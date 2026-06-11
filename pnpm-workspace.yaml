@@ -1,0 +1,6 @@
+packages:
+  - 'packages/*'
+  - 'apps/*'
+allowBuilds:
+  unrs-resolver: true
+  esbuild: true
