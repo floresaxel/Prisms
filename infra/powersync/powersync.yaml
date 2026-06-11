@@ -1,0 +1,27 @@
+# PowerSync service configuration — S1 STUB.
+#
+# TODO(s03): point sync_rules at the real rules in packages/db/sync-rules.yaml.
+# TODO(s10): replace the static dev key with JWKS issued by the API (§13).
+replication:
+  connections:
+    - type: postgresql
+      uri: postgresql://prisms:prisms_dev_password@postgres:5432/prisms
+
+storage:
+  type: postgresql
+  uri: postgresql://prisms:prisms_dev_password@postgres:5432/powersync_storage
+
+port: 8080
+
+sync_rules:
+  path: /config/sync-rules.yaml
+
+client_auth:
+  # Dev-only HS256 key ("prisms-dev-secret-change-me-32by"); never use in production.
+  jwks:
+    keys:
+      - kty: oct
+        alg: HS256
+        kid: powersync-dev
+        k: cHJpc21zLWRldi1zZWNyZXQtY2hhbmdlLW1lLTMyYnk
+  audience: ['powersync-dev']

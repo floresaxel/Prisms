@@ -1,0 +1,7 @@
+# S1 placeholder sync rules.
+# TODO(s03): the real rules (one user bucket, every table except command_log,
+# §7.3) are authored in packages/db/sync-rules.yaml and mounted here.
+bucket_definitions:
+  user_data:
+    parameters: SELECT request.user_id() AS user_id
+    data: []

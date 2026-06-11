@@ -1,0 +1,80 @@
+# Prisms self-hosted stack — S1 stub (BUILD_PLAN.md S1).
+# Boots: postgres (source of truth), powersync (sync service), api (placeholder).
+# TODO(s03): mount packages/db/sync-rules.yaml + pin the powersync image version.
+# TODO(s10): replace the api stub with the real apps/server build.
+name: prisms
+
+services:
+  postgres:
+    image: postgres:16
+    # PowerSync replicates via logical replication.
+    command: ['postgres', '-c', 'wal_level=logical']
+    environment:
+      POSTGRES_USER: prisms
+      POSTGRES_PASSWORD: prisms_dev_password
+      POSTGRES_DB: prisms
+    ports:
+      - '5432:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U prisms -d prisms']
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  powersync:
+    image: journeyapps/powersync-service:latest
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      POWERSYNC_CONFIG_PATH: /config/powersync.yaml
+    volumes:
+      - ./infra/powersync:/config:ro
+    ports:
+      - '8080:8080'
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://localhost:8080/probes/liveness').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  api:
+    # Placeholder until apps/server exists (s10); answers /health so the
+    # service topology and healthcheck wiring can be exercised today.
+    image: node:20-alpine
+    command:
+      - node
+      - -e
+      - |
+        const http = require('node:http');
+        http
+          .createServer((req, res) => {
+            if (req.url === '/health') {
+              res.setHeader('content-type', 'application/json');
+              res.end(JSON.stringify({ status: 'ok', service: 'prisms-api-stub' }));
+              return;
+            }
+            res.statusCode = 404;
+            res.end();
+          })
+          .listen(3001, () => console.log('prisms api stub listening on :3001'));
+    ports:
+      - '3001:3001'
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -q -O /dev/null http://127.0.0.1:3001/health || exit 1']
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 5s
+
+volumes:
+  pgdata:
