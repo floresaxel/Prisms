@@ -15,7 +15,8 @@
  * - aggregates/  TODO(s06) streaks, practice hours, progress, burndown
  * - rules/       TODO(s07) automation + blocker rules engine
  * - scheduler/   TODO(s08, s09) greedy + optimize scheduling
- * - commands/    TODO(s11) mutation catalog payload schemas + invariant checks
+ * - commands/    envelope + settings.update (s10); TODO(s11) full catalog +
+ *                invariant checks
  */
 export const CORE_PACKAGE = '@prisms/core' as const;
 
@@ -37,3 +38,5 @@ export * from './graph/justify';
 export * from './graph/cascade';
 export * from './graph/dag';
 export * from './graph/critical-path';
+export * from './commands/envelope';
+export * from './commands/settings';
