@@ -48,5 +48,6 @@ Architectural rules (package boundaries, core purity bans) are enforced by ESLin
 - [x] S2 — Domain types, schemas, time (HLC, bucketDate, Clock/Rng, UUID helpers)
 - [x] S3 — Database package (Drizzle schema, migrations, sync rules, demo seed)
 - [x] S4 — Graph module (tree/DAG ops, sort order, I1–I4/I10 validators, critical path)
+- [x] S5 — Status + predicate AST (§7.1 status fn, phase derivation, tri-state §9.2 evaluator)
 - [x] S10 — API shell + auth (Hono, Better Auth, PowerSync JWT, settings.update, rate limiter)
 - [ ] S5+ — see [Blueprints/BUILD_PLAN.md](Blueprints/BUILD_PLAN.md)

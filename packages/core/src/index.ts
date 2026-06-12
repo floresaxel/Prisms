@@ -11,7 +11,7 @@
  * - time/        instants, Clock/Rng, HLC, day bucketing, duration math (s02)
  * - graph/       tree/DAG ops, sort order, invariants I1–I4/I10, critical path (s04;
  *                ELK view-models arrive with the diagram surfaces, s14/s20)
- * - status/      TODO(s05) derived status + predicate AST
+ * - status/      derived status fn, project phase, predicate AST (s05)
  * - aggregates/  TODO(s06) streaks, practice hours, progress, burndown
  * - rules/       TODO(s07) automation + blocker rules engine
  * - scheduler/   TODO(s08, s09) greedy + optimize scheduling
@@ -40,3 +40,7 @@ export * from './graph/dag';
 export * from './graph/critical-path';
 export * from './commands/envelope';
 export * from './commands/settings';
+export * from './status/context';
+export * from './status/phase';
+export * from './status/predicate';
+export * from './status/status';
