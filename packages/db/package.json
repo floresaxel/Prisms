@@ -15,10 +15,15 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@prisms/core": "workspace:*"
+    "@prisms/core": "workspace:*",
+    "drizzle-orm": "^0.45.2",
+    "postgres": "^3.4.9"
   },
   "devDependencies": {
+    "@powersync/service-sync-rules": "^0.37.0",
+    "drizzle-kit": "^0.31.10",
     "eslint": "^10.4.1",
+    "tsx": "^4.22.4",
     "typescript": "^6.0.3",
     "vitest": "^4.1.8"
   }
