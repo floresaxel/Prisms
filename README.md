@@ -30,4 +30,5 @@ Architectural rules (package boundaries, core purity bans) are enforced by ESLin
 ## Session status
 
 - [x] S1 — Monorepo scaffold
-- [ ] S2+ — see [Blueprints/BUILD_PLAN.md](Blueprints/BUILD_PLAN.md)
+- [x] S2 — Domain types, schemas, time (HLC, bucketDate, Clock/Rng, UUID helpers)
+- [ ] S3+ — see [Blueprints/BUILD_PLAN.md](Blueprints/BUILD_PLAN.md)
