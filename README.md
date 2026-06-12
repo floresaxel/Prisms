@@ -25,6 +25,21 @@ pnpm turbo lint typecheck test   # the repo gate (also run in CI)
 docker compose up -d postgres    # local Postgres (wal_level=logical)
 ```
 
+### Windows without Docker Desktop
+
+Docker Engine runs fine inside WSL2 (Ubuntu, systemd). From the repo root in
+PowerShell:
+
+```powershell
+wsl docker compose up -d   # boots postgres + powersync + api
+wsl docker compose ps
+```
+
+Host ports are overridable in a local `.env` (gitignored) when the defaults
+are taken — e.g. `PRISMS_POSTGRES_PORT=5434`, `PRISMS_POWERSYNC_PORT=8081`.
+Note WSL shuts down when idle; re-running any `wsl docker ...` command boots
+it again and the containers auto-start (`restart: unless-stopped`).
+
 Architectural rules (package boundaries, core purity bans) are enforced by ESLint — see `eslint.config.mjs` — and regression-tested in `packages/core/test/architecture-lint.test.ts`.
 
 ## Session status
