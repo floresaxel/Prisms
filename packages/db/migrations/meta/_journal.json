@@ -15,6 +15,13 @@
       "when": 1781259098972,
       "tag": "0001_hierarchy_trigger",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1781261121631,
+      "tag": "0002_better_auth",
+      "breakpoints": true
     }
   ]
 }

@@ -7,14 +7,24 @@
   "scripts": {
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "dev": "tsx watch src/main.ts",
+    "start": "tsx src/main.ts"
   },
   "dependencies": {
+    "@hono/node-server": "^2.0.4",
     "@prisms/core": "workspace:*",
-    "@prisms/db": "workspace:*"
+    "@prisms/db": "workspace:*",
+    "better-auth": "^1.6.16",
+    "drizzle-orm": "^0.45.2",
+    "hono": "^4.12.25",
+    "jose": "^6.2.3",
+    "postgres": "^3.4.9"
   },
   "devDependencies": {
+    "@types/node": "^25.9.3",
     "eslint": "^10.4.1",
+    "tsx": "^4.22.4",
     "typescript": "^6.0.3",
     "vitest": "^4.1.8"
   }

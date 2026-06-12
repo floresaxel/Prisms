@@ -4,3 +4,9 @@ packages:
 allowBuilds:
   unrs-resolver: true
   esbuild: true
+# better-auth depends on kysely, which is an *optional peer* of drizzle-orm;
+# without this removal pnpm materializes a second drizzle-orm instance for the
+# server (peer-hash with kysely) whose types are incompatible with @prisms/db's
+# instance. We never use drizzle's kysely extension — drop the peer edge.
+overrides:
+  'drizzle-orm>kysely': '-'

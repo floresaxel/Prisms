@@ -7,6 +7,7 @@
 export const DB_PACKAGE = '@prisms/db' as const;
 
 export * from './schema';
-export { resolveDatabaseUrl } from './url';
+export { account, authSchema, session, user, verification } from './auth-schema';
+export { loadRootEnv, resolveDatabaseUrl } from './url';
 export { runMigrations } from './migrate';
 export { DEMO_USER_ID, seedDemoUser, type SeedSummary } from './seed';
