@@ -151,6 +151,9 @@ importers:
       '@powersync/service-sync-rules':
         specifier: ^0.37.0
         version: 0.37.0
+      '@types/node':
+        specifier: ^24.13.2
+        version: 24.13.2
       drizzle-kit:
         specifier: ^0.31.10
         version: 0.31.10
