@@ -6,10 +6,12 @@ replication:
   connections:
     - type: postgresql
       uri: postgresql://prisms:prisms_dev_password@postgres:5432/prisms
+      sslmode: disable
 
 storage:
   type: postgresql
   uri: postgresql://prisms:prisms_dev_password@postgres:5432/powersync_storage
+  sslmode: disable
 
 port: 8080
 
