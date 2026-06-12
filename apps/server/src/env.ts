@@ -22,6 +22,14 @@ export interface ServerConfig {
   baseUrl: string;
   databaseUrl: string;
   betterAuthSecret: string;
+  /**
+   * Origins allowed to make cookie-bearing cross-origin requests (CSRF +
+   * CORS, §13). The API's own origin is always trusted. Browsers send an
+   * Origin header on every POST; native clients without one can only
+   * sign in cookie-less (their first login) — re-auth flows must send an
+   * Origin/Referer or use a trusted scheme here.
+   */
+  trustedOrigins: string[];
   powersync: PowersyncJwtConfig;
   rateLimit: { limit: number; windowMs: number };
 }
@@ -43,6 +51,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     baseUrl: env.BETTER_AUTH_URL ?? `http://localhost:${port}`,
     databaseUrl: resolveDatabaseUrl(),
     betterAuthSecret,
+    trustedOrigins: (env.BETTER_AUTH_TRUSTED_ORIGINS ?? '')
+      .split(',')
+      .map((origin) => origin.trim())
+      .filter((origin) => origin.length > 0),
     powersync: {
       secret: powersyncSecret,
       kid: env.POWERSYNC_JWT_KID ?? 'powersync-dev',

@@ -14,18 +14,25 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 export interface AuthConfig {
   baseUrl: string;
   secret: string;
+  /** Extra origins allowed for cookie-bearing requests (the baseUrl origin is always trusted). */
+  trustedOrigins?: string[];
 }
 
 export function createAuth(db: PostgresJsDatabase, config: AuthConfig) {
   return betterAuth({
     baseURL: config.baseUrl,
     secret: config.secret,
+    trustedOrigins: config.trustedOrigins ?? [],
     database: drizzleAdapter(db, { provider: 'pg', schema: authSchema }),
     emailAndPassword: { enabled: true },
     advanced: {
       database: {
         generateId: () => randomUUID(),
       },
+      // better-auth silently skips its CSRF origin check when it detects a
+      // test environment; pin it on so vitest exercises exactly the
+      // production behavior (§13) and the suite can assert the 403s.
+      disableOriginCheck: false,
     },
   });
 }

@@ -10,6 +10,7 @@
  */
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { Hono, type MiddlewareHandler } from 'hono';
+import { cors } from 'hono/cors';
 import { SignJWT } from 'jose';
 import postgres from 'postgres';
 
@@ -23,6 +24,8 @@ export interface AppOptions {
   databaseUrl: string;
   baseUrl?: string;
   betterAuthSecret: string;
+  /** Cross-origin clients allowed to use cookie auth (CSRF + CORS, §13). */
+  trustedOrigins?: string[];
   powersync: PowersyncJwtConfig;
   rateLimit: { limit: number; windowMs: number };
   /** Disable request logging (tests). */
@@ -40,9 +43,12 @@ export interface PrismsServer {
 export function createApp(options: AppOptions): PrismsServer {
   const client = postgres(options.databaseUrl, { max: 10, onnotice: () => undefined });
   const db = drizzle(client);
+  const baseUrl = options.baseUrl ?? 'http://localhost:3001';
+  const trustedOrigins = options.trustedOrigins ?? [];
   const auth = createAuth(db, {
-    baseUrl: options.baseUrl ?? 'http://localhost:3001',
+    baseUrl,
     secret: options.betterAuthSecret,
+    trustedOrigins,
   });
   const limiter = createRateLimiter(options.rateLimit);
   const dispatcher = createDispatcher(db, limiter);
@@ -59,6 +65,18 @@ export function createApp(options: AppOptions): PrismsServer {
 
   const app = new Hono<AppEnv>();
   if (!options.quiet) app.use('*', requestLog());
+
+  // CORS for browser clients on other origins (e.g. the Vite dev server);
+  // same allow-list better-auth uses for its CSRF origin check. Untrusted
+  // origins get no CORS headers, so their scripted responses stay opaque.
+  const allowedOrigins = new Set([new URL(baseUrl).origin, ...trustedOrigins]);
+  const corsMiddleware = cors({
+    origin: (origin) => (allowedOrigins.has(origin) ? origin : undefined),
+    credentials: true,
+    maxAge: 600,
+  });
+  app.use('/api/*', corsMiddleware);
+  app.use('/sync/*', corsMiddleware);
 
   app.get('/health', (c) => c.json({ status: 'ok', service: 'prisms-api' }));
 

@@ -35,6 +35,18 @@ wsl docker compose up -d   # boots postgres + powersync + api
 wsl docker compose ps
 ```
 
+Then bring the database and API up to date:
+
+```sh
+pnpm --filter @prisms/db db:migrate    # forward-only migrations
+pnpm --filter @prisms/db db:seed       # demo user (optional)
+pnpm --filter @prisms/server dev       # real API on :3001 (compose api stub is a placeholder)
+```
+
+Cookie-authenticated POSTs require a trusted `Origin` (CSRF, §13): the API's
+own origin is always trusted; add cross-origin clients (e.g. the Vite dev
+server) via `BETTER_AUTH_TRUSTED_ORIGINS=http://localhost:5173`.
+
 Host ports are overridable in a local `.env` (gitignored) when the defaults
 are taken — e.g. `PRISMS_POSTGRES_PORT=5434`, `PRISMS_POWERSYNC_PORT=8081`.
 Note WSL shuts down when idle; re-running any `wsl docker ...` command boots

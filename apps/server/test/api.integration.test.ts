@@ -71,6 +71,7 @@ describe.skipIf(!adminUrl)('S10 API integration (auth, PowerSync JWT, settings.u
       databaseUrl: url,
       baseUrl: 'http://localhost',
       betterAuthSecret: DEV_AUTH_SECRET,
+      trustedOrigins: ['http://app.prisms.test'],
       powersync: {
         secret: DEV_POWERSYNC_SECRET,
         kid: 'powersync-dev',
@@ -262,6 +263,50 @@ describe.skipIf(!adminUrl)('S10 API integration (auth, PowerSync JWT, settings.u
       const rows = await sql`SELECT 1 FROM user_settings WHERE user_id = ${created.user.id}`;
       expect(rows).toHaveLength(0);
     }
+  });
+
+  it('CSRF (§13): cookie-bearing sign-in requires a trusted Origin', async () => {
+    const body = JSON.stringify({ email: 'demo@prisms.test', password: PASSWORD });
+    const attempt = (headers: Record<string, string>) =>
+      server.app.request('/api/auth/sign-in/email', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', cookie, ...headers },
+        body,
+      });
+
+    // browsers always send Origin on POST: same-origin and trusted ones pass
+    expect((await attempt({ origin: 'http://localhost' })).status).toBe(200);
+    expect((await attempt({ origin: 'http://app.prisms.test' })).status).toBe(200);
+    // cookie without provable origin / untrusted origin ⇒ rejected
+    expect((await attempt({})).status).toBe(403);
+    expect((await attempt({ origin: 'http://evil.test' })).status).toBe(403);
+    // cookie-less first sign-in needs no Origin (native-client first login)
+    const fresh = await server.app.request('/api/auth/sign-in/email', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body,
+    });
+    expect(fresh.status).toBe(200);
+  });
+
+  it('CORS: trusted origins get credentialed headers, others stay opaque', async () => {
+    const preflight = await server.app.request('/sync/upload', {
+      method: 'OPTIONS',
+      headers: {
+        origin: 'http://app.prisms.test',
+        'access-control-request-method': 'POST',
+      },
+    });
+    expect(preflight.headers.get('access-control-allow-origin')).toBe(
+      'http://app.prisms.test',
+    );
+    expect(preflight.headers.get('access-control-allow-credentials')).toBe('true');
+
+    const evil = await server.app.request('/sync/upload', {
+      method: 'OPTIONS',
+      headers: { origin: 'http://evil.test', 'access-control-request-method': 'POST' },
+    });
+    expect(evil.headers.get('access-control-allow-origin')).toBeNull();
   });
 
   it('rejects unauthenticated and malformed uploads', async () => {
