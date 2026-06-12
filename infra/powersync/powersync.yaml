@@ -1,6 +1,7 @@
-# PowerSync service configuration — S1 STUB.
+# PowerSync service configuration.
+# /sync-rules.yaml is bind-mounted from packages/db/sync-rules.yaml
+# (see docker-compose.yml).
 #
-# TODO(s03): point sync_rules at the real rules in packages/db/sync-rules.yaml.
 # TODO(s10): replace the static dev key with JWKS issued by the API (§13).
 replication:
   connections:
@@ -16,7 +17,7 @@ storage:
 port: 8080
 
 sync_rules:
-  path: /config/sync-rules.yaml
+  path: /sync-rules.yaml
 
 client_auth:
   # Dev-only HS256 key ("prisms-dev-secret-change-me-32by"); never use in production.
