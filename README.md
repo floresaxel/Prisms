@@ -31,4 +31,6 @@ Architectural rules (package boundaries, core purity bans) are enforced by ESLin
 
 - [x] S1 — Monorepo scaffold
 - [x] S2 — Domain types, schemas, time (HLC, bucketDate, Clock/Rng, UUID helpers)
-- [ ] S3+ — see [Blueprints/BUILD_PLAN.md](Blueprints/BUILD_PLAN.md)
+- [ ] S3 — Database package (deferred: needs Docker for its DoD; S4+ only depend on S2)
+- [x] S4 — Graph module (tree/DAG ops, sort order, I1–I4/I10 validators, critical path)
+- [ ] S5+ — see [Blueprints/BUILD_PLAN.md](Blueprints/BUILD_PLAN.md)

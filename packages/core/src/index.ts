@@ -9,7 +9,8 @@
  * Module map:
  * - domain/      entity types + Zod schemas, Result/DomainError, id helpers (s02)
  * - time/        instants, Clock/Rng, HLC, day bucketing, duration math (s02)
- * - graph/       TODO(s04) tree/DAG ops, cycle detection
+ * - graph/       tree/DAG ops, sort order, invariants I1–I4/I10, critical path (s04;
+ *                ELK view-models arrive with the diagram surfaces, s14/s20)
  * - status/      TODO(s05) derived status + predicate AST
  * - aggregates/  TODO(s06) streaks, practice hours, progress, burndown
  * - rules/       TODO(s07) automation + blocker rules engine
@@ -29,3 +30,10 @@ export * from './time/rng';
 export * from './time/duration';
 export * from './time/hlc';
 export * from './time/bucket';
+export * from './graph/tree';
+export * from './graph/order';
+export * from './graph/hierarchy';
+export * from './graph/justify';
+export * from './graph/cascade';
+export * from './graph/dag';
+export * from './graph/critical-path';
