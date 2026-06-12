@@ -2,7 +2,10 @@
 # /sync-rules.yaml is bind-mounted from packages/db/sync-rules.yaml
 # (see docker-compose.yml).
 #
-# TODO(s10): replace the static dev key with JWKS issued by the API (§13).
+# client_auth: the API signs short-lived HS256 JWTs with this shared dev key
+# (apps/server GET /api/powersync/token, §13). Override the key everywhere via
+# POWERSYNC_JWT_SECRET when deploying.
+# TODO(s23): production hardening — rotate to API-served JWKS (RS256).
 replication:
   connections:
     - type: postgresql

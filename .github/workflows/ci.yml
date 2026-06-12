@@ -25,8 +25,8 @@ jobs:
       - name: Lint, typecheck, test
         run: pnpm turbo lint typecheck test
 
-  db:
-    name: Migrations + seed against compose postgres
+  stack:
+    name: DB + API against compose postgres/powersync
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -41,13 +41,19 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Boot compose postgres (fresh volume)
-        run: docker compose up -d --wait postgres
+      - name: Boot compose postgres + powersync (fresh volumes)
+        run: docker compose up -d --wait postgres powersync
 
       - name: DB tests (migrations, seed, invariant backstops)
         run: pnpm --filter @prisms/db test
         env:
           PRISMS_DB_TEST_URL: postgresql://prisms:prisms_dev_password@localhost:5432/postgres
+
+      - name: Server tests (auth, PowerSync JWT, dispatcher, rate limit)
+        run: pnpm --filter @prisms/server test
+        env:
+          PRISMS_DB_TEST_URL: postgresql://prisms:prisms_dev_password@localhost:5432/postgres
+          PRISMS_POWERSYNC_URL: http://localhost:8080
 
       - name: Tear down
         if: always()

@@ -2,7 +2,11 @@
 # Boots: postgres (source of truth), powersync (sync service), api (placeholder).
 # Host ports are overridable via .env (PRISMS_*_PORT) for machines where the
 # defaults are taken — container-side ports never change.
-# TODO(s10): replace the api stub with the real apps/server build.
+# The api container below is still a placeholder: the real server (apps/server,
+# s10) runs on the host during development via `pnpm --filter @prisms/server dev`
+# and signs PowerSync JWTs with the shared dev key — no container-to-host calls
+# are needed. TODO(s23): build apps/server into this service for one-command
+# deploys.
 name: prisms
 
 services:
