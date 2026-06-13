@@ -297,8 +297,10 @@ describe('rescheduleTask + mode dispatch', () => {
     expect(isoOf(out.proposals[0]!.startsAt)).toBe('2026-06-15T11:00:00.000Z');
   });
 
-  it('schedule() dispatches greedy and stubs optimize for S9', () => {
+  it('schedule() dispatches both greedy and optimize modes', () => {
     expect(schedule(input({ tasks: [{ id: idOf(1), estimateMinutes: 60 }] })).proposals).toHaveLength(1);
-    expect(() => schedule(input({ tasks: [], mode: 'optimize' }))).toThrow(/s09/i);
+    // optimize is implemented in S9: dispatches without throwing, places the task
+    const optimized = schedule(input({ tasks: [{ id: idOf(1), estimateMinutes: 60 }], mode: 'optimize' }));
+    expect(optimized.proposals).toHaveLength(1);
   });
 });

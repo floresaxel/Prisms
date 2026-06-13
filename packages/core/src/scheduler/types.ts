@@ -7,9 +7,33 @@
  */
 import type { EdgeType } from '../domain/entities';
 import type { IsoDate, Uuid } from '../domain/primitives';
+import type { Rng } from '../time/rng';
 import type { Instant } from '../time/instant';
 
 export type SchedulerMode = 'greedy' | 'optimize';
+
+/** Weights for the optimize-mode soft objectives (§10). All ≥ 0. */
+export interface ObjectiveWeights {
+  /** Penalty per minute a block ends after its task's due date. */
+  dueDate: number;
+  /** Penalty per minute a sprint member starts after the horizon start. */
+  sprint: number;
+  /** Penalty per minute of idle gap between same-day consecutive blocks. */
+  fragmentation: number;
+  /** Reward per habit daily-target minute scheduled. */
+  dailyTarget: number;
+  /** Penalty per unplaceable task (dominates: optimize avoids dropping work). */
+  unplaceable: number;
+}
+
+/** Optimize-mode tuning (§10, §11 schedule.optimize). */
+export interface OptimizeOptions {
+  weights?: Partial<ObjectiveWeights>;
+  /** Injected randomness for local search (§16); defaults to a fixed seed. */
+  rng?: Rng;
+  /** Local-search iteration budget. */
+  iterations?: number;
+}
 
 /**
  * A named time-of-day window (morning/day/evening/night, §10) in the user's
@@ -41,6 +65,11 @@ export interface SchedulableTask {
   dependencies?: readonly SchedulerDependency[];
   /** Hard floor on the start instant (e.g. "not before now" for past-due reschedule). */
   notBefore?: Instant;
+  // --- optimize-mode soft signals (§10), ignored by greedy ---
+  /** Member of an active sprint — optimize prefers placing these earlier. */
+  sprintMember?: boolean;
+  /** Habit daily-target minutes — optimize rewards covering them. */
+  dailyTargetMinutes?: number | null;
 }
 
 /** An existing schedule_block in the planning context. */
@@ -79,6 +108,8 @@ export interface SchedulerInput {
   timezone: string;
   horizon: { from: Instant; to: Instant };
   mode: SchedulerMode;
+  /** Only consulted when mode === 'optimize'. */
+  optimize?: OptimizeOptions;
 }
 
 export interface SchedulerOutput {

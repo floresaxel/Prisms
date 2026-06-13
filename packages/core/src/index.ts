@@ -18,7 +18,7 @@
  *                outputs, self-trigger validation (s07; blockers live in
  *                status/predicate since they share the §9.2 evaluator)
  * - scheduler/   greedy earliest-fit placement, window hints, reschedule
- *                (s08); TODO(s09) optimize mode
+ *                (s08); optimize-mode local search + diffing (s09)
  * - commands/    envelope + settings.update (s10); TODO(s11) full catalog +
  *                invariant checks
  */
@@ -63,3 +63,4 @@ export * from './rules/validate';
 export * from './scheduler/types';
 export * from './scheduler/windows';
 export * from './scheduler/greedy';
+export * from './scheduler/optimize';
