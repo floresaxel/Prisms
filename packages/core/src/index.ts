@@ -12,7 +12,8 @@
  * - graph/       tree/DAG ops, sort order, invariants I1–I4/I10, critical path (s04;
  *                ELK view-models arrive with the diagram surfaces, s14/s20)
  * - status/      derived status fn, project phase, predicate AST (s05)
- * - aggregates/  TODO(s06) streaks, practice hours, progress, burndown
+ * - aggregates/  effective/practice hours, streaks, progress, completion,
+ *                burndown + projection, time-left (s06)
  * - rules/       TODO(s07) automation + blocker rules engine
  * - scheduler/   TODO(s08, s09) greedy + optimize scheduling
  * - commands/    envelope + settings.update (s10); TODO(s11) full catalog +
@@ -26,6 +27,7 @@ export * from './domain/primitives';
 export * from './domain/entities';
 export * from './domain/ids';
 export * from './time/instant';
+export * from './time/dates';
 export * from './time/clock';
 export * from './time/rng';
 export * from './time/duration';
@@ -44,3 +46,11 @@ export * from './status/context';
 export * from './status/phase';
 export * from './status/predicate';
 export * from './status/status';
+export * from './aggregates/effective';
+export * from './aggregates/occurrences';
+export * from './aggregates/practice';
+export * from './aggregates/progress';
+export * from './aggregates/completion';
+export * from './aggregates/streaks';
+export * from './aggregates/burndown';
+export * from './aggregates/timeleft';
