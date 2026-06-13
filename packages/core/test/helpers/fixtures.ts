@@ -3,6 +3,8 @@ import type {
   BlockerRule,
   Edge,
   ExternalFact,
+  Habit,
+  HabitCompletion,
   Node,
   NodeType,
   ScheduleBlock,
@@ -136,6 +138,41 @@ export function makeBlockerRule(
     scope: {},
     label: 'blocker',
     enabled: true,
+    ...overrides,
+  };
+}
+
+export function makeHabit(
+  overrides: Partial<Habit> & { id: Uuid; vision_id: Uuid },
+): Habit {
+  return {
+    user_id: TEST_USER,
+    created_at: T0,
+    updated_at: T0,
+    deleted_at: null,
+    title: 'habit',
+    rrule: 'FREQ=DAILY',
+    streak_mode: 'daily',
+    daily_target_minutes: null,
+    mastery_target_hours: null,
+    level_thresholds_hours: [],
+    ...overrides,
+  };
+}
+
+export function makeHabitCompletion(
+  overrides: Partial<HabitCompletion> & {
+    id: Uuid;
+    habit_id: Uuid;
+    occurrence_date: string;
+  },
+): HabitCompletion {
+  return {
+    user_id: TEST_USER,
+    created_at: T0,
+    updated_at: T0,
+    deleted_at: null,
+    completed_at: `${overrides.occurrence_date}T12:00:00.000Z`,
     ...overrides,
   };
 }
