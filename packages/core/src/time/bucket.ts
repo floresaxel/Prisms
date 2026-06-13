@@ -69,24 +69,25 @@ function formatDate(year: number, month: number, day: number): IsoDate {
 }
 
 /**
- * The instant at which `date` reads `hour:00` on the wall clock of
+ * The instant at which `date` reads `hour:minute` on the wall clock of
  * `timeZone` — the inverse of wall-clock reading, used for "next day-reset"
- * math (§7.2 time-left-in-day).
+ * math (§7.2 time-left-in-day) and scheduler window expansion (§10).
  *
  * Two-pass offset estimation handles DST: guess the instant as if the wall
  * time were UTC, measure the zone's wall-clock at that guess, correct, and
  * re-verify. For wall times skipped by spring-forward the result is the
- * consistent post-transition instant.
+ * consistent post-transition instant. `hour` may be 24 (end-of-day midnight).
  */
 export function localInstant(
   date: IsoDate,
   hour: number,
   timeZone: string,
+  minute = 0,
 ): EpochMillis {
   const year = Number(date.slice(0, 4));
   const month = Number(date.slice(5, 7));
   const day = Number(date.slice(8, 10));
-  const guess = Date.UTC(year, month - 1, day, hour);
+  const guess = Date.UTC(year, month - 1, day, hour, minute);
   const correct = (candidate: number): number => {
     const wall = localParts(candidate as EpochMillis, timeZone);
     const wallAsUtc = Date.UTC(wall.year, wall.month - 1, wall.day, wall.hour, wall.minute);
