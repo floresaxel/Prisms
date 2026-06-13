@@ -31,6 +31,7 @@ function tzFormatter(timeZone: string): Intl.DateTimeFormat {
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
+    minute: '2-digit',
   });
   formatterCache.set(timeZone, formatter);
   return formatter;
@@ -41,6 +42,7 @@ interface LocalParts {
   month: number;
   day: number;
   hour: number;
+  minute: number;
 }
 
 function localParts(ms: EpochMillis, timeZone: string): LocalParts {
@@ -55,6 +57,7 @@ function localParts(ms: EpochMillis, timeZone: string): LocalParts {
     month: read('month'),
     day: read('day'),
     hour: read('hour'),
+    minute: read('minute'),
   };
 }
 
@@ -63,6 +66,34 @@ function formatDate(year: number, month: number, day: number): IsoDate {
   const m = String(month).padStart(2, '0');
   const d = String(day).padStart(2, '0');
   return `${y}-${m}-${d}`;
+}
+
+/**
+ * The instant at which `date` reads `hour:00` on the wall clock of
+ * `timeZone` — the inverse of wall-clock reading, used for "next day-reset"
+ * math (§7.2 time-left-in-day).
+ *
+ * Two-pass offset estimation handles DST: guess the instant as if the wall
+ * time were UTC, measure the zone's wall-clock at that guess, correct, and
+ * re-verify. For wall times skipped by spring-forward the result is the
+ * consistent post-transition instant.
+ */
+export function localInstant(
+  date: IsoDate,
+  hour: number,
+  timeZone: string,
+): EpochMillis {
+  const year = Number(date.slice(0, 4));
+  const month = Number(date.slice(5, 7));
+  const day = Number(date.slice(8, 10));
+  const guess = Date.UTC(year, month - 1, day, hour);
+  const correct = (candidate: number): number => {
+    const wall = localParts(candidate as EpochMillis, timeZone);
+    const wallAsUtc = Date.UTC(wall.year, wall.month - 1, wall.day, wall.hour, wall.minute);
+    return candidate - (wallAsUtc - guess);
+  };
+  const first = correct(guess);
+  return correct(first) as EpochMillis;
 }
 
 export function bucketDate(
