@@ -78,7 +78,13 @@ describe('combinators with tri-state logic (§9.2)', () => {
     expect(ev({ bogus: true }, task, ctx)).toBe('unknown');
     expect(ev({ fact: 'node.title', op: 'between', value: 1 }, task, ctx)).toBe('unknown');
     expect(ev(null, task, ctx)).toBe('unknown');
-    expect(predicateSchema.safeParse({ all: [] }).success).toBe(false);
+  });
+
+  it('empty combinators are vacuous: all([]) is the canonical "always", any([]) never', () => {
+    const { ctx, task } = lectureWorld();
+    expect(predicateSchema.safeParse({ all: [] }).success).toBe(true);
+    expect(ev({ all: [] }, task, ctx)).toBe('true');
+    expect(ev({ any: [] }, task, ctx)).toBe('false');
   });
 });
 

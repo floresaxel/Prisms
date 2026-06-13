@@ -72,10 +72,12 @@ export type PredicateNode =
   | { not: PredicateNode }
   | PredicateCondition;
 
+// all([]) ≡ 'true' and any([]) ≡ 'false' (vacuous truth) — `{all: []}` is the
+// canonical "always" predicate for automation rules that fire unconditionally.
 export const predicateSchema: z.ZodType<PredicateNode> = z.lazy(() =>
   z.union([
-    z.strictObject({ all: z.array(predicateSchema).min(1) }),
-    z.strictObject({ any: z.array(predicateSchema).min(1) }),
+    z.strictObject({ all: z.array(predicateSchema) }),
+    z.strictObject({ any: z.array(predicateSchema) }),
     z.strictObject({ not: predicateSchema }),
     conditionSchema,
   ]),
