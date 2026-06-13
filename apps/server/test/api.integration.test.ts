@@ -210,7 +210,7 @@ describe.skipIf(!adminUrl)('S10 API integration (auth, PowerSync JWT, settings.u
 
   it('rejects machine-readably and logs the rejection', async () => {
     const badRange = command({ day_reset_hour: 25 });
-    const unknownVerb = command({ id: 'x' }, 'node.create');
+    const unknownVerb = command({ id: 'x' }, 'node.update'); // no generic update verb exists
     const res = await upload([badRange, unknownVerb]);
     expect(res.status).toBe(200);
     const { results } = (await res.json()) as {
