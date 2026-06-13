@@ -14,7 +14,9 @@
  * - status/      derived status fn, project phase, predicate AST (s05)
  * - aggregates/  effective/practice hours, streaks, progress, completion,
  *                burndown + projection, time-left (s06)
- * - rules/       TODO(s07) automation + blocker rules engine
+ * - rules/       automation engine: spawn templates, fixpoint, UUIDv5
+ *                outputs, self-trigger validation (s07; blockers live in
+ *                status/predicate since they share the §9.2 evaluator)
  * - scheduler/   TODO(s08, s09) greedy + optimize scheduling
  * - commands/    envelope + settings.update (s10); TODO(s11) full catalog +
  *                invariant checks
@@ -54,3 +56,6 @@ export * from './aggregates/completion';
 export * from './aggregates/streaks';
 export * from './aggregates/burndown';
 export * from './aggregates/timeleft';
+export * from './rules/actions';
+export * from './rules/engine';
+export * from './rules/validate';

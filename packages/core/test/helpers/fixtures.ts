@@ -1,5 +1,7 @@
 /** Shared row builders for graph and status tests. */
 import type {
+  AutomationRule,
+  AutomationTrigger,
   BlockerRule,
   Edge,
   ExternalFact,
@@ -173,6 +175,24 @@ export function makeHabitCompletion(
     updated_at: T0,
     deleted_at: null,
     completed_at: `${overrides.occurrence_date}T12:00:00.000Z`,
+    ...overrides,
+  };
+}
+
+export function makeAutomationRule(
+  overrides: Partial<AutomationRule> & {
+    id: Uuid;
+    trigger: AutomationTrigger;
+    actions: JsonValue;
+  },
+): AutomationRule {
+  return {
+    user_id: TEST_USER,
+    created_at: T0,
+    updated_at: T0,
+    deleted_at: null,
+    conditions: { all: [] },
+    enabled: true,
     ...overrides,
   };
 }
