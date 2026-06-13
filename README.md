@@ -64,5 +64,6 @@ Architectural rules (package boundaries, core purity bans) are enforced by ESLin
 - [x] S6 — Aggregates (practice hours/levels, six streak modes, progress, completion %, burndown + projection, time-left)
 - [x] S7 — Rules engine (spawn automations, fixpoint MAX_DEPTH=5, UUIDv5 outputs, self-trigger guard)
 - [x] S8 — Scheduler · greedy (earliest-fit, window hints, dependency+lag, single-task reschedule)
+- [x] S9 — Scheduler · optimize (weighted soft objectives, local search over greedy seed, proposal diffing)
 - [x] S10 — API shell + auth (Hono, Better Auth, PowerSync JWT, settings.update, rate limiter)
-- [ ] S9, S11+ — see [Blueprints/BUILD_PLAN.md](Blueprints/BUILD_PLAN.md)
+- [ ] S11+ — see [Blueprints/BUILD_PLAN.md](Blueprints/BUILD_PLAN.md)
