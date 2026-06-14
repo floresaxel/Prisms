@@ -9,14 +9,21 @@
  * through day bucketing (§7.2), which already produced the dates that
  * completions carry.
  */
-import { RRule } from 'rrule';
+// rrule ships an ESM build but no `exports` map, so Node resolves its CJS
+// `main` — under raw Node/tsx ESM a named `{ RRule }` import has no binding.
+// Default-import the CJS module.exports (works via esModuleInterop) and pull
+// RRule off it; this runs identically under Node, tsx, and the test bundler.
+import rrulePkg from 'rrule';
 
 import type { IsoDate } from '../domain/primitives';
 import { isoDateToUtcMs, utcMsToIsoDate } from '../time/dates';
 
-const ruleCache = new Map<string, RRule>();
+const { RRule } = rrulePkg;
+type RRuleInstance = InstanceType<typeof RRule>;
 
-function ruleFor(rruleString: string, dtstart: IsoDate): RRule {
+const ruleCache = new Map<string, RRuleInstance>();
+
+function ruleFor(rruleString: string, dtstart: IsoDate): RRuleInstance {
   const key = `${dtstart}|${rruleString}`;
   const cached = ruleCache.get(key);
   if (cached) return cached;
