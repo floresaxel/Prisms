@@ -25,6 +25,9 @@ jobs:
       - name: Lint, typecheck, test
         run: pnpm turbo lint typecheck test
 
+      - name: Build web app (Vite bundle + PWA service worker)
+        run: pnpm --filter @prisms/web build
+
   stack:
     name: DB + API against compose postgres/powersync
     runs-on: ubuntu-latest

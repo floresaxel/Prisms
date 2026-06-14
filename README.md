@@ -41,7 +41,15 @@ Then bring the database and API up to date:
 pnpm --filter @prisms/db db:migrate    # forward-only migrations
 pnpm --filter @prisms/db db:seed       # demo user (optional)
 pnpm --filter @prisms/server dev       # real API on :3001 (compose api stub is a placeholder)
+pnpm --filter @prisms/web dev          # web app on :5173 (proxies /api + /sync to :3001)
 ```
+
+The web app (`apps/web`) is a Vite + React SPA on PowerSync (wa-sqlite/OPFS).
+In dev, Vite reverse-proxies `/api` + `/sync` to the API so the browser is
+same-origin. The Playwright DoD e2e (`pnpm --filter @prisms/web e2e`) runs
+against the production build served by `vite preview` (real service worker for
+offline) with the stack up — start the API with
+`BETTER_AUTH_URL=http://localhost:5173 BETTER_AUTH_TRUSTED_ORIGINS=http://localhost:5173`.
 
 Cookie-authenticated POSTs require a trusted `Origin` (CSRF, §13): the API's
 own origin is always trusted; add cross-origin clients (e.g. the Vite dev
@@ -70,4 +78,5 @@ Architectural rules (package boundaries, core purity bans) are enforced by ESLin
 - [x] S12 — Convergence harness (two-device HLC LWW, §7.4 double clock-in, UUIDv5 automation convergence)
 - [x] S13 — Jobs I · facts & truth (pg-boss: weather.poll, aggregates.recompute, automation.backstop, retention.purge)
 - [x] S14 — Jobs II · scheduling & notify (schedule.optimize, pastdue.scan, layout.precompute/ELK, notify.dispatch)
-- [ ] S15+ — see [Blueprints/BUILD_PLAN.md](Blueprints/BUILD_PLAN.md)
+- [x] S15 — Web shell + data layer (Vite+React, PowerSync/OPFS, ui hooks, optimistic apply + rollback, PWA; Playwright DoD ✓)
+- [ ] S16+ — see [Blueprints/BUILD_PLAN.md](Blueprints/BUILD_PLAN.md)
