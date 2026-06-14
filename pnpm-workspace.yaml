@@ -5,9 +5,10 @@ allowBuilds:
   unrs-resolver: true
   esbuild: true
   better-sqlite3: true
-# better-auth depends on kysely, which is an *optional peer* of drizzle-orm;
-# without this removal pnpm materializes a second drizzle-orm instance for the
-# server (peer-hash with kysely) whose types are incompatible with @prisms/db's
-# instance. We never use drizzle's kysely extension — drop the peer edge.
+# drizzle-orm has several optional peers (kysely via better-auth, pg via
+# pg-boss). Each present peer makes pnpm materialize a SEPARATE drizzle-orm
+# instance whose types clash with @prisms/db's instance. We only use the
+# postgres-js driver, so drop those peer edges to keep one drizzle-orm.
 overrides:
   'drizzle-orm>kysely': '-'
+  'drizzle-orm>pg': '-'

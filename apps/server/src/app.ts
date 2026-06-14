@@ -15,7 +15,7 @@ import { SignJWT } from 'jose';
 import postgres from 'postgres';
 
 import { createAuth, type Auth } from './auth';
-import { createDispatcher } from './dispatcher';
+import { createDispatcher, type BackstopJob } from './dispatcher';
 import type { PowersyncJwtConfig } from './env';
 import { createRateLimiter } from './rate-limit';
 import { requestLog } from './request-log';
@@ -28,6 +28,8 @@ export interface AppOptions {
   trustedOrigins?: string[];
   powersync: PowersyncJwtConfig;
   rateLimit: { limit: number; windowMs: number };
+  /** Fire automation.backstop on completions/creations (§9.4); wired to pg-boss in main.ts. */
+  enqueueBackstop?: (job: BackstopJob) => void;
   /** Disable request logging (tests). */
   quiet?: boolean;
 }
@@ -51,7 +53,7 @@ export function createApp(options: AppOptions): PrismsServer {
     trustedOrigins,
   });
   const limiter = createRateLimiter(options.rateLimit);
-  const dispatcher = createDispatcher(db, limiter);
+  const dispatcher = createDispatcher(db, limiter, { enqueueBackstop: options.enqueueBackstop });
   const powersyncKey = new TextEncoder().encode(options.powersync.secret);
 
   const requireSession: MiddlewareHandler<AppEnv> = async (c, next) => {

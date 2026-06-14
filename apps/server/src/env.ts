@@ -32,6 +32,8 @@ export interface ServerConfig {
   trustedOrigins: string[];
   powersync: PowersyncJwtConfig;
   rateLimit: { limit: number; windowMs: number };
+  /** Start pg-boss workers (§11). Disable for API-only deployments or tests. */
+  jobsEnabled: boolean;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
@@ -66,5 +68,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
       limit: Number(env.COMMAND_RATE_LIMIT ?? 120),
       windowMs: 60_000,
     },
+    jobsEnabled: env.PRISMS_JOBS_ENABLED !== 'false',
   };
 }
