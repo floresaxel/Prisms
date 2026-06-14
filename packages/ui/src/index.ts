@@ -22,6 +22,8 @@ export {
   usePromoteTargets,
   useDayTimeLeft,
   useAgenda,
+  useHabits,
+  useKanban,
   useAggregates,
   useCommands,
   type WorklistItem,
@@ -31,6 +33,8 @@ export {
   type AgendaBlock,
   type AgendaEntry,
   type TodoTask,
+  type HabitView,
+  type KanbanColumn,
   type AggregateRow,
 } from './hooks';
 

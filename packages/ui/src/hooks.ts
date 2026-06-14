@@ -6,24 +6,34 @@ import { useMemo } from 'react';
 
 import { usePowerSync, useQuery } from '@powersync/react';
 import {
+  addDays,
   asEpochMillis,
+  bucketDate,
   buildFactContext,
   buildTreeIndex,
+  canonicalPractice,
   canonicalProgress,
+  canonicalStreak,
   DEFAULT_WINDOWS,
+  habitTaskIds,
   isJustified,
   isoToEpochMillis,
   minutesLeftInDay,
   minutesLeftInTask,
+  rawMinutes,
   taskStatus,
   type CommittedBlock,
   type FactContext,
+  type Habit,
   type Instant,
+  type IsoDate,
   type Node,
+  type PracticeValue,
   type ProgressValue,
   type SchedulableTask,
   type SchedulerDependency,
   type SchedulerInput,
+  type StreakValue,
   type TaskStatus,
   type TimeEntry,
   type TreeIndex,
@@ -35,6 +45,8 @@ import {
   toComputedAggregate,
   toEdge,
   toExternalFact,
+  toHabit,
+  toHabitCompletion,
   toMembership,
   toNode,
   toScheduleBlock,
@@ -321,6 +333,120 @@ export function useAgenda(now: Instant, horizonDays = 7): Agenda {
 
     return { input, tasksById, blocks, entries, todo };
   }, [ctx, edgeRows, blockRows, entryRows, sprintRows, membershipRows, now, horizonDays]);
+}
+
+export interface HabitView {
+  habit: Habit;
+  streak: StreakValue;
+  /** Practice hours + level (skills); zero for plain habits. */
+  practice: PracticeValue;
+  /** Minutes toward today's daily target — INCLUDING the live running timer. */
+  todayMinutes: number;
+  dailyTargetMinutes: number | null;
+  /** 0..1 (capped at 1) when a daily target is set; null otherwise. */
+  ringFill: number | null;
+  /** A completion exists for today's bucket. */
+  doneToday: boolean;
+  /** computed_at of the latest server aggregate for this habit (freshness label). */
+  serverComputedAt: string | null;
+}
+
+/**
+ * Habits/skills (§1.2, §7.2): streaks, practice hours + levels, and the daily-
+ * target ring — all computed live in core from local facts, with the running
+ * timer folded into today's minutes so the ring fills during a clock-in. The
+ * server aggregate's `computed_at` is surfaced for the freshness label.
+ */
+export function useHabits(now: Instant): HabitView[] {
+  const ctx = useFactContext();
+  const habitRows = useRows('SELECT * FROM habits WHERE deleted_at IS NULL');
+  const completionRows = useRows('SELECT * FROM habit_completions WHERE deleted_at IS NULL');
+  const entryRows = useRows('SELECT * FROM time_entries WHERE deleted_at IS NULL');
+  const blockRows = useRows('SELECT * FROM schedule_blocks WHERE deleted_at IS NULL');
+  const aggRows = useRows("SELECT * FROM computed_aggregates WHERE deleted_at IS NULL AND subject_kind = 'habit'");
+
+  return useMemo(() => {
+    const nodes = [...ctx.tree.byId.values()];
+    const entries = entryRows.map(toTimeEntry);
+    const completions = completionRows.map(toHabitCompletion);
+    const blocks = blockRows.map(toScheduleBlock);
+    const settings = { day_reset_hour: ctx.dayResetHour, timezone: ctx.timezone };
+    const today = ctx.today(now);
+
+    const serverAt = new Map<string, string>();
+    for (const a of aggRows.map(toComputedAggregate)) {
+      if (a.subject_id === null || a.computed_by !== 'server') continue;
+      const prev = serverAt.get(a.subject_id);
+      if (prev === undefined || a.computed_at > prev) serverAt.set(a.subject_id, a.computed_at);
+    }
+
+    const views: HabitView[] = [];
+    for (const habit of habitRows.map(toHabit)) {
+      const taskIds = habitTaskIds(habit, nodes);
+      const streak = canonicalStreak({ habit, completions, nodes, schedule_blocks: blocks, time_entries: entries, settings }, now);
+      const practice = canonicalPractice(habit, nodes, entries);
+
+      let todayMinutes = 0;
+      for (const e of entries) {
+        if (!taskIds.has(e.task_id)) continue;
+        if (bucketDate(e.started_at, settings.day_reset_hour, settings.timezone) !== today) continue;
+        todayMinutes += e.ended_at === null ? Math.max(0, (now - isoToEpochMillis(e.started_at)) / 60_000) : rawMinutes(e);
+      }
+
+      const target = habit.daily_target_minutes;
+      views.push({
+        habit,
+        streak,
+        practice,
+        todayMinutes,
+        dailyTargetMinutes: target,
+        ringFill: target && target > 0 ? Math.min(1, todayMinutes / target) : null,
+        doneToday: completions.some((c) => c.habit_id === habit.id && c.occurrence_date === today),
+        serverComputedAt: serverAt.get(habit.id) ?? null,
+      });
+    }
+    return views.sort((a, b) => (a.habit.title < b.habit.title ? -1 : a.habit.title > b.habit.title ? 1 : 0));
+  }, [ctx, habitRows, completionRows, entryRows, blockRows, aggRows, now]);
+}
+
+export interface KanbanColumn {
+  key: string;
+  label: string;
+  /** The due date this column writes on drop; null = the no-date backlog. */
+  date: IsoDate | null;
+  cards: Node[];
+}
+
+/**
+ * Kanban by date (§1.2): non-done tasks grouped into a backlog (no due date)
+ * plus `dayCount` day columns from today. Tasks due before the window land in
+ * the first day column, after it in the last — so every card stays draggable.
+ */
+export function useKanban(now: Instant, dayCount = 5): KanbanColumn[] {
+  const ctx = useFactContext();
+  return useMemo(() => {
+    const today = ctx.today(now);
+    const dates = Array.from({ length: dayCount }, (_, i) => addDays(today, i));
+    const columns: KanbanColumn[] = [
+      { key: 'backlog', label: 'No date', date: null, cards: [] },
+      ...dates.map((d, i) => ({ key: d, label: i === 0 ? `Today · ${d.slice(5)}` : d.slice(5), date: d, cards: [] as Node[] })),
+    ];
+    const dayCols = columns.slice(1);
+    for (const node of ctx.tree.byId.values()) {
+      if (node.node_type !== 'task' || node.completed_at !== null) continue;
+      if (node.due_date === null) {
+        columns[0]!.cards.push(node);
+        continue;
+      }
+      let target = dayCols.find((c) => c.date === node.due_date);
+      if (!target) target = node.due_date < dates[0]! ? dayCols[0]! : dayCols[dayCols.length - 1]!;
+      target.cards.push(node);
+    }
+    for (const col of columns) {
+      col.cards.sort((a, b) => (a.sort_order < b.sort_order ? -1 : a.sort_order > b.sort_order ? 1 : a.id < b.id ? -1 : 1));
+    }
+    return columns;
+  }, [ctx, now, dayCount]);
 }
 
 export interface AggregateRow {

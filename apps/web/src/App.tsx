@@ -13,11 +13,13 @@ import { getSession, signOut, type SessionUser } from './auth';
 import { connectDb, createDb } from './powersync';
 import { Agenda } from './screens/Agenda';
 import { Dashboard } from './screens/Dashboard';
+import { Habits } from './screens/Habits';
 import { Inbox } from './screens/Inbox';
+import { Kanban } from './screens/Kanban';
 import { Login } from './screens/Login';
 import { Worklist } from './screens/Worklist';
 
-type Route = '/' | '/inbox' | '/agenda' | '/dashboard';
+type Route = '/' | '/inbox' | '/agenda' | '/kanban' | '/habits' | '/dashboard';
 
 function AuthedApp({ user, onSignOut }: { user: SessionUser; onSignOut: () => void }) {
   const dbRef = useRef<PowerSyncDatabase | null>(null);
@@ -54,6 +56,8 @@ function AuthedApp({ user, onSignOut }: { user: SessionUser; onSignOut: () => vo
           { label: 'Worklist', href: '/', active: route === '/' },
           { label: 'Inbox', href: '/inbox', active: route === '/inbox' },
           { label: 'Agenda', href: '/agenda', active: route === '/agenda' },
+          { label: 'Kanban', href: '/kanban', active: route === '/kanban' },
+          { label: 'Habits', href: '/habits', active: route === '/habits' },
           { label: 'Dashboard', href: '/dashboard', active: route === '/dashboard' },
         ]}
         onNavigate={navigate}
@@ -76,6 +80,10 @@ function AuthedApp({ user, onSignOut }: { user: SessionUser; onSignOut: () => vo
           <Inbox ctx={ctx} />
         ) : route === '/agenda' ? (
           <Agenda ctx={ctx} />
+        ) : route === '/kanban' ? (
+          <Kanban ctx={ctx} />
+        ) : route === '/habits' ? (
+          <Habits ctx={ctx} />
         ) : (
           <Worklist ctx={ctx} />
         )}

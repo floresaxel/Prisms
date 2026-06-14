@@ -91,6 +91,22 @@ body {
 .px-cal-cell--valid { background: rgba(70,192,138,0.28); outline: 1px solid var(--px-ok); cursor: copy; }
 .px-cal-cell--invalid { background: rgba(0,0,0,0.35); }
 
+/* habits (§7.2): daily-target ring + create form */
+.px-habit-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.px-ring { position: relative; width: 64px; height: 64px; display: flex; align-items: center; justify-content: center; }
+.px-ring-track { fill: none; stroke: var(--px-surface-2); stroke-width: 6; }
+.px-ring-fill { fill: none; stroke: var(--px-accent); stroke-width: 6; stroke-linecap: round; transition: stroke-dashoffset 0.3s ease; }
+.px-ring-label { position: absolute; font-size: 12px; font-variant-numeric: tabular-nums; }
+
+/* kanban (§1.2): date columns */
+.px-kanban { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 8px; align-items: flex-start; }
+.px-kanban-col { flex: 0 0 200px; background: var(--px-surface); border: 1px solid var(--px-border); border-radius: var(--px-radius); padding: 10px; display: flex; flex-direction: column; gap: 8px; min-height: 120px; }
+.px-kanban-col--target { outline: 1px dashed var(--px-accent); }
+.px-kanban-col-head { font-size: 13px; font-weight: 600; }
+.px-kanban-card { background: var(--px-surface-2); border: 1px solid var(--px-border); border-radius: 8px; padding: 8px 10px; font-size: 13px; cursor: grab; user-select: none; }
+.px-kanban-card:hover { border-color: var(--px-accent); }
+.px-kanban-empty { color: var(--px-text-dim); text-align: center; font-size: 12px; padding: 8px 0; }
+
 .px-btn { font: inherit; padding: 8px 14px; border-radius: var(--px-radius); border: 1px solid var(--px-border); background: var(--px-surface-2); color: var(--px-text); cursor: pointer; }
 .px-btn:hover { border-color: var(--px-accent); }
 .px-btn--primary { background: var(--px-accent); border-color: var(--px-accent); color: white; }

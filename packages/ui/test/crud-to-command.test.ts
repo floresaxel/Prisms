@@ -133,6 +133,38 @@ describe('schedule_blocks', () => {
   });
 });
 
+describe('habits + habit_completions', () => {
+  const t = '2026-06-15T09:00:00.000Z';
+
+  it('PUT → habit.create, parsing level_thresholds_hours JSON text → array', () => {
+    expect(
+      crudToCommand(entry({ op: 'PUT', table: 'habits', id: 'h1', opData: { vision_id: 'v1', title: 'Piano', rrule: 'FREQ=DAILY', streak_mode: 'daily', daily_target_minutes: 30, mastery_target_hours: 100, level_thresholds_hours: '[1,10,100]' } })),
+    ).toEqual({
+      name: 'habit.create',
+      payload: { id: 'h1', vision_id: 'v1', title: 'Piano', rrule: 'FREQ=DAILY', streak_mode: 'daily', daily_target_minutes: 30, mastery_target_hours: 100, level_thresholds_hours: [1, 10, 100] },
+    });
+  });
+
+  it('PATCH changed fields → habit.update (level thresholds parsed)', () => {
+    expect(
+      crudToCommand(entry({ op: 'PATCH', table: 'habits', id: 'h1', opData: { daily_target_minutes: 45, level_thresholds_hours: '[2,20]', updated_at: t } })),
+    ).toEqual({ name: 'habit.update', payload: { id: 'h1', daily_target_minutes: 45, level_thresholds_hours: [2, 20] } });
+  });
+
+  it('PATCH updated_at-only → null; soft-delete → habit.delete', () => {
+    expect(crudToCommand(entry({ op: 'PATCH', table: 'habits', id: 'h1', opData: { updated_at: t } }))).toBeNull();
+    expect(crudToCommand(entry({ op: 'PATCH', table: 'habits', id: 'h1', opData: { deleted_at: t, updated_at: t } }))).toEqual({ name: 'habit.delete', payload: { id: 'h1' } });
+    expect(crudToCommand(entry({ op: 'DELETE', table: 'habits', id: 'h1' }))).toEqual({ name: 'habit.delete', payload: { id: 'h1' } });
+  });
+
+  it('completion PUT → habit.check_off; non-PUT → null (append-only facts)', () => {
+    expect(
+      crudToCommand(entry({ op: 'PUT', table: 'habit_completions', id: 'c1', opData: { habit_id: 'h1', occurrence_date: '2026-06-15', completed_at: t } })),
+    ).toEqual({ name: 'habit.check_off', payload: { id: 'c1', habit_id: 'h1', occurrence_date: '2026-06-15', completed_at: t } });
+    expect(crudToCommand(entry({ op: 'PATCH', table: 'habit_completions', id: 'c1', opData: { deleted_at: t } }))).toBeNull();
+  });
+});
+
 describe('user_settings + unknown tables', () => {
   it('settings patch → settings.update with only changed fields', () => {
     expect(crudToCommand(entry({ op: 'PATCH', table: 'user_settings', id: 'u1', opData: { day_reset_hour: 5, updated_at: 'x' } }))).toEqual({

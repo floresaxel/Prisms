@@ -32,6 +32,20 @@ function pick(data: Record<string, unknown> | null | undefined, keys: string[]):
   return out;
 }
 
+/** PowerSync stores array columns as JSON text; commands expect the array. */
+function jsonArray(value: unknown): number[] {
+  if (Array.isArray(value)) return value as number[];
+  if (typeof value === 'string' && value.length > 0) {
+    try {
+      const parsed = JSON.parse(value) as unknown;
+      return Array.isArray(parsed) ? (parsed as number[]) : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
 function nodeCommand(entry: CrudLike): TranslatedCommand | null {
   const d = entry.opData;
   if (entry.op === 'DELETE') return { name: 'node.soft_delete', payload: { id: entry.id } };
@@ -112,6 +126,36 @@ function scheduleBlockCommand(entry: CrudLike): TranslatedCommand | null {
   return null;
 }
 
+function habitCommand(entry: CrudLike): TranslatedCommand | null {
+  const d = entry.opData;
+  if (entry.op === 'DELETE') return { name: 'habit.delete', payload: { id: entry.id } };
+  if (entry.op === 'PUT') {
+    const payload: Record<string, unknown> = {
+      id: entry.id,
+      ...pick(d, ['vision_id', 'title', 'rrule', 'streak_mode', 'daily_target_minutes', 'mastery_target_hours']),
+    };
+    if (has(d, 'level_thresholds_hours')) payload['level_thresholds_hours'] = jsonArray(d!['level_thresholds_hours']);
+    return { name: 'habit.create', payload };
+  }
+  // PATCH
+  if (has(d, 'deleted_at') && d!['deleted_at'] != null) return { name: 'habit.delete', payload: { id: entry.id } };
+  const update: Record<string, unknown> = pick(d, ['title', 'rrule', 'streak_mode', 'daily_target_minutes', 'mastery_target_hours']);
+  if (has(d, 'level_thresholds_hours')) update['level_thresholds_hours'] = jsonArray(d!['level_thresholds_hours']);
+  return Object.keys(update).length > 0 ? { name: 'habit.update', payload: { id: entry.id, ...update } } : null;
+}
+
+function habitCompletionCommand(entry: CrudLike): TranslatedCommand | null {
+  const d = entry.opData;
+  // completions are append-only facts; only the check-off (PUT) ships.
+  if (entry.op === 'PUT') {
+    return {
+      name: 'habit.check_off',
+      payload: { id: entry.id, habit_id: d?.['habit_id'], occurrence_date: d?.['occurrence_date'], completed_at: d?.['completed_at'] },
+    };
+  }
+  return null;
+}
+
 function settingsCommand(entry: CrudLike): TranslatedCommand | null {
   if (entry.op === 'DELETE') return null;
   const payload = pick(entry.opData, ['day_reset_hour', 'timezone', 'weather_location']);
@@ -127,6 +171,10 @@ export function crudToCommand(entry: CrudLike): TranslatedCommand | null {
       return timeEntryCommand(entry);
     case 'schedule_blocks':
       return scheduleBlockCommand(entry);
+    case 'habits':
+      return habitCommand(entry);
+    case 'habit_completions':
+      return habitCompletionCommand(entry);
     case 'user_settings':
       return settingsCommand(entry);
     default:

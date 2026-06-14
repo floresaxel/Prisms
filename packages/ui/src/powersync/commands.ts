@@ -145,6 +145,85 @@ export function createCommands(db: WritableDb, ctx: CommandContext) {
       const now = iso(ctx);
       await db.execute('UPDATE schedule_blocks SET deleted_at = ?, updated_at = ? WHERE id = ?', [now, now, id]);
     },
+    // --- node dates (kanban-by-date, §1.2) ----------------------------------
+    /** Set a task's start/due dates (kanban drag = node.set_dates). */
+    async setDates(taskId: string, patch: { startDate?: string | null; dueDate?: string | null }): Promise<void> {
+      const now = iso(ctx);
+      const sets: string[] = [];
+      const params: unknown[] = [];
+      if ('startDate' in patch) {
+        sets.push('start_date = ?');
+        params.push(patch.startDate ?? null);
+      }
+      if ('dueDate' in patch) {
+        sets.push('due_date = ?');
+        params.push(patch.dueDate ?? null);
+      }
+      if (sets.length === 0) return;
+      sets.push('updated_at = ?');
+      params.push(now, taskId);
+      await db.execute(`UPDATE nodes SET ${sets.join(', ')} WHERE id = ?`, params);
+    },
+
+    // --- habits & skills (§1.2, §7.2) ---------------------------------------
+    async createHabit(input: {
+      visionId: string;
+      title: string;
+      rrule: string;
+      streakMode: 'perfect_planned' | 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'yearly';
+      dailyTargetMinutes?: number | null;
+      masteryTargetHours?: number | null;
+      levelThresholdsHours?: number[];
+    }): Promise<string> {
+      const id = newId();
+      const now = iso(ctx);
+      await db.execute(
+        'INSERT INTO habits (id, user_id, vision_id, title, rrule, streak_mode, daily_target_minutes, mastery_target_hours, level_thresholds_hours, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [
+          id,
+          ctx.userId,
+          input.visionId,
+          input.title,
+          input.rrule,
+          input.streakMode,
+          input.dailyTargetMinutes ?? null,
+          input.masteryTargetHours ?? null,
+          JSON.stringify(input.levelThresholdsHours ?? []),
+          now,
+          now,
+        ],
+      );
+      return id;
+    },
+    async updateHabit(id: string, patch: { title?: string; rrule?: string; dailyTargetMinutes?: number | null; masteryTargetHours?: number | null; levelThresholdsHours?: number[] }): Promise<void> {
+      const now = iso(ctx);
+      const sets: string[] = [];
+      const params: unknown[] = [];
+      if (patch.title !== undefined) { sets.push('title = ?'); params.push(patch.title); }
+      if (patch.rrule !== undefined) { sets.push('rrule = ?'); params.push(patch.rrule); }
+      if ('dailyTargetMinutes' in patch) { sets.push('daily_target_minutes = ?'); params.push(patch.dailyTargetMinutes ?? null); }
+      if ('masteryTargetHours' in patch) { sets.push('mastery_target_hours = ?'); params.push(patch.masteryTargetHours ?? null); }
+      if (patch.levelThresholdsHours !== undefined) { sets.push('level_thresholds_hours = ?'); params.push(JSON.stringify(patch.levelThresholdsHours)); }
+      if (sets.length === 0) return;
+      sets.push('updated_at = ?');
+      params.push(now, id);
+      await db.execute(`UPDATE habits SET ${sets.join(', ')} WHERE id = ?`, params);
+    },
+    async deleteHabit(id: string): Promise<void> {
+      const now = iso(ctx);
+      await db.execute('UPDATE habits SET deleted_at = ?, updated_at = ? WHERE id = ?', [now, now, id]);
+    },
+    /** Check a habit off for one occurrence (the caller buckets occurrenceDate). */
+    async checkOffHabit(input: { habitId: string; occurrenceDate: string }): Promise<string> {
+      const id = newId();
+      const now = iso(ctx);
+      await db.execute(
+        'INSERT INTO habit_completions (id, user_id, habit_id, occurrence_date, completed_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        [id, ctx.userId, input.habitId, input.occurrenceDate, now, now, now],
+      );
+      return id;
+    },
+
     async updateSettings(patch: { day_reset_hour?: number; timezone?: string }): Promise<void> {
       const now = iso(ctx);
       const sets: string[] = ['updated_at = ?'];
