@@ -488,6 +488,28 @@ export const command_field_versions = pgTable(
   (t) => [primaryKey({ columns: [t.table_name, t.row_id, t.field] })],
 );
 
+// --- PUSH SUBSCRIPTIONS (server-internal; never synced) -------------------------------
+// Per-device push endpoints for notify.dispatch (§11, §12.3): Web Push
+// endpoints + keys, or an Expo push token. Not a §6.0 domain table.
+export const push_subscriptions = pgTable(
+  'push_subscriptions',
+  {
+    id: uuid('id').primaryKey(),
+    user_id: uuid('user_id').notNull(),
+    device_id: text('device_id').notNull(),
+    kind: text('kind').$type<'web' | 'expo'>().notNull(),
+    endpoint: text('endpoint').notNull(), // web push URL or expo token
+    keys: jsonb('keys').$type<{ p256dh?: string; auth?: string }>(), // web push only
+    created_at: timestamptz('created_at').notNull().defaultNow(),
+    updated_at: timestamptz('updated_at').notNull(),
+    deleted_at: timestamptz('deleted_at'),
+  },
+  (t) => [
+    check('push_subscriptions_kind_check', sql`${t.kind} IN ('web','expo')`),
+    unique('push_subscriptions_endpoint_uq').on(t.user_id, t.endpoint),
+  ],
+);
+
 /** Every table, keyed by SQL name — used by the seed, tests, and later the server. */
 export const tables = {
   nodes,
