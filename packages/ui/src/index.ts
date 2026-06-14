@@ -1,7 +1,29 @@
 /**
- * @prisms/ui — shared React hooks (useStatus, useAggregates, useNodeTree,
- * useCommands) built on PowerSync reactive queries + core selectors.
- *
- * TODO(s15): everything. This is an S1 skeleton.
+ * @prisms/ui — shared React hooks (PowerSync reactive queries → core
+ * selectors), the PowerSync data layer (schema, connector, command bridge),
+ * and the base design system. Imports core; never imports server.
  */
 export const UI_PACKAGE = '@prisms/ui' as const;
+
+// data layer
+export { appSchema } from './powersync/schema';
+export { createConnector, type ConnectorOptions, type CommandRejection } from './powersync/connector';
+export { crudToCommand, type CrudLike, type CrudOp, type TranslatedCommand } from './powersync/crud-to-command';
+export { createCommands, type Commands, type CommandContext, type WritableDb } from './powersync/commands';
+export { newId, createHlc, getDeviceId, browserClock, browserRng } from './powersync/client-runtime';
+
+// hooks
+export {
+  useNodeTree,
+  useFactContext,
+  useWorklist,
+  useAggregates,
+  useCommands,
+  type WorklistItem,
+  type AggregateRow,
+} from './hooks';
+
+// design system
+export { Layout, type LayoutProps, type NavLinkSpec } from './components/Layout';
+export { List, ListItem, type ListProps, type ListItemProps } from './components/List';
+export { Modal, type ModalProps } from './components/Modal';
