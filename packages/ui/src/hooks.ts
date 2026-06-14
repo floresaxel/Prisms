@@ -8,11 +8,17 @@ import { usePowerSync, useQuery } from '@powersync/react';
 import {
   buildFactContext,
   buildTreeIndex,
+  canonicalProgress,
+  isoToEpochMillis,
+  minutesLeftInDay,
+  minutesLeftInTask,
   taskStatus,
   type FactContext,
   type Instant,
   type Node,
+  type ProgressValue,
   type TaskStatus,
+  type TimeEntry,
   type TreeIndex,
 } from '@prisms/core';
 
@@ -73,27 +79,103 @@ export interface WorklistItem {
   status: TaskStatus;
   /** Open time-entry id when running. */
   openEntryId?: string;
+  /** Time consumed vs. estimate (§7.2 progress bar). */
+  progress: ProgressValue;
+  /** estimate − consumed minutes (null without an estimate); negative when over. */
+  minutesLeftInTask: number | null;
 }
 
 /**
  * The "available items" worklist (§1.2): tasks the user can act on now —
  * available, prioritized, scheduled, or ongoing (not done, not blocked),
- * ordered ongoing-first then by status precedence.
+ * ordered ongoing-first then by status precedence. Each item carries its
+ * progress (§7.2) and time-left-in-task indicator.
  */
 export function useWorklist(now: Instant): WorklistItem[] {
   const ctx = useFactContext();
+  const entryRows = useRows('SELECT * FROM time_entries WHERE deleted_at IS NULL');
   return useMemo(() => {
+    const entries = entryRows.map(toTimeEntry);
     const items: WorklistItem[] = [];
     for (const node of ctx.tree.byId.values()) {
       if (node.node_type !== 'task') continue;
       const status = taskStatus(node, ctx, now);
       if (status === 'done' || status === 'blocked') continue;
       const open = ctx.openEntryFor(node.id);
-      items.push({ task: node, status, openEntryId: open?.id });
+      items.push({
+        task: node,
+        status,
+        openEntryId: open?.id,
+        progress: canonicalProgress(node, entries),
+        minutesLeftInTask: minutesLeftInTask(node, entries),
+      });
     }
     const rank: Record<TaskStatus, number> = { ongoing: 0, scheduled: 1, prioritized: 2, available: 3, blocked: 4, done: 5 };
     return items.sort((a, b) => rank[a.status] - rank[b.status] || (a.task.title < b.task.title ? -1 : 1));
-  }, [ctx, now]);
+  }, [ctx, entryRows, now]);
+}
+
+export interface RunningTimer {
+  entry: TimeEntry;
+  /** The task being timed (undefined only on a transiently inconsistent set). */
+  task: Node | undefined;
+  /** Live elapsed milliseconds since clock-in. */
+  elapsedMs: number;
+}
+
+/**
+ * The single global running timer (I5). When two open entries exist transiently
+ * (offline double clock-in, §7.4), the latest-started one is the live timer —
+ * the same winner the server's merge keeps — so the UI never shows two.
+ */
+export function useRunningTimer(now: Instant): RunningTimer | null {
+  const rows = useRows('SELECT * FROM time_entries WHERE ended_at IS NULL AND deleted_at IS NULL');
+  const tree = useNodeTree();
+  return useMemo(() => {
+    const open = rows.map(toTimeEntry);
+    if (open.length === 0) return null;
+    const winner = open.reduce((a, b) =>
+      b.started_at > a.started_at || (b.started_at === a.started_at && b.id > a.id) ? b : a,
+    );
+    return {
+      entry: winner,
+      task: tree.byId.get(winner.task_id),
+      elapsedMs: Math.max(0, now - isoToEpochMillis(winner.started_at)),
+    };
+  }, [rows, tree, now]);
+}
+
+/** Activity inbox (§1.2): parentless `activity` items awaiting promotion. */
+export function useActivityInbox(): Node[] {
+  const rows = useRows("SELECT * FROM nodes WHERE node_type = 'activity' AND deleted_at IS NULL");
+  return useMemo(
+    () => rows.map(toNode).sort((a, b) => (a.sort_order < b.sort_order ? -1 : a.sort_order > b.sort_order ? 1 : a.id < b.id ? -1 : 1)),
+    [rows],
+  );
+}
+
+export interface PromoteTarget {
+  id: string;
+  title: string;
+  type: 'project' | 'milestone';
+}
+
+/** Valid parents for a promoted activity (I1: a task's parent is a project or milestone). */
+export function usePromoteTargets(): PromoteTarget[] {
+  const tree = useNodeTree();
+  return useMemo(() => {
+    const out: PromoteTarget[] = [];
+    for (const n of tree.byId.values()) {
+      if (n.node_type === 'project' || n.node_type === 'milestone') out.push({ id: n.id, title: n.title, type: n.node_type });
+    }
+    return out.sort((a, b) => (a.title < b.title ? -1 : a.title > b.title ? 1 : a.id < b.id ? -1 : 1));
+  }, [tree]);
+}
+
+/** Minutes left until the next day-reset (§7.2), using the user's settings. */
+export function useDayTimeLeft(now: Instant): number {
+  const ctx = useFactContext();
+  return useMemo(() => minutesLeftInDay(now, { day_reset_hour: ctx.dayResetHour, timezone: ctx.timezone }), [ctx, now]);
 }
 
 export interface AggregateRow {

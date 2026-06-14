@@ -51,6 +51,14 @@ function nodeCommand(entry: CrudLike): TranslatedCommand | null {
       ? { name: 'node.uncheck', payload: { id: entry.id } }
       : { name: 'node.check_off', payload: { id: entry.id, completed_at: d!['completed_at'] } };
   }
+  // activity.promote retypes to task AND attaches a justification (parent xor
+  // habit, I3) in one write — distinguished from a plain retype by the
+  // co-changed parent_id/habit_id (§8.1).
+  if (has(d, 'node_type') && (has(d, 'parent_id') || has(d, 'habit_id'))) {
+    return d!['habit_id'] != null
+      ? { name: 'activity.promote', payload: { id: entry.id, habit_id: d!['habit_id'] } }
+      : { name: 'activity.promote', payload: { id: entry.id, parent_id: d!['parent_id'] } };
+  }
   if (has(d, 'node_type')) return { name: 'node.retype', payload: { id: entry.id, node_type: d!['node_type'] } };
   if (has(d, 'parent_id')) return { name: 'node.move', payload: { id: entry.id, new_parent_id: d!['parent_id'] ?? null, sort_order: d!['sort_order'] } };
   if (has(d, 'sort_order')) return { name: 'node.reorder', payload: { id: entry.id, sort_order: d!['sort_order'] } };

@@ -12,10 +12,11 @@ import { getDeviceId, Layout, type CommandContext, type CommandRejection } from 
 import { getSession, signOut, type SessionUser } from './auth';
 import { connectDb, createDb } from './powersync';
 import { Dashboard } from './screens/Dashboard';
+import { Inbox } from './screens/Inbox';
 import { Login } from './screens/Login';
 import { Worklist } from './screens/Worklist';
 
-type Route = '/' | '/dashboard';
+type Route = '/' | '/inbox' | '/dashboard';
 
 function AuthedApp({ user, onSignOut }: { user: SessionUser; onSignOut: () => void }) {
   const dbRef = useRef<PowerSyncDatabase | null>(null);
@@ -50,6 +51,7 @@ function AuthedApp({ user, onSignOut }: { user: SessionUser; onSignOut: () => vo
         title="Prisms"
         nav={[
           { label: 'Worklist', href: '/', active: route === '/' },
+          { label: 'Inbox', href: '/inbox', active: route === '/inbox' },
           { label: 'Dashboard', href: '/dashboard', active: route === '/dashboard' },
         ]}
         onNavigate={navigate}
@@ -66,7 +68,7 @@ function AuthedApp({ user, onSignOut }: { user: SessionUser; onSignOut: () => vo
             Change rejected: {rejections.map((r) => r.reject_code).join(', ')} (reverted)
           </div>
         )}
-        {route === '/dashboard' ? <Dashboard ctx={ctx} /> : <Worklist ctx={ctx} />}
+        {route === '/dashboard' ? <Dashboard ctx={ctx} /> : route === '/inbox' ? <Inbox ctx={ctx} /> : <Worklist ctx={ctx} />}
       </Layout>
     </PowerSyncContext.Provider>
   );

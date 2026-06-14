@@ -53,6 +53,28 @@ describe('nodes', () => {
     expect(crudToCommand(entry({ op: 'DELETE', table: 'nodes', id: 'n1' }))).toEqual({ name: 'node.soft_delete', payload: { id: 'n1' } });
   });
 
+  it('node_type + parent_id together → activity.promote (not a plain retype)', () => {
+    const t = '2026-06-14T10:00:00.000Z';
+    expect(
+      crudToCommand(entry({ op: 'PATCH', table: 'nodes', id: 'a1', opData: { node_type: 'task', parent_id: 'p1', habit_id: null, updated_at: t } })),
+    ).toEqual({ name: 'activity.promote', payload: { id: 'a1', parent_id: 'p1' } });
+  });
+
+  it('node_type + habit_id together → activity.promote onto the habit', () => {
+    const t = '2026-06-14T10:00:00.000Z';
+    expect(
+      crudToCommand(entry({ op: 'PATCH', table: 'nodes', id: 'a1', opData: { node_type: 'task', parent_id: null, habit_id: 'h1', updated_at: t } })),
+    ).toEqual({ name: 'activity.promote', payload: { id: 'a1', habit_id: 'h1' } });
+  });
+
+  it('a node_type-only patch is still a plain retype', () => {
+    const t = '2026-06-14T10:00:00.000Z';
+    expect(crudToCommand(entry({ op: 'PATCH', table: 'nodes', id: 'n1', opData: { node_type: 'project', updated_at: t } }))).toEqual({
+      name: 'node.retype',
+      payload: { id: 'n1', node_type: 'project' },
+    });
+  });
+
   it('an updated_at-only patch translates to nothing', () => {
     expect(crudToCommand(entry({ op: 'PATCH', table: 'nodes', id: 'n1', opData: { updated_at: 'x' } }))).toBeNull();
   });

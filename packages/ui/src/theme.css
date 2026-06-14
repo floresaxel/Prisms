@@ -41,6 +41,25 @@ body {
 .px-badge { font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; padding: 3px 8px; border-radius: 999px; background: var(--px-surface-2); color: var(--px-text-dim); }
 .px-badge--ongoing { background: rgba(91,140,255,0.18); color: var(--px-accent); }
 .px-badge--scheduled { background: rgba(70,192,138,0.16); color: var(--px-ok); }
+.px-badge--prioritized { background: rgba(255,196,84,0.16); color: #f4c454; }
+.px-badge--available { background: var(--px-surface-2); color: var(--px-text-dim); }
+.px-badge--blocked { background: rgba(255,107,107,0.16); color: var(--px-danger); }
+.px-badge--done { background: rgba(70,192,138,0.16); color: var(--px-ok); }
+
+/* task progress bar (§7.2) */
+.px-progress { height: 6px; border-radius: 999px; background: var(--px-surface-2); overflow: hidden; max-width: 320px; }
+.px-progress-fill { height: 100%; background: var(--px-accent); border-radius: 999px; transition: width 0.2s ease; }
+.px-progress-fill--over { background: var(--px-danger); }
+
+/* running-timer bar (I5: one global) */
+.px-timerbar { display: flex; align-items: center; gap: 12px; padding: 12px 16px; margin-bottom: 16px; background: var(--px-surface-2); border: 1px solid var(--px-accent); border-radius: var(--px-radius); }
+.px-timerbar-task { font-weight: 600; flex: 1; }
+.px-timerbar-elapsed { font-variant-numeric: tabular-nums; font-size: 18px; color: var(--px-accent); }
+
+/* form controls */
+.px-input, .px-select { font: inherit; padding: 8px 12px; border-radius: var(--px-radius); border: 1px solid var(--px-border); background: var(--px-bg); color: var(--px-text); }
+.px-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.px-btn:disabled:hover { border-color: var(--px-border); }
 
 .px-btn { font: inherit; padding: 8px 14px; border-radius: var(--px-radius); border: 1px solid var(--px-border); background: var(--px-surface-2); color: var(--px-text); cursor: pointer; }
 .px-btn:hover { border-color: var(--px-accent); }
