@@ -224,6 +224,45 @@ export function createCommands(db: WritableDb, ctx: CommandContext) {
       return id;
     },
 
+    // --- decision board (§6.0) ----------------------------------------------
+    async createBoard(title: string): Promise<string> {
+      const id = newId();
+      const now = iso(ctx);
+      await db.execute('INSERT INTO decision_boards (id, user_id, title, created_at, updated_at) VALUES (?, ?, ?, ?, ?)', [id, ctx.userId, title, now, now]);
+      return id;
+    },
+    async createCriterion(input: { boardId: string; label: string; weight: number }): Promise<string> {
+      const id = newId();
+      const now = iso(ctx);
+      await db.execute(
+        'INSERT INTO decision_criteria (id, user_id, board_id, label, weight, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        [id, ctx.userId, input.boardId, input.label, input.weight, now, now],
+      );
+      return id;
+    },
+    async setCriterionWeight(id: string, weight: number): Promise<void> {
+      await db.execute('UPDATE decision_criteria SET weight = ?, updated_at = ? WHERE id = ?', [weight, iso(ctx), id]);
+    },
+    /**
+     * Upsert a project's score on a criterion (score.set, keyed by
+     * criterion_id+project_id). On update we re-state the key fields so the
+     * CRUD patch carries them for the command bridge.
+     */
+    async setScore(input: { existingId?: string; criterionId: string; projectId: string; score: number }): Promise<void> {
+      const now = iso(ctx);
+      if (input.existingId) {
+        await db.execute(
+          'UPDATE decision_scores SET score = ?, criterion_id = ?, project_id = ?, updated_at = ? WHERE id = ?',
+          [input.score, input.criterionId, input.projectId, now, input.existingId],
+        );
+      } else {
+        await db.execute(
+          'INSERT INTO decision_scores (id, user_id, criterion_id, project_id, score, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          [newId(), ctx.userId, input.criterionId, input.projectId, input.score, now, now],
+        );
+      }
+    },
+
     async updateSettings(patch: { day_reset_hour?: number; timezone?: string }): Promise<void> {
       const now = iso(ctx);
       const sets: string[] = ['updated_at = ?'];

@@ -6,6 +6,9 @@
 import type {
   BlockerRule,
   ComputedAggregate,
+  DecisionBoard,
+  DecisionCriterion,
+  DecisionScore,
   Edge,
   ExternalFact,
   Habit,
@@ -161,6 +164,37 @@ export const toHabitCompletion = (r: Row): HabitCompletion => ({
   habit_id: String(r['habit_id']),
   occurrence_date: String(r['occurrence_date']),
   completed_at: String(r['completed_at']),
+  created_at: String(r['created_at'] ?? ''),
+  updated_at: String(r['updated_at'] ?? ''),
+  deleted_at: str(r['deleted_at']),
+});
+
+export const toDecisionBoard = (r: Row): DecisionBoard => ({
+  id: String(r['id']),
+  user_id: String(r['user_id']),
+  title: String(r['title'] ?? ''),
+  created_at: String(r['created_at'] ?? ''),
+  updated_at: String(r['updated_at'] ?? ''),
+  deleted_at: str(r['deleted_at']),
+});
+
+export const toDecisionCriterion = (r: Row): DecisionCriterion => ({
+  id: String(r['id']),
+  user_id: String(r['user_id']),
+  board_id: String(r['board_id']),
+  label: String(r['label'] ?? ''),
+  weight: Number(r['weight'] ?? 1),
+  created_at: String(r['created_at'] ?? ''),
+  updated_at: String(r['updated_at'] ?? ''),
+  deleted_at: str(r['deleted_at']),
+});
+
+export const toDecisionScore = (r: Row): DecisionScore => ({
+  id: String(r['id']),
+  user_id: String(r['user_id']),
+  criterion_id: String(r['criterion_id']),
+  project_id: String(r['project_id']),
+  score: Number(r['score'] ?? 0),
   created_at: String(r['created_at'] ?? ''),
   updated_at: String(r['updated_at'] ?? ''),
   deleted_at: str(r['deleted_at']),

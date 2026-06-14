@@ -107,6 +107,23 @@ body {
 .px-kanban-card:hover { border-color: var(--px-accent); }
 .px-kanban-empty { color: var(--px-text-dim); text-align: center; font-size: 12px; padding: 8px 0; }
 
+/* dashboard (§1.2): burndown chart + two-column panels */
+.px-chart { width: 100%; max-width: 640px; height: auto; background: var(--px-surface); border: 1px solid var(--px-border); border-radius: var(--px-radius); }
+.px-chart-axis { stroke: var(--px-border); stroke-width: 1; }
+.px-chart-bar { fill: rgba(70,192,138,0.28); }
+.px-chart-line { stroke: var(--px-accent); stroke-width: 2; }
+.px-chart-dot { fill: var(--px-accent); }
+.px-dash-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 12px; align-items: start; }
+
+/* decision board (§6.0): scoring grid + ranking */
+.px-grid { border-collapse: collapse; width: 100%; }
+.px-grid th, .px-grid td { border: 1px solid var(--px-border); padding: 6px 8px; text-align: center; }
+.px-grid th:first-child, .px-grid td:first-child { text-align: left; }
+.px-grid-weight, .px-grid-score { width: 60px; padding: 4px 6px; text-align: center; }
+.px-ranking { padding-left: 22px; }
+.px-ranking li { padding: 4px 0; }
+.px-board { margin-bottom: 28px; }
+
 .px-btn { font: inherit; padding: 8px 14px; border-radius: var(--px-radius); border: 1px solid var(--px-border); background: var(--px-surface-2); color: var(--px-text); cursor: pointer; }
 .px-btn:hover { border-color: var(--px-accent); }
 .px-btn--primary { background: var(--px-accent); border-color: var(--px-accent); color: white; }

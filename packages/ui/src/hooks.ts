@@ -11,6 +11,8 @@ import {
   bucketDate,
   buildFactContext,
   buildTreeIndex,
+  canonicalBurndown,
+  canonicalCompletion,
   canonicalPractice,
   canonicalProgress,
   canonicalStreak,
@@ -20,9 +22,14 @@ import {
   isoToEpochMillis,
   minutesLeftInDay,
   minutesLeftInTask,
+  rankProjects,
   rawMinutes,
   taskStatus,
+  type BurndownValue,
   type CommittedBlock,
+  type CompletionValue,
+  type DecisionBoard,
+  type DecisionCriterion,
   type FactContext,
   type Habit,
   type Instant,
@@ -43,6 +50,9 @@ import { createCommands, type CommandContext } from './powersync/commands';
 import {
   toBlockerRule,
   toComputedAggregate,
+  toDecisionBoard,
+  toDecisionCriterion,
+  toDecisionScore,
   toEdge,
   toExternalFact,
   toHabit,
@@ -447,6 +457,105 @@ export function useKanban(now: Instant, dayCount = 5): KanbanColumn[] {
     }
     return columns;
   }, [ctx, now, dayCount]);
+}
+
+export interface DecisionBoardView {
+  board: DecisionBoard;
+  criteria: DecisionCriterion[];
+  /** All scoreable projects (rows of the grid). */
+  projects: Node[];
+  /** key `${criterionId}:${projectId}` → the score row's id + value. */
+  scores: ReadonlyMap<string, { id: string; score: number }>;
+  /** Live weighted ranking, highest priority first (§6.0). */
+  ranking: { project: Node; priority: number }[];
+}
+
+/** Decision boards with their criteria, score grid, and live ranking (§6.0). */
+export function useDecisionBoards(): DecisionBoardView[] {
+  const tree = useNodeTree();
+  const boardRows = useRows('SELECT * FROM decision_boards WHERE deleted_at IS NULL');
+  const criterionRows = useRows('SELECT * FROM decision_criteria WHERE deleted_at IS NULL');
+  const scoreRows = useRows('SELECT * FROM decision_scores WHERE deleted_at IS NULL');
+
+  return useMemo(() => {
+    const projects = [...tree.byId.values()]
+      .filter((n) => n.node_type === 'project')
+      .sort((a, b) => (a.title < b.title ? -1 : a.title > b.title ? 1 : a.id < b.id ? -1 : 1));
+    const projectIds = projects.map((p) => p.id);
+    const projectById = new Map(projects.map((p) => [p.id, p]));
+    const allCriteria = criterionRows.map(toDecisionCriterion);
+    const allScores = scoreRows.map(toDecisionScore);
+
+    return boardRows
+      .map(toDecisionBoard)
+      .map((board) => {
+        const criteria = allCriteria
+          .filter((c) => c.board_id === board.id)
+          .sort((a, b) => (a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : a.id < b.id ? -1 : 1));
+        const critIds = new Set(criteria.map((c) => c.id));
+        const scores = allScores.filter((s) => critIds.has(s.criterion_id));
+        const scoreMap = new Map<string, { id: string; score: number }>();
+        for (const s of scores) scoreMap.set(`${s.criterion_id}:${s.project_id}`, { id: s.id, score: s.score });
+        const ranking = rankProjects(criteria, scores, projectIds)
+          .map((r) => ({ project: projectById.get(r.projectId) as Node, priority: r.priority }))
+          .filter((r) => r.project !== undefined);
+        return { board, criteria, projects, scores: scoreMap, ranking };
+      })
+      .sort((a, b) => (a.board.created_at < b.board.created_at ? -1 : a.board.created_at > b.board.created_at ? 1 : 0));
+  }, [tree, boardRows, criterionRows, scoreRows]);
+}
+
+export interface ProjectCompletion {
+  project: Node;
+  value: CompletionValue;
+}
+
+export interface DashboardData {
+  /** Trailing-window burndown (remaining vs scheduled) + projection (§7.2). */
+  burndown: BurndownValue;
+  /** computed_at of the server projection/burndown aggregate, or null (live). */
+  projectionComputedAt: string | null;
+  /** Per-project completion bars, most complete first. */
+  completion: ProjectCompletion[];
+}
+
+/**
+ * Dashboard data (§1.2): a user-wide burndown + projection (with the server
+ * aggregate's freshness), and per-project completion — all from local facts so
+ * the dashboard renders fully offline.
+ */
+export function useDashboard(now: Instant, days = 14): DashboardData {
+  const ctx = useFactContext();
+  // include soft-deleted tasks so the burndown scope-out (a deleted task
+  // leaving the series) is reflected.
+  const taskRows = useRows("SELECT * FROM nodes WHERE node_type = 'task'");
+  const blockRows = useRows('SELECT * FROM schedule_blocks WHERE deleted_at IS NULL');
+  const aggRows = useRows("SELECT * FROM computed_aggregates WHERE deleted_at IS NULL AND subject_kind = 'user'");
+
+  return useMemo(() => {
+    const settings = { day_reset_hour: ctx.dayResetHour, timezone: ctx.timezone };
+    const today = ctx.today(now);
+    const burndown = canonicalBurndown({
+      tasks: taskRows.map(toNode),
+      schedule_blocks: blockRows.map(toScheduleBlock),
+      settings,
+      range: { from: addDays(today, -(days - 1)), to: today },
+    });
+
+    let projectionComputedAt: string | null = null;
+    for (const a of aggRows.map(toComputedAggregate)) {
+      if (a.computed_by !== 'server') continue;
+      if (a.metric !== 'projection' && a.metric !== 'burndown_series') continue;
+      if (projectionComputedAt === null || a.computed_at > projectionComputedAt) projectionComputedAt = a.computed_at;
+    }
+
+    const completion: ProjectCompletion[] = [...ctx.tree.byId.values()]
+      .filter((n) => n.node_type === 'project')
+      .map((project) => ({ project, value: canonicalCompletion(project.id, ctx.tree) }))
+      .sort((a, b) => b.value.percent - a.value.percent || (a.project.title < b.project.title ? -1 : 1));
+
+    return { burndown, projectionComputedAt, completion };
+  }, [ctx, taskRows, blockRows, aggRows, now, days]);
 }
 
 export interface AggregateRow {

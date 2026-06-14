@@ -156,6 +156,33 @@ function habitCompletionCommand(entry: CrudLike): TranslatedCommand | null {
   return null;
 }
 
+function decisionBoardCommand(entry: CrudLike): TranslatedCommand | null {
+  // boards have only a create command (no rename/delete in the catalog).
+  if (entry.op === 'PUT') return { name: 'board.create', payload: { id: entry.id, ...pick(entry.opData, ['title']) } };
+  return null;
+}
+
+function decisionCriterionCommand(entry: CrudLike): TranslatedCommand | null {
+  const d = entry.opData;
+  if (entry.op === 'PUT') {
+    return { name: 'criterion.create', payload: { id: entry.id, ...pick(d, ['board_id', 'label', 'weight']) } };
+  }
+  if (entry.op === 'PATCH' && has(d, 'weight')) {
+    return { name: 'criterion.set_weight', payload: { id: entry.id, weight: d!['weight'] } };
+  }
+  return null;
+}
+
+function decisionScoreCommand(entry: CrudLike): TranslatedCommand | null {
+  const d = entry.opData;
+  // score.set is an upsert keyed by (criterion_id, project_id); the writer
+  // re-states those key fields on update so the command always carries them.
+  if (entry.op === 'PUT' || (entry.op === 'PATCH' && has(d, 'score'))) {
+    return { name: 'score.set', payload: { id: entry.id, criterion_id: d?.['criterion_id'], project_id: d?.['project_id'], score: d?.['score'] } };
+  }
+  return null;
+}
+
 function settingsCommand(entry: CrudLike): TranslatedCommand | null {
   if (entry.op === 'DELETE') return null;
   const payload = pick(entry.opData, ['day_reset_hour', 'timezone', 'weather_location']);
@@ -175,6 +202,12 @@ export function crudToCommand(entry: CrudLike): TranslatedCommand | null {
       return habitCommand(entry);
     case 'habit_completions':
       return habitCompletionCommand(entry);
+    case 'decision_boards':
+      return decisionBoardCommand(entry);
+    case 'decision_criteria':
+      return decisionCriterionCommand(entry);
+    case 'decision_scores':
+      return decisionScoreCommand(entry);
     case 'user_settings':
       return settingsCommand(entry);
     default:

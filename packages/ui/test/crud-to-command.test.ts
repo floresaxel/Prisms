@@ -165,6 +165,36 @@ describe('habits + habit_completions', () => {
   });
 });
 
+describe('decision board', () => {
+  const t = '2026-06-15T09:00:00.000Z';
+
+  it('board PUT → board.create; PATCH ignored', () => {
+    expect(crudToCommand(entry({ op: 'PUT', table: 'decision_boards', id: 'b1', opData: { title: 'Priorities' } }))).toEqual({
+      name: 'board.create', payload: { id: 'b1', title: 'Priorities' },
+    });
+    expect(crudToCommand(entry({ op: 'PATCH', table: 'decision_boards', id: 'b1', opData: { title: 'X', updated_at: t } }))).toBeNull();
+  });
+
+  it('criterion PUT → criterion.create; weight PATCH → criterion.set_weight', () => {
+    expect(crudToCommand(entry({ op: 'PUT', table: 'decision_criteria', id: 'c1', opData: { board_id: 'b1', label: 'Impact', weight: 3 } }))).toEqual({
+      name: 'criterion.create', payload: { id: 'c1', board_id: 'b1', label: 'Impact', weight: 3 },
+    });
+    expect(crudToCommand(entry({ op: 'PATCH', table: 'decision_criteria', id: 'c1', opData: { weight: 5, updated_at: t } }))).toEqual({
+      name: 'criterion.set_weight', payload: { id: 'c1', weight: 5 },
+    });
+  });
+
+  it('score PUT and score PATCH both → score.set with the upsert key fields', () => {
+    expect(crudToCommand(entry({ op: 'PUT', table: 'decision_scores', id: 's1', opData: { criterion_id: 'c1', project_id: 'p1', score: 7 } }))).toEqual({
+      name: 'score.set', payload: { id: 's1', criterion_id: 'c1', project_id: 'p1', score: 7 },
+    });
+    // update re-states criterion_id/project_id so the patch carries them
+    expect(crudToCommand(entry({ op: 'PATCH', table: 'decision_scores', id: 's1', opData: { criterion_id: 'c1', project_id: 'p1', score: 9, updated_at: t } }))).toEqual({
+      name: 'score.set', payload: { id: 's1', criterion_id: 'c1', project_id: 'p1', score: 9 },
+    });
+  });
+});
+
 describe('user_settings + unknown tables', () => {
   it('settings patch → settings.update with only changed fields', () => {
     expect(crudToCommand(entry({ op: 'PATCH', table: 'user_settings', id: 'u1', opData: { day_reset_hour: 5, updated_at: 'x' } }))).toEqual({

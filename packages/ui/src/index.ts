@@ -24,6 +24,8 @@ export {
   useAgenda,
   useHabits,
   useKanban,
+  useDecisionBoards,
+  useDashboard,
   useAggregates,
   useCommands,
   type WorklistItem,
@@ -35,6 +37,9 @@ export {
   type TodoTask,
   type HabitView,
   type KanbanColumn,
+  type DecisionBoardView,
+  type DashboardData,
+  type ProjectCompletion,
   type AggregateRow,
 } from './hooks';
 
