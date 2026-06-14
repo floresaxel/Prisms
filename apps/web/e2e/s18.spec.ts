@@ -73,6 +73,38 @@ test('daily-target ring fills during an offline clock-in on a skill task', async
   await context.setOffline(false);
 });
 
+test('habit CRUD: create, edit (daily target), delete through the UI', async ({ page }) => {
+  await register(page, 'crud');
+
+  // a vision to attach habits to
+  const vision = randomUUID();
+  const seed = await page.request.post('/sync/upload', {
+    data: { device_id: 'e2e-seed', commands: [cmd('node.create', { id: vision, node_type: 'vision', title: 'Wellness', sort_order: 'a0' })] },
+  });
+  expect(seed.ok()).toBeTruthy();
+
+  await page.getByRole('link', { name: 'Habits' }).click();
+  // wait for the vision to sync so the create form can attach to it
+  await expect(page.getByTestId('habit-vision')).toContainText('Wellness', { timeout: 30_000 });
+
+  // create
+  await page.getByTestId('habit-title').fill('Read');
+  await page.getByTestId('habit-target').fill('30');
+  await page.getByTestId('habit-add').click();
+  const row = page.getByTestId('habits').locator('li', { hasText: 'Read' });
+  await expect(row).toContainText('30m today');
+
+  // update — change the daily target via the edit modal
+  await row.getByRole('button', { name: 'Edit' }).click();
+  await page.getByTestId('edit-target').fill('45');
+  await page.getByTestId('edit-save').click();
+  await expect(page.getByTestId('habits').locator('li', { hasText: 'Read' })).toContainText('45m today');
+
+  // delete
+  await page.getByTestId('habits').locator('li', { hasText: 'Read' }).getByRole('button', { name: 'delete' }).click();
+  await expect(page.getByTestId('habits')).not.toContainText('Read');
+});
+
 test('kanban: dragging a card to another day re-dates it and persists', async ({ page }) => {
   await register(page, 'kanban');
 
