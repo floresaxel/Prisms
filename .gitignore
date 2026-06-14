@@ -1,8 +1,11 @@
 node_modules/
 dist/
+dev-dist/
 build/
 coverage/
 .turbo/
+test-results/
+playwright-report/
 *.tsbuildinfo
 *.log
 
