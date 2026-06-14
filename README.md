@@ -69,4 +69,5 @@ Architectural rules (package boundaries, core purity bans) are enforced by ESLin
 - [x] S11 — Command dispatcher + full §8.1 catalog (49 verbs, invariant checks, idempotency, backstop enqueue)
 - [x] S12 — Convergence harness (two-device HLC LWW, §7.4 double clock-in, UUIDv5 automation convergence)
 - [x] S13 — Jobs I · facts & truth (pg-boss: weather.poll, aggregates.recompute, automation.backstop, retention.purge)
-- [ ] S14+ — see [Blueprints/BUILD_PLAN.md](Blueprints/BUILD_PLAN.md)
+- [x] S14 — Jobs II · scheduling & notify (schedule.optimize, pastdue.scan, layout.precompute/ELK, notify.dispatch)
+- [ ] S15+ — see [Blueprints/BUILD_PLAN.md](Blueprints/BUILD_PLAN.md)
