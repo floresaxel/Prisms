@@ -47,6 +47,7 @@ export * from './commands/envelope';
 export * from './commands/settings';
 export * from './commands/payloads';
 export * from './commands/invariants';
+export * from './commands/timer-merge';
 export * from './status/context';
 export * from './status/phase';
 export * from './status/predicate';
