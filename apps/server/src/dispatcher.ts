@@ -1,13 +1,19 @@
 /**
- * Command dispatcher — the §8 write path, full §8.1 catalog (s11).
+ * Command dispatcher — the §8 write path, full §8.1 catalog (s11), with the
+ * §7.3/§7.4 convergence rules (s12).
  *
- * Pipeline per command, in order: (1) Zod parse against the catalog schema →
- * (2) ownership: every referenced row's user_id must equal the token user →
- * (3) invariant checks from @prisms/core (the same functions the client ran)
- * → (4) apply via Drizzle in a transaction → (5) append command_log. The
- * command id is the idempotency key: replays return the original result as
- * `noop`. Rejections carry machine-readable codes (§8). Completions/creations
- * enqueue automation.backstop (§9.4, run by the S13 job).
+ * Pipeline per command: (1) Zod parse against the catalog schema → (2)
+ * ownership: every referenced row's user_id must equal the token user → (3)
+ * invariant checks from @prisms/core → (4) apply via Drizzle in a transaction
+ * → (5) append command_log. The command id is the idempotency key.
+ *
+ * Convergence (s12):
+ * - Same-field conflicts resolve by HLC, not arrival order (§7.3): field
+ *   updates pass through `lwwFields`, which only writes a field when the
+ *   command's HLC beats the last writer's (tracked in command_field_versions).
+ * - Creates are idempotent by row id (§9.4): a row that already exists is a
+ *   converged no-op, so two devices running the same UUIDv5 automation agree.
+ * - Double clock-in resolves by §7.4 (latest started_at stays open).
  */
 import {
   COMMAND_SCHEMAS,
@@ -16,8 +22,6 @@ import {
   checkActivityPromote,
   checkBlockCreate,
   checkBlockMove,
-  checkClockIn,
-  checkClockOut,
   checkEdgeCreate,
   checkHabitVision,
   checkNodeCreate,
@@ -25,6 +29,7 @@ import {
   checkNodeRetype,
   checkRule,
   isCommandName,
+  resolveOpenTimeEntries,
   softDeleteClosure,
   uploadRequestSchema,
   type CommandName,
@@ -37,6 +42,7 @@ import {
 import {
   automation_rules,
   blocker_rules,
+  command_field_versions,
   command_log,
   decision_boards,
   decision_criteria,
@@ -53,7 +59,7 @@ import {
   time_entries,
   user_settings,
 } from '@prisms/db';
-import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, eq, isNull, inArray, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { z } from 'zod';
 
@@ -97,31 +103,72 @@ export function createDispatcher(
 ): Dispatcher {
   const nowIso = options.nowIso ?? (() => new Date().toISOString());
 
-  // --- row loaders (ownership reads; not deleted-filtered so we can detect
-  // cross-user references precisely) ---------------------------------------
   const one = async <T>(rows: Promise<T[]>): Promise<T | undefined> => (await rows)[0];
   const loadNodeRow = (tx: Tx, id: string) => one(tx.select().from(nodes).where(eq(nodes.id, id)).limit(1));
   const loadTree = async (tx: Tx, userId: string): Promise<TreeIndex> =>
     buildTreeIndex(await tx.select().from(nodes).where(eq(nodes.user_id, userId)));
   const loadEdgeIndex = async (tx: Tx, userId: string) =>
-    buildEdgeIndex(
-      await tx.select().from(edges).where(and(eq(edges.user_id, userId), isNull(edges.deleted_at))),
-    );
+    buildEdgeIndex(await tx.select().from(edges).where(and(eq(edges.user_id, userId), isNull(edges.deleted_at))));
 
-  // --- handler: one per verb. Receives the parsed payload; does ownership +
-  // invariant + apply, returns applied/rejected (+ optional backstop). ------
-  async function runHandler(name: CommandName, tx: Tx, userId: string, deviceId: string, payload: unknown): Promise<HandlerOut> {
+  /**
+   * §7.3 last-writer-wins by HLC. Returns the subset of `candidate` fields
+   * whose incoming HLC beats the recorded last writer (and records the new
+   * winner). HLC strings are zero-padded so lexical compare == HLC order.
+   * Losing fields are simply not written (the command is still logged).
+   */
+  async function lwwFields<T extends Record<string, unknown>>(
+    tx: Tx,
+    hlc: string,
+    userId: string,
+    table: string,
+    rowId: string,
+    candidate: T,
+  ): Promise<Partial<T>> {
+    const winning: Partial<T> = {};
+    for (const key of Object.keys(candidate) as (keyof T & string)[]) {
+      const current = await one(
+        tx
+          .select({ hlc: command_field_versions.hlc })
+          .from(command_field_versions)
+          .where(and(eq(command_field_versions.table_name, table), eq(command_field_versions.row_id, rowId), eq(command_field_versions.field, key)))
+          .limit(1),
+      );
+      if (!current || hlc > current.hlc) {
+        winning[key] = candidate[key];
+        await tx
+          .insert(command_field_versions)
+          .values({ user_id: userId, table_name: table, row_id: rowId, field: key, hlc })
+          .onConflictDoUpdate({
+            target: [command_field_versions.table_name, command_field_versions.row_id, command_field_versions.field],
+            set: { hlc },
+          });
+      }
+    }
+    return winning;
+  }
+
+  async function runHandler(name: CommandName, tx: Tx, userId: string, deviceId: string, hlc: string, payload: unknown): Promise<HandlerOut> {
     const now = nowIso();
     const applied = (backstop?: BackstopJob): HandlerOut => ({ status: 'applied', backstop });
+    // §9.4 idempotent create: an existing row (same user) is a converged no-op.
+    const convergeOrOwn = (existing: { user_id: string } | undefined, kind: string, id: string): HandlerOut | null =>
+      !existing ? null : existing.user_id === userId ? { status: 'applied' } : reject('E_OWNERSHIP', `${kind} ${id} belongs to another user`);
+    /** Ownership-checked, HLC-filtered single-row field update on `nodes`. */
+    const updateNode = async (id: string, fields: Record<string, unknown>): Promise<HandlerOut> => {
+      const own = ownershipReject('node', id, await loadNodeRow(tx, id), userId);
+      if (own) return own;
+      const win = await lwwFields(tx, hlc, userId, 'nodes', id, fields);
+      if (Object.keys(win).length > 0) await tx.update(nodes).set({ ...win, updated_at: now }).where(eq(nodes.id, id));
+      return applied();
+    };
 
     switch (name) {
       // --- nodes ------------------------------------------------------------
       case 'node.create': {
         const p = payload as Payload<'node.create'>;
-        const existing = await loadNodeRow(tx, p.id);
-        if (existing) return reject('E_DUPLICATE', `node ${p.id} already exists`);
-        const tree = await loadTree(tx, userId);
-        const bad = fromCheck(checkNodeCreate(tree, p));
+        const conv = convergeOrOwn(await loadNodeRow(tx, p.id), 'node', p.id);
+        if (conv) return conv;
+        const bad = fromCheck(checkNodeCreate(await loadTree(tx, userId), p));
         if (bad) return bad;
         await tx.insert(nodes).values({
           id: p.id,
@@ -138,133 +185,91 @@ export function createDispatcher(
           attributes: p.attributes ?? {},
           updated_at: now,
         });
-        return applied(
-          p.node_type === 'task' ? { userId, trigger: 'task_created', nodeId: p.id } : undefined,
-        );
+        return applied(p.node_type === 'task' ? { userId, trigger: 'task_created', nodeId: p.id } : undefined);
       }
       case 'node.rename': {
         const p = payload as Payload<'node.rename'>;
-        const row = await loadNodeRow(tx, p.id);
-        const own = ownershipReject('node', p.id, row, userId);
-        if (own) return own;
-        await tx.update(nodes).set({ title: p.title, updated_at: now }).where(eq(nodes.id, p.id));
-        return applied();
+        return updateNode(p.id, { title: p.title });
       }
       case 'node.set_description': {
         const p = payload as Payload<'node.set_description'>;
-        const row = await loadNodeRow(tx, p.id);
-        const own = ownershipReject('node', p.id, row, userId);
-        if (own) return own;
-        await tx.update(nodes).set({ description: p.description, updated_at: now }).where(eq(nodes.id, p.id));
-        return applied();
+        return updateNode(p.id, { description: p.description });
       }
       case 'node.move': {
         const p = payload as Payload<'node.move'>;
-        const row = await loadNodeRow(tx, p.id);
-        const own = ownershipReject('node', p.id, row, userId);
+        const own = ownershipReject('node', p.id, await loadNodeRow(tx, p.id), userId);
         if (own) return own;
-        const tree = await loadTree(tx, userId);
-        const bad = fromCheck(checkNodeMove(tree, p));
+        const bad = fromCheck(checkNodeMove(await loadTree(tx, userId), p));
         if (bad) return bad;
-        await tx
-          .update(nodes)
-          .set({ parent_id: p.new_parent_id, sort_order: p.sort_order, updated_at: now })
-          .where(eq(nodes.id, p.id));
+        const win = await lwwFields(tx, hlc, userId, 'nodes', p.id, { parent_id: p.new_parent_id, sort_order: p.sort_order });
+        if (Object.keys(win).length > 0) await tx.update(nodes).set({ ...win, updated_at: now }).where(eq(nodes.id, p.id));
         return applied();
       }
       case 'node.retype': {
         const p = payload as Payload<'node.retype'>;
-        const row = await loadNodeRow(tx, p.id);
-        const own = ownershipReject('node', p.id, row, userId);
+        const own = ownershipReject('node', p.id, await loadNodeRow(tx, p.id), userId);
         if (own) return own;
-        const tree = await loadTree(tx, userId);
-        const bad = fromCheck(checkNodeRetype(tree, p));
+        const bad = fromCheck(checkNodeRetype(await loadTree(tx, userId), p));
         if (bad) return bad;
-        await tx.update(nodes).set({ node_type: p.node_type, updated_at: now }).where(eq(nodes.id, p.id));
+        const win = await lwwFields(tx, hlc, userId, 'nodes', p.id, { node_type: p.node_type });
+        if (Object.keys(win).length > 0) await tx.update(nodes).set({ ...win, updated_at: now }).where(eq(nodes.id, p.id));
         return applied();
       }
       case 'node.set_dates': {
         const p = payload as Payload<'node.set_dates'>;
-        const row = await loadNodeRow(tx, p.id);
-        const own = ownershipReject('node', p.id, row, userId);
-        if (own) return own;
-        const set: Record<string, unknown> = { updated_at: now };
-        if ('start_date' in p) set['start_date'] = p.start_date ?? null;
-        if ('due_date' in p) set['due_date'] = p.due_date ?? null;
-        await tx.update(nodes).set(set).where(eq(nodes.id, p.id));
-        return applied();
+        const candidate: Record<string, unknown> = {};
+        if ('start_date' in p) candidate['start_date'] = p.start_date ?? null;
+        if ('due_date' in p) candidate['due_date'] = p.due_date ?? null;
+        return updateNode(p.id, candidate);
       }
       case 'node.set_estimate': {
         const p = payload as Payload<'node.set_estimate'>;
-        const row = await loadNodeRow(tx, p.id);
-        const own = ownershipReject('node', p.id, row, userId);
-        if (own) return own;
-        await tx.update(nodes).set({ estimate_minutes: p.estimate_minutes, updated_at: now }).where(eq(nodes.id, p.id));
-        return applied();
+        return updateNode(p.id, { estimate_minutes: p.estimate_minutes });
       }
       case 'node.reorder': {
         const p = payload as Payload<'node.reorder'>;
-        const row = await loadNodeRow(tx, p.id);
-        const own = ownershipReject('node', p.id, row, userId);
-        if (own) return own;
-        await tx.update(nodes).set({ sort_order: p.sort_order, updated_at: now }).where(eq(nodes.id, p.id));
-        return applied();
+        return updateNode(p.id, { sort_order: p.sort_order });
       }
       case 'node.check_off': {
         const p = payload as Payload<'node.check_off'>;
         const row = await loadNodeRow(tx, p.id);
         const own = ownershipReject('node', p.id, row, userId);
         if (own) return own;
-        await tx.update(nodes).set({ completed_at: p.completed_at, updated_at: now }).where(eq(nodes.id, p.id));
-        return applied(
-          row!.node_type === 'task' ? { userId, trigger: 'task_completed', nodeId: p.id } : undefined,
-        );
+        const win = await lwwFields(tx, hlc, userId, 'nodes', p.id, { completed_at: p.completed_at });
+        if (Object.keys(win).length > 0) await tx.update(nodes).set({ ...win, updated_at: now }).where(eq(nodes.id, p.id));
+        return applied(row!.node_type === 'task' ? { userId, trigger: 'task_completed', nodeId: p.id } : undefined);
       }
       case 'node.uncheck': {
         const p = payload as Payload<'node.uncheck'>;
-        const row = await loadNodeRow(tx, p.id);
-        const own = ownershipReject('node', p.id, row, userId);
-        if (own) return own;
-        await tx.update(nodes).set({ completed_at: null, updated_at: now }).where(eq(nodes.id, p.id));
-        return applied();
+        return updateNode(p.id, { completed_at: null });
       }
       case 'node.soft_delete': {
         const p = payload as Payload<'node.soft_delete'>;
-        const row = await loadNodeRow(tx, p.id);
-        const own = ownershipReject('node', p.id, row, userId);
+        const own = ownershipReject('node', p.id, await loadNodeRow(tx, p.id), userId);
         if (own) return own;
-        const tree = await loadTree(tx, userId);
-        const ids = softDeleteClosure(tree, p.id); // I10 cascade closure
+        const ids = softDeleteClosure(await loadTree(tx, userId), p.id); // I10
         if (ids.length > 0) {
-          await tx.update(nodes).set({ deleted_at: now, updated_at: now }).where(
-            and(eq(nodes.user_id, userId), inArray(nodes.id, ids)),
-          );
+          await tx.update(nodes).set({ deleted_at: now, updated_at: now }).where(and(eq(nodes.user_id, userId), inArray(nodes.id, ids)));
         }
         return applied();
       }
       case 'activity.promote': {
         const p = payload as Payload<'activity.promote'>;
-        const row = await loadNodeRow(tx, p.id);
-        const own = ownershipReject('activity', p.id, row, userId);
+        const own = ownershipReject('activity', p.id, await loadNodeRow(tx, p.id), userId);
         if (own) return own;
-        const tree = await loadTree(tx, userId);
-        const bad = fromCheck(checkActivityPromote(tree, p));
+        const bad = fromCheck(checkActivityPromote(await loadTree(tx, userId), p));
         if (bad) return bad;
-        await tx
-          .update(nodes)
-          .set({ node_type: 'task', parent_id: p.parent_id ?? null, habit_id: p.habit_id ?? null, updated_at: now })
-          .where(eq(nodes.id, p.id));
+        const win = await lwwFields(tx, hlc, userId, 'nodes', p.id, { node_type: 'task' as const, parent_id: p.parent_id ?? null, habit_id: p.habit_id ?? null });
+        if (Object.keys(win).length > 0) await tx.update(nodes).set({ ...win, updated_at: now }).where(eq(nodes.id, p.id));
         return applied({ userId, trigger: 'task_created', nodeId: p.id });
       }
 
       // --- edges ------------------------------------------------------------
       case 'edge.create': {
         const p = payload as Payload<'edge.create'>;
-        const existing = await one(tx.select().from(edges).where(eq(edges.id, p.id)).limit(1));
-        if (existing) return reject('E_DUPLICATE', `edge ${p.id} already exists`);
-        const tree = await loadTree(tx, userId);
-        const edgeIndex = await loadEdgeIndex(tx, userId);
-        const bad = fromCheck(checkEdgeCreate(tree, edgeIndex, p));
+        const conv = convergeOrOwn(await one(tx.select().from(edges).where(eq(edges.id, p.id)).limit(1)), 'edge', p.id);
+        if (conv) return conv;
+        const bad = fromCheck(checkEdgeCreate(await loadTree(tx, userId), await loadEdgeIndex(tx, userId), p));
         if (bad) return bad;
         await tx.insert(edges).values({
           id: p.id,
@@ -289,8 +294,8 @@ export function createDispatcher(
       // --- schedule blocks --------------------------------------------------
       case 'block.create': {
         const p = payload as Payload<'block.create'>;
-        const existing = await one(tx.select().from(schedule_blocks).where(eq(schedule_blocks.id, p.id)).limit(1));
-        if (existing) return reject('E_DUPLICATE', `block ${p.id} already exists`);
+        const conv = convergeOrOwn(await one(tx.select().from(schedule_blocks).where(eq(schedule_blocks.id, p.id)).limit(1)), 'block', p.id);
+        if (conv) return conv;
         const task = await loadNodeRow(tx, p.task_id);
         const own = ownershipReject('task', p.task_id, task, userId);
         if (own) return own;
@@ -316,7 +321,8 @@ export function createDispatcher(
         const task = await loadNodeRow(tx, block!.task_id);
         const bad = fromCheck(checkBlockMove(block!, p.id, task as CoreNode | undefined, p));
         if (bad) return bad;
-        await tx.update(schedule_blocks).set({ starts_at: p.starts_at, ends_at: p.ends_at, updated_at: now }).where(eq(schedule_blocks.id, p.id));
+        const win = await lwwFields(tx, hlc, userId, 'schedule_blocks', p.id, { starts_at: p.starts_at, ends_at: p.ends_at });
+        if (Object.keys(win).length > 0) await tx.update(schedule_blocks).set({ ...win, updated_at: now }).where(eq(schedule_blocks.id, p.id));
         return applied();
       }
       case 'block.set_anchor': {
@@ -324,7 +330,8 @@ export function createDispatcher(
         const block = await one(tx.select().from(schedule_blocks).where(eq(schedule_blocks.id, p.id)).limit(1));
         const own = ownershipReject('block', p.id, block, userId);
         if (own) return own;
-        await tx.update(schedule_blocks).set({ anchor_type: p.anchor_type, updated_at: now }).where(eq(schedule_blocks.id, p.id));
+        const win = await lwwFields(tx, hlc, userId, 'schedule_blocks', p.id, { anchor_type: p.anchor_type });
+        if (Object.keys(win).length > 0) await tx.update(schedule_blocks).set({ ...win, updated_at: now }).where(eq(schedule_blocks.id, p.id));
         return applied();
       }
       case 'block.delete': {
@@ -355,29 +362,50 @@ export function createDispatcher(
       // --- time tracking ----------------------------------------------------
       case 'timer.clock_in': {
         const p = payload as Payload<'timer.clock_in'>;
-        const existing = await one(tx.select().from(time_entries).where(eq(time_entries.id, p.entry_id)).limit(1));
-        if (existing) return reject('E_DUPLICATE', `time entry ${p.entry_id} already exists`);
+        const conv = convergeOrOwn(await one(tx.select().from(time_entries).where(eq(time_entries.id, p.entry_id)).limit(1)), 'time entry', p.entry_id);
+        if (conv) return conv;
         const task = await loadNodeRow(tx, p.task_id);
         const own = ownershipReject('task', p.task_id, task, userId);
         if (own) return own;
-        const openCount = await one(
-          tx
-            .select({ n: sql<number>`count(*)::int` })
-            .from(time_entries)
-            .where(and(eq(time_entries.user_id, userId), isNull(time_entries.ended_at), isNull(time_entries.deleted_at))),
+        if ((task as CoreNode).completed_at !== null) return reject('E_DONE_IMMUTABLE', `task ${p.task_id} is done (I8)`);
+
+        const openEntry = await one(
+          tx.select().from(time_entries).where(and(eq(time_entries.user_id, userId), isNull(time_entries.ended_at), isNull(time_entries.deleted_at))).limit(1),
         );
-        const bad = fromCheck(checkClockIn(task as CoreNode, p.task_id, (openCount?.n ?? 0) > 0));
-        if (bad) return bad;
-        await tx.insert(time_entries).values({
-          id: p.entry_id,
-          user_id: userId,
-          task_id: p.task_id,
-          started_at: p.started_at,
-          ended_at: null,
-          planned: p.planned ?? true,
-          device_id: deviceId,
-          updated_at: now,
-        });
+        const insertEntry = (endedAt: string | null) =>
+          tx.insert(time_entries).values({
+            id: p.entry_id,
+            user_id: userId,
+            task_id: p.task_id,
+            started_at: p.started_at,
+            ended_at: endedAt,
+            completed_session: endedAt === null ? undefined : null,
+            planned: p.planned ?? true,
+            device_id: deviceId,
+            updated_at: now,
+          });
+
+        if (!openEntry) {
+          await insertEntry(null);
+          return applied();
+        }
+        // I5: a second clock-in on the SAME device is a straight rejection.
+        if (openEntry.device_id === deviceId) {
+          return reject('E_TIMER_ALREADY_RUNNING', 'another timer is already running on this device (I5)');
+        }
+        // §7.4: cross-device offline race — latest started_at stays open.
+        // Normalize the stored timestamp to ISO so it compares correctly with
+        // the ISO payload (Postgres returns "YYYY-MM-DD HH:MM:SS+00").
+        const res = resolveOpenTimeEntries([
+          { id: openEntry.id, started_at: new Date(openEntry.started_at).toISOString() },
+          { id: p.entry_id, started_at: p.started_at },
+        ])!;
+        if (res.keepOpenId === p.entry_id) {
+          await tx.update(time_entries).set({ ended_at: res.closures[0]!.ended_at, completed_session: null, updated_at: now }).where(eq(time_entries.id, openEntry.id));
+          await insertEntry(null);
+        } else {
+          await insertEntry(res.closures.find((c) => c.id === p.entry_id)!.ended_at);
+        }
         return applied();
       }
       case 'timer.clock_out': {
@@ -385,8 +413,7 @@ export function createDispatcher(
         const entry = await one(tx.select().from(time_entries).where(eq(time_entries.id, p.entry_id)).limit(1));
         const own = ownershipReject('time entry', p.entry_id, entry, userId);
         if (own) return own;
-        const bad = fromCheck(checkClockOut(entry!, p.entry_id, p));
-        if (bad) return bad;
+        if (entry!.ended_at !== null) return reject('E_TIMER_NOT_RUNNING', `time entry ${p.entry_id} is already closed`);
         await tx.update(time_entries).set({ ended_at: p.ended_at, updated_at: now }).where(eq(time_entries.id, p.entry_id));
         return applied();
       }
@@ -395,15 +422,13 @@ export function createDispatcher(
         const entry = await one(tx.select().from(time_entries).where(eq(time_entries.id, p.entry_id)).limit(1));
         const own = ownershipReject('time entry', p.entry_id, entry, userId);
         if (own) return own;
-        await tx
-          .update(time_entries)
-          .set({ focus_factor: p.focus_factor, completed_session: p.completed_session, updated_at: now })
-          .where(eq(time_entries.id, p.entry_id));
-        // may also complete the task (§8.1): set completed_at to the session end
+        const win = await lwwFields(tx, hlc, userId, 'time_entries', p.entry_id, { focus_factor: p.focus_factor, completed_session: p.completed_session });
+        if (Object.keys(win).length > 0) await tx.update(time_entries).set({ ...win, updated_at: now }).where(eq(time_entries.id, p.entry_id));
         if (p.completed_session && entry!.ended_at !== null) {
           const task = await loadNodeRow(tx, entry!.task_id);
           if (task && task.user_id === userId && task.completed_at === null) {
-            await tx.update(nodes).set({ completed_at: entry!.ended_at, updated_at: now }).where(eq(nodes.id, task.id));
+            const winC = await lwwFields(tx, hlc, userId, 'nodes', task.id, { completed_at: entry!.ended_at });
+            if (Object.keys(winC).length > 0) await tx.update(nodes).set({ ...winC, updated_at: now }).where(eq(nodes.id, task.id));
             return applied({ userId, trigger: 'task_completed', nodeId: task.id });
           }
         }
@@ -413,10 +438,9 @@ export function createDispatcher(
       // --- habits -----------------------------------------------------------
       case 'habit.create': {
         const p = payload as Payload<'habit.create'>;
-        const existing = await one(tx.select().from(habits).where(eq(habits.id, p.id)).limit(1));
-        if (existing) return reject('E_DUPLICATE', `habit ${p.id} already exists`);
-        const tree = await loadTree(tx, userId);
-        const bad = fromCheck(checkHabitVision(tree, p.vision_id));
+        const conv = convergeOrOwn(await one(tx.select().from(habits).where(eq(habits.id, p.id)).limit(1)), 'habit', p.id);
+        if (conv) return conv;
+        const bad = fromCheck(checkHabitVision(await loadTree(tx, userId), p.vision_id));
         if (bad) return bad;
         await tx.insert(habits).values({
           id: p.id,
@@ -434,89 +458,68 @@ export function createDispatcher(
       }
       case 'habit.update': {
         const p = payload as Payload<'habit.update'>;
-        const row = await one(tx.select().from(habits).where(eq(habits.id, p.id)).limit(1));
-        const own = ownershipReject('habit', p.id, row, userId);
+        const own = ownershipReject('habit', p.id, await one(tx.select().from(habits).where(eq(habits.id, p.id)).limit(1)), userId);
         if (own) return own;
-        const set: Record<string, unknown> = { updated_at: now };
-        if (p.title !== undefined) set['title'] = p.title;
-        if (p.rrule !== undefined) set['rrule'] = p.rrule;
-        if (p.streak_mode !== undefined) set['streak_mode'] = p.streak_mode;
-        if ('daily_target_minutes' in p) set['daily_target_minutes'] = p.daily_target_minutes ?? null;
-        if ('mastery_target_hours' in p) set['mastery_target_hours'] = p.mastery_target_hours ?? null;
-        if (p.level_thresholds_hours !== undefined) set['level_thresholds_hours'] = p.level_thresholds_hours;
-        await tx.update(habits).set(set).where(eq(habits.id, p.id));
+        const candidate: Record<string, unknown> = {};
+        if (p.title !== undefined) candidate['title'] = p.title;
+        if (p.rrule !== undefined) candidate['rrule'] = p.rrule;
+        if (p.streak_mode !== undefined) candidate['streak_mode'] = p.streak_mode;
+        if ('daily_target_minutes' in p) candidate['daily_target_minutes'] = p.daily_target_minutes ?? null;
+        if ('mastery_target_hours' in p) candidate['mastery_target_hours'] = p.mastery_target_hours ?? null;
+        if (p.level_thresholds_hours !== undefined) candidate['level_thresholds_hours'] = p.level_thresholds_hours;
+        const win = await lwwFields(tx, hlc, userId, 'habits', p.id, candidate);
+        if (Object.keys(win).length > 0) await tx.update(habits).set({ ...win, updated_at: now }).where(eq(habits.id, p.id));
         return applied();
       }
       case 'habit.delete': {
         const p = payload as Payload<'habit.delete'>;
-        const row = await one(tx.select().from(habits).where(eq(habits.id, p.id)).limit(1));
-        const own = ownershipReject('habit', p.id, row, userId);
+        const own = ownershipReject('habit', p.id, await one(tx.select().from(habits).where(eq(habits.id, p.id)).limit(1)), userId);
         if (own) return own;
         await tx.update(habits).set({ deleted_at: now, updated_at: now }).where(eq(habits.id, p.id));
         return applied();
       }
       case 'habit.check_off': {
         const p = payload as Payload<'habit.check_off'>;
-        const existing = await one(tx.select().from(habit_completions).where(eq(habit_completions.id, p.id)).limit(1));
-        if (existing) return reject('E_DUPLICATE', `habit completion ${p.id} already exists`);
-        const habit = await one(tx.select().from(habits).where(eq(habits.id, p.habit_id)).limit(1));
-        const own = ownershipReject('habit', p.habit_id, habit, userId);
+        const conv = convergeOrOwn(await one(tx.select().from(habit_completions).where(eq(habit_completions.id, p.id)).limit(1)), 'habit completion', p.id);
+        if (conv) return conv;
+        const own = ownershipReject('habit', p.habit_id, await one(tx.select().from(habits).where(eq(habits.id, p.habit_id)).limit(1)), userId);
         if (own) return own;
-        await tx.insert(habit_completions).values({
-          id: p.id,
-          user_id: userId,
-          habit_id: p.habit_id,
-          occurrence_date: p.occurrence_date,
-          completed_at: p.completed_at,
-          updated_at: now,
-        });
+        await tx
+          .insert(habit_completions)
+          .values({ id: p.id, user_id: userId, habit_id: p.habit_id, occurrence_date: p.occurrence_date, completed_at: p.completed_at, updated_at: now })
+          .onConflictDoNothing({ target: [habit_completions.habit_id, habit_completions.occurrence_date] });
         return applied();
       }
 
       // --- sprints ----------------------------------------------------------
       case 'sprint.create': {
         const p = payload as Payload<'sprint.create'>;
-        const existing = await one(tx.select().from(sprints).where(eq(sprints.id, p.id)).limit(1));
-        if (existing) return reject('E_DUPLICATE', `sprint ${p.id} already exists`);
-        await tx.insert(sprints).values({
-          id: p.id,
-          user_id: userId,
-          title: p.title,
-          starts_on: p.starts_on,
-          ends_on: p.ends_on,
-          updated_at: now,
-        });
+        const conv = convergeOrOwn(await one(tx.select().from(sprints).where(eq(sprints.id, p.id)).limit(1)), 'sprint', p.id);
+        if (conv) return conv;
+        await tx.insert(sprints).values({ id: p.id, user_id: userId, title: p.title, starts_on: p.starts_on, ends_on: p.ends_on, updated_at: now });
         return applied();
       }
       case 'sprint.add_node': {
         const p = payload as Payload<'sprint.add_node'>;
-        const sprint = await one(tx.select().from(sprints).where(eq(sprints.id, p.sprint_id)).limit(1));
-        const ownS = ownershipReject('sprint', p.sprint_id, sprint, userId);
+        const conv = convergeOrOwn(await one(tx.select().from(sprint_memberships).where(eq(sprint_memberships.id, p.id)).limit(1)), 'sprint membership', p.id);
+        if (conv) return conv;
+        const ownS = ownershipReject('sprint', p.sprint_id, await one(tx.select().from(sprints).where(eq(sprints.id, p.sprint_id)).limit(1)), userId);
         if (ownS) return ownS;
-        const node = await loadNodeRow(tx, p.node_id);
-        const ownN = ownershipReject('node', p.node_id, node, userId);
+        const ownN = ownershipReject('node', p.node_id, await loadNodeRow(tx, p.node_id), userId);
         if (ownN) return ownN;
-        await tx.insert(sprint_memberships).values({
-          id: p.id,
-          user_id: userId,
-          sprint_id: p.sprint_id,
-          node_id: p.node_id,
-          updated_at: now,
-        });
+        await tx.insert(sprint_memberships).values({ id: p.id, user_id: userId, sprint_id: p.sprint_id, node_id: p.node_id, updated_at: now }).onConflictDoNothing({ target: [sprint_memberships.sprint_id, sprint_memberships.node_id] });
         return applied();
       }
       case 'sprint.remove_node': {
         const p = payload as Payload<'sprint.remove_node'>;
-        const row = await one(tx.select().from(sprint_memberships).where(eq(sprint_memberships.id, p.id)).limit(1));
-        const own = ownershipReject('sprint membership', p.id, row, userId);
+        const own = ownershipReject('sprint membership', p.id, await one(tx.select().from(sprint_memberships).where(eq(sprint_memberships.id, p.id)).limit(1)), userId);
         if (own) return own;
         await tx.update(sprint_memberships).set({ deleted_at: now, updated_at: now }).where(eq(sprint_memberships.id, p.id));
         return applied();
       }
       case 'sprint.delete': {
         const p = payload as Payload<'sprint.delete'>;
-        const row = await one(tx.select().from(sprints).where(eq(sprints.id, p.id)).limit(1));
-        const own = ownershipReject('sprint', p.id, row, userId);
+        const own = ownershipReject('sprint', p.id, await one(tx.select().from(sprints).where(eq(sprints.id, p.id)).limit(1)), userId);
         if (own) return own;
         await tx.update(sprints).set({ deleted_at: now, updated_at: now }).where(eq(sprints.id, p.id));
         return applied();
@@ -525,62 +528,48 @@ export function createDispatcher(
       // --- decision board ---------------------------------------------------
       case 'board.create': {
         const p = payload as Payload<'board.create'>;
-        const existing = await one(tx.select().from(decision_boards).where(eq(decision_boards.id, p.id)).limit(1));
-        if (existing) return reject('E_DUPLICATE', `board ${p.id} already exists`);
+        const conv = convergeOrOwn(await one(tx.select().from(decision_boards).where(eq(decision_boards.id, p.id)).limit(1)), 'board', p.id);
+        if (conv) return conv;
         await tx.insert(decision_boards).values({ id: p.id, user_id: userId, title: p.title, updated_at: now });
         return applied();
       }
       case 'criterion.create': {
         const p = payload as Payload<'criterion.create'>;
-        const existing = await one(tx.select().from(decision_criteria).where(eq(decision_criteria.id, p.id)).limit(1));
-        if (existing) return reject('E_DUPLICATE', `criterion ${p.id} already exists`);
-        const board = await one(tx.select().from(decision_boards).where(eq(decision_boards.id, p.board_id)).limit(1));
-        const own = ownershipReject('board', p.board_id, board, userId);
+        const conv = convergeOrOwn(await one(tx.select().from(decision_criteria).where(eq(decision_criteria.id, p.id)).limit(1)), 'criterion', p.id);
+        if (conv) return conv;
+        const own = ownershipReject('board', p.board_id, await one(tx.select().from(decision_boards).where(eq(decision_boards.id, p.board_id)).limit(1)), userId);
         if (own) return own;
         await tx.insert(decision_criteria).values({ id: p.id, user_id: userId, board_id: p.board_id, label: p.label, weight: p.weight, updated_at: now });
         return applied();
       }
       case 'criterion.set_weight': {
         const p = payload as Payload<'criterion.set_weight'>;
-        const row = await one(tx.select().from(decision_criteria).where(eq(decision_criteria.id, p.id)).limit(1));
-        const own = ownershipReject('criterion', p.id, row, userId);
+        const own = ownershipReject('criterion', p.id, await one(tx.select().from(decision_criteria).where(eq(decision_criteria.id, p.id)).limit(1)), userId);
         if (own) return own;
-        await tx.update(decision_criteria).set({ weight: p.weight, updated_at: now }).where(eq(decision_criteria.id, p.id));
+        const win = await lwwFields(tx, hlc, userId, 'decision_criteria', p.id, { weight: p.weight });
+        if (Object.keys(win).length > 0) await tx.update(decision_criteria).set({ ...win, updated_at: now }).where(eq(decision_criteria.id, p.id));
         return applied();
       }
       case 'score.set': {
         const p = payload as Payload<'score.set'>;
-        const criterion = await one(tx.select().from(decision_criteria).where(eq(decision_criteria.id, p.criterion_id)).limit(1));
-        const own = ownershipReject('criterion', p.criterion_id, criterion, userId);
+        const own = ownershipReject('criterion', p.criterion_id, await one(tx.select().from(decision_criteria).where(eq(decision_criteria.id, p.criterion_id)).limit(1)), userId);
         if (own) return own;
-        // upsert on (criterion_id, project_id) — the §6.0 UNIQUE
         await tx
           .insert(decision_scores)
           .values({ id: p.id, user_id: userId, criterion_id: p.criterion_id, project_id: p.project_id, score: p.score, updated_at: now })
-          .onConflictDoUpdate({
-            target: [decision_scores.criterion_id, decision_scores.project_id],
-            set: { score: p.score, updated_at: now },
-          });
+          .onConflictDoUpdate({ target: [decision_scores.criterion_id, decision_scores.project_id], set: { score: p.score, updated_at: now } });
         return applied();
       }
 
       // --- automation & blocker rules ---------------------------------------
       case 'rule.create': {
         const p = payload as Payload<'rule.create'>;
-        const existing = await one(tx.select().from(automation_rules).where(eq(automation_rules.id, p.id)).limit(1));
-        if (existing) return reject('E_DUPLICATE', `rule ${p.id} already exists`);
+        const conv = convergeOrOwn(await one(tx.select().from(automation_rules).where(eq(automation_rules.id, p.id)).limit(1)), 'rule', p.id);
+        if (conv) return conv;
         const existingRules = await tx.select().from(automation_rules).where(and(eq(automation_rules.user_id, userId), isNull(automation_rules.deleted_at)));
         const bad = fromCheck(checkRule({ trigger: p.trigger, conditions: p.conditions, actions: p.actions }, existingRules));
         if (bad) return bad;
-        await tx.insert(automation_rules).values({
-          id: p.id,
-          user_id: userId,
-          trigger: p.trigger,
-          conditions: p.conditions,
-          actions: p.actions,
-          enabled: p.enabled ?? true,
-          updated_at: now,
-        });
+        await tx.insert(automation_rules).values({ id: p.id, user_id: userId, trigger: p.trigger, conditions: p.conditions, actions: p.actions, enabled: p.enabled ?? true, updated_at: now });
         return applied();
       }
       case 'rule.update': {
@@ -588,72 +577,63 @@ export function createDispatcher(
         const row = await one(tx.select().from(automation_rules).where(eq(automation_rules.id, p.id)).limit(1));
         const own = ownershipReject('rule', p.id, row, userId);
         if (own) return own;
-        const merged = {
-          trigger: p.trigger ?? row!.trigger,
-          conditions: p.conditions ?? row!.conditions,
-          actions: p.actions ?? row!.actions,
-        };
+        const merged = { trigger: p.trigger ?? row!.trigger, conditions: p.conditions ?? row!.conditions, actions: p.actions ?? row!.actions };
         const others = await tx.select().from(automation_rules).where(and(eq(automation_rules.user_id, userId), isNull(automation_rules.deleted_at)));
         const bad = fromCheck(checkRule(merged, others.filter((r) => r.id !== p.id)));
         if (bad) return bad;
-        await tx.update(automation_rules).set({ ...merged, updated_at: now }).where(eq(automation_rules.id, p.id));
+        const candidate: Record<string, unknown> = {};
+        if (p.trigger !== undefined) candidate['trigger'] = p.trigger;
+        if (p.conditions !== undefined) candidate['conditions'] = p.conditions;
+        if (p.actions !== undefined) candidate['actions'] = p.actions;
+        const win = await lwwFields(tx, hlc, userId, 'automation_rules', p.id, candidate);
+        if (Object.keys(win).length > 0) await tx.update(automation_rules).set({ ...win, updated_at: now }).where(eq(automation_rules.id, p.id));
         return applied();
       }
       case 'rule.toggle': {
         const p = payload as Payload<'rule.toggle'>;
-        const row = await one(tx.select().from(automation_rules).where(eq(automation_rules.id, p.id)).limit(1));
-        const own = ownershipReject('rule', p.id, row, userId);
+        const own = ownershipReject('rule', p.id, await one(tx.select().from(automation_rules).where(eq(automation_rules.id, p.id)).limit(1)), userId);
         if (own) return own;
-        await tx.update(automation_rules).set({ enabled: p.enabled, updated_at: now }).where(eq(automation_rules.id, p.id));
+        const win = await lwwFields(tx, hlc, userId, 'automation_rules', p.id, { enabled: p.enabled });
+        if (Object.keys(win).length > 0) await tx.update(automation_rules).set({ ...win, updated_at: now }).where(eq(automation_rules.id, p.id));
         return applied();
       }
       case 'rule.delete': {
         const p = payload as Payload<'rule.delete'>;
-        const row = await one(tx.select().from(automation_rules).where(eq(automation_rules.id, p.id)).limit(1));
-        const own = ownershipReject('rule', p.id, row, userId);
+        const own = ownershipReject('rule', p.id, await one(tx.select().from(automation_rules).where(eq(automation_rules.id, p.id)).limit(1)), userId);
         if (own) return own;
         await tx.update(automation_rules).set({ deleted_at: now, updated_at: now }).where(eq(automation_rules.id, p.id));
         return applied();
       }
       case 'blocker.create': {
         const p = payload as Payload<'blocker.create'>;
-        const existing = await one(tx.select().from(blocker_rules).where(eq(blocker_rules.id, p.id)).limit(1));
-        if (existing) return reject('E_DUPLICATE', `blocker ${p.id} already exists`);
-        await tx.insert(blocker_rules).values({
-          id: p.id,
-          user_id: userId,
-          scope: p.scope,
-          predicate: p.predicate,
-          label: p.label,
-          enabled: p.enabled ?? true,
-          updated_at: now,
-        });
+        const conv = convergeOrOwn(await one(tx.select().from(blocker_rules).where(eq(blocker_rules.id, p.id)).limit(1)), 'blocker', p.id);
+        if (conv) return conv;
+        await tx.insert(blocker_rules).values({ id: p.id, user_id: userId, scope: p.scope, predicate: p.predicate, label: p.label, enabled: p.enabled ?? true, updated_at: now });
         return applied();
       }
       case 'blocker.update': {
         const p = payload as Payload<'blocker.update'>;
-        const row = await one(tx.select().from(blocker_rules).where(eq(blocker_rules.id, p.id)).limit(1));
-        const own = ownershipReject('blocker', p.id, row, userId);
+        const own = ownershipReject('blocker', p.id, await one(tx.select().from(blocker_rules).where(eq(blocker_rules.id, p.id)).limit(1)), userId);
         if (own) return own;
-        const set: Record<string, unknown> = { updated_at: now };
-        if (p.scope !== undefined) set['scope'] = p.scope;
-        if (p.predicate !== undefined) set['predicate'] = p.predicate;
-        if (p.label !== undefined) set['label'] = p.label;
-        await tx.update(blocker_rules).set(set).where(eq(blocker_rules.id, p.id));
+        const candidate: Record<string, unknown> = {};
+        if (p.scope !== undefined) candidate['scope'] = p.scope;
+        if (p.predicate !== undefined) candidate['predicate'] = p.predicate;
+        if (p.label !== undefined) candidate['label'] = p.label;
+        const win = await lwwFields(tx, hlc, userId, 'blocker_rules', p.id, candidate);
+        if (Object.keys(win).length > 0) await tx.update(blocker_rules).set({ ...win, updated_at: now }).where(eq(blocker_rules.id, p.id));
         return applied();
       }
       case 'blocker.toggle': {
         const p = payload as Payload<'blocker.toggle'>;
-        const row = await one(tx.select().from(blocker_rules).where(eq(blocker_rules.id, p.id)).limit(1));
-        const own = ownershipReject('blocker', p.id, row, userId);
+        const own = ownershipReject('blocker', p.id, await one(tx.select().from(blocker_rules).where(eq(blocker_rules.id, p.id)).limit(1)), userId);
         if (own) return own;
-        await tx.update(blocker_rules).set({ enabled: p.enabled, updated_at: now }).where(eq(blocker_rules.id, p.id));
+        const win = await lwwFields(tx, hlc, userId, 'blocker_rules', p.id, { enabled: p.enabled });
+        if (Object.keys(win).length > 0) await tx.update(blocker_rules).set({ ...win, updated_at: now }).where(eq(blocker_rules.id, p.id));
         return applied();
       }
       case 'blocker.delete': {
         const p = payload as Payload<'blocker.delete'>;
-        const row = await one(tx.select().from(blocker_rules).where(eq(blocker_rules.id, p.id)).limit(1));
-        const own = ownershipReject('blocker', p.id, row, userId);
+        const own = ownershipReject('blocker', p.id, await one(tx.select().from(blocker_rules).where(eq(blocker_rules.id, p.id)).limit(1)), userId);
         if (own) return own;
         await tx.update(blocker_rules).set({ deleted_at: now, updated_at: now }).where(eq(blocker_rules.id, p.id));
         return applied();
@@ -662,72 +642,45 @@ export function createDispatcher(
       // --- diagram layout & groups ------------------------------------------
       case 'layout.set_position': {
         const p = payload as Payload<'layout.set_position'>;
-        const node = await loadNodeRow(tx, p.node_id);
-        const own = ownershipReject('node', p.node_id, node, userId);
+        const own = ownershipReject('node', p.node_id, await loadNodeRow(tx, p.node_id), userId);
         if (own) return own;
         await tx
           .insert(diagram_layouts)
-          .values({
-            id: sql`gen_random_uuid()`,
-            user_id: userId,
-            diagram_id: p.diagram_id,
-            node_id: p.node_id,
-            x: p.x,
-            y: p.y,
-            group_id: p.group_id ?? null,
-            updated_at: now,
-          })
-          .onConflictDoUpdate({
-            target: [diagram_layouts.diagram_id, diagram_layouts.node_id],
-            set: { x: p.x, y: p.y, group_id: p.group_id ?? null, updated_at: now },
-          });
+          .values({ id: sql`gen_random_uuid()`, user_id: userId, diagram_id: p.diagram_id, node_id: p.node_id, x: p.x, y: p.y, group_id: p.group_id ?? null, updated_at: now })
+          .onConflictDoUpdate({ target: [diagram_layouts.diagram_id, diagram_layouts.node_id], set: { x: p.x, y: p.y, group_id: p.group_id ?? null, updated_at: now } });
         return applied();
       }
       case 'layout.set_collapsed': {
         const p = payload as Payload<'layout.set_collapsed'>;
-        const node = await loadNodeRow(tx, p.node_id);
-        const own = ownershipReject('node', p.node_id, node, userId);
+        const own = ownershipReject('node', p.node_id, await loadNodeRow(tx, p.node_id), userId);
         if (own) return own;
         await tx
           .insert(diagram_layouts)
-          .values({
-            id: sql`gen_random_uuid()`,
-            user_id: userId,
-            diagram_id: p.diagram_id,
-            node_id: p.node_id,
-            x: 0,
-            y: 0,
-            collapsed: p.collapsed,
-            updated_at: now,
-          })
-          .onConflictDoUpdate({
-            target: [diagram_layouts.diagram_id, diagram_layouts.node_id],
-            set: { collapsed: p.collapsed, updated_at: now },
-          });
+          .values({ id: sql`gen_random_uuid()`, user_id: userId, diagram_id: p.diagram_id, node_id: p.node_id, x: 0, y: 0, collapsed: p.collapsed, updated_at: now })
+          .onConflictDoUpdate({ target: [diagram_layouts.diagram_id, diagram_layouts.node_id], set: { collapsed: p.collapsed, updated_at: now } });
         return applied();
       }
       case 'group.create': {
         const p = payload as Payload<'group.create'>;
-        const existing = await one(tx.select().from(diagram_groups).where(eq(diagram_groups.id, p.id)).limit(1));
-        if (existing) return reject('E_DUPLICATE', `group ${p.id} already exists`);
+        const conv = convergeOrOwn(await one(tx.select().from(diagram_groups).where(eq(diagram_groups.id, p.id)).limit(1)), 'group', p.id);
+        if (conv) return conv;
         await tx.insert(diagram_groups).values({ id: p.id, user_id: userId, diagram_id: p.diagram_id, label: p.label, color: p.color ?? null, updated_at: now });
         return applied();
       }
       case 'group.update': {
         const p = payload as Payload<'group.update'>;
-        const row = await one(tx.select().from(diagram_groups).where(eq(diagram_groups.id, p.id)).limit(1));
-        const own = ownershipReject('group', p.id, row, userId);
+        const own = ownershipReject('group', p.id, await one(tx.select().from(diagram_groups).where(eq(diagram_groups.id, p.id)).limit(1)), userId);
         if (own) return own;
-        const set: Record<string, unknown> = { updated_at: now };
-        if (p.label !== undefined) set['label'] = p.label;
-        if ('color' in p) set['color'] = p.color ?? null;
-        await tx.update(diagram_groups).set(set).where(eq(diagram_groups.id, p.id));
+        const candidate: Record<string, unknown> = {};
+        if (p.label !== undefined) candidate['label'] = p.label;
+        if ('color' in p) candidate['color'] = p.color ?? null;
+        const win = await lwwFields(tx, hlc, userId, 'diagram_groups', p.id, candidate);
+        if (Object.keys(win).length > 0) await tx.update(diagram_groups).set({ ...win, updated_at: now }).where(eq(diagram_groups.id, p.id));
         return applied();
       }
       case 'group.delete': {
         const p = payload as Payload<'group.delete'>;
-        const row = await one(tx.select().from(diagram_groups).where(eq(diagram_groups.id, p.id)).limit(1));
-        const own = ownershipReject('group', p.id, row, userId);
+        const own = ownershipReject('group', p.id, await one(tx.select().from(diagram_groups).where(eq(diagram_groups.id, p.id)).limit(1)), userId);
         if (own) return own;
         await tx.update(diagram_groups).set({ deleted_at: now, updated_at: now }).where(eq(diagram_groups.id, p.id));
         return applied();
@@ -736,86 +689,18 @@ export function createDispatcher(
       // --- settings ---------------------------------------------------------
       case 'settings.update': {
         const p = payload as Payload<'settings.update'>;
-        const insert: Record<string, unknown> = { user_id: userId, updated_at: now };
-        const set: Record<string, unknown> = { updated_at: now };
-        if (p.day_reset_hour !== undefined) {
-          insert['day_reset_hour'] = p.day_reset_hour;
-          set['day_reset_hour'] = p.day_reset_hour;
-        }
-        if (p.timezone !== undefined) {
-          insert['timezone'] = p.timezone;
-          set['timezone'] = p.timezone;
-        }
-        if (p.weather_location !== undefined) {
-          insert['weather_location'] = p.weather_location;
-          set['weather_location'] = p.weather_location;
-        }
-        await tx.insert(user_settings).values(insert as typeof user_settings.$inferInsert).onConflictDoUpdate({ target: user_settings.user_id, set });
+        const candidate: Record<string, unknown> = {};
+        if (p.day_reset_hour !== undefined) candidate['day_reset_hour'] = p.day_reset_hour;
+        if (p.timezone !== undefined) candidate['timezone'] = p.timezone;
+        if (p.weather_location !== undefined) candidate['weather_location'] = p.weather_location;
+        const win = await lwwFields(tx, hlc, userId, 'user_settings', userId, candidate);
+        if (Object.keys(win).length === 0) return applied(); // every field lost LWW
+        await tx
+          .insert(user_settings)
+          .values({ user_id: userId, updated_at: now, ...(win as Record<string, unknown>) } as typeof user_settings.$inferInsert)
+          .onConflictDoUpdate({ target: user_settings.user_id, set: { updated_at: now, ...win } });
         return applied();
       }
-    }
-  }
-
-  async function handleCommand(
-    userId: string,
-    deviceId: string,
-    cmd: { id: string; name: string; hlc: string; payload: unknown },
-  ): Promise<CommandOutcome> {
-    // step 5 (idempotency, fast path): a replayed command id returns the
-    // original result as noop.
-    const prior = await one(
-      db.select({ user_id: command_log.user_id, result: command_log.result }).from(command_log).where(eq(command_log.id, cmd.id)).limit(1),
-    );
-    if (prior) {
-      if (prior.user_id !== userId) {
-        return { id: cmd.id, result: 'rejected', reject_code: 'E_OWNERSHIP', reject_reason: 'command id belongs to another user' };
-      }
-      return { id: cmd.id, result: 'noop', original_result: prior.result === 'applied' ? 'applied' : 'rejected' };
-    }
-
-    // step 1: name + Zod parse against the catalog schema.
-    if (!isCommandName(cmd.name)) {
-      await logResult(userId, deviceId, cmd, 'rejected', 'E_UNKNOWN_COMMAND: unknown command');
-      return { id: cmd.id, result: 'rejected', reject_code: 'E_UNKNOWN_COMMAND', reject_reason: `unknown command "${cmd.name}"` };
-    }
-    const parsed = COMMAND_SCHEMAS[cmd.name].safeParse(cmd.payload);
-    if (!parsed.success) {
-      const first = parsed.error.issues[0];
-      const reason = first ? `${first.path.join('.') || 'payload'}: ${first.message}` : 'invalid payload';
-      await logResult(userId, deviceId, cmd, 'rejected', `E_PARSE: ${reason}`);
-      return { id: cmd.id, result: 'rejected', reject_code: 'E_PARSE', reject_reason: reason };
-    }
-
-    // steps 2-5 atomically; the command_log PK makes concurrent replays a noop.
-    try {
-      const { out } = await db.transaction(async (tx) => {
-        const result = await runHandler(cmd.name as CommandName, tx, userId, deviceId, parsed.data);
-        await tx.insert(command_log).values({
-          id: cmd.id,
-          user_id: userId,
-          name: cmd.name,
-          payload: cmd.payload as never,
-          device_id: deviceId,
-          hlc: cmd.hlc,
-          result: result.status === 'applied' ? 'applied' : 'rejected',
-          reject_reason: result.status === 'rejected' ? `${result.code}: ${result.reason}` : null,
-        });
-        return { out: result };
-      });
-      if (out.status === 'applied') {
-        if (out.backstop && options.enqueueBackstop) await options.enqueueBackstop(out.backstop);
-        return { id: cmd.id, result: 'applied' };
-      }
-      return { id: cmd.id, result: 'rejected', reject_code: out.code, reject_reason: out.reason };
-    } catch (error) {
-      // concurrent replay: the command_log PK conflict rolled the tx back.
-      if (isUniqueViolation(error)) {
-        const existing = await one(db.select({ result: command_log.result }).from(command_log).where(eq(command_log.id, cmd.id)).limit(1));
-        if (existing) {
-          return { id: cmd.id, result: 'noop', original_result: existing.result === 'applied' ? 'applied' : 'rejected' };
-        }
-      }
-      throw error;
     }
   }
 
@@ -838,13 +723,68 @@ export function createDispatcher(
     });
   }
 
+  async function handleCommand(
+    userId: string,
+    deviceId: string,
+    cmd: { id: string; name: string; hlc: string; payload: unknown },
+  ): Promise<CommandOutcome> {
+    const prior = await one(
+      db.select({ user_id: command_log.user_id, result: command_log.result }).from(command_log).where(eq(command_log.id, cmd.id)).limit(1),
+    );
+    if (prior) {
+      if (prior.user_id !== userId) {
+        return { id: cmd.id, result: 'rejected', reject_code: 'E_OWNERSHIP', reject_reason: 'command id belongs to another user' };
+      }
+      return { id: cmd.id, result: 'noop', original_result: prior.result === 'applied' ? 'applied' : 'rejected' };
+    }
+
+    if (!isCommandName(cmd.name)) {
+      await logResult(userId, deviceId, cmd, 'rejected', 'E_UNKNOWN_COMMAND: unknown command');
+      return { id: cmd.id, result: 'rejected', reject_code: 'E_UNKNOWN_COMMAND', reject_reason: `unknown command "${cmd.name}"` };
+    }
+    const parsed = COMMAND_SCHEMAS[cmd.name].safeParse(cmd.payload);
+    if (!parsed.success) {
+      const first = parsed.error.issues[0];
+      const reason = first ? `${first.path.join('.') || 'payload'}: ${first.message}` : 'invalid payload';
+      await logResult(userId, deviceId, cmd, 'rejected', `E_PARSE: ${reason}`);
+      return { id: cmd.id, result: 'rejected', reject_code: 'E_PARSE', reject_reason: reason };
+    }
+
+    try {
+      const { out } = await db.transaction(async (tx) => {
+        const result = await runHandler(cmd.name as CommandName, tx, userId, deviceId, cmd.hlc, parsed.data);
+        await tx.insert(command_log).values({
+          id: cmd.id,
+          user_id: userId,
+          name: cmd.name,
+          payload: cmd.payload as never,
+          device_id: deviceId,
+          hlc: cmd.hlc,
+          result: result.status === 'applied' ? 'applied' : 'rejected',
+          reject_reason: result.status === 'rejected' ? `${result.code}: ${result.reason}` : null,
+        });
+        return { out: result };
+      });
+      if (out.status === 'applied') {
+        if (out.backstop && options.enqueueBackstop) await options.enqueueBackstop(out.backstop);
+        return { id: cmd.id, result: 'applied' };
+      }
+      return { id: cmd.id, result: 'rejected', reject_code: out.code, reject_reason: out.reason };
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        const existing = await one(db.select({ result: command_log.result }).from(command_log).where(eq(command_log.id, cmd.id)).limit(1));
+        if (existing) return { id: cmd.id, result: 'noop', original_result: existing.result === 'applied' ? 'applied' : 'rejected' };
+      }
+      throw error;
+    }
+  }
+
   return {
     async handleUpload(userId, body): Promise<UploadResponse> {
       const parsed = uploadRequestSchema.safeParse(body);
       if (!parsed.success) return { kind: 'parse_error', issues: parsed.error.issues };
       const { device_id, commands } = parsed.data;
 
-      // rate limit per user+verb (§13), pre-checked over the whole batch.
       const perVerb = new Map<string, number>();
       for (const cmd of commands) perVerb.set(cmd.name, (perVerb.get(cmd.name) ?? 0) + 1);
       for (const [verb, count] of perVerb) {

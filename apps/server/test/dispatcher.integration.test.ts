@@ -267,10 +267,16 @@ describe.skipIf(!adminUrl)('S11 command dispatcher (§8 pipeline, full catalog)'
     expect(visionStill[0]!['deleted_at']).toBeNull(); // ancestor untouched
   });
 
-  it('a duplicate node id (same user) is rejected E_DUPLICATE', async () => {
+  it('a re-created row id converges idempotently (§9.4), keeping one row', async () => {
     const ids = await seedTree();
-    const dupe = cmd('node.create', { id: ids.vision, node_type: 'vision', title: 'again', sort_order: 'a0' });
+    // a fresh command id re-creating the same row id is a converged no-op
+    // (different content is ignored — the existing row wins), so two devices
+    // running the same UUIDv5 automation agree.
+    const dupe = cmd('node.create', { id: ids.vision, node_type: 'vision', title: 'again', sort_order: 'a9' });
     const [r] = await results([dupe], ids.user);
-    expect(r).toMatchObject({ result: 'rejected', reject_code: 'E_DUPLICATE' });
+    expect(r!.result).toBe('applied');
+    const rows = await sql`SELECT title FROM nodes WHERE id = ${ids.vision}`;
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!['title']).toBe('V'); // original content preserved
   });
 });
