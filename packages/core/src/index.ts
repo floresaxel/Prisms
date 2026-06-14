@@ -43,6 +43,7 @@ export * from './graph/justify';
 export * from './graph/cascade';
 export * from './graph/dag';
 export * from './graph/critical-path';
+export * from './graph/elk';
 export * from './commands/envelope';
 export * from './commands/settings';
 export * from './commands/payloads';
