@@ -13,6 +13,13 @@ export interface ConcreteWindow extends Interval {
   windowId: string;
 }
 
+/**
+ * Default daytime window (08:00–20:00 local) used until a window-config table
+ * exists in §6.0. Shared by the client (drag hints, §10) and the server jobs
+ * (optimize, past-due) so both agree on where work may land.
+ */
+export const DEFAULT_WINDOWS: readonly NamedWindow[] = [{ id: 'day', startMinute: 8 * 60, endMinute: 20 * 60 }];
+
 /** Ascending by start, then windowId — stable for determinism. */
 export function expandWindows(
   windows: readonly NamedWindow[],

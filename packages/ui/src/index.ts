@@ -21,11 +21,16 @@ export {
   useActivityInbox,
   usePromoteTargets,
   useDayTimeLeft,
+  useAgenda,
   useAggregates,
   useCommands,
   type WorklistItem,
   type RunningTimer,
   type PromoteTarget,
+  type Agenda,
+  type AgendaBlock,
+  type AgendaEntry,
+  type TodoTask,
   type AggregateRow,
 } from './hooks';
 

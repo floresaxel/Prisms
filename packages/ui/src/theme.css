@@ -61,6 +61,36 @@ body {
 .px-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .px-btn:disabled:hover { border-color: var(--px-border); }
 
+/* agenda (§12.2): to-do panel + week calendar */
+.px-agenda { display: grid; grid-template-columns: 240px 1fr; gap: 20px; align-items: start; }
+.px-agenda-todo h2 { margin-top: 0; }
+.px-todo-item { display: flex; justify-content: space-between; gap: 8px; padding: 10px 12px; margin-bottom: 8px; background: var(--px-surface); border: 1px solid var(--px-border); border-radius: var(--px-radius); cursor: grab; user-select: none; }
+.px-todo-item:hover { border-color: var(--px-accent); }
+
+.px-cal-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.px-cal-grid { display: grid; grid-template-columns: 48px repeat(7, 1fr); gap: 0; border: 1px solid var(--px-border); border-radius: var(--px-radius); overflow: hidden; }
+.px-cal-gutter { position: relative; border-right: 1px solid var(--px-border); margin-top: 28px; }
+.px-cal-hour-label { position: absolute; right: 6px; font-size: 10px; color: var(--px-text-dim); transform: translateY(-6px); }
+.px-cal-col { border-right: 1px solid var(--px-border); }
+.px-cal-col:last-child { border-right: none; }
+.px-cal-col-head { height: 28px; display: flex; align-items: center; justify-content: center; font-size: 12px; color: var(--px-text-dim); background: var(--px-surface); border-bottom: 1px solid var(--px-border); }
+.px-cal-col-body { position: relative; }
+.px-cal-line { position: absolute; left: 0; right: 0; border-top: 1px dashed var(--px-border); opacity: 0.5; }
+
+.px-cal-block { position: absolute; left: 3px; right: 3px; padding: 3px 6px; border-radius: 6px; font-size: 12px; overflow: hidden; background: rgba(91,140,255,0.22); border: 1px solid var(--px-accent); color: var(--px-text); display: flex; flex-direction: column; gap: 2px; }
+.px-cal-block-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.px-cal-block-actions { display: flex; gap: 4px; }
+.px-cal-block-actions .px-btn { padding: 1px 6px; font-size: 11px; }
+.px-cal-block--suggested { background: transparent; border-style: dashed; }
+.px-cal-block--unjustified { background: rgba(120,120,120,0.22); border-color: #555; color: var(--px-text-dim); }
+.px-cal-block--anchored { border-color: var(--px-ok); }
+.px-cal-entry { position: absolute; left: 3px; right: 3px; padding: 2px 6px; border-radius: 6px; font-size: 11px; background: rgba(255,255,255,0.05); border: 1px dashed var(--px-border); color: var(--px-text-dim); overflow: hidden; }
+
+.px-cal-drop { position: absolute; inset: 0; z-index: 5; }
+.px-cal-cell { position: absolute; left: 0; right: 0; }
+.px-cal-cell--valid { background: rgba(70,192,138,0.28); outline: 1px solid var(--px-ok); cursor: copy; }
+.px-cal-cell--invalid { background: rgba(0,0,0,0.35); }
+
 .px-btn { font: inherit; padding: 8px 14px; border-radius: var(--px-radius); border: 1px solid var(--px-border); background: var(--px-surface-2); color: var(--px-text); cursor: pointer; }
 .px-btn:hover { border-color: var(--px-accent); }
 .px-btn--primary { background: var(--px-accent); border-color: var(--px-accent); color: white; }

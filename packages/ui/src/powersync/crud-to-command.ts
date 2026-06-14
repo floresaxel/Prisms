@@ -86,6 +86,32 @@ function timeEntryCommand(entry: CrudLike): TranslatedCommand | null {
   return null;
 }
 
+function scheduleBlockCommand(entry: CrudLike): TranslatedCommand | null {
+  const d = entry.opData;
+  if (entry.op === 'DELETE') return { name: 'block.delete', payload: { id: entry.id } };
+  if (entry.op === 'PUT') {
+    return {
+      name: 'block.create',
+      payload: {
+        id: entry.id,
+        task_id: d?.['task_id'],
+        starts_at: d?.['starts_at'],
+        ends_at: d?.['ends_at'],
+        ...(has(d, 'anchor_type') ? { anchor_type: d!['anchor_type'] } : {}),
+      },
+    };
+  }
+  // PATCH — per-field verb inference.
+  if (has(d, 'deleted_at') && d!['deleted_at'] != null) return { name: 'block.delete', payload: { id: entry.id } };
+  // accepting a suggestion flips status committed (suggestion_reason cleared too).
+  if (has(d, 'status')) return { name: 'block.accept_suggestion', payload: { id: entry.id } };
+  if (has(d, 'anchor_type')) return { name: 'block.set_anchor', payload: { id: entry.id, anchor_type: d!['anchor_type'] } };
+  if (has(d, 'starts_at') || has(d, 'ends_at')) {
+    return { name: 'block.move', payload: { id: entry.id, starts_at: d!['starts_at'], ends_at: d!['ends_at'] } };
+  }
+  return null;
+}
+
 function settingsCommand(entry: CrudLike): TranslatedCommand | null {
   if (entry.op === 'DELETE') return null;
   const payload = pick(entry.opData, ['day_reset_hour', 'timezone', 'weather_location']);
@@ -99,6 +125,8 @@ export function crudToCommand(entry: CrudLike): TranslatedCommand | null {
       return nodeCommand(entry);
     case 'time_entries':
       return timeEntryCommand(entry);
+    case 'schedule_blocks':
+      return scheduleBlockCommand(entry);
     case 'user_settings':
       return settingsCommand(entry);
     default:

@@ -6,17 +6,24 @@ import { useMemo } from 'react';
 
 import { usePowerSync, useQuery } from '@powersync/react';
 import {
+  asEpochMillis,
   buildFactContext,
   buildTreeIndex,
   canonicalProgress,
+  DEFAULT_WINDOWS,
+  isJustified,
   isoToEpochMillis,
   minutesLeftInDay,
   minutesLeftInTask,
   taskStatus,
+  type CommittedBlock,
   type FactContext,
   type Instant,
   type Node,
   type ProgressValue,
+  type SchedulableTask,
+  type SchedulerDependency,
+  type SchedulerInput,
   type TaskStatus,
   type TimeEntry,
   type TreeIndex,
@@ -176,6 +183,144 @@ export function usePromoteTargets(): PromoteTarget[] {
 export function useDayTimeLeft(now: Instant): number {
   const ctx = useFactContext();
   return useMemo(() => minutesLeftInDay(now, { day_reset_hour: ctx.dayResetHour, timezone: ctx.timezone }), [ctx, now]);
+}
+
+export interface AgendaBlock {
+  id: string;
+  taskId: string;
+  title: string;
+  startsAt: Instant;
+  endsAt: Instant;
+  status: 'committed' | 'suggested';
+  /** anchor_type != 'none' (I7): immovable, shows a lock glyph. */
+  anchored: boolean;
+  /** §12.2: ancestry reaches no vision/habit → render dark grey. */
+  justified: boolean;
+  suggestionReason: string | null;
+}
+
+export interface AgendaEntry {
+  id: string;
+  taskId: string;
+  title: string;
+  startsAt: Instant;
+  endsAt: Instant;
+}
+
+export interface TodoTask {
+  task: Node;
+  schedulable: SchedulableTask;
+}
+
+export interface Agenda {
+  /** SchedulerInput (greedy) for `validWindowsFor` drag hints (§10). */
+  input: SchedulerInput;
+  tasksById: ReadonlyMap<string, SchedulableTask>;
+  /** Committed + suggested blocks to render in the calendar. */
+  blocks: AgendaBlock[];
+  /** Past `time_entries` as the historical event layer (§12.2). */
+  entries: AgendaEntry[];
+  /** Schedulable tasks not yet placed — the to-do side panel. */
+  todo: TodoTask[];
+}
+
+/**
+ * Agenda data (§12.2, §10 client mode): mirrors the server's scheduler-context
+ * loader on the client so drag-to-agenda window hints, suggestions, the grey
+ * (unjustified) rule, and the time-entry history layer all work offline.
+ */
+export function useAgenda(now: Instant, horizonDays = 7): Agenda {
+  const ctx = useFactContext();
+  const edgeRows = useRows('SELECT * FROM edges WHERE deleted_at IS NULL');
+  const blockRows = useRows('SELECT * FROM schedule_blocks WHERE deleted_at IS NULL');
+  const entryRows = useRows('SELECT * FROM time_entries WHERE deleted_at IS NULL');
+  const sprintRows = useRows('SELECT * FROM sprints WHERE deleted_at IS NULL');
+  const membershipRows = useRows('SELECT * FROM sprint_memberships WHERE deleted_at IS NULL');
+
+  return useMemo(() => {
+    const tree = ctx.tree;
+    const today = ctx.today(now);
+
+    const activeSprintIds = new Set(
+      sprintRows.map(toSprint).filter((s) => s.starts_on <= today && today <= s.ends_on).map((s) => s.id),
+    );
+    const sprintMemberNodeIds = new Set<string>();
+    for (const m of membershipRows.map(toMembership)) if (activeSprintIds.has(m.sprint_id)) sprintMemberNodeIds.add(m.node_id);
+
+    const depsBySuccessor = new Map<string, SchedulerDependency[]>();
+    for (const e of edgeRows.map(toEdge)) {
+      const list = depsBySuccessor.get(e.successor_id) ?? [];
+      list.push({ predecessorId: e.predecessor_id, edgeType: e.edge_type, lagMinutes: e.lag_minutes });
+      depsBySuccessor.set(e.successor_id, list);
+    }
+
+    const tasks: SchedulableTask[] = [];
+    const tasksById = new Map<string, SchedulableTask>();
+    for (const node of tree.byId.values()) {
+      if (node.node_type !== 'task' || node.completed_at !== null) continue;
+      if (node.estimate_minutes === null || node.estimate_minutes <= 0) continue;
+      const t: SchedulableTask = {
+        id: node.id,
+        estimateMinutes: node.estimate_minutes,
+        dueDate: node.due_date,
+        dependencies: depsBySuccessor.get(node.id),
+        sprintMember: sprintMemberNodeIds.has(node.id),
+      };
+      tasks.push(t);
+      tasksById.set(node.id, t);
+    }
+
+    const blocksRaw = blockRows.map(toScheduleBlock);
+    const committed: CommittedBlock[] = blocksRaw
+      .filter((b) => b.status === 'committed')
+      .map((b) => ({
+        id: b.id,
+        taskId: b.task_id,
+        startsAt: isoToEpochMillis(b.starts_at),
+        endsAt: isoToEpochMillis(b.ends_at),
+        anchored: b.anchor_type !== 'none',
+      }));
+
+    const input: SchedulerInput = {
+      tasks,
+      committed,
+      windows: DEFAULT_WINDOWS,
+      timezone: ctx.timezone,
+      horizon: { from: now, to: asEpochMillis(now + horizonDays * 86_400_000) },
+      mode: 'greedy',
+    };
+
+    const blocks: AgendaBlock[] = blocksRaw.map((b) => ({
+      id: b.id,
+      taskId: b.task_id,
+      title: tree.byId.get(b.task_id)?.title ?? 'Task',
+      startsAt: isoToEpochMillis(b.starts_at),
+      endsAt: isoToEpochMillis(b.ends_at),
+      status: b.status,
+      anchored: b.anchor_type !== 'none',
+      justified: isJustified(tree, b.task_id),
+      suggestionReason: b.suggestion_reason,
+    }));
+
+    const entries: AgendaEntry[] = entryRows
+      .map(toTimeEntry)
+      .filter((e) => e.ended_at !== null)
+      .map((e) => ({
+        id: e.id,
+        taskId: e.task_id,
+        title: tree.byId.get(e.task_id)?.title ?? 'Task',
+        startsAt: isoToEpochMillis(e.started_at),
+        endsAt: isoToEpochMillis(e.ended_at as string),
+      }));
+
+    const scheduledTaskIds = new Set(committed.map((b) => b.taskId));
+    const todo: TodoTask[] = tasks
+      .filter((t) => !scheduledTaskIds.has(t.id))
+      .map((t) => ({ task: tree.byId.get(t.id) as Node, schedulable: t }))
+      .sort((a, b) => (a.task.title < b.task.title ? -1 : a.task.title > b.task.title ? 1 : 0));
+
+    return { input, tasksById, blocks, entries, todo };
+  }, [ctx, edgeRows, blockRows, entryRows, sprintRows, membershipRows, now, horizonDays]);
 }
 
 export interface AggregateRow {

@@ -113,6 +113,38 @@ export function createCommands(db: WritableDb, ctx: CommandContext) {
         await db.execute('UPDATE nodes SET completed_at = ?, updated_at = ? WHERE id = ?', [now, now, input.taskId]);
       }
     },
+    // --- schedule blocks (agenda, §10/§12.2) --------------------------------
+    /** Place a committed calendar block (drag-to-agenda drop). */
+    async createBlock(input: { id?: string; taskId: string; startsAt: string; endsAt: string; anchorType?: 'none' | 'start' | 'end' | 'both' }): Promise<string> {
+      const id = input.id ?? newId();
+      const now = iso(ctx);
+      await db.execute(
+        'INSERT INTO schedule_blocks (id, user_id, task_id, starts_at, ends_at, anchor_type, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [id, ctx.userId, input.taskId, input.startsAt, input.endsAt, input.anchorType ?? 'none', 'committed', now, now],
+      );
+      return id;
+    },
+    /** Move/resize a block (rejected server-side if anchored, I7). */
+    async moveBlock(id: string, startsAt: string, endsAt: string): Promise<void> {
+      const now = iso(ctx);
+      await db.execute('UPDATE schedule_blocks SET starts_at = ?, ends_at = ?, updated_at = ? WHERE id = ?', [startsAt, endsAt, now, id]);
+    },
+    async setBlockAnchor(id: string, anchorType: 'none' | 'start' | 'end' | 'both'): Promise<void> {
+      await db.execute('UPDATE schedule_blocks SET anchor_type = ?, updated_at = ? WHERE id = ?', [anchorType, iso(ctx), id]);
+    },
+    async deleteBlock(id: string): Promise<void> {
+      const now = iso(ctx);
+      await db.execute('UPDATE schedule_blocks SET deleted_at = ?, updated_at = ? WHERE id = ?', [now, now, id]);
+    },
+    /** Promote a suggested block to a committed fact (§2.6). */
+    async acceptSuggestion(id: string): Promise<void> {
+      await db.execute('UPDATE schedule_blocks SET status = ?, suggestion_reason = NULL, updated_at = ? WHERE id = ?', ['committed', iso(ctx), id]);
+    },
+    /** Dismiss a suggested block (soft-delete; maps to block.delete). */
+    async rejectSuggestion(id: string): Promise<void> {
+      const now = iso(ctx);
+      await db.execute('UPDATE schedule_blocks SET deleted_at = ?, updated_at = ? WHERE id = ?', [now, now, id]);
+    },
     async updateSettings(patch: { day_reset_hour?: number; timezone?: string }): Promise<void> {
       const now = iso(ctx);
       const sets: string[] = ['updated_at = ?'];

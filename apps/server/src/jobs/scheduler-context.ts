@@ -10,9 +10,9 @@
 import {
   asEpochMillis,
   bucketDate,
+  DEFAULT_WINDOWS,
   type CommittedBlock,
   type EdgeType,
-  type NamedWindow,
   type SchedulableTask,
   type SchedulerDependency,
   type SchedulerInput,
@@ -22,8 +22,8 @@ import { edges, nodes, schedule_blocks, sprint_memberships, sprints, user_settin
 import { and, eq, isNull } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 
-/** Default daytime window (08:00–20:00 local) until a window-config table exists. */
-export const DEFAULT_WINDOWS: NamedWindow[] = [{ id: 'day', startMinute: 8 * 60, endMinute: 20 * 60 }];
+// DEFAULT_WINDOWS now lives in @prisms/core (shared with the client agenda).
+export { DEFAULT_WINDOWS } from '@prisms/core';
 
 const DEFAULT_SETTINGS = { day_reset_hour: 4, timezone: 'America/New_York' };
 

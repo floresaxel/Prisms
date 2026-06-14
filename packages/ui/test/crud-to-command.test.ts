@@ -97,6 +97,42 @@ describe('time_entries', () => {
   });
 });
 
+describe('schedule_blocks', () => {
+  const t = '2026-06-15T09:00:00.000Z';
+  const end = '2026-06-15T10:00:00.000Z';
+
+  it('PUT → block.create with the create fields', () => {
+    expect(
+      crudToCommand(entry({ op: 'PUT', table: 'schedule_blocks', id: 'b1', opData: { task_id: 'k1', starts_at: t, ends_at: end, anchor_type: 'none', status: 'committed' } })),
+    ).toEqual({ name: 'block.create', payload: { id: 'b1', task_id: 'k1', starts_at: t, ends_at: end, anchor_type: 'none' } });
+  });
+
+  it('starts_at/ends_at patch → block.move', () => {
+    expect(
+      crudToCommand(entry({ op: 'PATCH', table: 'schedule_blocks', id: 'b1', opData: { starts_at: t, ends_at: end, updated_at: t } })),
+    ).toEqual({ name: 'block.move', payload: { id: 'b1', starts_at: t, ends_at: end } });
+  });
+
+  it('status patch → block.accept_suggestion', () => {
+    expect(
+      crudToCommand(entry({ op: 'PATCH', table: 'schedule_blocks', id: 'b1', opData: { status: 'committed', suggestion_reason: null, updated_at: t } })),
+    ).toEqual({ name: 'block.accept_suggestion', payload: { id: 'b1' } });
+  });
+
+  it('anchor_type patch → block.set_anchor', () => {
+    expect(
+      crudToCommand(entry({ op: 'PATCH', table: 'schedule_blocks', id: 'b1', opData: { anchor_type: 'both', updated_at: t } })),
+    ).toEqual({ name: 'block.set_anchor', payload: { id: 'b1', anchor_type: 'both' } });
+  });
+
+  it('soft-delete (reject/delete) → block.delete', () => {
+    expect(
+      crudToCommand(entry({ op: 'PATCH', table: 'schedule_blocks', id: 'b1', opData: { deleted_at: t, updated_at: t } })),
+    ).toEqual({ name: 'block.delete', payload: { id: 'b1' } });
+    expect(crudToCommand(entry({ op: 'DELETE', table: 'schedule_blocks', id: 'b1' }))).toEqual({ name: 'block.delete', payload: { id: 'b1' } });
+  });
+});
+
 describe('user_settings + unknown tables', () => {
   it('settings patch → settings.update with only changed fields', () => {
     expect(crudToCommand(entry({ op: 'PATCH', table: 'user_settings', id: 'u1', opData: { day_reset_hour: 5, updated_at: 'x' } }))).toEqual({
