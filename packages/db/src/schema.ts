@@ -24,6 +24,7 @@ import {
   integer,
   jsonb,
   pgTable,
+  primaryKey,
   real,
   smallint,
   text,
@@ -469,6 +470,22 @@ export const user_settings = pgTable(
       sql`${t.day_reset_hour} BETWEEN 0 AND 23`,
     ),
   ],
+);
+
+// --- CONVERGENCE: per-field HLC last-writer (server-internal; never synced) ----------
+// Tracks the HLC of the last writer of each mutable field so the dispatcher
+// can resolve same-field conflicts by HLC, not arrival order (§7.3). Not a
+// §6.0 domain table: excluded from sync-rules and the core type assertions.
+export const command_field_versions = pgTable(
+  'command_field_versions',
+  {
+    user_id: uuid('user_id').notNull(),
+    table_name: text('table_name').notNull(),
+    row_id: uuid('row_id').notNull(),
+    field: text('field').notNull(),
+    hlc: text('hlc').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.table_name, t.row_id, t.field] })],
 );
 
 /** Every table, keyed by SQL name — used by the seed, tests, and later the server. */
