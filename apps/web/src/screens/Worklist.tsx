@@ -17,6 +17,7 @@ import {
   Modal,
   useCommands,
   useDayTimeLeft,
+  useNextBlockMinutes,
   useRunningTimer,
   useWorklist,
   type CommandContext,
@@ -35,9 +36,16 @@ function ProgressBar({ item }: { item: WorklistItem }) {
   const { progress } = item;
   if (progress.estimateMinutes === null) return <span className="px-muted">no estimate</span>;
   const over = progress.ratio !== null && progress.ratio > 1;
+  // §7.2: bar caps at 100%, overflow shown numerically (uncapped %).
+  const pct = Math.round((progress.ratio ?? 0) * 100);
   return (
-    <div className="px-progress" data-testid={`progress-${item.task.id}`} title={`${Math.round(progress.percent)}%`}>
-      <div className={`px-progress-fill${over ? ' px-progress-fill--over' : ''}`} style={{ width: `${progress.percent}%` }} />
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <div className="px-progress" data-testid={`progress-${item.task.id}`}>
+        <div className={`px-progress-fill${over ? ' px-progress-fill--over' : ''}`} style={{ width: `${progress.percent}%` }} />
+      </div>
+      <span className="px-muted" data-testid={`progress-pct-${item.task.id}`} style={over ? { color: 'var(--px-danger)' } : undefined}>
+        {pct}%
+      </span>
     </div>
   );
 }
@@ -52,6 +60,7 @@ export function Worklist({ ctx }: { ctx: CommandContext }) {
   const items = useWorklist(now);
   const running = useRunningTimer(now);
   const dayLeft = useDayTimeLeft(now);
+  const nextBlock = useNextBlockMinutes(now);
   const commands = useCommands(ctx);
 
   const [review, setReview] = useState<ReviewTarget | null>(null);
@@ -77,6 +86,7 @@ export function Worklist({ ctx }: { ctx: CommandContext }) {
       <p className="px-muted">
         Available items — clock in, check off, or delete.{' '}
         <span data-testid="day-left">{formatMinutes(dayLeft)} left today</span>
+        {nextBlock !== null && <> · <span data-testid="next-block">next block in {formatMinutes(nextBlock)}</span></>}
       </p>
 
       {running && (

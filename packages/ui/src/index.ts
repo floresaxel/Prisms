@@ -21,6 +21,7 @@ export {
   useActivityInbox,
   usePromoteTargets,
   useDayTimeLeft,
+  useNextBlockMinutes,
   useAgenda,
   useHabits,
   useKanban,

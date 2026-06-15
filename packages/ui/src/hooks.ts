@@ -22,6 +22,7 @@ import {
   isoToEpochMillis,
   minutesLeftInDay,
   minutesLeftInTask,
+  minutesUntilNextBlock,
   rankProjects,
   rawMinutes,
   taskStatus,
@@ -205,6 +206,12 @@ export function usePromoteTargets(): PromoteTarget[] {
 export function useDayTimeLeft(now: Instant): number {
   const ctx = useFactContext();
   return useMemo(() => minutesLeftInDay(now, { day_reset_hour: ctx.dayResetHour, timezone: ctx.timezone }), [ctx, now]);
+}
+
+/** Minutes until the next committed block starts (§7.2 time-left trio); null when none ahead. */
+export function useNextBlockMinutes(now: Instant, taskId?: string): number | null {
+  const rows = useRows('SELECT * FROM schedule_blocks WHERE deleted_at IS NULL');
+  return useMemo(() => minutesUntilNextBlock(rows.map(toScheduleBlock), now, taskId), [rows, now, taskId]);
 }
 
 export interface AgendaBlock {

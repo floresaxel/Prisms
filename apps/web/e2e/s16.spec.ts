@@ -79,6 +79,9 @@ test('inbox → promote → clock in/out → review, offline then synced; double
   const existing = page.getByTestId('worklist').locator('li', { hasText: 'Existing Task' });
   await expect(existing.getByRole('button', { name: 'Clock in' })).toBeDisabled();
 
+  // task progress bar shows its numeric % (estimate 60, nothing logged yet)
+  await expect(existing.getByTestId(`progress-pct-${ids.existing}`)).toHaveText('0%');
+
   // clock out → focus review modal
   await page.getByTestId('timer-clock-out').click();
   await expect(page.getByTestId('review-save')).toBeVisible();
