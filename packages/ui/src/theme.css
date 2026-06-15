@@ -84,6 +84,8 @@ body {
 .px-cal-block--suggested { background: transparent; border-style: dashed; }
 .px-cal-block--unjustified { background: rgba(120,120,120,0.22); border-color: #555; color: var(--px-text-dim); }
 .px-cal-block--anchored { border-color: var(--px-ok); }
+.px-cal-resize { position: absolute; left: 0; right: 0; bottom: 0; height: 7px; cursor: ns-resize; border-bottom-left-radius: 6px; border-bottom-right-radius: 6px; }
+.px-cal-resize:hover { background: rgba(255,255,255,0.18); }
 .px-cal-entry { position: absolute; left: 3px; right: 3px; padding: 2px 6px; border-radius: 6px; font-size: 11px; background: rgba(255,255,255,0.05); border: 1px dashed var(--px-border); color: var(--px-text-dim); overflow: hidden; }
 
 .px-cal-drop { position: absolute; inset: 0; z-index: 5; }

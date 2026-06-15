@@ -69,6 +69,36 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
     return () => window.removeEventListener('mouseup', onUp);
   }, []);
 
+  // resize: drag a committed block's bottom edge to change its end (block.move),
+  // snapped to 15-minute steps. Independent of the move/create drag above.
+  const [resize, setResize] = useState<{ blockId: string; startInstant: Instant; originEnd: Instant; startY: number } | null>(null);
+  const [resizeEnd, setResizeEnd] = useState<Instant | null>(null);
+  const resizeEndRef = useRef<Instant | null>(null);
+  resizeEndRef.current = resizeEnd;
+
+  useEffect(() => {
+    if (!resize) return;
+    const onMove = (e: MouseEvent) => {
+      const deltaMin = Math.round((((e.clientY - resize.startY) / HOUR_PX) * 60) / 15) * 15;
+      const minEnd = resize.startInstant + 15 * MS_PER_MIN;
+      setResizeEnd(asEpochMillis(Math.max(minEnd, resize.originEnd + deltaMin * MS_PER_MIN)));
+    };
+    const onUp = () => {
+      const end = resizeEndRef.current;
+      setResize(null);
+      setResizeEnd(null);
+      if (end !== null && end !== resize.originEnd) {
+        void commands.moveBlock(resize.blockId, epochMillisToIso(resize.startInstant), epochMillisToIso(end));
+      }
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+  }, [resize, commands]);
+
   const days = useMemo(() => {
     const base = addDays(bucketDate(now, 0, tz), weekOffset * 7);
     return Array.from({ length: 7 }, (_, i) => addDays(base, i));
@@ -110,7 +140,7 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
   }
 
   return (
-    <section className="px-agenda" style={drag ? { userSelect: 'none' } : undefined}>
+    <section className="px-agenda" style={drag || resize ? { userSelect: 'none' } : undefined}>
       <div className="px-agenda-todo">
         <h2>To-do</h2>
         <p className="px-muted">Drag a task onto the week to schedule it.</p>
@@ -169,7 +199,9 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
 
                 {/* blocks */}
                 {agenda.blocks.map((b) => {
-                  const p = place(b.startsAt, b.endsAt);
+                  const resizing = resize?.blockId === b.id && resizeEnd !== null;
+                  const endForDisplay = resizing ? (resizeEnd as Instant) : b.endsAt;
+                  const p = place(b.startsAt, endForDisplay);
                   if (p === null || p.col !== col) return null;
                   const cls = [
                     'px-cal-block',
@@ -182,6 +214,7 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
                       key={b.id}
                       className={cls}
                       data-testid={`block-${b.id}`}
+                      data-duration-min={Math.round((endForDisplay - b.startsAt) / MS_PER_MIN)}
                       style={{ top: p.top, height: p.height, cursor: b.anchored ? 'not-allowed' : 'grab' }}
                       onMouseDown={(e) => {
                         if (b.status !== 'committed') return;
@@ -195,6 +228,18 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
                           <button className="px-btn px-btn--primary" data-testid={`accept-${b.id}`} onMouseDown={(e) => e.stopPropagation()} onClick={() => void commands.acceptSuggestion(b.id)}>✓</button>
                           <button className="px-btn px-btn--danger" data-testid={`reject-${b.id}`} onMouseDown={(e) => e.stopPropagation()} onClick={() => void commands.rejectSuggestion(b.id)}>✕</button>
                         </span>
+                      )}
+                      {b.status === 'committed' && !b.anchored && (
+                        <div
+                          className="px-cal-resize"
+                          data-testid={`resize-${b.id}`}
+                          onMouseDown={(e) => {
+                            e.stopPropagation();
+                            e.preventDefault();
+                            setResize({ blockId: b.id, startInstant: b.startsAt, originEnd: b.endsAt, startY: e.clientY });
+                            setResizeEnd(b.endsAt);
+                          }}
+                        />
                       )}
                     </div>
                   );

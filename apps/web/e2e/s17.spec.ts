@@ -115,7 +115,9 @@ test('agenda: drag→valid windows→drop commits; anchored refuses; suggestion 
     await page.mouse.down();
     // valid windows light up the moment the drag starts
     await expect(page.locator('.px-cal-drop').first()).toBeVisible({ timeout: 5000 });
-    const cell = page.getByTestId('cell-3-10'); // 3 days ahead, 10:00 — empty & in-window
+    // col 5 (5 days out) is always free & in-window regardless of the UTC↔local
+    // date offset (seeds only touch offsets 1–2 → cols ≤ 3).
+    const cell = page.getByTestId('cell-5-9');
     await expect(cell).toHaveAttribute('data-valid', 'true');
     await expect(page.locator('.px-cal-cell--valid').first()).toBeVisible();
     await cell.hover();
@@ -134,4 +136,55 @@ test('agenda: drag→valid windows→drop commits; anchored refuses; suggestion 
   } finally {
     await sql.end({ timeout: 5 });
   }
+});
+
+test('agenda: a committed block moves to another day and resizes (block.move)', async ({ page }) => {
+  const email = `e2e-s17b-${Date.now()}@prisms.test`;
+  await page.goto('/');
+  await page.getByRole('link', { name: 'Register' }).click();
+  await page.locator('input[autocomplete="name"]').fill('S17 User');
+  await page.getByTestId('email').fill(email);
+  await page.getByTestId('password').fill('e2e-password-123');
+  await page.getByTestId('submit').click();
+  await expect(page.getByTestId('sync-state')).toBeVisible();
+
+  const ids = { v: randomUUID(), r: randomUUID(), p: randomUUID(), task: randomUUID(), block: randomUUID() };
+  const seed = await page.request.post('/sync/upload', {
+    data: {
+      device_id: 'e2e-seed',
+      commands: [
+        cmd('node.create', { id: ids.v, node_type: 'vision', title: 'Vision', sort_order: 'a0' }),
+        cmd('node.create', { id: ids.r, node_type: 'roadmap', title: 'Roadmap', sort_order: 'a0', parent_id: ids.v }),
+        cmd('node.create', { id: ids.p, node_type: 'project', title: 'Project', sort_order: 'a0', parent_id: ids.r }),
+        cmd('node.create', { id: ids.task, node_type: 'task', title: 'Move Block', sort_order: 'a0', parent_id: ids.p, estimate_minutes: 60 }),
+        // a 1-hour committed block on day+1 at ~10:00 local
+        cmd('block.create', { id: ids.block, task_id: ids.task, starts_at: dayISO(1, 14), ends_at: dayISO(1, 15) }),
+      ],
+    },
+  });
+  expect(seed.ok()).toBeTruthy();
+
+  await page.getByRole('link', { name: 'Agenda' }).click();
+  const block = page.getByTestId(`block-${ids.block}`);
+  await expect(block).toBeVisible({ timeout: 30_000 });
+  await expect(block).toHaveAttribute('data-duration-min', '60');
+
+  // --- move: drag the block to col 5 at 09:00 (always free & in-window) ---
+  await block.hover();
+  await page.mouse.down();
+  const cell = page.getByTestId('cell-5-9');
+  await expect(cell).toHaveAttribute('data-valid', 'true');
+  await cell.hover();
+  await page.mouse.up();
+  await expect(page.getByTestId('day-5').getByTestId(`block-${ids.block}`)).toBeVisible();
+
+  // --- resize: drag the bottom edge down one hour → 120 min ------------
+  const handle = page.getByTestId(`resize-${ids.block}`);
+  const box = await handle.boundingBox();
+  if (!box) throw new Error('resize handle has no bounding box');
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2 + 44, { steps: 6 });
+  await page.mouse.up();
+  await expect(page.getByTestId(`block-${ids.block}`)).toHaveAttribute('data-duration-min', '120');
 });
