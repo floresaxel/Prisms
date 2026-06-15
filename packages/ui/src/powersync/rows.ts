@@ -4,11 +4,14 @@
  * widened, absent columns normalized to null.
  */
 import type {
+  AutomationRule,
   BlockerRule,
   ComputedAggregate,
   DecisionBoard,
   DecisionCriterion,
   DecisionScore,
+  DiagramGroup,
+  DiagramLayout,
   Edge,
   ExternalFact,
   Habit,
@@ -126,6 +129,44 @@ export const toBlockerRule = (r: Row): BlockerRule => ({
   predicate: json(r['predicate'], {}),
   label: String(r['label'] ?? ''),
   enabled: bool(r['enabled']),
+  created_at: String(r['created_at'] ?? ''),
+  updated_at: String(r['updated_at'] ?? ''),
+  deleted_at: str(r['deleted_at']),
+});
+
+export const toAutomationRule = (r: Row): AutomationRule => ({
+  id: String(r['id']),
+  user_id: String(r['user_id']),
+  trigger: r['trigger'] as AutomationRule['trigger'],
+  conditions: json(r['conditions'], {}),
+  actions: json(r['actions'], []),
+  enabled: bool(r['enabled']),
+  created_at: String(r['created_at'] ?? ''),
+  updated_at: String(r['updated_at'] ?? ''),
+  deleted_at: str(r['deleted_at']),
+});
+
+export const toDiagramLayout = (r: Row): DiagramLayout => ({
+  id: String(r['id']),
+  user_id: String(r['user_id']),
+  diagram_id: String(r['diagram_id']),
+  node_id: String(r['node_id']),
+  x: Number(r['x'] ?? 0),
+  y: Number(r['y'] ?? 0),
+  group_id: str(r['group_id']),
+  collapsed: bool(r['collapsed']),
+  computed_at: str(r['computed_at']),
+  created_at: String(r['created_at'] ?? ''),
+  updated_at: String(r['updated_at'] ?? ''),
+  deleted_at: str(r['deleted_at']),
+});
+
+export const toDiagramGroup = (r: Row): DiagramGroup => ({
+  id: String(r['id']),
+  user_id: String(r['user_id']),
+  diagram_id: String(r['diagram_id']),
+  label: String(r['label'] ?? ''),
+  color: str(r['color']),
   created_at: String(r['created_at'] ?? ''),
   updated_at: String(r['updated_at'] ?? ''),
   deleted_at: str(r['deleted_at']),

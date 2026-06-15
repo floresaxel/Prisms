@@ -27,6 +27,10 @@ export {
   useKanban,
   useDecisionBoards,
   useDashboard,
+  useFlowchart,
+  useGantt,
+  useRules,
+  useBlockers,
   useAggregates,
   useCommands,
   type WorklistItem,
@@ -41,6 +45,11 @@ export {
   type DecisionBoardView,
   type DashboardData,
   type ProjectCompletion,
+  type FlowNode,
+  type FlowEdge,
+  type FlowchartView,
+  type GanttBar,
+  type GanttView,
   type AggregateRow,
 } from './hooks';
 

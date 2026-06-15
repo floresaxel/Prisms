@@ -195,6 +195,55 @@ describe('decision board', () => {
   });
 });
 
+describe('edges (the dependency graph)', () => {
+  const t = '2026-06-15T09:00:00.000Z';
+  it('PUT → edge.create; soft-delete/DELETE → edge.delete', () => {
+    expect(crudToCommand(entry({ op: 'PUT', table: 'edges', id: 'e1', opData: { predecessor_id: 'a', successor_id: 'b', edge_type: 'FS', lag_minutes: 0 } }))).toEqual({
+      name: 'edge.create', payload: { id: 'e1', predecessor_id: 'a', successor_id: 'b', edge_type: 'FS', lag_minutes: 0 },
+    });
+    expect(crudToCommand(entry({ op: 'PATCH', table: 'edges', id: 'e1', opData: { deleted_at: t } }))).toEqual({ name: 'edge.delete', payload: { id: 'e1' } });
+    expect(crudToCommand(entry({ op: 'DELETE', table: 'edges', id: 'e1' }))).toEqual({ name: 'edge.delete', payload: { id: 'e1' } });
+  });
+});
+
+describe('diagram layout & groups', () => {
+  const t = '2026-06-15T09:00:00.000Z';
+  it('position patch → layout.set_position; collapsed patch → layout.set_collapsed (collapsed wins)', () => {
+    expect(crudToCommand(entry({ op: 'PATCH', table: 'diagram_layouts', id: 'l1', opData: { diagram_id: 'd', node_id: 'n', x: 12, y: 34, group_id: null, updated_at: t } }))).toEqual({
+      name: 'layout.set_position', payload: { diagram_id: 'd', node_id: 'n', x: 12, y: 34, group_id: null },
+    });
+    // a collapse write seeds x=0,y=0 on insert → must still map to set_collapsed
+    expect(crudToCommand(entry({ op: 'PUT', table: 'diagram_layouts', id: 'l1', opData: { diagram_id: 'd', node_id: 'n', x: 0, y: 0, collapsed: 1 } }))).toEqual({
+      name: 'layout.set_collapsed', payload: { diagram_id: 'd', node_id: 'n', collapsed: true },
+    });
+  });
+  it('group PUT → group.create; label patch → group.update; delete → group.delete', () => {
+    expect(crudToCommand(entry({ op: 'PUT', table: 'diagram_groups', id: 'g1', opData: { diagram_id: 'd', label: 'G', color: null } }))).toEqual({
+      name: 'group.create', payload: { id: 'g1', diagram_id: 'd', label: 'G', color: null },
+    });
+    expect(crudToCommand(entry({ op: 'PATCH', table: 'diagram_groups', id: 'g1', opData: { label: 'G2', updated_at: t } }))).toEqual({ name: 'group.update', payload: { id: 'g1', label: 'G2' } });
+    expect(crudToCommand(entry({ op: 'PATCH', table: 'diagram_groups', id: 'g1', opData: { deleted_at: t } }))).toEqual({ name: 'group.delete', payload: { id: 'g1' } });
+  });
+});
+
+describe('automation & blocker rules (JSON columns parsed)', () => {
+  const t = '2026-06-15T09:00:00.000Z';
+  it('rule PUT → rule.create (conditions/actions parsed); enabled patch → rule.toggle', () => {
+    expect(crudToCommand(entry({ op: 'PUT', table: 'automation_rules', id: 'r1', opData: { trigger: 'task_completed', conditions: '{"all":[]}', actions: '[{"action":"spawn_task","slot":0,"template":{"title":"X"}}]', enabled: 1 } }))).toEqual({
+      name: 'rule.create',
+      payload: { id: 'r1', trigger: 'task_completed', conditions: { all: [] }, actions: [{ action: 'spawn_task', slot: 0, template: { title: 'X' } }], enabled: true },
+    });
+    expect(crudToCommand(entry({ op: 'PATCH', table: 'automation_rules', id: 'r1', opData: { enabled: 0, updated_at: t } }))).toEqual({ name: 'rule.toggle', payload: { id: 'r1', enabled: false } });
+    expect(crudToCommand(entry({ op: 'PATCH', table: 'automation_rules', id: 'r1', opData: { deleted_at: t } }))).toEqual({ name: 'rule.delete', payload: { id: 'r1' } });
+  });
+  it('blocker PUT → blocker.create (scope/predicate parsed); enabled patch → blocker.toggle', () => {
+    expect(crudToCommand(entry({ op: 'PUT', table: 'blocker_rules', id: 'b1', opData: { scope: '{}', predicate: '{"all":[]}', label: 'L', enabled: 1 } }))).toEqual({
+      name: 'blocker.create', payload: { id: 'b1', scope: {}, predicate: { all: [] }, label: 'L', enabled: true },
+    });
+    expect(crudToCommand(entry({ op: 'PATCH', table: 'blocker_rules', id: 'b1', opData: { enabled: 0, updated_at: t } }))).toEqual({ name: 'blocker.toggle', payload: { id: 'b1', enabled: false } });
+  });
+});
+
 describe('user_settings + unknown tables', () => {
   it('settings patch → settings.update with only changed fields', () => {
     expect(crudToCommand(entry({ op: 'PATCH', table: 'user_settings', id: 'u1', opData: { day_reset_hour: 5, updated_at: 'x' } }))).toEqual({

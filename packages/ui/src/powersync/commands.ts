@@ -263,6 +263,110 @@ export function createCommands(db: WritableDb, ctx: CommandContext) {
       }
     },
 
+    // --- edges (the dependency graph, §6.7 I4) ------------------------------
+    async createEdge(input: { id?: string; predecessorId: string; successorId: string; edgeType?: 'FS' | 'SS' | 'FF' | 'SF'; lagMinutes?: number }): Promise<string> {
+      const id = input.id ?? newId();
+      const now = iso(ctx);
+      await db.execute(
+        'INSERT INTO edges (id, user_id, predecessor_id, successor_id, edge_type, lag_minutes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        [id, ctx.userId, input.predecessorId, input.successorId, input.edgeType ?? 'FS', input.lagMinutes ?? 0, now, now],
+      );
+      return id;
+    },
+    async deleteEdge(id: string): Promise<void> {
+      const now = iso(ctx);
+      await db.execute('UPDATE edges SET deleted_at = ?, updated_at = ? WHERE id = ?', [now, now, id]);
+    },
+
+    // --- diagram layout & groups (§12.1–12.2) -------------------------------
+    /** Persist a node's position in a diagram (layout.set_position, upsert by diagram+node). */
+    async setLayoutPosition(input: { existingId?: string; diagramId: string; nodeId: string; x: number; y: number; groupId?: string | null }): Promise<void> {
+      const now = iso(ctx);
+      if (input.existingId) {
+        await db.execute(
+          'UPDATE diagram_layouts SET x = ?, y = ?, group_id = ?, diagram_id = ?, node_id = ?, updated_at = ? WHERE id = ?',
+          [input.x, input.y, input.groupId ?? null, input.diagramId, input.nodeId, now, input.existingId],
+        );
+      } else {
+        await db.execute(
+          'INSERT INTO diagram_layouts (id, user_id, diagram_id, node_id, x, y, group_id, collapsed, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          [newId(), ctx.userId, input.diagramId, input.nodeId, input.x, input.y, input.groupId ?? null, 0, now, now],
+        );
+      }
+    },
+    async setLayoutCollapsed(input: { existingId?: string; diagramId: string; nodeId: string; collapsed: boolean }): Promise<void> {
+      const now = iso(ctx);
+      if (input.existingId) {
+        await db.execute(
+          'UPDATE diagram_layouts SET collapsed = ?, diagram_id = ?, node_id = ?, updated_at = ? WHERE id = ?',
+          [input.collapsed ? 1 : 0, input.diagramId, input.nodeId, now, input.existingId],
+        );
+      } else {
+        await db.execute(
+          'INSERT INTO diagram_layouts (id, user_id, diagram_id, node_id, x, y, collapsed, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          [newId(), ctx.userId, input.diagramId, input.nodeId, 0, 0, input.collapsed ? 1 : 0, now, now],
+        );
+      }
+    },
+    async createGroup(input: { id?: string; diagramId: string; label: string; color?: string | null }): Promise<string> {
+      const id = input.id ?? newId();
+      const now = iso(ctx);
+      await db.execute(
+        'INSERT INTO diagram_groups (id, user_id, diagram_id, label, color, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        [id, ctx.userId, input.diagramId, input.label, input.color ?? null, now, now],
+      );
+      return id;
+    },
+    async updateGroup(id: string, patch: { label?: string; color?: string | null }): Promise<void> {
+      const now = iso(ctx);
+      const sets: string[] = [];
+      const params: unknown[] = [];
+      if (patch.label !== undefined) { sets.push('label = ?'); params.push(patch.label); }
+      if ('color' in patch) { sets.push('color = ?'); params.push(patch.color ?? null); }
+      if (sets.length === 0) return;
+      sets.push('updated_at = ?');
+      params.push(now, id);
+      await db.execute(`UPDATE diagram_groups SET ${sets.join(', ')} WHERE id = ?`, params);
+    },
+    async deleteGroup(id: string): Promise<void> {
+      const now = iso(ctx);
+      await db.execute('UPDATE diagram_groups SET deleted_at = ?, updated_at = ? WHERE id = ?', [now, now, id]);
+    },
+
+    // --- automation & blocker rules (§9) ------------------------------------
+    async createRule(input: { id?: string; trigger: 'task_completed' | 'task_created'; conditions: unknown; actions: unknown; enabled?: boolean }): Promise<string> {
+      const id = input.id ?? newId();
+      const now = iso(ctx);
+      await db.execute(
+        'INSERT INTO automation_rules (id, user_id, trigger, conditions, actions, enabled, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        [id, ctx.userId, input.trigger, JSON.stringify(input.conditions), JSON.stringify(input.actions), input.enabled === false ? 0 : 1, now, now],
+      );
+      return id;
+    },
+    async toggleRule(id: string, enabled: boolean): Promise<void> {
+      await db.execute('UPDATE automation_rules SET enabled = ?, updated_at = ? WHERE id = ?', [enabled ? 1 : 0, iso(ctx), id]);
+    },
+    async deleteRule(id: string): Promise<void> {
+      const now = iso(ctx);
+      await db.execute('UPDATE automation_rules SET deleted_at = ?, updated_at = ? WHERE id = ?', [now, now, id]);
+    },
+    async createBlocker(input: { id?: string; scope: unknown; predicate: unknown; label: string; enabled?: boolean }): Promise<string> {
+      const id = input.id ?? newId();
+      const now = iso(ctx);
+      await db.execute(
+        'INSERT INTO blocker_rules (id, user_id, scope, predicate, label, enabled, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        [id, ctx.userId, JSON.stringify(input.scope), JSON.stringify(input.predicate), input.label, input.enabled === false ? 0 : 1, now, now],
+      );
+      return id;
+    },
+    async toggleBlocker(id: string, enabled: boolean): Promise<void> {
+      await db.execute('UPDATE blocker_rules SET enabled = ?, updated_at = ? WHERE id = ?', [enabled ? 1 : 0, iso(ctx), id]);
+    },
+    async deleteBlocker(id: string): Promise<void> {
+      const now = iso(ctx);
+      await db.execute('UPDATE blocker_rules SET deleted_at = ?, updated_at = ? WHERE id = ?', [now, now, id]);
+    },
+
     async updateSettings(patch: { day_reset_hour?: number; timezone?: string }): Promise<void> {
       const now = iso(ctx);
       const sets: string[] = ['updated_at = ?'];
@@ -277,6 +381,18 @@ export function createCommands(db: WritableDb, ctx: CommandContext) {
       }
       params.push(ctx.userId);
       await db.execute(`UPDATE user_settings SET ${sets.join(', ')} WHERE id = ?`, params);
+    },
+    /**
+     * Create the user's settings row (id = user_id, matching the server PK) when
+     * none has synced yet — the server upserts on user_id, so this is the first
+     * settings.update for a fresh account.
+     */
+    async insertSettings(patch: { day_reset_hour: number; timezone: string }): Promise<void> {
+      const now = iso(ctx);
+      await db.execute(
+        'INSERT INTO user_settings (id, day_reset_hour, timezone, updated_at) VALUES (?, ?, ?, ?)',
+        [ctx.userId, patch.day_reset_hour, patch.timezone, now],
+      );
     },
   };
 }

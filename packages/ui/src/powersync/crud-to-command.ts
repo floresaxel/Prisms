@@ -46,6 +46,18 @@ function jsonArray(value: unknown): number[] {
   return [];
 }
 
+/** PowerSync stores jsonb columns (conditions/actions/scope/predicate) as text. */
+function jsonValue(value: unknown): unknown {
+  if (typeof value !== 'string') return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+}
+
+const bool = (value: unknown): boolean => value === 1 || value === true || value === '1';
+
 function nodeCommand(entry: CrudLike): TranslatedCommand | null {
   const d = entry.opData;
   if (entry.op === 'DELETE') return { name: 'node.soft_delete', payload: { id: entry.id } };
@@ -183,6 +195,77 @@ function decisionScoreCommand(entry: CrudLike): TranslatedCommand | null {
   return null;
 }
 
+function edgeCommand(entry: CrudLike): TranslatedCommand | null {
+  const d = entry.opData;
+  if (entry.op === 'DELETE') return { name: 'edge.delete', payload: { id: entry.id } };
+  if (entry.op === 'PUT') {
+    return {
+      name: 'edge.create',
+      payload: { id: entry.id, predecessor_id: d?.['predecessor_id'], successor_id: d?.['successor_id'], ...pick(d, ['edge_type', 'lag_minutes']) },
+    };
+  }
+  if (has(d, 'deleted_at') && d!['deleted_at'] != null) return { name: 'edge.delete', payload: { id: entry.id } };
+  return null;
+}
+
+function diagramLayoutCommand(entry: CrudLike): TranslatedCommand | null {
+  const d = entry.opData;
+  if (entry.op === 'DELETE') return null;
+  // collapsed-first so a collapse write (which also seeds x=0,y=0 on insert)
+  // is never mistaken for a position write.
+  if (has(d, 'collapsed')) {
+    return { name: 'layout.set_collapsed', payload: { diagram_id: d!['diagram_id'], node_id: d!['node_id'], collapsed: bool(d!['collapsed']) } };
+  }
+  if (has(d, 'x') || has(d, 'y')) {
+    return {
+      name: 'layout.set_position',
+      payload: { diagram_id: d!['diagram_id'], node_id: d!['node_id'], x: Number(d!['x']), y: Number(d!['y']), ...(has(d, 'group_id') ? { group_id: d!['group_id'] ?? null } : {}) },
+    };
+  }
+  return null;
+}
+
+function diagramGroupCommand(entry: CrudLike): TranslatedCommand | null {
+  const d = entry.opData;
+  if (entry.op === 'DELETE') return { name: 'group.delete', payload: { id: entry.id } };
+  if (entry.op === 'PUT') {
+    return { name: 'group.create', payload: { id: entry.id, diagram_id: d?.['diagram_id'], label: d?.['label'], ...(has(d, 'color') ? { color: d!['color'] ?? null } : {}) } };
+  }
+  if (has(d, 'deleted_at') && d!['deleted_at'] != null) return { name: 'group.delete', payload: { id: entry.id } };
+  const update: Record<string, unknown> = {};
+  if (has(d, 'label')) update['label'] = d!['label'];
+  if (has(d, 'color')) update['color'] = d!['color'] ?? null;
+  return Object.keys(update).length > 0 ? { name: 'group.update', payload: { id: entry.id, ...update } } : null;
+}
+
+function automationRuleCommand(entry: CrudLike): TranslatedCommand | null {
+  const d = entry.opData;
+  if (entry.op === 'DELETE') return { name: 'rule.delete', payload: { id: entry.id } };
+  if (entry.op === 'PUT') {
+    return {
+      name: 'rule.create',
+      payload: { id: entry.id, trigger: d?.['trigger'], conditions: jsonValue(d?.['conditions']), actions: jsonValue(d?.['actions']), ...(has(d, 'enabled') ? { enabled: bool(d!['enabled']) } : {}) },
+    };
+  }
+  if (has(d, 'deleted_at') && d!['deleted_at'] != null) return { name: 'rule.delete', payload: { id: entry.id } };
+  if (has(d, 'enabled')) return { name: 'rule.toggle', payload: { id: entry.id, enabled: bool(d!['enabled']) } };
+  return null;
+}
+
+function blockerRuleCommand(entry: CrudLike): TranslatedCommand | null {
+  const d = entry.opData;
+  if (entry.op === 'DELETE') return { name: 'blocker.delete', payload: { id: entry.id } };
+  if (entry.op === 'PUT') {
+    return {
+      name: 'blocker.create',
+      payload: { id: entry.id, scope: jsonValue(d?.['scope']), predicate: jsonValue(d?.['predicate']), label: d?.['label'], ...(has(d, 'enabled') ? { enabled: bool(d!['enabled']) } : {}) },
+    };
+  }
+  if (has(d, 'deleted_at') && d!['deleted_at'] != null) return { name: 'blocker.delete', payload: { id: entry.id } };
+  if (has(d, 'enabled')) return { name: 'blocker.toggle', payload: { id: entry.id, enabled: bool(d!['enabled']) } };
+  return null;
+}
+
 function settingsCommand(entry: CrudLike): TranslatedCommand | null {
   if (entry.op === 'DELETE') return null;
   const payload = pick(entry.opData, ['day_reset_hour', 'timezone', 'weather_location']);
@@ -194,10 +277,20 @@ export function crudToCommand(entry: CrudLike): TranslatedCommand | null {
   switch (entry.table) {
     case 'nodes':
       return nodeCommand(entry);
+    case 'edges':
+      return edgeCommand(entry);
     case 'time_entries':
       return timeEntryCommand(entry);
     case 'schedule_blocks':
       return scheduleBlockCommand(entry);
+    case 'diagram_layouts':
+      return diagramLayoutCommand(entry);
+    case 'diagram_groups':
+      return diagramGroupCommand(entry);
+    case 'automation_rules':
+      return automationRuleCommand(entry);
+    case 'blocker_rules':
+      return blockerRuleCommand(entry);
     case 'habits':
       return habitCommand(entry);
     case 'habit_completions':

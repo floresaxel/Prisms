@@ -117,6 +117,31 @@ body {
 .px-chart-dot { fill: var(--px-accent); }
 .px-dash-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 12px; align-items: start; }
 
+/* flowchart (§12.1–12.2): React Flow canvas + nodes */
+.px-flow-canvas { height: 440px; border: 1px solid var(--px-border); border-radius: var(--px-radius); background: var(--px-bg); }
+.px-flow-node { background: var(--px-surface-2); border: 1px solid var(--px-accent); border-radius: 8px; padding: 8px 10px; width: 160px; font-size: 12px; display: flex; flex-direction: column; gap: 4px; }
+.px-flow-node--collapsed { opacity: 0.5; border-style: dashed; }
+.px-flow-node-title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.px-flow-node-type { color: var(--px-text-dim); font-size: 10px; text-transform: uppercase; letter-spacing: 0.4px; }
+.px-flow-node .px-btn { padding: 2px 8px; font-size: 11px; }
+.px-flow-edge-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 10px; background: var(--px-surface); border: 1px solid var(--px-border); border-radius: var(--px-radius); margin-bottom: 6px; }
+/* React Flow draws on a light canvas; keep its text readable on our dark theme */
+.react-flow__edge-text { fill: var(--px-text); font-size: 10px; }
+.react-flow__controls button { background: var(--px-surface-2); color: var(--px-text); border-bottom: 1px solid var(--px-border); }
+
+/* gantt (§12.2): custom SVG bars + dependency arrows + critical path */
+.px-gantt { background: var(--px-surface); border: 1px solid var(--px-border); border-radius: var(--px-radius); }
+.px-gantt-grid { stroke: var(--px-border); stroke-width: 1; opacity: 0.4; }
+.px-gantt-label { fill: var(--px-text); font-size: 12px; dominant-baseline: middle; }
+.px-gantt-bar { fill: rgba(91,140,255,0.5); stroke: var(--px-accent); }
+.px-gantt-bar--critical { fill: rgba(255,107,107,0.5); stroke: var(--px-danger); }
+.px-gantt-arrow { stroke: var(--px-text-dim); stroke-width: 1.5; }
+.px-gantt-arrowhead { fill: var(--px-text-dim); }
+
+/* rule / blocker editors (§9) */
+.px-rule-form { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-end; }
+.px-rule-form .px-field { margin-bottom: 0; }
+
 /* decision board (§6.0): scoring grid + ranking */
 .px-grid { border-collapse: collapse; width: 100%; }
 .px-grid th, .px-grid td { border: 1px solid var(--px-border); padding: 6px 8px; text-align: center; }

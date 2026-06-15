@@ -9,6 +9,7 @@ import {
   addDays,
   asEpochMillis,
   bucketDate,
+  buildEdgeIndex,
   buildFactContext,
   buildTreeIndex,
   canonicalBurndown,
@@ -16,7 +17,10 @@ import {
   canonicalPractice,
   canonicalProgress,
   canonicalStreak,
+  childrenOf,
+  criticalPath,
   DEFAULT_WINDOWS,
+  descendantsOf,
   habitTaskIds,
   isJustified,
   isoToEpochMillis,
@@ -26,11 +30,16 @@ import {
   rankProjects,
   rawMinutes,
   taskStatus,
+  topologicalOrder,
+  type AutomationRule,
+  type BlockerRule,
   type BurndownValue,
   type CommittedBlock,
   type CompletionValue,
   type DecisionBoard,
   type DecisionCriterion,
+  type DiagramGroup,
+  type EdgeIndex,
   type FactContext,
   type Habit,
   type Instant,
@@ -49,11 +58,14 @@ import {
 
 import { createCommands, type CommandContext } from './powersync/commands';
 import {
+  toAutomationRule,
   toBlockerRule,
   toComputedAggregate,
   toDecisionBoard,
   toDecisionCriterion,
   toDecisionScore,
+  toDiagramGroup,
+  toDiagramLayout,
   toEdge,
   toExternalFact,
   toHabit,
@@ -563,6 +575,214 @@ export function useDashboard(now: Instant, days = 14): DashboardData {
 
     return { burndown, projectionComputedAt, completion };
   }, [ctx, taskRows, blockRows, aggRows, now, days]);
+}
+
+export interface FlowNode {
+  id: string;
+  title: string;
+  nodeType: Node['node_type'];
+  x: number;
+  y: number;
+  /** The diagram_layouts row id, when a saved position exists (for upsert). */
+  layoutId?: string;
+  collapsed: boolean;
+  groupId: string | null;
+  dueDate: string | null;
+}
+
+export interface FlowEdge {
+  id: string;
+  predecessorId: string;
+  successorId: string;
+  edgeType: string;
+}
+
+export interface FlowchartView {
+  /** Children of the diagram root, positioned (saved layout → fallback layered). */
+  nodes: FlowNode[];
+  /** Dependency edges whose both endpoints are in the node set. */
+  edges: FlowEdge[];
+  groups: DiagramGroup[];
+  /** Full tree + edge index for local validateEdge (cycle/type checks). */
+  tree: TreeIndex;
+  edgeIndex: EdgeIndex;
+}
+
+const COL_W = 220;
+const ROW_H = 110;
+
+/**
+ * Flowchart view-model (§12.1–12.2): the diagram root's children as cards plus
+ * the dependency edges among them. Positions come from saved `diagram_layouts`
+ * (a user drag) or a deterministic layered fallback (topological rank → x,
+ * order-in-rank → y); "dates" mode overrides x by due-date. Pure selector over
+ * local rows, so it renders + validates offline.
+ */
+export function useFlowchart(diagramId: string | null, mode: 'dates' | 'nodates' = 'nodates'): FlowchartView {
+  const tree = useNodeTree();
+  const edgeRows = useRows('SELECT * FROM edges WHERE deleted_at IS NULL');
+  const layoutRows = useRows('SELECT * FROM diagram_layouts WHERE deleted_at IS NULL');
+  const groupRows = useRows('SELECT * FROM diagram_groups WHERE deleted_at IS NULL');
+
+  return useMemo(() => {
+    const allEdges = edgeRows.map(toEdge);
+    const edgeIndex = buildEdgeIndex(allEdges);
+    if (diagramId === null) return { nodes: [], edges: [], groups: [], tree, edgeIndex };
+
+    const children = childrenOf(tree, diagramId);
+    const childIds = new Set(children.map((c) => c.id));
+
+    const savedByNode = new Map<string, ReturnType<typeof toDiagramLayout>>();
+    for (const l of layoutRows.map(toDiagramLayout)) {
+      if (l.diagram_id === diagramId) savedByNode.set(l.node_id, l);
+    }
+
+    // fallback layered layout: rank = longest in-set predecessor chain.
+    const inSetEdges = allEdges.filter((e) => childIds.has(e.predecessor_id) && childIds.has(e.successor_id));
+    const order = topologicalOrder(buildEdgeIndex(inSetEdges), childIds);
+    const rank = new Map<string, number>();
+    if (order.ok) {
+      for (const id of order.value) {
+        let r = 0;
+        for (const e of inSetEdges) if (e.successor_id === id) r = Math.max(r, (rank.get(e.predecessor_id) ?? 0) + 1);
+        rank.set(id, r);
+      }
+    }
+    const seenInRank = new Map<number, number>();
+    const minDue = children.reduce<string | null>((m, c) => (c.due_date && (m === null || c.due_date < m) ? c.due_date : m), null);
+
+    const nodes: FlowNode[] = children.map((c, i) => {
+      const saved = savedByNode.get(c.id);
+      const r = rank.get(c.id) ?? 0;
+      const rowInRank = seenInRank.get(r) ?? 0;
+      seenInRank.set(r, rowInRank + 1);
+      let x = r * COL_W;
+      const y = saved ? saved.y : rowInRank * ROW_H + (r % 2) * 24;
+      if (saved) {
+        x = saved.x;
+      } else if (mode === 'dates' && c.due_date && minDue) {
+        x = Math.max(0, Math.round((Date.parse(c.due_date) - Date.parse(minDue)) / 86_400_000)) * 80;
+      }
+      return {
+        id: c.id,
+        title: c.title,
+        nodeType: c.node_type,
+        x,
+        y: saved ? saved.y : i * 4 + y, // tiny per-index nudge keeps siblings distinct
+        layoutId: saved?.id,
+        collapsed: saved?.collapsed ?? false,
+        groupId: saved?.group_id ?? null,
+        dueDate: c.due_date,
+      };
+    });
+
+    const edges: FlowEdge[] = inSetEdges.map((e) => ({ id: e.id, predecessorId: e.predecessor_id, successorId: e.successor_id, edgeType: e.edge_type }));
+    const groups = groupRows.map(toDiagramGroup).filter((g) => g.diagram_id === diagramId);
+    return { nodes, edges, groups, tree, edgeIndex };
+  }, [tree, edgeRows, layoutRows, groupRows, diagramId, mode]);
+}
+
+export interface GanttBar {
+  taskId: string;
+  title: string;
+  /** Day offsets from the chart's first day. */
+  startDay: number;
+  endDay: number;
+  onCriticalPath: boolean;
+}
+
+export interface GanttView {
+  bars: GanttBar[];
+  edges: { predecessorId: string; successorId: string }[];
+  /** First day of the chart (IsoDate) and total day span. */
+  fromDate: IsoDate | null;
+  days: number;
+  criticalPathIds: string[];
+}
+
+/**
+ * Gantt view-model (§12.2): one bar per descendant task (committed-block span,
+ * else a due-date day), dependency edges, and the critical path (longest path
+ * over estimates, from core). Day offsets are relative to the earliest dated
+ * item so the screen can lay out a simple time axis.
+ */
+export function useGantt(projectId: string | null, now: Instant): GanttView {
+  const ctx = useFactContext();
+  const edgeRows = useRows('SELECT * FROM edges WHERE deleted_at IS NULL');
+  const blockRows = useRows('SELECT * FROM schedule_blocks WHERE deleted_at IS NULL');
+
+  return useMemo(() => {
+    if (projectId === null) return { bars: [], edges: [], fromDate: null, days: 0, criticalPathIds: [] };
+    const tz = ctx.timezone;
+    const dr = ctx.dayResetHour;
+    const tasks = descendantsOf(ctx.tree, projectId).filter((n) => n.node_type === 'task');
+    const taskIds = new Set(tasks.map((t) => t.id));
+    const allEdges = edgeRows.map(toEdge);
+
+    // committed-block span per task
+    const span = new Map<string, { start: IsoDate; end: IsoDate }>();
+    for (const b of blockRows.map(toScheduleBlock)) {
+      if (b.status !== 'committed' || !taskIds.has(b.task_id)) continue;
+      const s = bucketDate(b.starts_at, dr, tz);
+      const e = bucketDate(b.ends_at, dr, tz);
+      const cur = span.get(b.task_id);
+      span.set(b.task_id, { start: cur && cur.start < s ? cur.start : s, end: cur && cur.end > e ? cur.end : e });
+    }
+
+    const cp = criticalPath(tasks, allEdges.filter((e) => taskIds.has(e.predecessor_id) && taskIds.has(e.successor_id)));
+    const criticalPathIds = cp.ok ? [...cp.value.nodeIds] : [];
+    const cpSet = new Set(criticalPathIds);
+
+    // pick each task's [start,end] dates: block span, else due_date (single day)
+    const dated = tasks
+      .map((t) => {
+        const sp = span.get(t.id);
+        if (sp) return { task: t, start: sp.start, end: sp.end };
+        if (t.due_date) return { task: t, start: t.due_date, end: t.due_date };
+        return null;
+      })
+      .filter((d): d is { task: Node; start: IsoDate; end: IsoDate } => d !== null);
+
+    if (dated.length === 0) return { bars: [], edges: [], fromDate: null, days: 0, criticalPathIds };
+
+    const today = ctx.today(now);
+    let fromDate = today;
+    let toDate = today;
+    for (const d of dated) {
+      if (d.start < fromDate) fromDate = d.start;
+      if (d.end > toDate) toDate = d.end;
+    }
+    const dayOffset = (date: IsoDate): number => Math.round((Date.parse(date) - Date.parse(fromDate)) / 86_400_000);
+    const days = dayOffset(toDate) + 1;
+
+    const bars: GanttBar[] = dated
+      .map((d) => ({
+        taskId: d.task.id,
+        title: d.task.title,
+        startDay: dayOffset(d.start),
+        endDay: dayOffset(d.end) + 1,
+        onCriticalPath: cpSet.has(d.task.id),
+      }))
+      .sort((a, b) => a.startDay - b.startDay || (a.title < b.title ? -1 : 1));
+
+    const edges = allEdges
+      .filter((e) => taskIds.has(e.predecessor_id) && taskIds.has(e.successor_id))
+      .map((e) => ({ predecessorId: e.predecessor_id, successorId: e.successor_id }));
+
+    return { bars, edges, fromDate, days, criticalPathIds };
+  }, [ctx, edgeRows, blockRows, projectId, now]);
+}
+
+/** Automation rules (§9) for the rule editor. */
+export function useRules(): AutomationRule[] {
+  const rows = useRows('SELECT * FROM automation_rules WHERE deleted_at IS NULL');
+  return useMemo(() => rows.map(toAutomationRule).sort((a, b) => (a.created_at < b.created_at ? -1 : 1)), [rows]);
+}
+
+/** Blocker rules (§9) for the blocker editor. */
+export function useBlockers(): BlockerRule[] {
+  const rows = useRows('SELECT * FROM blocker_rules WHERE deleted_at IS NULL');
+  return useMemo(() => rows.map(toBlockerRule).sort((a, b) => (a.created_at < b.created_at ? -1 : 1)), [rows]);
 }
 
 export interface AggregateRow {

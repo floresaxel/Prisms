@@ -3,7 +3,7 @@
  * connect it, and provide it to the reactive hooks. A global toast surfaces
  * server command rejections (the row itself rolls back via sync).
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import type { PowerSyncDatabase } from '@powersync/web';
 import { PowerSyncContext } from '@powersync/react';
@@ -12,15 +12,32 @@ import { getDeviceId, Layout, type CommandContext, type CommandRejection } from 
 import { getSession, signOut, type SessionUser } from './auth';
 import { connectDb, createDb } from './powersync';
 import { Agenda } from './screens/Agenda';
+import { Blockers } from './screens/Blockers';
 import { Dashboard } from './screens/Dashboard';
 import { DecisionBoard } from './screens/DecisionBoard';
+import { Flowchart } from './screens/Flowchart';
+import { Gantt } from './screens/Gantt';
 import { Habits } from './screens/Habits';
 import { Inbox } from './screens/Inbox';
 import { Kanban } from './screens/Kanban';
 import { Login } from './screens/Login';
+import { Rules } from './screens/Rules';
+import { Settings } from './screens/Settings';
 import { Worklist } from './screens/Worklist';
 
-type Route = '/' | '/inbox' | '/agenda' | '/kanban' | '/habits' | '/decisions' | '/dashboard';
+type Route =
+  | '/'
+  | '/inbox'
+  | '/agenda'
+  | '/kanban'
+  | '/habits'
+  | '/decisions'
+  | '/dashboard'
+  | '/flowchart'
+  | '/gantt'
+  | '/rules'
+  | '/blockers'
+  | '/settings';
 
 function AuthedApp({ user, onSignOut }: { user: SessionUser; onSignOut: () => void }) {
   const dbRef = useRef<PowerSyncDatabase | null>(null);
@@ -59,8 +76,13 @@ function AuthedApp({ user, onSignOut }: { user: SessionUser; onSignOut: () => vo
           { label: 'Agenda', href: '/agenda', active: route === '/agenda' },
           { label: 'Kanban', href: '/kanban', active: route === '/kanban' },
           { label: 'Habits', href: '/habits', active: route === '/habits' },
+          { label: 'Flowchart', href: '/flowchart', active: route === '/flowchart' },
+          { label: 'Gantt', href: '/gantt', active: route === '/gantt' },
           { label: 'Decisions', href: '/decisions', active: route === '/decisions' },
+          { label: 'Rules', href: '/rules', active: route === '/rules' },
+          { label: 'Blockers', href: '/blockers', active: route === '/blockers' },
           { label: 'Dashboard', href: '/dashboard', active: route === '/dashboard' },
+          { label: 'Settings', href: '/settings', active: route === '/settings' },
         ]}
         onNavigate={navigate}
         status={
@@ -76,21 +98,20 @@ function AuthedApp({ user, onSignOut }: { user: SessionUser; onSignOut: () => vo
             Change rejected: {rejections.map((r) => r.reject_code).join(', ')} (reverted)
           </div>
         )}
-        {route === '/dashboard' ? (
-          <Dashboard ctx={ctx} />
-        ) : route === '/inbox' ? (
-          <Inbox ctx={ctx} />
-        ) : route === '/agenda' ? (
-          <Agenda ctx={ctx} />
-        ) : route === '/kanban' ? (
-          <Kanban ctx={ctx} />
-        ) : route === '/habits' ? (
-          <Habits ctx={ctx} />
-        ) : route === '/decisions' ? (
-          <DecisionBoard ctx={ctx} />
-        ) : (
-          <Worklist ctx={ctx} />
-        )}
+        {({
+          '/': <Worklist ctx={ctx} />,
+          '/inbox': <Inbox ctx={ctx} />,
+          '/agenda': <Agenda ctx={ctx} />,
+          '/kanban': <Kanban ctx={ctx} />,
+          '/habits': <Habits ctx={ctx} />,
+          '/flowchart': <Flowchart ctx={ctx} />,
+          '/gantt': <Gantt />,
+          '/decisions': <DecisionBoard ctx={ctx} />,
+          '/rules': <Rules ctx={ctx} />,
+          '/blockers': <Blockers ctx={ctx} />,
+          '/dashboard': <Dashboard ctx={ctx} />,
+          '/settings': <Settings ctx={ctx} />,
+        } satisfies Record<Route, ReactNode>)[route] ?? <Worklist ctx={ctx} />}
       </Layout>
     </PowerSyncContext.Provider>
   );
