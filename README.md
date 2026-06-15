@@ -12,9 +12,9 @@ Local-first goal-execution platform: `Vision → Roadmap → Project → Milesto
 | `packages/core` | `@prisms/core` | Pure domain logic — no IO, no wall clock, no randomness (lint-enforced) |
 | `packages/db` | `@prisms/db` | Drizzle schema, migrations, PowerSync sync rules |
 | `packages/ui` | `@prisms/ui` | Shared reactive React hooks |
-| `apps/web` | `@prisms/web` | Vite + React SPA |
-| `apps/mobile` | `@prisms/mobile` | Expo (React Native) |
-| `apps/desktop` | `@prisms/desktop` | Tauri v2 shell |
+| `apps/web` | `@prisms/web` | Vite + React SPA (full feature surface incl. flowcharts/Gantt/editors) |
+| `apps/mobile` | `@prisms/mobile` | Expo (React Native) — lists/agenda/kanban/timer/habits + read-only graphs |
+| `apps/desktop` | `@prisms/desktop` | Tauri v2 shell loading the web build |
 | `apps/server` | `@prisms/server` | Hono API + Better Auth + pg-boss jobs |
 
 ## Development
@@ -62,6 +62,17 @@ it again and the containers auto-start (`restart: unless-stopped`).
 
 Architectural rules (package boundaries, core purity bans) are enforced by ESLint — see `eslint.config.mjs` — and regression-tested in `packages/core/test/architecture-lint.test.ts`.
 
+## Production / self-hosting
+
+One command on a clean host brings up Postgres + PowerSync + the API + the web
+bundle (`docker-compose.prod.yml`). See **[docs/SELF_HOSTING.md](docs/SELF_HOSTING.md)**
+for secrets, the JWT key derivation, backup/restore, and upgrades.
+
+```sh
+cp .env.example .env          # fill in secrets
+docker compose -f docker-compose.prod.yml up -d --build
+```
+
 ## Session status
 
 - [x] S1 — Monorepo scaffold
@@ -79,4 +90,15 @@ Architectural rules (package boundaries, core purity bans) are enforced by ESLin
 - [x] S13 — Jobs I · facts & truth (pg-boss: weather.poll, aggregates.recompute, automation.backstop, retention.purge)
 - [x] S14 — Jobs II · scheduling & notify (schedule.optimize, pastdue.scan, layout.precompute/ELK, notify.dispatch)
 - [x] S15 — Web shell + data layer (Vite+React, PowerSync/OPFS, ui hooks, optimistic apply + rollback, PWA; Playwright DoD ✓)
-- [ ] S16+ — see [Blueprints/BUILD_PLAN.md](Blueprints/BUILD_PLAN.md)
+- [x] S16 — Worklist, timer, focus review, activity inbox (offline loop; double-timer impossible)
+- [x] S17 — Agenda (week calendar + to-do, drag/tap-to-place with live window hints, anchored/suggested/grey, block move/resize)
+- [x] S18 — Kanban by date + habits (streaks, daily-target rings, practice hours/levels)
+- [x] S19 — Dashboard (burndown + projection + completion + priority + streaks) + decision board
+- [x] S20 — Graph surfaces (React Flow flowcharts, Gantt) + automation/blocker editors + settings
+- [x] S21 — Mobile core (Expo): reuses the platform-neutral `@prisms/ui`; lists/agenda/kanban/timer/habits + read-only graph + local notifications
+- [x] S22 — Desktop (Tauri v2 shell around the web build; OS notifications)
+- [x] S23 — Hardening & release (CI matrix, core coverage ≥90%, prod compose + backup/restore, self-hosting guide, 100k-node load budgets)
+
+All 23 build sessions complete. The repo gate is `pnpm turbo lint typecheck test`
+(21 tasks) plus the web Playwright suite (`pnpm --filter @prisms/web e2e`) and the
+core coverage gate (`pnpm --filter @prisms/core test:coverage`).

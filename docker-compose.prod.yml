@@ -1,0 +1,93 @@
+# Prisms — production self-hosted stack (§5, §15). One command on a clean host:
+#   cp .env.example .env   # then edit the secrets
+#   docker compose -f docker-compose.prod.yml up -d --build
+# Serves the web app on :${WEB_PORT:-8088} and the sync/API behind it.
+#
+# Unlike docker-compose.yml (dev: postgres + powersync + a placeholder api),
+# this builds the real API (apps/server, runs migrations then serves + jobs)
+# and the static web bundle behind nginx (which also reverse-proxies /api,
+# /sync → api and /powersync → powersync so the browser is single-origin).
+name: prisms-prod
+
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    command: ['postgres', '-c', 'wal_level=logical']
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-prisms}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-prisms}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-prisms} -d ${POSTGRES_DB:-prisms}']
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  powersync:
+    image: journeyapps/powersync-service:1.22.0
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      POWERSYNC_CONFIG_PATH: /config/powersync.yaml
+      PS_DATABASE_URI: postgresql://${POSTGRES_USER:-prisms}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-prisms}
+      PS_STORAGE_URI: postgresql://${POSTGRES_USER:-prisms}:${POSTGRES_PASSWORD}@postgres:5432/powersync_storage
+      POWERSYNC_JWT_KID: ${POWERSYNC_JWT_KID:-prisms}
+      POWERSYNC_JWT_K_B64URL: ${POWERSYNC_JWT_K_B64URL:?set POWERSYNC_JWT_K_B64URL (base64url of POWERSYNC_JWT_SECRET)}
+      POWERSYNC_JWT_AUDIENCE: ${POWERSYNC_JWT_AUDIENCE:-prisms}
+    volumes:
+      - ./infra/powersync/powersync.prod.yaml:/config/powersync.yaml:ro
+      - ./packages/db/sync-rules.yaml:/sync-rules.yaml:ro
+    healthcheck:
+      test: ['CMD', 'node', '-e', "fetch('http://localhost:8080/probes/liveness').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/server/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-prisms}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-prisms}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?set BETTER_AUTH_SECRET in .env}
+      BETTER_AUTH_URL: ${PUBLIC_URL:?set PUBLIC_URL in .env}
+      BETTER_AUTH_TRUSTED_ORIGINS: ${PUBLIC_URL}
+      POWERSYNC_JWT_SECRET: ${POWERSYNC_JWT_SECRET:?set POWERSYNC_JWT_SECRET in .env}
+      POWERSYNC_JWT_KID: ${POWERSYNC_JWT_KID:-prisms}
+      POWERSYNC_JWT_AUDIENCE: ${POWERSYNC_JWT_AUDIENCE:-prisms}
+      PRISMS_JOBS_ENABLED: 'true'
+      PORT: '3001'
+    healthcheck:
+      test: ['CMD-SHELL', 'node -e "fetch(\"http://localhost:3001/health\").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        VITE_POWERSYNC_URL: ${PUBLIC_URL}/powersync
+    restart: unless-stopped
+    depends_on:
+      - api
+      - powersync
+    ports:
+      - '${WEB_PORT:-8088}:80'
+
+volumes:
+  pgdata:

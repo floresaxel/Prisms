@@ -7,13 +7,11 @@ on:
 
 jobs:
   checks:
-    name: Lint, typecheck, test
+    name: Lint, typecheck, test, coverage
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: pnpm/action-setup@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -22,8 +20,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Lint, typecheck, test
+      - name: Lint, typecheck, test (all packages — incl. mobile + desktop TS)
         run: pnpm turbo lint typecheck test
+
+      - name: Core coverage gate (§16 floor — lines/functions/statements ≥ 90%)
+        run: pnpm --filter @prisms/core test:coverage
 
       - name: Build web app (Vite bundle + PWA service worker)
         run: pnpm --filter @prisms/web build
@@ -33,9 +34,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: pnpm/action-setup@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -52,7 +51,7 @@ jobs:
         env:
           PRISMS_DB_TEST_URL: postgresql://prisms:prisms_dev_password@localhost:5432/postgres
 
-      - name: Server tests (auth, PowerSync JWT, dispatcher, rate limit)
+      - name: Server tests (auth, PowerSync JWT, dispatcher, convergence, jobs)
         run: pnpm --filter @prisms/server test
         env:
           PRISMS_DB_TEST_URL: postgresql://prisms:prisms_dev_password@localhost:5432/postgres
@@ -61,3 +60,64 @@ jobs:
       - name: Tear down
         if: always()
         run: docker compose down -v
+
+  e2e:
+    name: Web Playwright e2e (offline + convergence + graph/rules) vs live stack
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Boot compose postgres + powersync (fresh volumes)
+        run: docker compose up -d --wait postgres powersync
+
+      - name: Apply migrations
+        run: pnpm --filter @prisms/db db:migrate
+
+      - name: Build web (production bundle for vite preview)
+        run: pnpm --filter @prisms/web build
+
+      - name: Install Playwright Chromium
+        run: pnpm --filter @prisms/web exec playwright install --with-deps chromium
+
+      - name: Start API (jobs on, so the s20 automation backstop fires)
+        run: pnpm --filter @prisms/server start &
+        env:
+          PORT: '3001'
+          BETTER_AUTH_URL: http://localhost:5173
+          BETTER_AUTH_TRUSTED_ORIGINS: http://localhost:5173
+          PRISMS_JOBS_ENABLED: 'true'
+
+      - name: Start web (vite preview)
+        run: pnpm --filter @prisms/web preview &
+
+      - name: Wait for API + web
+        run: |
+          npx --yes wait-on http://localhost:3001/health http://localhost:5173 --timeout 60000
+
+      - name: Run Playwright e2e
+        run: pnpm --filter @prisms/web e2e
+
+      - name: Upload traces on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces
+          path: apps/web/test-results
+          if-no-files-found: ignore
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v
+
+  # Mobile (Maestro on an Android/iOS emulator) and desktop (tauri-driver on a
+  # packaged build, needs the Rust toolchain) e2e are device/toolchain-bound and
+  # run on self-hosted/dedicated runners — flows live in apps/mobile/.maestro and
+  # apps/desktop/e2e. The TS for both is gate-checked in the `checks` job above.
