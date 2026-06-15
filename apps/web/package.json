@@ -18,6 +18,8 @@
     "@powersync/web": "^1.38.3",
     "@prisms/core": "workspace:*",
     "@prisms/ui": "workspace:*",
+    "@tauri-apps/api": "^2.0.0",
+    "@tauri-apps/plugin-notification": "^2.0.0",
     "@xyflow/react": "^12.3.5",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",

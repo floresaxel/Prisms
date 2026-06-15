@@ -3,13 +3,17 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Tauri v2 shell wrapping the web build; native SQLite via Tauri SQL plugin (ARCHITECTURE.md §12.3).",
+  "description": "Tauri v2 shell loading the identical apps/web build; PowerSync persists via the web SDK (wa-sqlite/OPFS) in the WebView; OS notifications via the Tauri notification plugin (ARCHITECTURE.md §12.3).",
   "scripts": {
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "tauri": "tauri",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "^2.1.0",
     "eslint": "^10.4.1",
     "typescript": "^6.0.3",
     "vitest": "^4.1.8"

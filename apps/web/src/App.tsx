@@ -10,6 +10,7 @@ import { PowerSyncContext } from '@powersync/react';
 import { getDeviceId, Layout, type CommandContext, type CommandRejection } from '@prisms/ui';
 
 import { getSession, signOut, type SessionUser } from './auth';
+import { isDesktop, osNotify } from './desktop';
 import { connectDb, createDb } from './powersync';
 import { Agenda } from './screens/Agenda';
 import { Blockers } from './screens/Blockers';
@@ -89,6 +90,16 @@ function AuthedApp({ user, onSignOut }: { user: SessionUser; onSignOut: () => vo
           <>
             <div data-testid="sync-state">{connected ? 'synced' : 'connecting…'}</div>
             <div>{user.email}</div>
+            {isDesktop() && (
+              <button
+                className="px-btn"
+                style={{ marginTop: 8 }}
+                data-testid="desktop-notify"
+                onClick={() => void osNotify('Prisms', 'Desktop notifications are working.')}
+              >
+                Test notification
+              </button>
+            )}
             <button className="px-btn" style={{ marginTop: 8 }} onClick={onSignOut}>Sign out</button>
           </>
         }
