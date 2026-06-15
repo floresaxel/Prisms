@@ -5,7 +5,7 @@
  * sync rules stream down (§7.3) is present except command_log and the
  * server-internal ones.
  */
-import { Schema, Table, column } from '@powersync/web';
+import { Schema, Table, column } from '@powersync/common';
 
 const nodes = new Table({
   user_id: column.text,

@@ -1,0 +1,69 @@
+# S21 DoD flow (Maestro) — mirrors S16's offline worklist loop on a device.
+#
+# Prerequisites (this flow is written but UNRUN in CI here — no emulator in the
+# build environment): a running stack reachable from the device (set
+# src/config.ts to the host LAN IP), a registered account `mobile-e2e@prisms.test`
+# with at least one schedulable task seeded (via the web app or /sync/upload).
+#
+# Run locally:  maestro test apps/mobile/.maestro/worklist-offline.flow.yaml
+appId: com.prisms.app
+---
+- launchApp:
+    clearState: true
+
+# --- sign in -----------------------------------------------------------------
+- tapOn:
+    id: "email"
+- inputText: "mobile-e2e@prisms.test"
+- tapOn:
+    id: "password"
+- inputText: "e2e-password-123"
+- tapOn:
+    id: "submit"
+- assertVisible:
+    id: "worklist"
+
+# --- go offline: the whole loop must work locally ----------------------------
+- setAirplaneMode:
+    value: enabled
+
+# clock in the first available task → the single running-timer appears
+- tapOn:
+    text: "Clock in"
+    index: 0
+- assertVisible:
+    id: "running-timer"
+
+# a second clock-in is impossible while one runs (I5) — the button is disabled,
+# so the running-timer is still the only timer
+- assertVisible:
+    id: "timer-elapsed"
+
+# clock out → focus-review modal → save
+- tapOn:
+    id: "timer-clock-out"
+- assertVisible:
+    id: "review-modal"
+- tapOn:
+    id: "review-focus-0.75"
+- tapOn:
+    id: "review-completed"
+- tapOn:
+    id: "review-save"
+- assertNotVisible:
+    id: "running-timer"
+
+# --- back online -------------------------------------------------------------
+- setAirplaneMode:
+    value: disabled
+
+# --- a local notification fires with the network disabled --------------------
+- setAirplaneMode:
+    value: enabled
+- tapOn:
+    text: "Account"
+- tapOn:
+    id: "test-reminder"
+- assertVisible: "Prisms reminder"
+- setAirplaneMode:
+    value: disabled

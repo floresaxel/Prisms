@@ -2,18 +2,35 @@
   "name": "@prisms/mobile",
   "version": "0.1.0",
   "private": true,
-  "type": "module",
-  "description": "Expo (React Native) app: editable lists/agenda/kanban/timer, read-only graph views (ARCHITECTURE.md §12).",
+  "main": "index.ts",
+  "description": "Expo (React Native) app: editable lists/agenda/kanban/timer/habits/dashboard, read-only graph views, local notifications (ARCHITECTURE.md §12.1, §12.3).",
   "scripts": {
+    "start": "expo start",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
   "dependencies": {
+    "@journeyapps/react-native-quick-sqlite": "^2.5.2",
+    "@powersync/react": "^1.10.0",
+    "@powersync/react-native": "^1.23.0",
     "@prisms/core": "workspace:*",
-    "@prisms/ui": "workspace:*"
+    "@prisms/ui": "workspace:*",
+    "@react-navigation/bottom-tabs": "^7.2.0",
+    "@react-navigation/native": "^7.0.14",
+    "expo": "^53.0.0",
+    "expo-notifications": "~0.31.0",
+    "expo-status-bar": "~2.2.0",
+    "react": "^19.0.0",
+    "react-native": "^0.79.0",
+    "react-native-get-random-values": "~1.11.0",
+    "react-native-safe-area-context": "^5.0.0",
+    "react-native-screens": "~4.10.0"
   },
   "devDependencies": {
+    "@types/react": "^19.2.17",
     "eslint": "^10.4.1",
     "typescript": "^6.0.3",
     "vitest": "^4.1.8"

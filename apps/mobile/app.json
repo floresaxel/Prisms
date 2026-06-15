@@ -1,0 +1,14 @@
+{
+  "expo": {
+    "name": "Prisms",
+    "slug": "prisms",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "prisms",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "ios": { "supportsTablet": true, "bundleIdentifier": "com.prisms.app" },
+    "android": { "package": "com.prisms.app" },
+    "plugins": ["expo-notifications"]
+  }
+}

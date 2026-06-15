@@ -16,8 +16,8 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@powersync/common": "^1.54.0",
     "@powersync/react": "^1.10.0",
-    "@powersync/web": "^1.38.3",
     "@prisms/core": "workspace:*",
     "react": "^19.2.7"
   },

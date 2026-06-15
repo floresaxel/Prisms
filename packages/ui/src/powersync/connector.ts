@@ -6,7 +6,7 @@
  * unchanged server row back down, so the optimistic local edit visibly rolls
  * back (DoD).
  */
-import type { AbstractPowerSyncDatabase, CrudEntry, PowerSyncBackendConnector, PowerSyncCredentials } from '@powersync/web';
+import type { AbstractPowerSyncDatabase, CrudEntry, PowerSyncBackendConnector, PowerSyncCredentials } from '@powersync/common';
 
 import { createHlc, newId } from './client-runtime';
 import { crudToCommand, type CrudOp } from './crud-to-command';
