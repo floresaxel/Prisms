@@ -13,9 +13,10 @@ import { NavigationContainer, DarkTheme } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { PowerSyncContext } from '@powersync/react';
 import type { PowerSyncDatabase } from '@powersync/react-native';
-import { getDeviceId, type CommandContext, type CommandRejection } from '@prisms/ui';
+import { type CommandContext, type CommandRejection } from '@prisms/ui';
 
 import { getSession, signOut, type SessionUser } from './src/auth';
+import { getDeviceId, loadDeviceId } from './src/device';
 import { registerForPush, scheduleReminder } from './src/notifications';
 import { connectDb, getDb } from './src/powersync';
 import { theme } from './src/ui';
@@ -93,10 +94,16 @@ export function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    getSession()
-      .then(setUser)
-      .catch(() => undefined)
-      .finally(() => setLoading(false));
+    void (async () => {
+      try {
+        await loadDeviceId(); // persist/restore the stable device id before any command context is built
+        setUser(await getSession());
+      } catch {
+        // unauthenticated or offline — fall through to the Login screen
+      } finally {
+        setLoading(false);
+      }
+    })();
   }, []);
 
   const handleSignOut = useCallback(async () => {

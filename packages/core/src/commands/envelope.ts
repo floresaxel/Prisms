@@ -4,7 +4,7 @@
  *
  * The command id is client-generated (UUIDv7) and doubles as the idempotency
  * key; `hlc` orders same-field conflicts (§7.3). Payloads are parsed per-verb
- * by the catalog — TODO(s11): full catalog; settings.update ships first (s10).
+ * by the catalog (`payloads.ts`, the full §8.1 set).
  */
 import { z } from 'zod';
 

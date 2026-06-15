@@ -88,6 +88,9 @@ importers:
       expo-notifications:
         specifier: ~0.31.0
         version: 0.31.5(expo@53.0.27(@babel/core@7.29.7)(react-native@0.79.7(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7))(react-native@0.79.7(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7)
+      expo-secure-store:
+        specifier: ~14.0.1
+        version: 14.0.1(expo@53.0.27(@babel/core@7.29.7)(react-native@0.79.7(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7))
       expo-status-bar:
         specifier: ~2.2.0
         version: 2.2.3(react-native@0.79.7(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7)
@@ -3977,6 +3980,11 @@ packages:
       expo: '*'
       react: 19.2.7
       react-native: '*'
+
+  expo-secure-store@14.0.1:
+    resolution: {integrity: sha512-QUS+j4+UG4jRQalgnpmTvvrFnMVLqPiUZRzYPnG3+JrZ5kwVW2w6YS3WWerPoR7C6g3y/a2htRxRSylsDs+TaQ==}
+    peerDependencies:
+      expo: '*'
 
   expo-server-sdk@6.1.0:
     resolution: {integrity: sha512-ISuax1AQ7cpM5RAqcu8gVcoLL0ZKskJ5OLoMWmdITBe9nYjTucjdGyBq817YkIvTcj1pAUwx+9toUT7l/V7thA==}
@@ -10352,6 +10360,10 @@ snapshots:
       react-native: 0.79.7(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7)
     transitivePeerDependencies:
       - supports-color
+
+  expo-secure-store@14.0.1(expo@53.0.27(@babel/core@7.29.7)(react-native@0.79.7(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7)):
+    dependencies:
+      expo: 53.0.27(@babel/core@7.29.7)(react-native@0.79.7(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7)
 
   expo-server-sdk@6.1.0:
     dependencies:

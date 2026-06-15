@@ -32,8 +32,10 @@ emulator with a seeded `mobile-e2e@prisms.test` account.
 
 ## Known follow-ups
 
-- Persist the session + device id across launches (expo-secure-store) for true
-  offline cold-start (today the session is fetched once per launch).
+- The device id persists across launches via `expo-secure-store` (`src/device.ts`,
+  loaded at startup) so the §7.4 merge recognizes the same device after a
+  restart. The session is still fetched once per launch — persist it too for a
+  true offline cold-start.
 - Rules/blockers/decision editors are web-only for now (mobile is the
   consumption + capture surface); add if needed.
 - Rings use a bar meter; swap to `react-native-svg` arcs for true rings.

@@ -19,8 +19,8 @@
  *                status/predicate since they share the §9.2 evaluator)
  * - scheduler/   greedy earliest-fit placement, window hints, reschedule
  *                (s08); optimize-mode local search + diffing (s09)
- * - commands/    envelope + settings.update (s10); TODO(s11) full catalog +
- *                invariant checks
+ * - commands/    upload envelope (s10), full §8.1 catalog payload schemas +
+ *                per-verb invariant checks, timer-merge resolver (s11)
  */
 export const CORE_PACKAGE = '@prisms/core' as const;
 

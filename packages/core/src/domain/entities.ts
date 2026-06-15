@@ -8,8 +8,9 @@
  * rules live in core/src/commands (s11), never here.
  *
  * jsonb AST columns (rule conditions/actions/scope/predicate) are typed as
- * opaque JSON for now — TODO(s05)/TODO(s07) tighten them to the predicate
- * AST and action-template schemas.
+ * opaque JSON here by design — the row schema mirrors the jsonb column. The
+ * typed §9.2 predicate AST and §9.3 action templates are validated where they
+ * run: status/predicate (s05) and rules/validate (s07).
  */
 import { z } from 'zod';
 
@@ -216,9 +217,9 @@ export type AutomationTrigger = z.infer<typeof automationTriggerSchema>;
 export const automationRuleSchema = z.strictObject({
   ...baseRow,
   trigger: automationTriggerSchema,
-  /** Predicate AST — TODO(s05): replace with the typed AST schema. */
+  /** §9.2 predicate AST as stored (jsonb); typed-validated in status/predicate. */
   conditions: jsonValueSchema,
-  /** Spawn templates — TODO(s07): replace with the action-template schema. */
+  /** §9.3 spawn templates as stored (jsonb); typed-validated in rules/validate. */
   actions: jsonValueSchema,
   enabled: z.boolean(),
 });
@@ -226,9 +227,9 @@ export type AutomationRule = z.infer<typeof automationRuleSchema>;
 
 export const blockerRuleSchema = z.strictObject({
   ...baseRow,
-  /** Which nodes it applies to (subtree/type/tag) — TODO(s05). */
+  /** Which nodes it applies to (subtree/type/tag) as stored (jsonb). */
   scope: jsonValueSchema,
-  /** Same AST grammar; may reference external_facts — TODO(s05). */
+  /** §9.2 AST (may reference external_facts) as stored; evaluated in status/predicate. */
   predicate: jsonValueSchema,
   /** Shown in UI: "Blocked: rain forecast". */
   label: z.string(),
