@@ -47,6 +47,7 @@ import {
   type Node,
   type PracticeValue,
   type ProgressValue,
+  type ScheduleBlock,
   type SchedulableTask,
   type SchedulerDependency,
   type SchedulerInput,
@@ -130,6 +131,22 @@ export interface WorklistItem {
   progress: ProgressValue;
   /** estimate − consumed minutes (null without an estimate); negative when over. */
   minutesLeftInTask: number | null;
+  /** True when the task has ≥1 committed block (Phase 3 grouping/association). */
+  scheduled: boolean;
+  /** The committed block to auto-associate a completion with (null = none/unscheduled). */
+  committedBlockId: string | null;
+}
+
+/** The committed block to default a completion to: covering now, else most recent, else earliest. */
+function pickCommittedBlock(blocks: readonly ScheduleBlock[], now: Instant): string | null {
+  if (blocks.length === 0) return null;
+  const covering = blocks.find(
+    (b) => isoToEpochMillis(b.starts_at) <= now && now <= isoToEpochMillis(b.ends_at),
+  );
+  if (covering) return covering.id;
+  const sorted = [...blocks].sort((a, b) => isoToEpochMillis(a.starts_at) - isoToEpochMillis(b.starts_at));
+  const lastPast = [...sorted].reverse().find((b) => isoToEpochMillis(b.starts_at) <= now);
+  return (lastPast ?? sorted[0]!).id;
 }
 
 /**
@@ -141,25 +158,61 @@ export interface WorklistItem {
 export function useWorklist(now: Instant): WorklistItem[] {
   const ctx = useFactContext();
   const entryRows = useRows('SELECT * FROM time_entries WHERE deleted_at IS NULL');
+  const blockRows = useRows("SELECT * FROM schedule_blocks WHERE status = 'committed' AND deleted_at IS NULL");
   return useMemo(() => {
     const entries = entryRows.map(toTimeEntry);
+    const blocksByTask = new Map<string, ScheduleBlock[]>();
+    for (const b of blockRows.map(toScheduleBlock)) {
+      const list = blocksByTask.get(b.task_id);
+      if (list) list.push(b);
+      else blocksByTask.set(b.task_id, [b]);
+    }
     const items: WorklistItem[] = [];
     for (const node of ctx.tree.byId.values()) {
       if (node.node_type !== 'task') continue;
       const status = taskStatus(node, ctx, now);
       if (status === 'done' || status === 'blocked') continue;
       const open = ctx.openEntryFor(node.id);
+      const taskBlocks = blocksByTask.get(node.id) ?? [];
       items.push({
         task: node,
         status,
         openEntryId: open?.id,
         progress: canonicalProgress(node, entries),
         minutesLeftInTask: minutesLeftInTask(node, entries),
+        scheduled: taskBlocks.length > 0,
+        committedBlockId: pickCommittedBlock(taskBlocks, now),
       });
     }
     const rank: Record<TaskStatus, number> = { ongoing: 0, scheduled: 1, prioritized: 2, available: 3, blocked: 4, done: 5 };
     return items.sort((a, b) => rank[a.status] - rank[b.status] || (a.task.title < b.task.title ? -1 : 1));
-  }, [ctx, entryRows, now]);
+  }, [ctx, entryRows, blockRows, now]);
+}
+
+export interface TimeBlockOption {
+  id: string;
+  title: string;
+  startsAt: Instant;
+  endsAt: Instant;
+}
+
+/** Committed blocks bucketed to the current day — options for the "which block?" picker (Phase 3). */
+export function useTimeBlocksForDay(now: Instant): TimeBlockOption[] {
+  const ctx = useFactContext();
+  const blockRows = useRows("SELECT * FROM schedule_blocks WHERE status = 'committed' AND deleted_at IS NULL");
+  return useMemo(() => {
+    const today = bucketDate(now, ctx.dayResetHour, ctx.timezone);
+    return blockRows
+      .map(toScheduleBlock)
+      .filter((b) => bucketDate(isoToEpochMillis(b.starts_at), ctx.dayResetHour, ctx.timezone) === today)
+      .map((b) => ({
+        id: b.id,
+        title: ctx.tree.byId.get(b.task_id)?.title ?? 'Block',
+        startsAt: isoToEpochMillis(b.starts_at),
+        endsAt: isoToEpochMillis(b.ends_at),
+      }))
+      .sort((a, b) => a.startsAt - b.startsAt);
+  }, [blockRows, ctx, now]);
 }
 
 export interface RunningTimer {

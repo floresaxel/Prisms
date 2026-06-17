@@ -274,13 +274,23 @@ export function createDispatcher(
         const row = await loadNodeRow(tx, p.id);
         const own = ownershipReject('node', p.id, row, userId);
         if (own) return own;
-        const win = await lwwFields(tx, hlc, userId, 'nodes', p.id, { completed_at: p.completed_at, completion_disposition: p.disposition ?? 'completed' });
+        // Phase 3: when a completing-in block is named, it must exist and be owned
+        // (any owned committed block — an unscheduled task may be logged into one).
+        if (p.completed_in_block_id != null) {
+          const ownBlock = ownershipReject('block', p.completed_in_block_id, await one(tx.select().from(schedule_blocks).where(eq(schedule_blocks.id, p.completed_in_block_id)).limit(1)), userId);
+          if (ownBlock) return ownBlock;
+        }
+        const win = await lwwFields(tx, hlc, userId, 'nodes', p.id, {
+          completed_at: p.completed_at,
+          completion_disposition: p.disposition ?? 'completed',
+          completed_in_block_id: p.completed_in_block_id ?? null,
+        });
         if (Object.keys(win).length > 0) await tx.update(nodes).set({ ...win, updated_at: now }).where(eq(nodes.id, p.id));
         return applied(row!.node_type === 'task' ? { userId, trigger: 'task_completed', nodeId: p.id } : undefined);
       }
       case 'node.uncheck': {
         const p = payload as Payload<'node.uncheck'>;
-        return updateNode(p.id, { completed_at: null, completion_disposition: null });
+        return updateNode(p.id, { completed_at: null, completion_disposition: null, completed_in_block_id: null });
       }
       case 'node.soft_delete': {
         const p = payload as Payload<'node.soft_delete'>;

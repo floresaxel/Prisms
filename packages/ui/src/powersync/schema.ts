@@ -19,6 +19,7 @@ const nodes = new Table({
   estimate_minutes: column.integer,
   completed_at: column.text,
   completion_disposition: column.text,
+  completed_in_block_id: column.text,
   habit_id: column.text,
   attributes: column.text,
   created_at: column.text,

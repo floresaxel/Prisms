@@ -36,6 +36,7 @@ export {
   useCommands,
   useTagCatalog,
   useBlockTags,
+  useTimeBlocksForDay,
   type WorklistItem,
   type RunningTimer,
   type PromoteTarget,
@@ -56,6 +57,7 @@ export {
   type AggregateRow,
   type UserSettingsView,
   type BlockTagView,
+  type TimeBlockOption,
 } from './hooks';
 
 // design system

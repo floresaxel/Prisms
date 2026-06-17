@@ -27,15 +27,20 @@ export function createCommands(db: WritableDb, ctx: CommandContext) {
      * Check a task off (node.check_off). `disposition` records whether the task
      * was finished ('completed', default) or descoped ('obsolete'); both set
      * completed_at so the task reads as done, but obsolete leaves the project's
-     * completion denominator (§7.2).
+     * completion denominator (§7.2). `completedInBlockId` records the time block
+     * it was done in (Phase 3); null/omitted = completed unscheduled.
      */
-    async checkOff(taskId: string, opts?: { disposition?: 'completed' | 'obsolete' }): Promise<void> {
+    async checkOff(taskId: string, opts?: { disposition?: 'completed' | 'obsolete'; completedInBlockId?: string | null }): Promise<void> {
       const now = iso(ctx);
       const disposition = opts?.disposition ?? 'completed';
-      await db.execute('UPDATE nodes SET completed_at = ?, completion_disposition = ?, updated_at = ? WHERE id = ?', [now, disposition, now, taskId]);
+      const blockId = opts?.completedInBlockId ?? null;
+      await db.execute(
+        'UPDATE nodes SET completed_at = ?, completion_disposition = ?, completed_in_block_id = ?, updated_at = ? WHERE id = ?',
+        [now, disposition, blockId, now, taskId],
+      );
     },
     async uncheck(taskId: string): Promise<void> {
-      await db.execute('UPDATE nodes SET completed_at = NULL, completion_disposition = NULL, updated_at = ? WHERE id = ?', [iso(ctx), taskId]);
+      await db.execute('UPDATE nodes SET completed_at = NULL, completion_disposition = NULL, completed_in_block_id = NULL, updated_at = ? WHERE id = ?', [iso(ctx), taskId]);
     },
     async rename(taskId: string, title: string): Promise<void> {
       await db.execute('UPDATE nodes SET title = ?, updated_at = ? WHERE id = ?', [title, iso(ctx), taskId]);

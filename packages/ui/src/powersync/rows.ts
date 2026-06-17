@@ -54,6 +54,7 @@ export const toNode = (r: Row): Node => ({
   estimate_minutes: r['estimate_minutes'] == null ? null : Number(r['estimate_minutes']),
   completed_at: str(r['completed_at']),
   completion_disposition: r['completion_disposition'] == null ? null : (r['completion_disposition'] as Node['completion_disposition']),
+  completed_in_block_id: str(r['completed_in_block_id']),
   habit_id: str(r['habit_id']),
   attributes: json(r['attributes'], {}),
   created_at: String(r['created_at'] ?? ''),

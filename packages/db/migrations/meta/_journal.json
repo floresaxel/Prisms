@@ -50,6 +50,13 @@
       "when": 1781649116244,
       "tag": "0006_completion_disposition",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1781660030162,
+      "tag": "0007_completed_in_block",
+      "breakpoints": true
     }
   ]
 }

@@ -83,6 +83,8 @@ export const nodes = pgTable(
     completed_at: timestamptz('completed_at'),
     // disposition of the completion: 'completed' (default) or 'obsolete' (descoped). NULL when not done.
     completion_disposition: text('completion_disposition').$type<CompletionDisposition>(),
+    // committed block this task was completed in; NULL = unscheduled. Plain uuid (no FK), like habit_id.
+    completed_in_block_id: uuid('completed_in_block_id'),
     // task spawned by a habit occurrence (XOR parent rule, §6.7-I3)
     habit_id: uuid('habit_id'),
     // type-specific extras only; never queried fields

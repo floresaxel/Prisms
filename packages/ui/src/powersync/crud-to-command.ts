@@ -83,6 +83,8 @@ function nodeCommand(entry: CrudLike): TranslatedCommand | null {
             ...(has(d, 'completion_disposition') && d!['completion_disposition'] != null
               ? { disposition: d!['completion_disposition'] }
               : {}),
+            // carry the block association (including an explicit null = unscheduled)
+            ...(has(d, 'completed_in_block_id') ? { completed_in_block_id: d!['completed_in_block_id'] ?? null } : {}),
           },
         };
   }

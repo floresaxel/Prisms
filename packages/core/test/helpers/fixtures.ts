@@ -41,6 +41,7 @@ export function makeNode(
     estimate_minutes: null,
     completed_at: null,
     completion_disposition: null,
+    completed_in_block_id: null,
     habit_id: null,
     attributes: {},
     ...overrides,

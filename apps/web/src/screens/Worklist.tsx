@@ -19,6 +19,7 @@ import {
   useDayTimeLeft,
   useNextBlockMinutes,
   useRunningTimer,
+  useTimeBlocksForDay,
   useWorklist,
   type CommandContext,
   type WorklistItem,
@@ -66,11 +67,21 @@ export function Worklist({ ctx }: { ctx: CommandContext }) {
   const [review, setReview] = useState<ReviewTarget | null>(null);
   const [focus, setFocus] = useState(1.0);
   const [completed, setCompleted] = useState(false);
-  const [checkOff, setCheckOff] = useState<{ id: string; title: string } | null>(null);
+  const timeBlocks = useTimeBlocksForDay(now);
+  const [checkOff, setCheckOff] = useState<{ id: string; title: string; scheduled: boolean; blockId: string | null } | null>(null);
+  // for an unscheduled task: which time block (if any) it was completed in.
+  const [pickedBlock, setPickedBlock] = useState<string | null>(null);
+
+  function openCheckOff(item: WorklistItem) {
+    setCheckOff({ id: item.task.id, title: item.task.title, scheduled: item.scheduled, blockId: item.committedBlockId });
+    setPickedBlock(null);
+  }
 
   async function finishCheckOff(disposition: 'completed' | 'obsolete') {
     if (!checkOff) return;
-    await commands.checkOff(checkOff.id, { disposition });
+    // scheduled tasks auto-associate with their committed block; unscheduled use the picked block (null = unscheduled).
+    const completedInBlockId = checkOff.scheduled ? checkOff.blockId : pickedBlock;
+    await commands.checkOff(checkOff.id, { disposition, completedInBlockId });
     setCheckOff(null);
   }
 
@@ -139,7 +150,7 @@ export function Worklist({ ctx }: { ctx: CommandContext }) {
                       Clock in
                     </button>
                   )}
-                  <button className="px-btn px-btn--primary" onClick={() => setCheckOff({ id: item.task.id, title: item.task.title })} data-testid={`check-${item.task.id}`}>
+                  <button className="px-btn px-btn--primary" onClick={() => openCheckOff(item)} data-testid={`check-${item.task.id}`}>
                     Done
                   </button>
                   <button className="px-btn px-btn--danger" onClick={() => void commands.softDelete(item.task.id)} aria-label="delete">×</button>
@@ -199,6 +210,25 @@ export function Worklist({ ctx }: { ctx: CommandContext }) {
       >
         <p className="px-muted">{checkOff?.title}</p>
         <p>Did you finish this task, or is it no longer relevant?</p>
+        {checkOff && !checkOff.scheduled && (
+          <label className="px-field" style={{ display: 'block', marginTop: 8 }}>
+            Completed in which time block?
+            <select
+              data-testid="checkoff-block"
+              value={pickedBlock ?? ''}
+              onChange={(e) => setPickedBlock(e.target.value === '' ? null : e.target.value)}
+              style={{ display: 'block', marginTop: 4, width: '100%' }}
+            >
+              <option value="">Unscheduled (no block)</option>
+              {timeBlocks.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {new Date(b.startsAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} — {b.title}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        {checkOff?.scheduled && <p className="px-muted" data-testid="checkoff-autoblock">Logged to its scheduled block.</p>}
       </Modal>
     </section>
   );

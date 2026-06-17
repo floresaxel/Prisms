@@ -51,6 +51,7 @@ const SYNTHETIC_BASE: Node = {
   estimate_minutes: null,
   completed_at: null,
   completion_disposition: null,
+  completed_in_block_id: null,
   habit_id: null,
   attributes: {},
 };

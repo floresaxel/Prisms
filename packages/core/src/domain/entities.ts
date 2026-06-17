@@ -66,6 +66,8 @@ export const nodeSchema = z.strictObject({
   completed_at: isoDateTimeSchema.nullable(),
   /** Set with completed_at at check-off: 'completed' (default) or 'obsolete' (descoped). NULL when not done. */
   completion_disposition: completionDispositionSchema.nullable(),
+  /** The committed block this task was completed in; NULL = completed unscheduled (Phase 3). */
+  completed_in_block_id: uuidSchema.nullable(),
   /** Task spawned by a habit occurrence; XOR parent rule is invariant I3. */
   habit_id: uuidSchema.nullable(),
   attributes: jsonObjectSchema,

@@ -40,6 +40,7 @@ const validRows: { [K in EntityTable]: unknown } = {
     estimate_minutes: 30,
     completed_at: null,
     completion_disposition: null,
+    completed_in_block_id: null,
     habit_id: null,
     attributes: { color: 'blue', tags: ['uni', 1], nested: { a: null } },
   },

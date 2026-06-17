@@ -1,0 +1,1 @@
+ALTER TABLE "nodes" ADD COLUMN "completed_in_block_id" uuid;

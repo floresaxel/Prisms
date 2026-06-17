@@ -63,6 +63,18 @@ describe('nodes', () => {
     });
   });
 
+  it('check_off carries the completed-in block, including an explicit null = unscheduled (Phase 3)', () => {
+    const t = '2026-06-13T12:00:00.000Z';
+    expect(crudToCommand(entry({ op: 'PATCH', table: 'nodes', id: 'n1', opData: { completed_at: t, completed_in_block_id: 'b1', updated_at: t } }))).toEqual({
+      name: 'node.check_off',
+      payload: { id: 'n1', completed_at: t, completed_in_block_id: 'b1' },
+    });
+    expect(crudToCommand(entry({ op: 'PATCH', table: 'nodes', id: 'n1', opData: { completed_at: t, completed_in_block_id: null, updated_at: t } }))).toEqual({
+      name: 'node.check_off',
+      payload: { id: 'n1', completed_at: t, completed_in_block_id: null },
+    });
+  });
+
   it('DELETE maps to soft_delete (we never hard-delete)', () => {
     expect(crudToCommand(entry({ op: 'DELETE', table: 'nodes', id: 'n1' }))).toEqual({ name: 'node.soft_delete', payload: { id: 'n1' } });
   });

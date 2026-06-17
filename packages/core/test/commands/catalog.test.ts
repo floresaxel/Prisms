@@ -61,6 +61,10 @@ describe('catalog completeness + strictness (DoD schema test)', () => {
     expect(COMMAND_SCHEMAS['node.check_off'].safeParse({ id, completed_at, disposition: 'obsolete' }).success).toBe(true);
     // a bogus disposition is rejected
     expect(COMMAND_SCHEMAS['node.check_off'].safeParse({ id, completed_at, disposition: 'maybe' }).success).toBe(false);
+    // Phase 3: completed_in_block_id is optional + nullable
+    expect(COMMAND_SCHEMAS['node.check_off'].safeParse({ id, completed_at, completed_in_block_id: idOf(2) }).success).toBe(true);
+    expect(COMMAND_SCHEMAS['node.check_off'].safeParse({ id, completed_at, completed_in_block_id: null }).success).toBe(true);
+    expect(COMMAND_SCHEMAS['node.check_off'].safeParse({ id, completed_at, completed_in_block_id: 'not-a-uuid' }).success).toBe(false);
   });
 
   it('every schema is a strict object (rejects an extra unknown key)', () => {

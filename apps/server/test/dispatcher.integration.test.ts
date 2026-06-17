@@ -215,6 +215,28 @@ describe.skipIf(!adminUrl)('S11 command dispatcher (§8 pipeline, full catalog)'
     expect((await sql`SELECT completion_disposition FROM nodes WHERE id = ${ids.task}`)[0]!['completion_disposition']).toBe('obsolete');
   });
 
+  it('node.check_off records the completing block; explicit persists, no-block ⇒ unscheduled, uncheck clears (Phase 3)', async () => {
+    const ids = await seedTree();
+    const block = await seedBlock(ids);
+    // explicit block persists
+    await results([cmd('node.check_off', { id: ids.task, completed_at: '2026-06-13T11:00:00.000Z', completed_in_block_id: block })], ids.user);
+    expect((await sql`SELECT completed_in_block_id FROM nodes WHERE id = ${ids.task}`)[0]!['completed_in_block_id']).toBe(block);
+    // uncheck clears it
+    await results([cmd('node.uncheck', { id: ids.task })], ids.user);
+    expect((await sql`SELECT completed_in_block_id FROM nodes WHERE id = ${ids.task}`)[0]!['completed_in_block_id']).toBeNull();
+    // a check-off with no block ⇒ completed unscheduled (null)
+    await results([cmd('node.check_off', { id: ids.task, completed_at: '2026-06-13T12:00:00.000Z' })], ids.user);
+    expect((await sql`SELECT completed_in_block_id FROM nodes WHERE id = ${ids.task}`)[0]!['completed_in_block_id']).toBeNull();
+  });
+
+  it('node.check_off rejects a completing block owned by another user (Phase 3)', async () => {
+    const ids = await seedTree();
+    const other = await seedTree();
+    const otherBlock = await seedBlock(other); // a block owned by a different user
+    const [r] = await results([cmd('node.check_off', { id: ids.task, completed_at: '2026-06-13T11:00:00.000Z', completed_in_block_id: otherBlock })], ids.user);
+    expect(r).toMatchObject({ result: 'rejected', reject_code: 'E_OWNERSHIP' });
+  });
+
   it('replay returns noop with the original result (DoD)', async () => {
     const ids = await seedTree();
     const checkOff = cmd('node.check_off', { id: ids.task, completed_at: '2026-06-13T09:00:00.000Z' });

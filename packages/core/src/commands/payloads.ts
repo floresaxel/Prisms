@@ -64,6 +64,8 @@ export const nodeCheckOffSchema = z.strictObject({
   completed_at: isoDateTimeSchema,
   // optional for back-compat (§16): absent ⇒ server defaults to 'completed'.
   disposition: completionDispositionSchema.optional(),
+  // optional (§16): the block this was completed in; null/absent ⇒ unscheduled.
+  completed_in_block_id: uuidSchema.nullable().optional(),
 });
 export const nodeUncheckSchema = idOnly;
 export const nodeSoftDeleteSchema = idOnly;
