@@ -467,6 +467,8 @@ export interface HabitView {
   ringFill: number | null;
   /** A completion exists for today's bucket. */
   doneToday: boolean;
+  /** Live yes/no/pending tally across this habit's confirmable-tag placements (Phase 4b). */
+  tagConfirmation: { yes: number; no: number; pending: number };
   /** computed_at of the latest server aggregate for this habit (freshness label). */
   serverComputedAt: string | null;
 }
@@ -496,6 +498,7 @@ export function useHabits(now: Instant): HabitView[] {
     const tags = tagRows.map(toTag);
     const placements = placementRows.map(toTagPlacement);
     const answers = answerRows.map(toTagAnswer);
+    const liveAnswer = new Map(answers.filter((a) => a.deleted_at === null).map((a) => [a.placement_id, a.value] as const));
     const settings = { day_reset_hour: ctx.dayResetHour, timezone: ctx.timezone };
     const today = ctx.today(now);
 
@@ -522,6 +525,17 @@ export function useHabits(now: Instant): HabitView[] {
         todayMinutes += e.ended_at === null ? Math.max(0, (now - isoToEpochMillis(e.started_at)) / 60_000) : rawMinutes(e);
       }
 
+      // live tag-confirmation tally across this habit's habit-scoped placements
+      const habitTagIds = new Set(tags.filter((t) => t.deleted_at === null && t.habit_id === habit.id).map((t) => t.id));
+      const tc = { yes: 0, no: 0, pending: 0 };
+      for (const pl of placements) {
+        if (pl.deleted_at !== null || !habitTagIds.has(pl.tag_id)) continue;
+        const a = liveAnswer.get(pl.id);
+        if (a === 'yes') tc.yes += 1;
+        else if (a === 'no') tc.no += 1;
+        else tc.pending += 1;
+      }
+
       const target = habit.daily_target_minutes;
       views.push({
         habit,
@@ -531,6 +545,7 @@ export function useHabits(now: Instant): HabitView[] {
         dailyTargetMinutes: target,
         ringFill: target && target > 0 ? Math.min(1, todayMinutes / target) : null,
         doneToday: completions.some((c) => c.habit_id === habit.id && c.occurrence_date === today),
+        tagConfirmation: tc,
         serverComputedAt: serverAt.get(habit.id) ?? null,
       });
     }

@@ -106,11 +106,21 @@ export function Dashboard({ ctx }: { ctx: CommandContext }) {
           <h2 style={{ marginTop: 24 }}>Streaks</h2>
           <div data-testid="streak-summary">
             <List empty="No habits yet.">
-              {habits.map((h) => (
-                <ListItem key={h.habit.id} trailing={<span className="px-muted">best {h.streak.longest}</span>}>
-                  🔥 {h.streak.current} · {h.habit.title}
-                </ListItem>
-              ))}
+              {habits.map((h) => {
+                const tc = h.tagConfirmation;
+                const total = tc.yes + tc.no + tc.pending;
+                return (
+                  <ListItem key={h.habit.id} trailing={<span className="px-muted">best {h.streak.longest}</span>}>
+                    🔥 {h.streak.current} · {h.habit.title}
+                    {total > 0 && (
+                      <span className="px-muted" data-testid={`tagconf-${h.habit.id}`}>
+                        {' · '}✓ {tc.yes}/{total}
+                        {tc.pending > 0 && ` (${tc.pending} pending)`}
+                      </span>
+                    )}
+                  </ListItem>
+                );
+              })}
             </List>
           </div>
         </div>

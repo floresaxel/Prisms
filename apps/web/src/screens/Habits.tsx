@@ -183,6 +183,12 @@ export function Habits({ ctx }: { ctx: CommandContext }) {
                 <span data-testid={`streak-${view.habit.id}`}>🔥 {view.streak.current} ({view.habit.streak_mode}, best {view.streak.longest})</span>
                 {view.dailyTargetMinutes != null && <span> · {formatMinutes(view.todayMinutes)}/{view.dailyTargetMinutes}m today</span>}
                 <PracticeLine view={view} />
+                {view.tagConfirmation.yes + view.tagConfirmation.no + view.tagConfirmation.pending > 0 && (
+                  <span data-testid={`tagconf-${view.habit.id}`}>
+                    {' · '}✓ {view.tagConfirmation.yes}/{view.tagConfirmation.yes + view.tagConfirmation.no + view.tagConfirmation.pending}
+                    {view.tagConfirmation.pending > 0 && ` (${view.tagConfirmation.pending} pending)`}
+                  </span>
+                )}
                 <span> · {view.serverComputedAt ? `synced ${new Date(view.serverComputedAt).toLocaleDateString()}` : 'live'}</span>
               </div>
             </ListItem>
