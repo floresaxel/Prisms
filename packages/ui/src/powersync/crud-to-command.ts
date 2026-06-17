@@ -75,7 +75,16 @@ function nodeCommand(entry: CrudLike): TranslatedCommand | null {
   if (has(d, 'completed_at')) {
     return d!['completed_at'] == null
       ? { name: 'node.uncheck', payload: { id: entry.id } }
-      : { name: 'node.check_off', payload: { id: entry.id, completed_at: d!['completed_at'] } };
+      : {
+          name: 'node.check_off',
+          payload: {
+            id: entry.id,
+            completed_at: d!['completed_at'],
+            ...(has(d, 'completion_disposition') && d!['completion_disposition'] != null
+              ? { disposition: d!['completion_disposition'] }
+              : {}),
+          },
+        };
   }
   // activity.promote retypes to task AND attaches a justification (parent xor
   // habit, I3) in one write — distinguished from a plain retype by the

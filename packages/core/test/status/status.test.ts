@@ -309,3 +309,31 @@ describe('edge-type gates (§7.1 isBlocked part a)', () => {
     expect(taskStatus(task, ctx, NOW)).toBe('available');
   });
 });
+
+describe('obsolete disposition (Phase 2)', () => {
+  it('an obsolete task is still done (completed_at set ⇒ highest precedence)', () => {
+    const task = makeNode({
+      id: TASK,
+      node_type: 'task',
+      completed_at: '2026-06-12T12:00:00.000Z',
+      completion_disposition: 'obsolete',
+    });
+    expect(taskStatus(task, buildFactContext({ nodes: [task] }), NOW)).toBe('done');
+  });
+
+  it('an obsolete predecessor unblocks an FS successor, exactly like a completed one', () => {
+    const pred = makeNode({
+      id: PRED,
+      node_type: 'task',
+      completed_at: '2026-06-12T12:00:00.000Z',
+      completion_disposition: 'obsolete',
+    });
+    const task = makeNode({ id: TASK, node_type: 'task' });
+    const ctx = buildFactContext({
+      nodes: [pred, task],
+      edges: [makeEdge({ id: idOf(101), predecessor_id: PRED, successor_id: TASK })],
+    });
+    expect(dependencyBlocked(task, ctx, NOW)).toBe(false);
+    expect(taskStatus(task, ctx, NOW)).toBe('available');
+  });
+});

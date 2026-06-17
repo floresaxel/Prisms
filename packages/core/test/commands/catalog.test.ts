@@ -51,6 +51,18 @@ describe('catalog completeness + strictness (DoD schema test)', () => {
     expect(COMMAND_SCHEMAS['node.create'].safeParse({ ...base, user_id: idOf(9) }).success).toBe(false);
   });
 
+  it('node.check_off disposition is optional and enum-bounded (Phase 2, §16 back-compat)', () => {
+    const id = idOf(1);
+    const completed_at = '2026-06-13T00:00:00.000Z';
+    // legacy payload (no disposition) still parses
+    expect(COMMAND_SCHEMAS['node.check_off'].safeParse({ id, completed_at }).success).toBe(true);
+    // explicit dispositions parse
+    expect(COMMAND_SCHEMAS['node.check_off'].safeParse({ id, completed_at, disposition: 'completed' }).success).toBe(true);
+    expect(COMMAND_SCHEMAS['node.check_off'].safeParse({ id, completed_at, disposition: 'obsolete' }).success).toBe(true);
+    // a bogus disposition is rejected
+    expect(COMMAND_SCHEMAS['node.check_off'].safeParse({ id, completed_at, disposition: 'maybe' }).success).toBe(false);
+  });
+
   it('every schema is a strict object (rejects an extra unknown key)', () => {
     for (const name of COMMAND_NAMES) {
       const schema = COMMAND_SCHEMAS[name];

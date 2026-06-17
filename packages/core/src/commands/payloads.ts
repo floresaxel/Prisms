@@ -12,6 +12,7 @@ import { z } from 'zod';
 
 import {
   anchorTypeSchema,
+  completionDispositionSchema,
   edgeTypeSchema,
   nodeTypeSchema,
   streakModeSchema,
@@ -58,7 +59,12 @@ export const nodeSetEstimateSchema = z.strictObject({
   estimate_minutes: z.number().int().positive().nullable(),
 });
 export const nodeReorderSchema = z.strictObject({ id: uuidSchema, sort_order: z.string().min(1) });
-export const nodeCheckOffSchema = z.strictObject({ id: uuidSchema, completed_at: isoDateTimeSchema });
+export const nodeCheckOffSchema = z.strictObject({
+  id: uuidSchema,
+  completed_at: isoDateTimeSchema,
+  // optional for back-compat (§16): absent ⇒ server defaults to 'completed'.
+  disposition: completionDispositionSchema.optional(),
+});
 export const nodeUncheckSchema = idOnly;
 export const nodeSoftDeleteSchema = idOnly;
 

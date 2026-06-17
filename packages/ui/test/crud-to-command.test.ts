@@ -49,6 +49,20 @@ describe('nodes', () => {
     });
   });
 
+  it('check_off carries the completion disposition when present (Phase 2)', () => {
+    const t = '2026-06-13T12:00:00.000Z';
+    // obsolete check-off (completed_at + disposition both set in one write)
+    expect(crudToCommand(entry({ op: 'PATCH', table: 'nodes', id: 'n1', opData: { completed_at: t, completion_disposition: 'obsolete', updated_at: t } }))).toEqual({
+      name: 'node.check_off',
+      payload: { id: 'n1', completed_at: t, disposition: 'obsolete' },
+    });
+    // legacy/plain check-off without a disposition column → no disposition field (server defaults 'completed')
+    expect(crudToCommand(entry({ op: 'PATCH', table: 'nodes', id: 'n1', opData: { completed_at: t, updated_at: t } }))).toEqual({
+      name: 'node.check_off',
+      payload: { id: 'n1', completed_at: t },
+    });
+  });
+
   it('DELETE maps to soft_delete (we never hard-delete)', () => {
     expect(crudToCommand(entry({ op: 'DELETE', table: 'nodes', id: 'n1' }))).toEqual({ name: 'node.soft_delete', payload: { id: 'n1' } });
   });

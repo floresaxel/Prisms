@@ -46,6 +46,11 @@ export const NODE_TYPES = [
 export const nodeTypeSchema = z.enum(NODE_TYPES);
 export type NodeType = z.infer<typeof nodeTypeSchema>;
 
+/** How a task was checked off: finished, or descoped as no-longer-relevant. */
+export const COMPLETION_DISPOSITIONS = ['completed', 'obsolete'] as const;
+export const completionDispositionSchema = z.enum(COMPLETION_DISPOSITIONS);
+export type CompletionDisposition = z.infer<typeof completionDispositionSchema>;
+
 export const nodeSchema = z.strictObject({
   ...baseRow,
   parent_id: uuidSchema.nullable(),
@@ -59,6 +64,8 @@ export const nodeSchema = z.strictObject({
   estimate_minutes: z.number().int().nullable(),
   /** FACT: NULL = not done. Only set by mutations (§6). */
   completed_at: isoDateTimeSchema.nullable(),
+  /** Set with completed_at at check-off: 'completed' (default) or 'obsolete' (descoped). NULL when not done. */
+  completion_disposition: completionDispositionSchema.nullable(),
   /** Task spawned by a habit occurrence; XOR parent rule is invariant I3. */
   habit_id: uuidSchema.nullable(),
   attributes: jsonObjectSchema,

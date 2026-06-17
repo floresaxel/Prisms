@@ -274,13 +274,13 @@ export function createDispatcher(
         const row = await loadNodeRow(tx, p.id);
         const own = ownershipReject('node', p.id, row, userId);
         if (own) return own;
-        const win = await lwwFields(tx, hlc, userId, 'nodes', p.id, { completed_at: p.completed_at });
+        const win = await lwwFields(tx, hlc, userId, 'nodes', p.id, { completed_at: p.completed_at, completion_disposition: p.disposition ?? 'completed' });
         if (Object.keys(win).length > 0) await tx.update(nodes).set({ ...win, updated_at: now }).where(eq(nodes.id, p.id));
         return applied(row!.node_type === 'task' ? { userId, trigger: 'task_completed', nodeId: p.id } : undefined);
       }
       case 'node.uncheck': {
         const p = payload as Payload<'node.uncheck'>;
-        return updateNode(p.id, { completed_at: null });
+        return updateNode(p.id, { completed_at: null, completion_disposition: null });
       }
       case 'node.soft_delete': {
         const p = payload as Payload<'node.soft_delete'>;
@@ -467,7 +467,7 @@ export function createDispatcher(
         if (p.completed_session && entry!.ended_at !== null) {
           const task = await loadNodeRow(tx, entry!.task_id);
           if (task && task.user_id === userId && task.completed_at === null) {
-            const winC = await lwwFields(tx, hlc, userId, 'nodes', task.id, { completed_at: entry!.ended_at });
+            const winC = await lwwFields(tx, hlc, userId, 'nodes', task.id, { completed_at: entry!.ended_at, completion_disposition: 'completed' as const });
             if (Object.keys(winC).length > 0) await tx.update(nodes).set({ ...winC, updated_at: now }).where(eq(nodes.id, task.id));
             return applied({ userId, trigger: 'task_completed', nodeId: task.id });
           }

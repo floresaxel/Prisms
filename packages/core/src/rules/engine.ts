@@ -147,6 +147,7 @@ export function runAutomations(input: RulesEngineInput): RulesEngineOutput {
                   : resolveTriggerDate(template.due, trigger.node, ctx),
               estimate_minutes: template.estimate_minutes ?? null,
               completed_at: null,
+              completion_disposition: null,
               habit_id:
                 parentMode === 'same_as_trigger' ? trigger.node.habit_id : null,
               attributes: {},

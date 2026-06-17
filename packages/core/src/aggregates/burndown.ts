@@ -124,7 +124,7 @@ export function canonicalBurndown(inputs: BurndownInputs): BurndownValue {
     for (const w of windows) {
       if (w.created > date) continue; // not yet in scope
       if (w.deleted !== null && w.deleted <= date) continue; // left scope
-      if (w.completed !== null && w.completed <= date) continue; // done
+      if (w.completed !== null && w.completed <= date) continue; // done or obsolete (both scope-out via completed_at)
       remaining += w.minutes;
     }
     days.push({

@@ -50,6 +50,7 @@ const SYNTHETIC_BASE: Node = {
   due_date: null,
   estimate_minutes: null,
   completed_at: null,
+  completion_disposition: null,
   habit_id: null,
   attributes: {},
 };

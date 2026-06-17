@@ -66,6 +66,13 @@ export function Worklist({ ctx }: { ctx: CommandContext }) {
   const [review, setReview] = useState<ReviewTarget | null>(null);
   const [focus, setFocus] = useState(1.0);
   const [completed, setCompleted] = useState(false);
+  const [checkOff, setCheckOff] = useState<{ id: string; title: string } | null>(null);
+
+  async function finishCheckOff(disposition: 'completed' | 'obsolete') {
+    if (!checkOff) return;
+    await commands.checkOff(checkOff.id, { disposition });
+    setCheckOff(null);
+  }
 
   async function clockOut(entryId: string, taskId: string, taskTitle: string) {
     await commands.clockOut(entryId);
@@ -132,7 +139,7 @@ export function Worklist({ ctx }: { ctx: CommandContext }) {
                       Clock in
                     </button>
                   )}
-                  <button className="px-btn px-btn--primary" onClick={() => void commands.checkOff(item.task.id)} data-testid={`check-${item.task.id}`}>
+                  <button className="px-btn px-btn--primary" onClick={() => setCheckOff({ id: item.task.id, title: item.task.title })} data-testid={`check-${item.task.id}`}>
                     Done
                   </button>
                   <button className="px-btn px-btn--danger" onClick={() => void commands.softDelete(item.task.id)} aria-label="delete">×</button>
@@ -176,6 +183,22 @@ export function Worklist({ ctx }: { ctx: CommandContext }) {
           <input type="checkbox" checked={completed} data-testid="review-completed" onChange={(e) => setCompleted(e.target.checked)} />
           Completed this task
         </label>
+      </Modal>
+
+      <Modal
+        open={checkOff !== null}
+        title="Check off task"
+        onClose={() => setCheckOff(null)}
+        actions={
+          <>
+            <button className="px-btn" onClick={() => setCheckOff(null)}>Cancel</button>
+            <button className="px-btn" data-testid="checkoff-obsolete" onClick={() => void finishCheckOff('obsolete')}>Obsolete</button>
+            <button className="px-btn px-btn--primary" data-testid="checkoff-completed" onClick={() => void finishCheckOff('completed')}>Completed</button>
+          </>
+        }
+      >
+        <p className="px-muted">{checkOff?.title}</p>
+        <p>Did you finish this task, or is it no longer relevant?</p>
       </Modal>
     </section>
   );

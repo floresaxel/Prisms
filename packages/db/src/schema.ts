@@ -40,6 +40,7 @@ import type {
   AutomationTrigger,
   BlockStatus,
   CommandResult,
+  CompletionDisposition,
   ComputedBy,
   EdgeType,
   JsonObject,
@@ -80,6 +81,8 @@ export const nodes = pgTable(
     estimate_minutes: integer('estimate_minutes'),
     // FACT. NULL = not done. Only set by mutations.
     completed_at: timestamptz('completed_at'),
+    // disposition of the completion: 'completed' (default) or 'obsolete' (descoped). NULL when not done.
+    completion_disposition: text('completion_disposition').$type<CompletionDisposition>(),
     // task spawned by a habit occurrence (XOR parent rule, §6.7-I3)
     habit_id: uuid('habit_id'),
     // type-specific extras only; never queried fields
@@ -89,6 +92,10 @@ export const nodes = pgTable(
     check(
       'nodes_node_type_check',
       sql`${t.node_type} IN ('vision','roadmap','project','milestone','task','activity')`,
+    ),
+    check(
+      'nodes_completion_disposition_check',
+      sql`${t.completion_disposition} IN ('completed','obsolete')`,
     ),
     index('nodes_children')
       .on(t.user_id, t.parent_id, t.sort_order)

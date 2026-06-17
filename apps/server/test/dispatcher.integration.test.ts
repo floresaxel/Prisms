@@ -200,6 +200,21 @@ describe.skipIf(!adminUrl)('S11 command dispatcher (§8 pipeline, full catalog)'
     expect(backstops).toContainEqual({ userId: ids.user, trigger: 'task_completed', nodeId: ids.task });
   });
 
+  it('node.check_off records the disposition: default completed, explicit obsolete; uncheck clears (Phase 2)', async () => {
+    const ids = await seedTree();
+    // default: a check-off with no disposition records 'completed'
+    await results([cmd('node.check_off', { id: ids.task, completed_at: '2026-06-13T09:00:00.000Z' })], ids.user);
+    expect((await sql`SELECT completion_disposition FROM nodes WHERE id = ${ids.task}`)[0]!['completion_disposition']).toBe('completed');
+    // uncheck clears completed_at AND the disposition
+    await results([cmd('node.uncheck', { id: ids.task })], ids.user);
+    const cleared = (await sql`SELECT completed_at, completion_disposition FROM nodes WHERE id = ${ids.task}`)[0]!;
+    expect(cleared['completed_at']).toBeNull();
+    expect(cleared['completion_disposition']).toBeNull();
+    // explicit obsolete persists
+    await results([cmd('node.check_off', { id: ids.task, completed_at: '2026-06-13T10:00:00.000Z', disposition: 'obsolete' })], ids.user);
+    expect((await sql`SELECT completion_disposition FROM nodes WHERE id = ${ids.task}`)[0]!['completion_disposition']).toBe('obsolete');
+  });
+
   it('replay returns noop with the original result (DoD)', async () => {
     const ids = await seedTree();
     const checkOff = cmd('node.check_off', { id: ids.task, completed_at: '2026-06-13T09:00:00.000Z' });

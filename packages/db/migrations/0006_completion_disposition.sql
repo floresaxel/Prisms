@@ -1,0 +1,2 @@
+ALTER TABLE "nodes" ADD COLUMN "completion_disposition" text;--> statement-breakpoint
+ALTER TABLE "nodes" ADD CONSTRAINT "nodes_completion_disposition_check" CHECK ("nodes"."completion_disposition" IN ('completed','obsolete'));
