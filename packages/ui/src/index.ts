@@ -37,6 +37,8 @@ export {
   useTagCatalog,
   useBlockTags,
   useTimeBlocksForDay,
+  useGroupedWorklist,
+  useHabitTasks,
   type WorklistItem,
   type RunningTimer,
   type PromoteTarget,
@@ -58,7 +60,9 @@ export {
   type UserSettingsView,
   type BlockTagView,
   type TimeBlockOption,
+  type HabitTasksView,
 } from './hooks';
+export { groupWorklistBySchedule, type WorklistGroup } from './worklist-grouping';
 
 // design system
 export { Layout, type LayoutProps, type NavLinkSpec } from './components/Layout';

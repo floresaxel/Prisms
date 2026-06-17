@@ -20,6 +20,9 @@ import {
   makeHabit,
   makeHabitCompletion,
   makeNode,
+  makeTag,
+  makeTagAnswer,
+  makeTagPlacement,
 } from '../helpers/fixtures';
 import type { HabitCompletion } from '../../src/domain/entities';
 
@@ -256,6 +259,79 @@ describe('perfect_planned (§7.2: every scheduled block needs a session)', () =>
       at('2026-06-12'),
     );
     expect(value.current).toBe(4);
+  });
+});
+
+describe('perfect_planned: confirmable tags feed the streak (Phase 4b)', () => {
+  // a past block (06-10) WITH a session, so the only thing that can break the day
+  // is the habit-scoped tag answer.
+  const habit = makeHabit({
+    id: idOf(130),
+    vision_id: VISION,
+    rrule: 'FREQ=DAILY',
+    streak_mode: 'perfect_planned',
+    created_at: '2026-06-08T12:00:00.000Z',
+  });
+  const task = makeNode({ id: idOf(131), node_type: 'task', habit_id: habit.id });
+  const block = makeBlock({ id: idOf(132), task_id: task.id, starts_at: '2026-06-10T14:00:00.000Z', ends_at: '2026-06-10T15:00:00.000Z' });
+  const session = makeEntry({ id: idOf(133), task_id: task.id, started_at: '2026-06-10T14:20:00.000Z', ended_at: '2026-06-10T14:50:00.000Z' });
+  const tag = makeTag({ id: idOf(134), label: 'on time?', habit_id: habit.id });
+  const placement = makeTagPlacement({ id: idOf(135), block_id: block.id, tag_id: tag.id });
+  const base = {
+    habit,
+    nodes: [task],
+    settings: SETTINGS,
+    completions: completions(habit.id, ['2026-06-08', '2026-06-09', '2026-06-10', '2026-06-11']),
+    schedule_blocks: [block],
+    time_entries: [session],
+    tags: [tag],
+    tag_placements: [placement],
+  };
+
+  it("a 'yes' answer on a past block keeps the streak perfect", () => {
+    const v = canonicalStreak({ ...base, tag_answers: [makeTagAnswer({ id: idOf(136), placement_id: placement.id, value: 'yes' })] }, at('2026-06-12'));
+    expect(v.current).toBe(4);
+  });
+
+  it("a 'no' answer on a past block breaks that day, even with a session", () => {
+    const v = canonicalStreak({ ...base, tag_answers: [makeTagAnswer({ id: idOf(137), placement_id: placement.id, value: 'no' })] }, at('2026-06-12'));
+    expect(v.current).toBe(1); // 06-10 broken; 06-11 restarts
+    expect(v.longest).toBe(2);
+  });
+
+  it('an unanswered (pending) tag on a PAST block breaks the day (per user decision)', () => {
+    const v = canonicalStreak({ ...base, tag_answers: [] }, at('2026-06-12'));
+    expect(v.current).toBe(1);
+  });
+
+  it("an unanswered tag on TODAY's block does not break (still pending)", () => {
+    const todayBlock = makeBlock({ id: idOf(138), task_id: task.id, starts_at: '2026-06-12T20:00:00.000Z', ends_at: '2026-06-12T21:00:00.000Z' });
+    const todayPlacement = makeTagPlacement({ id: idOf(139), block_id: todayBlock.id, tag_id: tag.id });
+    const v = canonicalStreak(
+      {
+        ...base,
+        schedule_blocks: [block, todayBlock],
+        tag_placements: [placement, todayPlacement],
+        tag_answers: [makeTagAnswer({ id: idOf(140), placement_id: placement.id, value: 'yes' })],
+      },
+      at('2026-06-12'),
+    );
+    expect(v.current).toBe(4);
+  });
+
+  it('a tag scoped to a different habit is ignored', () => {
+    const otherTag = makeTag({ id: idOf(141), label: 'unrelated', habit_id: idOf(999) });
+    const otherPlacement = makeTagPlacement({ id: idOf(142), block_id: block.id, tag_id: otherTag.id });
+    const v = canonicalStreak(
+      {
+        ...base,
+        tags: [tag, otherTag],
+        tag_placements: [placement, otherPlacement], // otherPlacement has no answer but isn't habit-scoped
+        tag_answers: [makeTagAnswer({ id: idOf(143), placement_id: placement.id, value: 'yes' })],
+      },
+      at('2026-06-12'),
+    );
+    expect(v.current).toBe(4);
   });
 });
 

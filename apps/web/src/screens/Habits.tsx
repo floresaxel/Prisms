@@ -9,7 +9,7 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import { asEpochMillis, type Instant } from '@prisms/core';
-import { List, ListItem, Modal, useCommands, useFactContext, useHabits, useNodeTree, type CommandContext, type HabitView } from '@prisms/ui';
+import { List, ListItem, Modal, useCommands, useFactContext, useHabits, useHabitTasks, useNodeTree, type CommandContext, type HabitView } from '@prisms/ui';
 
 import { formatMinutes } from '../format';
 
@@ -81,6 +81,7 @@ export function Habits({ ctx }: { ctx: CommandContext }) {
   const fact = useFactContext();
   const tree = useNodeTree();
   const habits = useHabits(now);
+  const habitTasks = useHabitTasks(now);
   const commands = useCommands(ctx);
 
   const visions = useMemo(
@@ -188,6 +189,36 @@ export function Habits({ ctx }: { ctx: CommandContext }) {
           ))}
         </List>
       </div>
+
+      {habitTasks.length > 0 && (
+        <div data-testid="habit-tasks" style={{ marginTop: 24 }}>
+          <h2>Recurring tasks</h2>
+          {habitTasks.map(({ habit, tasks }) => (
+            <div key={habit.id} data-testid={`habit-tasks-${habit.id}`} style={{ marginBottom: 12 }}>
+              <h3 style={{ marginBottom: 4 }}>{habit.title}</h3>
+              <List>
+                {tasks.map((item) => (
+                  <ListItem
+                    key={item.task.id}
+                    leading={<span className={`px-badge px-badge--${item.status}`}>{item.status}</span>}
+                    trailing={
+                      <button
+                        className="px-btn px-btn--primary"
+                        data-testid={`habit-task-check-${item.task.id}`}
+                        onClick={() => void commands.checkOff(item.task.id)}
+                      >
+                        Done
+                      </button>
+                    }
+                  >
+                    {item.task.title}
+                  </ListItem>
+                ))}
+              </List>
+            </div>
+          ))}
+        </div>
+      )}
 
       <Modal
         open={edit !== null}

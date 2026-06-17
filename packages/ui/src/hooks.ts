@@ -60,6 +60,7 @@ import {
 } from '@prisms/core';
 
 import { createCommands, type CommandContext } from './powersync/commands';
+import { groupWorklistBySchedule, type WorklistGroup } from './worklist-grouping';
 import {
   toAutomationRule,
   toBlockerRule,
@@ -213,6 +214,38 @@ export function useTimeBlocksForDay(now: Instant): TimeBlockOption[] {
       }))
       .sort((a, b) => a.startsAt - b.startsAt);
   }, [blockRows, ctx, now]);
+}
+
+/** The worklist grouped by scheduled vs unscheduled (Phase 4a). */
+export function useGroupedWorklist(now: Instant): WorklistGroup[] {
+  const items = useWorklist(now);
+  return useMemo(() => groupWorklistBySchedule(items), [items]);
+}
+
+export interface HabitTasksView {
+  habit: Habit;
+  /** The habit's actionable (not done/blocked) recurring task instances. */
+  tasks: WorklistItem[];
+}
+
+/** Each habit's recurring task instances (nodes.habit_id) as actionable items (Phase 4a). */
+export function useHabitTasks(now: Instant): HabitTasksView[] {
+  const items = useWorklist(now);
+  const habitRows = useRows('SELECT * FROM habits WHERE deleted_at IS NULL');
+  return useMemo(() => {
+    const byHabit = new Map<string, WorklistItem[]>();
+    for (const item of items) {
+      if (item.task.habit_id === null) continue;
+      const list = byHabit.get(item.task.habit_id);
+      if (list) list.push(item);
+      else byHabit.set(item.task.habit_id, [item]);
+    }
+    return habitRows
+      .map(toHabit)
+      .map((habit) => ({ habit, tasks: byHabit.get(habit.id) ?? [] }))
+      .filter((v) => v.tasks.length > 0)
+      .sort((a, b) => (a.habit.title < b.habit.title ? -1 : a.habit.title > b.habit.title ? 1 : 0));
+  }, [items, habitRows]);
 }
 
 export interface RunningTimer {
@@ -450,6 +483,9 @@ export function useHabits(now: Instant): HabitView[] {
   const completionRows = useRows('SELECT * FROM habit_completions WHERE deleted_at IS NULL');
   const entryRows = useRows('SELECT * FROM time_entries WHERE deleted_at IS NULL');
   const blockRows = useRows('SELECT * FROM schedule_blocks WHERE deleted_at IS NULL');
+  const tagRows = useRows('SELECT * FROM tags WHERE deleted_at IS NULL');
+  const placementRows = useRows('SELECT * FROM tag_placements WHERE deleted_at IS NULL');
+  const answerRows = useRows('SELECT * FROM tag_answers WHERE deleted_at IS NULL');
   const aggRows = useRows("SELECT * FROM computed_aggregates WHERE deleted_at IS NULL AND subject_kind = 'habit'");
 
   return useMemo(() => {
@@ -457,6 +493,9 @@ export function useHabits(now: Instant): HabitView[] {
     const entries = entryRows.map(toTimeEntry);
     const completions = completionRows.map(toHabitCompletion);
     const blocks = blockRows.map(toScheduleBlock);
+    const tags = tagRows.map(toTag);
+    const placements = placementRows.map(toTagPlacement);
+    const answers = answerRows.map(toTagAnswer);
     const settings = { day_reset_hour: ctx.dayResetHour, timezone: ctx.timezone };
     const today = ctx.today(now);
 
@@ -470,7 +509,10 @@ export function useHabits(now: Instant): HabitView[] {
     const views: HabitView[] = [];
     for (const habit of habitRows.map(toHabit)) {
       const taskIds = habitTaskIds(habit, nodes);
-      const streak = canonicalStreak({ habit, completions, nodes, schedule_blocks: blocks, time_entries: entries, settings }, now);
+      const streak = canonicalStreak(
+        { habit, completions, nodes, schedule_blocks: blocks, time_entries: entries, tags, tag_placements: placements, tag_answers: answers, settings },
+        now,
+      );
       const practice = canonicalPractice(habit, nodes, entries);
 
       let todayMinutes = 0;
@@ -493,7 +535,7 @@ export function useHabits(now: Instant): HabitView[] {
       });
     }
     return views.sort((a, b) => (a.habit.title < b.habit.title ? -1 : a.habit.title > b.habit.title ? 1 : 0));
-  }, [ctx, habitRows, completionRows, entryRows, blockRows, aggRows, now]);
+  }, [ctx, habitRows, completionRows, entryRows, blockRows, tagRows, placementRows, answerRows, aggRows, now]);
 }
 
 export interface KanbanColumn {

@@ -28,6 +28,9 @@ import type {
   HabitCompletion,
   Node,
   ScheduleBlock,
+  Tag,
+  TagAnswer,
+  TagPlacement,
   TimeEntry,
 } from '../domain/entities';
 import type { IsoDate } from '../domain/primitives';
@@ -59,6 +62,10 @@ export interface StreakInputs {
   nodes?: readonly Node[];
   schedule_blocks?: readonly ScheduleBlock[];
   time_entries?: readonly TimeEntry[];
+  /** Phase 4b: habit-scoped confirmable tags feed perfect_planned (see collectDayFacts). */
+  tags?: readonly Tag[];
+  tag_placements?: readonly TagPlacement[];
+  tag_answers?: readonly TagAnswer[];
   settings: StreakSettings;
 }
 
@@ -110,6 +117,25 @@ function collectDayFacts(inputs: StreakInputs, today: IsoDate): DayFacts {
       if (list) list.push(entry);
       else entriesByTask.set(entry.task_id, [entry]);
     }
+
+    // Phase 4b: a habit-scoped confirmable tag placed on the habit's blocks must
+    // read 'yes' once the day has passed — a 'no' or an unanswered (pending) past
+    // tag breaks the perfect_planned day, exactly like a missing session.
+    const habitTagIds = new Set(
+      (inputs.tags ?? []).filter((t) => t.deleted_at === null && t.habit_id === inputs.habit.id).map((t) => t.id),
+    );
+    const placementsByBlock = new Map<string, string[]>();
+    for (const pl of inputs.tag_placements ?? []) {
+      if (pl.deleted_at !== null || !habitTagIds.has(pl.tag_id)) continue;
+      const list = placementsByBlock.get(pl.block_id);
+      if (list) list.push(pl.id);
+      else placementsByBlock.set(pl.block_id, [pl.id]);
+    }
+    const answerByPlacement = new Map<string, 'yes' | 'no'>();
+    for (const a of inputs.tag_answers ?? []) {
+      if (a.deleted_at === null) answerByPlacement.set(a.placement_id, a.value);
+    }
+
     for (const block of inputs.schedule_blocks ?? []) {
       if (block.deleted_at !== null || block.status !== 'committed') continue;
       if (!tasks.has(block.task_id)) continue;
@@ -127,6 +153,10 @@ function collectDayFacts(inputs: StreakInputs, today: IsoDate): DayFacts {
         return start < blockEnd && end > blockStart;
       });
       if (!hasSession) violatedDays.add(day);
+      // habit-scoped tags on this past block must be answered 'yes'
+      for (const placementId of placementsByBlock.get(block.id) ?? []) {
+        if (answerByPlacement.get(placementId) !== 'yes') violatedDays.add(day);
+      }
     }
   }
 

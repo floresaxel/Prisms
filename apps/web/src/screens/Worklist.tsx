@@ -18,9 +18,9 @@ import {
   useCommands,
   useDayTimeLeft,
   useNextBlockMinutes,
+  useGroupedWorklist,
   useRunningTimer,
   useTimeBlocksForDay,
-  useWorklist,
   type CommandContext,
   type WorklistItem,
 } from '@prisms/ui';
@@ -58,7 +58,7 @@ export function Worklist({ ctx }: { ctx: CommandContext }) {
     return () => clearInterval(t);
   }, []);
 
-  const items = useWorklist(now);
+  const groups = useGroupedWorklist(now);
   const running = useRunningTimer(now);
   const dayLeft = useDayTimeLeft(now);
   const nextBlock = useNextBlockMinutes(now);
@@ -123,10 +123,16 @@ export function Worklist({ ctx }: { ctx: CommandContext }) {
       )}
 
       <div data-testid="worklist">
-        <List empty="No available tasks — everything is done or blocked.">
-          {items.map((item) => (
-            <ListItem
-              key={item.task.id}
+        {groups.length === 0 && (
+          <div className="px-list-empty">No available tasks — everything is done or blocked.</div>
+        )}
+        {groups.map((group) => (
+          <div key={group.key} data-testid={`worklist-group-${group.key}`}>
+            <h3 className="px-muted" style={{ margin: '10px 0 4px' }}>{group.title}</h3>
+            <List>
+              {group.items.map((item) => (
+                <ListItem
+                  key={item.task.id}
               leading={<span className={`px-badge px-badge--${item.status}`}>{item.status}</span>}
               trailing={
                 <>
@@ -157,13 +163,15 @@ export function Worklist({ ctx }: { ctx: CommandContext }) {
                 </>
               }
             >
-              {item.task.title}
-              <div style={{ marginTop: 6 }}>
-                <ProgressBar item={item} />
-              </div>
-            </ListItem>
-          ))}
-        </List>
+                  {item.task.title}
+                  <div style={{ marginTop: 6 }}>
+                    <ProgressBar item={item} />
+                  </div>
+                </ListItem>
+              ))}
+            </List>
+          </div>
+        ))}
       </div>
 
       <Modal

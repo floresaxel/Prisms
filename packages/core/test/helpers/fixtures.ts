@@ -12,6 +12,9 @@ import type {
   ScheduleBlock,
   Sprint,
   SprintMembership,
+  Tag,
+  TagAnswer,
+  TagPlacement,
   TimeEntry,
 } from '../../src/domain/entities';
 import type { JsonValue, Uuid } from '../../src/domain/primitives';
@@ -129,6 +132,22 @@ export function makeMembership(
     deleted_at: null,
     ...overrides,
   };
+}
+
+export function makeTag(overrides: Partial<Tag> & { id: Uuid; label: string }): Tag {
+  return { user_id: TEST_USER, created_at: T0, updated_at: T0, deleted_at: null, habit_id: null, ...overrides };
+}
+
+export function makeTagPlacement(
+  overrides: Partial<TagPlacement> & { id: Uuid; block_id: Uuid; tag_id: Uuid },
+): TagPlacement {
+  return { user_id: TEST_USER, created_at: T0, updated_at: T0, deleted_at: null, ...overrides };
+}
+
+export function makeTagAnswer(
+  overrides: Partial<TagAnswer> & { id: Uuid; placement_id: Uuid; value: 'yes' | 'no' },
+): TagAnswer {
+  return { user_id: TEST_USER, created_at: T0, updated_at: T0, deleted_at: null, answered_at: T0, ...overrides };
 }
 
 export function makeBlockerRule(
