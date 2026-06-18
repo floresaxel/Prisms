@@ -24,6 +24,9 @@ import type {
   ScheduleBlock,
   Sprint,
   SprintMembership,
+  Tag,
+  TagAnswer,
+  TagPlacement,
   TimeEntry,
   UserSettings,
 } from '@prisms/core';
@@ -44,6 +47,9 @@ export type AssertScheduleBlocks = Assert<Equal<Row<'schedule_blocks'>, Schedule
 export type AssertTimeEntries = Assert<Equal<Row<'time_entries'>, TimeEntry>>;
 export type AssertHabits = Assert<Equal<Row<'habits'>, Habit>>;
 export type AssertHabitCompletions = Assert<Equal<Row<'habit_completions'>, HabitCompletion>>;
+export type AssertTags = Assert<Equal<Row<'tags'>, Tag>>;
+export type AssertTagPlacements = Assert<Equal<Row<'tag_placements'>, TagPlacement>>;
+export type AssertTagAnswers = Assert<Equal<Row<'tag_answers'>, TagAnswer>>;
 export type AssertDecisionBoards = Assert<Equal<Row<'decision_boards'>, DecisionBoard>>;
 export type AssertDecisionCriteria = Assert<Equal<Row<'decision_criteria'>, DecisionCriterion>>;
 export type AssertDecisionScores = Assert<Equal<Row<'decision_scores'>, DecisionScore>>;

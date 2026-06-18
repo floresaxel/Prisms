@@ -195,6 +195,40 @@ describe('decision board', () => {
   });
 });
 
+describe('tags (confirmable event tags)', () => {
+  const t = '2026-06-15T09:00:00.000Z';
+
+  it('tag PUT → tag.create; label PATCH → tag.rename; delete → tag.delete', () => {
+    expect(crudToCommand(entry({ op: 'PUT', table: 'tags', id: 'g1', opData: { label: 'on time?', habit_id: 'h1' } }))).toEqual({
+      name: 'tag.create', payload: { id: 'g1', label: 'on time?', habit_id: 'h1' },
+    });
+    expect(crudToCommand(entry({ op: 'PATCH', table: 'tags', id: 'g1', opData: { label: 'on schedule?', updated_at: t } }))).toEqual({
+      name: 'tag.rename', payload: { id: 'g1', label: 'on schedule?' },
+    });
+    expect(crudToCommand(entry({ op: 'PATCH', table: 'tags', id: 'g1', opData: { deleted_at: t } }))).toEqual({ name: 'tag.delete', payload: { id: 'g1' } });
+    expect(crudToCommand(entry({ op: 'DELETE', table: 'tags', id: 'g1' }))).toEqual({ name: 'tag.delete', payload: { id: 'g1' } });
+  });
+
+  it('placement PUT → tag.place; soft-delete/DELETE → tag.unplace', () => {
+    expect(crudToCommand(entry({ op: 'PUT', table: 'tag_placements', id: 'pl1', opData: { block_id: 'b1', tag_id: 'g1' } }))).toEqual({
+      name: 'tag.place', payload: { id: 'pl1', block_id: 'b1', tag_id: 'g1' },
+    });
+    expect(crudToCommand(entry({ op: 'PATCH', table: 'tag_placements', id: 'pl1', opData: { deleted_at: t } }))).toEqual({ name: 'tag.unplace', payload: { id: 'pl1' } });
+    expect(crudToCommand(entry({ op: 'DELETE', table: 'tag_placements', id: 'pl1' }))).toEqual({ name: 'tag.unplace', payload: { id: 'pl1' } });
+  });
+
+  it('answer PUT and value PATCH both → tag.answer with placement_id; clear → tag.clear_answer', () => {
+    expect(crudToCommand(entry({ op: 'PUT', table: 'tag_answers', id: 'a1', opData: { placement_id: 'pl1', value: 'yes', answered_at: t } }))).toEqual({
+      name: 'tag.answer', payload: { id: 'a1', placement_id: 'pl1', value: 'yes', answered_at: t },
+    });
+    // re-answering re-states placement_id so the patch carries the upsert key
+    expect(crudToCommand(entry({ op: 'PATCH', table: 'tag_answers', id: 'a1', opData: { value: 'no', answered_at: t, placement_id: 'pl1', updated_at: t } }))).toEqual({
+      name: 'tag.answer', payload: { id: 'a1', placement_id: 'pl1', value: 'no', answered_at: t },
+    });
+    expect(crudToCommand(entry({ op: 'PATCH', table: 'tag_answers', id: 'a1', opData: { deleted_at: t } }))).toEqual({ name: 'tag.clear_answer', payload: { id: 'a1' } });
+  });
+});
+
 describe('edges (the dependency graph)', () => {
   const t = '2026-06-15T09:00:00.000Z';
   it('PUT → edge.create; soft-delete/DELETE → edge.delete', () => {

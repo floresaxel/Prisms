@@ -87,6 +87,9 @@ const validRows: { [K in EntityTable]: unknown } = {
     occurrence_date: D1,
     completed_at: T1,
   },
+  tags: { ...base, label: 'on time?', habit_id: ID_B },
+  tag_placements: { ...base, block_id: ID_B, tag_id: ID_C },
+  tag_answers: { ...base, placement_id: ID_B, value: 'yes', answered_at: T1 },
   decision_boards: { ...base, title: 'Q3 priorities' },
   decision_criteria: {
     ...base,
@@ -173,7 +176,7 @@ const tables = Object.keys(entitySchemas) as EntityTable[];
 describe('entity schemas (§6.0) round-trip', () => {
   it('covers every table exactly once', () => {
     expect(tables.sort()).toEqual(Object.keys(validRows).sort());
-    expect(tables).toHaveLength(19);
+    expect(tables).toHaveLength(22);
   });
 
   it.each(tables)('%s: valid row parses and round-trips unchanged', (table) => {
@@ -212,6 +215,7 @@ describe('entity schemas reject DDL CHECK violations', () => {
   it('entries: focus_factor above 1.0', () => reject('time_entries', { focus_factor: 1.5 }));
   it('entries: bad device id', () => reject('time_entries', { device_id: 'has spaces!' }));
   it('habits: bad streak_mode', () => reject('habits', { streak_mode: 'fortnightly' }));
+  it('tag_answers: bad value', () => reject('tag_answers', { value: 'maybe' }));
   it('criteria: zero weight', () => reject('decision_criteria', { weight: 0 }));
   it('scores: score over 10', () => reject('decision_scores', { score: 10.5 }));
   it('scores: negative score', () => reject('decision_scores', { score: -1 }));

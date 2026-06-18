@@ -1,13 +1,13 @@
 /**
  * Rules engine (§9) — pure transactional output: returns the rows to write;
- * the caller (client SQLite tx today, server dispatcher/backstop in s11/s13)
- * commits them atomically with the triggering write (§9.1, R4).
+ * the server automation backstop commits them atomically in Postgres (§9.1,
+ * R4).
  *
  * Determinism (§2.7, §9.4): output ids are UUIDv5 over
  * `rule_id:trigger_node_id:slot`, timestamps derive from the triggering
  * fact (completed_at for task_completed, created_at for task_created),
- * rules evaluate in id order and slots ascending — two devices running the
- * same trigger offline produce byte-identical rows.
+ * rules evaluate in id order and slots ascending — duplicate server backstop
+ * runs for the same trigger produce byte-identical rows.
  *
  * Fixpoint: spawned tasks are `task_created` events for the next wave, up to
  * MAX_DEPTH cascade levels; deeper matches set `depthLimited` and stop.

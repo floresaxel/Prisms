@@ -263,6 +263,62 @@ export function createCommands(db: WritableDb, ctx: CommandContext) {
       }
     },
 
+    // --- tags (confirmable event tags) --------------------------------------
+    /** Create a reusable catalog tag ("on time?"); optionally scoped to a habit. */
+    async createTag(input: { id?: string; label: string; habitId?: string | null }): Promise<string> {
+      const id = input.id ?? newId();
+      const now = iso(ctx);
+      await db.execute(
+        'INSERT INTO tags (id, user_id, label, habit_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+        [id, ctx.userId, input.label, input.habitId ?? null, now, now],
+      );
+      return id;
+    },
+    async renameTag(id: string, label: string): Promise<void> {
+      await db.execute('UPDATE tags SET label = ?, updated_at = ? WHERE id = ?', [label, iso(ctx), id]);
+    },
+    async deleteTag(id: string): Promise<void> {
+      const now = iso(ctx);
+      await db.execute('UPDATE tags SET deleted_at = ?, updated_at = ? WHERE id = ?', [now, now, id]);
+    },
+    /** Place a tag on a schedule block (event); idempotent by (block, tag) server-side. */
+    async placeTag(input: { id?: string; blockId: string; tagId: string }): Promise<string> {
+      const id = input.id ?? newId();
+      const now = iso(ctx);
+      await db.execute(
+        'INSERT INTO tag_placements (id, user_id, block_id, tag_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+        [id, ctx.userId, input.blockId, input.tagId, now, now],
+      );
+      return id;
+    },
+    async unplaceTag(id: string): Promise<void> {
+      const now = iso(ctx);
+      await db.execute('UPDATE tag_placements SET deleted_at = ?, updated_at = ? WHERE id = ?', [now, now, id]);
+    },
+    /**
+     * Answer a placed tag yes/no (tag.answer, upsert keyed by placement_id). On
+     * update we re-state placement_id so the CRUD patch carries it for the bridge.
+     */
+    async answerTag(input: { existingId?: string; placementId: string; value: 'yes' | 'no' }): Promise<void> {
+      const now = iso(ctx);
+      if (input.existingId) {
+        await db.execute(
+          'UPDATE tag_answers SET value = ?, answered_at = ?, placement_id = ?, updated_at = ? WHERE id = ?',
+          [input.value, now, input.placementId, now, input.existingId],
+        );
+      } else {
+        await db.execute(
+          'INSERT INTO tag_answers (id, user_id, placement_id, value, answered_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          [newId(), ctx.userId, input.placementId, input.value, now, now, now],
+        );
+      }
+    },
+    /** Clear an answer back to pending (soft-delete the answer row). */
+    async clearTagAnswer(answerId: string): Promise<void> {
+      const now = iso(ctx);
+      await db.execute('UPDATE tag_answers SET deleted_at = ?, updated_at = ? WHERE id = ?', [now, now, answerId]);
+    },
+
     // --- edges (the dependency graph, §6.7 I4) ------------------------------
     async createEdge(input: { id?: string; predecessorId: string; successorId: string; edgeType?: 'FS' | 'SS' | 'FF' | 'SF'; lagMinutes?: number }): Promise<string> {
       const id = input.id ?? newId();

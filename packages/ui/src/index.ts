@@ -31,8 +31,11 @@ export {
   useGantt,
   useRules,
   useBlockers,
+  useUserSettings,
   useAggregates,
   useCommands,
+  useTagCatalog,
+  useBlockTags,
   type WorklistItem,
   type RunningTimer,
   type PromoteTarget,
@@ -51,6 +54,8 @@ export {
   type GanttBar,
   type GanttView,
   type AggregateRow,
+  type UserSettingsView,
+  type BlockTagView,
 } from './hooks';
 
 // design system

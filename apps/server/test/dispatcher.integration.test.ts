@@ -267,6 +267,80 @@ describe.skipIf(!adminUrl)('S11 command dispatcher (§8 pipeline, full catalog)'
     expect(visionStill[0]!['deleted_at']).toBeNull(); // ancestor untouched
   });
 
+  async function seedBlock(ids: Awaited<ReturnType<typeof seedTree>>) {
+    const block = randomUUID();
+    await results(
+      [cmd('block.create', { id: block, task_id: ids.task, starts_at: '2026-06-13T10:00:00.000Z', ends_at: '2026-06-13T11:00:00.000Z' })],
+      ids.user,
+    );
+    return block;
+  }
+
+  it('tags: place on a block, answer yes then no (LWW), then clear → pending', async () => {
+    const ids = await seedTree();
+    const block = await seedBlock(ids);
+    const tag = randomUUID();
+    const placement = randomUUID();
+    const answer = randomUUID();
+    const res = await results(
+      [
+        cmd('tag.create', { id: tag, label: 'on time?' }),
+        cmd('tag.place', { id: placement, block_id: block, tag_id: tag }),
+        cmd('tag.answer', { id: answer, placement_id: placement, value: 'yes', answered_at: '2026-06-13T11:05:00.000Z' }),
+      ],
+      ids.user,
+    );
+    expect(res.every((r) => r.result === 'applied')).toBe(true);
+    const live = () => sql`SELECT value FROM tag_answers WHERE placement_id = ${placement} AND deleted_at IS NULL`;
+    let rows = await live();
+    expect(rows).toEqual([{ value: 'yes' }]);
+    // re-answer with the same row id; the higher-HLC value wins (§7.3 LWW)
+    await results([cmd('tag.answer', { id: answer, placement_id: placement, value: 'no', answered_at: '2026-06-13T12:00:00.000Z' })], ids.user);
+    rows = await live();
+    expect(rows).toEqual([{ value: 'no' }]);
+    // clear back to pending (no live row remains)
+    await results([cmd('tag.clear_answer', { id: answer })], ids.user);
+    expect(await live()).toHaveLength(0);
+  });
+
+  it('tags: placing/answering on a DONE task succeeds (event completed, tag still confirmable)', async () => {
+    const ids = await seedTree();
+    const block = await seedBlock(ids);
+    await results([cmd('node.check_off', { id: ids.task, completed_at: '2026-06-13T11:00:00.000Z' })], ids.user);
+    const placement = randomUUID();
+    const out = await results(
+      [
+        cmd('tag.create', { id: randomUUID(), label: 'on time?' }),
+        cmd('tag.place', { id: placement, block_id: block, tag_id: (await sql`SELECT id FROM tags WHERE user_id = ${ids.user} LIMIT 1`)[0]!['id'] as string }),
+        cmd('tag.answer', { id: randomUUID(), placement_id: placement, value: 'yes', answered_at: '2026-06-13T12:00:00.000Z' }),
+      ],
+      ids.user,
+    );
+    expect(out.every((r) => r.result === 'applied')).toBe(true);
+  });
+
+  it('tags: a duplicate (block, tag) placement converges to one live row', async () => {
+    const ids = await seedTree();
+    const block = await seedBlock(ids);
+    const tag = randomUUID();
+    await results([cmd('tag.create', { id: tag, label: 'on time?' })], ids.user);
+    await results([cmd('tag.place', { id: randomUUID(), block_id: block, tag_id: tag })], ids.user);
+    const [dup] = await results([cmd('tag.place', { id: randomUUID(), block_id: block, tag_id: tag })], ids.user);
+    expect(dup!.result).toBe('applied'); // converged no-op
+    const rows = await sql`SELECT count(*)::int AS n FROM tag_placements WHERE block_id = ${block} AND tag_id = ${tag} AND deleted_at IS NULL`;
+    expect(rows[0]!['n']).toBe(1);
+  });
+
+  it('tags: another user cannot place a tag on these rows (E_OWNERSHIP)', async () => {
+    const ids = await seedTree();
+    const block = await seedBlock(ids);
+    const attacker = randomUUID();
+    const tag = randomUUID();
+    await results([cmd('tag.create', { id: tag, label: 'sneaky' })], attacker); // attacker's own tag
+    const [r] = await results([cmd('tag.place', { id: randomUUID(), block_id: block, tag_id: tag })], attacker);
+    expect(r).toMatchObject({ result: 'rejected', reject_code: 'E_OWNERSHIP' }); // the block isn't theirs
+  });
+
   it('a re-created row id converges idempotently (§9.4), keeping one row', async () => {
     const ids = await seedTree();
     // a fresh command id re-creating the same row id is a converged no-op

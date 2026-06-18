@@ -14,6 +14,9 @@ bucket_definitions:
       - SELECT * FROM time_entries WHERE user_id = bucket.user_id
       - SELECT * FROM habits WHERE user_id = bucket.user_id
       - SELECT * FROM habit_completions WHERE user_id = bucket.user_id
+      - SELECT * FROM tags WHERE user_id = bucket.user_id
+      - SELECT * FROM tag_placements WHERE user_id = bucket.user_id
+      - SELECT * FROM tag_answers WHERE user_id = bucket.user_id
       - SELECT * FROM decision_boards WHERE user_id = bucket.user_id
       - SELECT * FROM decision_criteria WHERE user_id = bucket.user_id
       - SELECT * FROM decision_scores WHERE user_id = bucket.user_id

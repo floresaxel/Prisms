@@ -1,7 +1,8 @@
 /**
- * S7 DoD: determinism property — two simulated devices that stored the same
- * rules in any order, and process the same trigger, emit byte-identical rows
- * (§2.7, §9.4). This is what makes UUIDv5 outputs converge without a server.
+ * S7 DoD: determinism property — duplicate server backstop runs that read the
+ * same rules in any order, and process the same trigger, emit byte-identical
+ * rows (§2.7, §9.4). This is what makes UUIDv5 outputs converge across
+ * retries and duplicate jobs.
  */
 import * as fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
@@ -54,7 +55,7 @@ function shuffle<T>(items: readonly T[], seed: number): T[] {
   return out;
 }
 
-describe('two-device determinism (§9.4 DoD)', () => {
+describe('server backstop determinism (§9.4 DoD)', () => {
   it('shuffled rule order yields byte-identical engine output', () => {
     fc.assert(
       fc.property(
@@ -76,9 +77,9 @@ describe('two-device determinism (§9.4 DoD)', () => {
             trigger: { kind: triggerKind, node: triggerNode },
             rows: { nodes: [triggerNode] },
           };
-          const device1 = runAutomations({ ...base, rules });
-          const device2 = runAutomations({ ...base, rules: shuffle(rules, seed) });
-          expect(JSON.stringify(device2)).toBe(JSON.stringify(device1));
+          const run1 = runAutomations({ ...base, rules });
+          const run2 = runAutomations({ ...base, rules: shuffle(rules, seed) });
+          expect(JSON.stringify(run2)).toBe(JSON.stringify(run1));
         },
       ),
       { numRuns: 200 },

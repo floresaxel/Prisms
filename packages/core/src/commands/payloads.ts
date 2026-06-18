@@ -15,6 +15,7 @@ import {
   edgeTypeSchema,
   nodeTypeSchema,
   streakModeSchema,
+  tagAnswerValueSchema,
 } from '../domain/entities';
 import { isoDateSchema, isoDateTimeSchema, jsonValueSchema, uuidSchema } from '../domain/primitives';
 import { settingsUpdateSchema } from './settings';
@@ -181,6 +182,32 @@ export const scoreSetSchema = z.strictObject({
   score: z.number().min(0).max(10),
 });
 
+// --- tags (confirmable event tags) ------------------------------------------
+
+export const tagCreateSchema = z.strictObject({
+  id: uuidSchema,
+  label: z.string(),
+  habit_id: uuidSchema.nullable().optional(),
+});
+export const tagRenameSchema = z.strictObject({ id: uuidSchema, label: z.string() });
+export const tagDeleteSchema = idOnly;
+export const tagPlaceSchema = z.strictObject({
+  id: uuidSchema,
+  block_id: uuidSchema,
+  tag_id: uuidSchema,
+});
+export const tagUnplaceSchema = idOnly; // placement row id
+// Upsert keyed by placement_id (the score.set shape); carries the client row id
+// so client and server converge. Named *Payload to avoid colliding with the
+// entity `tagAnswerSchema` at the barrel.
+export const tagAnswerPayloadSchema = z.strictObject({
+  id: uuidSchema,
+  placement_id: uuidSchema,
+  value: tagAnswerValueSchema,
+  answered_at: isoDateTimeSchema,
+});
+export const tagClearAnswerSchema = idOnly; // answer row id
+
 // --- automation & blocker rules ---------------------------------------------
 
 export const ruleCreateSchema = z.strictObject({
@@ -288,6 +315,13 @@ export const COMMAND_SCHEMAS = {
   'criterion.create': criterionCreateSchema,
   'criterion.set_weight': criterionSetWeightSchema,
   'score.set': scoreSetSchema,
+  'tag.create': tagCreateSchema,
+  'tag.rename': tagRenameSchema,
+  'tag.delete': tagDeleteSchema,
+  'tag.place': tagPlaceSchema,
+  'tag.unplace': tagUnplaceSchema,
+  'tag.answer': tagAnswerPayloadSchema,
+  'tag.clear_answer': tagClearAnswerSchema,
   'rule.create': ruleCreateSchema,
   'rule.update': ruleUpdateSchema,
   'rule.toggle': ruleToggleSchema,

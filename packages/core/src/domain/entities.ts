@@ -165,6 +165,40 @@ export const habitCompletionSchema = z.strictObject({
 });
 export type HabitCompletion = z.infer<typeof habitCompletionSchema>;
 
+// --- TAGS (confirmable event tags) ---------------------------------------------------
+
+export const TAG_ANSWER_VALUES = ['yes', 'no'] as const;
+export const tagAnswerValueSchema = z.enum(TAG_ANSWER_VALUES);
+export type TagAnswerValue = z.infer<typeof tagAnswerValueSchema>;
+
+/** Reusable tag catalog ("on time?"); placed on schedule blocks and answered yes/no. */
+export const tagSchema = z.strictObject({
+  ...baseRow,
+  label: z.string(),
+  /** NULL = global tag; non-NULL scopes it to a habit (feeds that habit's metrics later). */
+  habit_id: uuidSchema.nullable(),
+});
+export type Tag = z.infer<typeof tagSchema>;
+
+/** A tag placed on a schedule block — lets the tag sit pending on the event. */
+export const tagPlacementSchema = z.strictObject({
+  ...baseRow,
+  block_id: uuidSchema,
+  tag_id: uuidSchema,
+});
+export type TagPlacement = z.infer<typeof tagPlacementSchema>;
+
+/** The yes/no answer fact for a placement; pending = no live (non-deleted) row. */
+export const tagAnswerSchema = z.strictObject({
+  ...baseRow,
+  placement_id: uuidSchema,
+  /** CHECK (value IN ('yes','no')). */
+  value: tagAnswerValueSchema,
+  /** When the user answered (a fact, so it is stored). */
+  answered_at: isoDateTimeSchema,
+});
+export type TagAnswer = z.infer<typeof tagAnswerSchema>;
+
 // --- DECISION MATRIX ----------------------------------------------------------------
 
 export const decisionBoardSchema = z.strictObject({
@@ -349,6 +383,9 @@ export const entitySchemas = {
   time_entries: timeEntrySchema,
   habits: habitSchema,
   habit_completions: habitCompletionSchema,
+  tags: tagSchema,
+  tag_placements: tagPlacementSchema,
+  tag_answers: tagAnswerSchema,
   decision_boards: decisionBoardSchema,
   decision_criteria: decisionCriterionSchema,
   decision_scores: decisionScoreSchema,

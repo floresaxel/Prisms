@@ -1,6 +1,6 @@
 /**
  * S7 DoD: the §1.2 lecture example produces exactly the pre-brief + 3h study
- * task with an FS edge; two simulated devices produce byte-identical output;
+ * task with an FS edge; duplicate server runs produce byte-identical output;
  * depth-guard cuts cascades at MAX_DEPTH; replay is a no-op.
  */
 import { describe, expect, it } from 'vitest';
@@ -118,7 +118,7 @@ describe('lecture example (§1.2 DoD)', () => {
   });
 });
 
-describe('determinism (§2.7 DoD: two devices, byte-for-byte)', () => {
+describe('determinism (§2.7 DoD: duplicate server runs, byte-for-byte)', () => {
   it('produces identical output regardless of rule input order', () => {
     const ruleA = makeAutomationRule({
       id: idOf(510),
@@ -138,18 +138,18 @@ describe('determinism (§2.7 DoD: two devices, byte-for-byte)', () => {
       completed_at: '2026-06-12T14:00:00.000Z',
     });
 
-    // device 1 stored [A, B]; device 2 stored [B, A]
-    const device1 = runAutomations({
+    // One run reads [A, B]; a duplicate/retry reads [B, A].
+    const run1 = runAutomations({
       trigger: { kind: 'task_completed', node: task },
       rules: [ruleA, ruleB],
       rows: { nodes: [task] },
     });
-    const device2 = runAutomations({
+    const run2 = runAutomations({
       trigger: { kind: 'task_completed', node: task },
       rules: [ruleB, ruleA],
       rows: { nodes: [task] },
     });
-    expect(JSON.stringify(device2)).toBe(JSON.stringify(device1));
+    expect(JSON.stringify(run2)).toBe(JSON.stringify(run1));
   });
 });
 

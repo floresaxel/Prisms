@@ -16,10 +16,7 @@ import {
   asEpochMillis,
   hlcEncode,
   hlcTick,
-  runAutomations,
-  type AutomationRule,
   type Hlc,
-  type Node as CoreNode,
 } from '@prisms/core';
 import { loadRootEnv, runMigrations } from '@prisms/db';
 import Database from 'better-sqlite3';
@@ -27,7 +24,8 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { createDispatcher, type Dispatcher } from '../src/dispatcher';
+import { createDispatcher, type BackstopJob, type Dispatcher } from '../src/dispatcher';
+import { runAutomationBackstop } from '../src/jobs/automation-backstop';
 import { createRateLimiter } from '../src/rate-limit';
 
 loadRootEnv();
@@ -92,6 +90,7 @@ describe.skipIf(!adminUrl)('S12 convergence harness (two devices, offline edits)
   let url: string;
   let sql: postgres.Sql;
   let dispatcher: Dispatcher;
+  let backstops: BackstopJob[];
 
   /** Upload commands immediately as a synchronous "online" setup device. */
   const seed = async (userId: string, commands: Command[]) => {
@@ -127,7 +126,12 @@ describe.skipIf(!adminUrl)('S12 convergence harness (two devices, offline edits)
     url = new URL(`/${dbName}`, adminUrl!).toString();
     await runMigrations(url);
     sql = postgres(url, { max: 6, onnotice: () => undefined });
-    dispatcher = createDispatcher(drizzle(sql), createRateLimiter({ limit: 100_000, windowMs: 60_000 }));
+    backstops = [];
+    dispatcher = createDispatcher(drizzle(sql), createRateLimiter({ limit: 100_000, windowMs: 60_000 }), {
+      enqueueBackstop: (job) => {
+        backstops.push(job);
+      },
+    });
   });
 
   afterAll(async () => {
@@ -225,57 +229,73 @@ describe.skipIf(!adminUrl)('S12 convergence harness (two devices, offline edits)
     }
   });
 
-  it('scenario 5 — automation spawned on both devices converges via UUIDv5', async () => {
+  it('scenario 6 — two devices answer the same tag placement: later HLC wins', async () => {
+    // Mirrors scenario 3 for the new tag_answers fact: the answer is upserted by
+    // placement_id, so both devices' offline answers collapse to one live row
+    // whose value is the later-HLC one ("no", physical time 2000).
+    for (const order of ['a-then-b', 'b-then-a'] as const) {
+      const p = await project();
+      const block = randomUUID();
+      const tag = randomUUID();
+      const placement = randomUUID();
+      await seed(p.user, [
+        seedCmd('block.create', { id: block, task_id: p.task, starts_at: '2026-06-13T10:00:00.000Z', ends_at: '2026-06-13T11:00:00.000Z' }),
+        seedCmd('tag.create', { id: tag, label: 'on time?' }),
+        seedCmd('tag.place', { id: placement, block_id: block, tag_id: tag }),
+      ]);
+      const a = new Device('device-a');
+      const b = new Device('device-b');
+      a.edit('tag.answer', { id: randomUUID(), placement_id: placement, value: 'yes', answered_at: '2026-06-13T11:00:00.000Z' }, 1000); // earlier
+      b.edit('tag.answer', { id: randomUUID(), placement_id: placement, value: 'no', answered_at: '2026-06-13T11:30:00.000Z' }, 2000); // later ⇒ wins
+      if (order === 'a-then-b') {
+        await a.sync(dispatcher, p.user);
+        await b.sync(dispatcher, p.user);
+      } else {
+        await b.sync(dispatcher, p.user);
+        await a.sync(dispatcher, p.user);
+      }
+      const live = await sql`SELECT value FROM tag_answers WHERE placement_id = ${placement} AND deleted_at IS NULL`;
+      expect(live, `order ${order}`).toEqual([{ value: 'no' }]);
+      a.close();
+      b.close();
+    }
+  });
+
+  it('scenario 5 — duplicate server automation backstops converge via UUIDv5', async () => {
     const p = await project();
-    // an automation that, on completing the trigger task, spawns a follow-up
     const ruleId = randomUUID();
-    const rule: AutomationRule = {
-      id: ruleId,
-      user_id: p.user,
-      created_at: '2026-06-01T00:00:00.000Z',
-      updated_at: '2026-06-01T00:00:00.000Z',
-      deleted_at: null,
-      trigger: 'task_completed',
-      conditions: { all: [] },
-      actions: [{ action: 'spawn_task', slot: 0, template: { title: 'Follow-up', parent: 'same_as_trigger' } }],
-      enabled: true,
-    };
-    const trigger: CoreNode = {
-      id: p.task,
-      user_id: p.user,
-      created_at: '2026-06-10T00:00:00.000Z',
-      updated_at: '2026-06-10T00:00:00.000Z',
-      deleted_at: null,
-      parent_id: p.project,
-      node_type: 'task',
-      title: 'T',
-      description: '',
-      sort_order: 'a0',
-      start_date: null,
-      due_date: null,
-      estimate_minutes: null,
-      completed_at: '2026-06-13T14:00:00.000Z',
-      habit_id: null,
-      attributes: {},
-    };
+    await seed(p.user, [
+      seedCmd('rule.create', {
+        id: ruleId,
+        trigger: 'task_completed',
+        conditions: { all: [] },
+        actions: [{ action: 'spawn_task', slot: 0, template: { title: 'Follow-up', parent: 'same_as_trigger' } }],
+      }),
+    ]);
+    backstops.length = 0;
 
-    // both devices run the SAME automation locally ⇒ byte-identical spawned row
-    const outA = runAutomations({ trigger: { kind: 'task_completed', node: trigger }, rules: [rule], rows: { nodes: [trigger] } });
-    const outB = runAutomations({ trigger: { kind: 'task_completed', node: trigger }, rules: [rule], rows: { nodes: [trigger] } });
-    expect(outA.nodes[0]!.id).toBe(outB.nodes[0]!.id); // deterministic UUIDv5
-    const spawned = outA.nodes[0]!;
-
+    const completedAt = '2026-06-13T14:00:00.000Z';
     const a = new Device('device-a');
     const b = new Device('device-b');
-    const createPayload = { id: spawned.id, node_type: 'task', title: spawned.title, sort_order: spawned.sort_order, parent_id: spawned.parent_id };
-    a.edit('node.create', createPayload, 1000);
-    b.edit('node.create', createPayload, 1000);
+    a.edit('node.check_off', { id: p.task, completed_at: completedAt }, 1000);
+    b.edit('node.check_off', { id: p.task, completed_at: completedAt }, 1000);
     await a.sync(dispatcher, p.user);
-    await b.sync(dispatcher, p.user); // second device's identical create converges
+    await b.sync(dispatcher, p.user);
 
-    const rows = await sql`SELECT id, title FROM nodes WHERE id = ${spawned.id} AND deleted_at IS NULL`;
+    expect(backstops).toEqual([
+      { userId: p.user, trigger: 'task_completed', nodeId: p.task },
+      { userId: p.user, trigger: 'task_completed', nodeId: p.task },
+    ]);
+
+    const first = await runAutomationBackstop(drizzle(sql), backstops[0]!);
+    const second = await runAutomationBackstop(drizzle(sql), backstops[1]!);
+    expect(first.nodesInserted).toBe(1);
+    expect(first.noop).toBe(false);
+    expect(second.nodesInserted).toBe(0);
+    expect(second.noop).toBe(true);
+
+    const rows = await sql`SELECT id, title FROM nodes WHERE user_id = ${p.user} AND title = 'Follow-up' AND deleted_at IS NULL`;
     expect(rows).toHaveLength(1); // structurally impossible to duplicate (§9.4)
-    expect(rows[0]!['title']).toBe('Follow-up');
     a.close();
     b.close();
   });

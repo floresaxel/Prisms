@@ -12,7 +12,7 @@
  *   updates pass through `lwwFields`, which only writes a field when the
  *   command's HLC beats the last writer's (tracked in command_field_versions).
  * - Creates are idempotent by row id (§9.4): a row that already exists is a
- *   converged no-op, so two devices running the same UUIDv5 automation agree.
+ *   converged no-op, so duplicate server automation backstops agree.
  * - Double clock-in resolves by §7.4 (latest started_at stays open).
  */
 import {
@@ -22,6 +22,7 @@ import {
   checkActivityPromote,
   checkBlockCreate,
   checkBlockMove,
+  checkClockOut,
   checkEdgeCreate,
   checkHabitVision,
   checkNodeCreate,
@@ -56,10 +57,14 @@ import {
   schedule_blocks,
   sprint_memberships,
   sprints,
+  tag_answers,
+  tag_placements,
+  tags,
   time_entries,
   user_settings,
 } from '@prisms/db';
-import { and, eq, isNull, inArray, sql } from 'drizzle-orm';
+import { randomUUID } from 'node:crypto';
+import { and, eq, isNull, inArray } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { z } from 'zod';
 
@@ -105,6 +110,40 @@ export function createDispatcher(
 
   const one = async <T>(rows: Promise<T[]>): Promise<T | undefined> => (await rows)[0];
   const loadNodeRow = (tx: Tx, id: string) => one(tx.select().from(nodes).where(eq(nodes.id, id)).limit(1));
+  const loadDecisionScoreByPair = (tx: Tx, criterionId: string, projectId: string) =>
+    one(
+      tx
+        .select()
+        .from(decision_scores)
+        .where(and(eq(decision_scores.criterion_id, criterionId), eq(decision_scores.project_id, projectId)))
+        .limit(1),
+    );
+  const loadLayoutByPair = (tx: Tx, diagramId: string, nodeId: string) =>
+    one(
+      tx
+        .select()
+        .from(diagram_layouts)
+        .where(and(eq(diagram_layouts.diagram_id, diagramId), eq(diagram_layouts.node_id, nodeId)))
+        .limit(1),
+    );
+  // tag placement/answer dedupe by their live (non-deleted) natural keys — the
+  // partial unique indexes (WHERE deleted_at IS NULL) are the DB backstop.
+  const loadTagPlacementByPair = (tx: Tx, blockId: string, tagId: string) =>
+    one(
+      tx
+        .select()
+        .from(tag_placements)
+        .where(and(eq(tag_placements.block_id, blockId), eq(tag_placements.tag_id, tagId), isNull(tag_placements.deleted_at)))
+        .limit(1),
+    );
+  const loadTagAnswerByPlacement = (tx: Tx, placementId: string) =>
+    one(
+      tx
+        .select()
+        .from(tag_answers)
+        .where(and(eq(tag_answers.placement_id, placementId), isNull(tag_answers.deleted_at)))
+        .limit(1),
+    );
   const loadTree = async (tx: Tx, userId: string): Promise<TreeIndex> =>
     buildTreeIndex(await tx.select().from(nodes).where(eq(nodes.user_id, userId)));
   const loadEdgeIndex = async (tx: Tx, userId: string) =>
@@ -413,7 +452,8 @@ export function createDispatcher(
         const entry = await one(tx.select().from(time_entries).where(eq(time_entries.id, p.entry_id)).limit(1));
         const own = ownershipReject('time entry', p.entry_id, entry, userId);
         if (own) return own;
-        if (entry!.ended_at !== null) return reject('E_TIMER_NOT_RUNNING', `time entry ${p.entry_id} is already closed`);
+        const bad = fromCheck(checkClockOut(entry, p.entry_id, p));
+        if (bad) return bad;
         await tx.update(time_entries).set({ ended_at: p.ended_at, updated_at: now }).where(eq(time_entries.id, p.entry_id));
         return applied();
       }
@@ -554,10 +594,103 @@ export function createDispatcher(
         const p = payload as Payload<'score.set'>;
         const own = ownershipReject('criterion', p.criterion_id, await one(tx.select().from(decision_criteria).where(eq(decision_criteria.id, p.criterion_id)).limit(1)), userId);
         if (own) return own;
-        await tx
-          .insert(decision_scores)
-          .values({ id: p.id, user_id: userId, criterion_id: p.criterion_id, project_id: p.project_id, score: p.score, updated_at: now })
-          .onConflictDoUpdate({ target: [decision_scores.criterion_id, decision_scores.project_id], set: { score: p.score, updated_at: now } });
+        const project = await loadNodeRow(tx, p.project_id);
+        const ownProject = ownershipReject('project', p.project_id, project, userId);
+        if (ownProject) return ownProject;
+        if (project!.node_type !== 'project') return reject('E_HIERARCHY', `score.set project_id must reference a project, not a ${project!.node_type}`);
+
+        const existingById = await one(tx.select().from(decision_scores).where(eq(decision_scores.id, p.id)).limit(1));
+        const ownExisting = existingById ? ownershipReject('score', p.id, existingById, userId) : null;
+        if (ownExisting) return ownExisting;
+        if (existingById && (existingById.criterion_id !== p.criterion_id || existingById.project_id !== p.project_id)) {
+          return reject('E_DUPLICATE', 'score.set id already belongs to a different criterion/project pair');
+        }
+
+        const existing = existingById ?? (await loadDecisionScoreByPair(tx, p.criterion_id, p.project_id));
+        if (!existing) {
+          await tx.insert(decision_scores).values({ id: p.id, user_id: userId, criterion_id: p.criterion_id, project_id: p.project_id, score: p.score, updated_at: now });
+          await lwwFields(tx, hlc, userId, 'decision_scores', p.id, { score: p.score });
+        } else {
+          const win = await lwwFields(tx, hlc, userId, 'decision_scores', existing.id, { score: p.score });
+          if (Object.keys(win).length > 0) await tx.update(decision_scores).set({ ...win, updated_at: now }).where(eq(decision_scores.id, existing.id));
+        }
+        return applied();
+      }
+
+      // --- tags (confirmable event tags) ------------------------------------
+      case 'tag.create': {
+        const p = payload as Payload<'tag.create'>;
+        const conv = convergeOrOwn(await one(tx.select().from(tags).where(eq(tags.id, p.id)).limit(1)), 'tag', p.id);
+        if (conv) return conv;
+        if (p.habit_id != null) {
+          const ownHabit = ownershipReject('habit', p.habit_id, await one(tx.select().from(habits).where(eq(habits.id, p.habit_id)).limit(1)), userId);
+          if (ownHabit) return ownHabit;
+        }
+        await tx.insert(tags).values({ id: p.id, user_id: userId, label: p.label, habit_id: p.habit_id ?? null, updated_at: now });
+        return applied();
+      }
+      case 'tag.rename': {
+        const p = payload as Payload<'tag.rename'>;
+        const own = ownershipReject('tag', p.id, await one(tx.select().from(tags).where(eq(tags.id, p.id)).limit(1)), userId);
+        if (own) return own;
+        const win = await lwwFields(tx, hlc, userId, 'tags', p.id, { label: p.label });
+        if (Object.keys(win).length > 0) await tx.update(tags).set({ ...win, updated_at: now }).where(eq(tags.id, p.id));
+        return applied();
+      }
+      case 'tag.delete': {
+        const p = payload as Payload<'tag.delete'>;
+        const own = ownershipReject('tag', p.id, await one(tx.select().from(tags).where(eq(tags.id, p.id)).limit(1)), userId);
+        if (own) return own;
+        await tx.update(tags).set({ deleted_at: now, updated_at: now }).where(eq(tags.id, p.id));
+        return applied();
+      }
+      case 'tag.place': {
+        const p = payload as Payload<'tag.place'>;
+        const conv = convergeOrOwn(await one(tx.select().from(tag_placements).where(eq(tag_placements.id, p.id)).limit(1)), 'tag placement', p.id);
+        if (conv) return conv;
+        const ownBlock = ownershipReject('block', p.block_id, await one(tx.select().from(schedule_blocks).where(eq(schedule_blocks.id, p.block_id)).limit(1)), userId);
+        if (ownBlock) return ownBlock;
+        const ownTag = ownershipReject('tag', p.tag_id, await one(tx.select().from(tags).where(eq(tags.id, p.tag_id)).limit(1)), userId);
+        if (ownTag) return ownTag;
+        // Placing on a block whose task is already done is allowed (the core scenario).
+        // Converged no-op if the live (block, tag) pair is already placed.
+        if (await loadTagPlacementByPair(tx, p.block_id, p.tag_id)) return applied();
+        await tx.insert(tag_placements).values({ id: p.id, user_id: userId, block_id: p.block_id, tag_id: p.tag_id, updated_at: now });
+        return applied();
+      }
+      case 'tag.unplace': {
+        const p = payload as Payload<'tag.unplace'>;
+        const own = ownershipReject('tag placement', p.id, await one(tx.select().from(tag_placements).where(eq(tag_placements.id, p.id)).limit(1)), userId);
+        if (own) return own;
+        await tx.update(tag_placements).set({ deleted_at: now, updated_at: now }).where(eq(tag_placements.id, p.id));
+        return applied();
+      }
+      case 'tag.answer': {
+        const p = payload as Payload<'tag.answer'>;
+        const ownPlacement = ownershipReject('tag placement', p.placement_id, await one(tx.select().from(tag_placements).where(eq(tag_placements.id, p.placement_id)).limit(1)), userId);
+        if (ownPlacement) return ownPlacement;
+        const existingById = await one(tx.select().from(tag_answers).where(eq(tag_answers.id, p.id)).limit(1));
+        const ownExisting = existingById ? ownershipReject('tag answer', p.id, existingById, userId) : null;
+        if (ownExisting) return ownExisting;
+        if (existingById && existingById.placement_id !== p.placement_id) {
+          return reject('E_DUPLICATE', 'tag.answer id already belongs to a different placement');
+        }
+        // upsert keyed by placement (one live answer per placement); LWW the value.
+        const existing = existingById ?? (await loadTagAnswerByPlacement(tx, p.placement_id));
+        if (!existing) {
+          await tx.insert(tag_answers).values({ id: p.id, user_id: userId, placement_id: p.placement_id, value: p.value, answered_at: p.answered_at, updated_at: now });
+          await lwwFields(tx, hlc, userId, 'tag_answers', p.id, { value: p.value, answered_at: p.answered_at });
+        } else {
+          const win = await lwwFields(tx, hlc, userId, 'tag_answers', existing.id, { value: p.value, answered_at: p.answered_at });
+          if (Object.keys(win).length > 0) await tx.update(tag_answers).set({ ...win, updated_at: now }).where(eq(tag_answers.id, existing.id));
+        }
+        return applied();
+      }
+      case 'tag.clear_answer': {
+        const p = payload as Payload<'tag.clear_answer'>;
+        const own = ownershipReject('tag answer', p.id, await one(tx.select().from(tag_answers).where(eq(tag_answers.id, p.id)).limit(1)), userId);
+        if (own) return own;
+        await tx.update(tag_answers).set({ deleted_at: now, updated_at: now }).where(eq(tag_answers.id, p.id));
         return applied();
       }
 
@@ -642,28 +775,55 @@ export function createDispatcher(
       // --- diagram layout & groups ------------------------------------------
       case 'layout.set_position': {
         const p = payload as Payload<'layout.set_position'>;
+        const ownDiagram = ownershipReject('diagram', p.diagram_id, await loadNodeRow(tx, p.diagram_id), userId);
+        if (ownDiagram) return ownDiagram;
         const own = ownershipReject('node', p.node_id, await loadNodeRow(tx, p.node_id), userId);
         if (own) return own;
-        await tx
-          .insert(diagram_layouts)
-          .values({ id: sql`gen_random_uuid()`, user_id: userId, diagram_id: p.diagram_id, node_id: p.node_id, x: p.x, y: p.y, group_id: p.group_id ?? null, updated_at: now })
-          .onConflictDoUpdate({ target: [diagram_layouts.diagram_id, diagram_layouts.node_id], set: { x: p.x, y: p.y, group_id: p.group_id ?? null, updated_at: now } });
+        if (p.group_id !== undefined && p.group_id !== null) {
+          const group = await one(tx.select().from(diagram_groups).where(eq(diagram_groups.id, p.group_id)).limit(1));
+          const ownGroup = ownershipReject('group', p.group_id, group, userId);
+          if (ownGroup) return ownGroup;
+          if (group!.diagram_id !== p.diagram_id) return reject('E_HIERARCHY', 'layout group must belong to the same diagram');
+        }
+        const existing = await loadLayoutByPair(tx, p.diagram_id, p.node_id);
+        const fields = { x: p.x, y: p.y, group_id: p.group_id ?? null };
+        if (!existing) {
+          const id = randomUUID();
+          await tx.insert(diagram_layouts).values({ id, user_id: userId, diagram_id: p.diagram_id, node_id: p.node_id, ...fields, updated_at: now });
+          await lwwFields(tx, hlc, userId, 'diagram_layouts', id, fields);
+        } else {
+          const ownLayout = ownershipReject('layout', existing.id, existing, userId);
+          if (ownLayout) return ownLayout;
+          const win = await lwwFields(tx, hlc, userId, 'diagram_layouts', existing.id, fields);
+          if (Object.keys(win).length > 0) await tx.update(diagram_layouts).set({ ...win, updated_at: now }).where(eq(diagram_layouts.id, existing.id));
+        }
         return applied();
       }
       case 'layout.set_collapsed': {
         const p = payload as Payload<'layout.set_collapsed'>;
+        const ownDiagram = ownershipReject('diagram', p.diagram_id, await loadNodeRow(tx, p.diagram_id), userId);
+        if (ownDiagram) return ownDiagram;
         const own = ownershipReject('node', p.node_id, await loadNodeRow(tx, p.node_id), userId);
         if (own) return own;
-        await tx
-          .insert(diagram_layouts)
-          .values({ id: sql`gen_random_uuid()`, user_id: userId, diagram_id: p.diagram_id, node_id: p.node_id, x: 0, y: 0, collapsed: p.collapsed, updated_at: now })
-          .onConflictDoUpdate({ target: [diagram_layouts.diagram_id, diagram_layouts.node_id], set: { collapsed: p.collapsed, updated_at: now } });
+        const existing = await loadLayoutByPair(tx, p.diagram_id, p.node_id);
+        if (!existing) {
+          const id = randomUUID();
+          await tx.insert(diagram_layouts).values({ id, user_id: userId, diagram_id: p.diagram_id, node_id: p.node_id, x: 0, y: 0, collapsed: p.collapsed, updated_at: now });
+          await lwwFields(tx, hlc, userId, 'diagram_layouts', id, { collapsed: p.collapsed });
+        } else {
+          const ownLayout = ownershipReject('layout', existing.id, existing, userId);
+          if (ownLayout) return ownLayout;
+          const win = await lwwFields(tx, hlc, userId, 'diagram_layouts', existing.id, { collapsed: p.collapsed });
+          if (Object.keys(win).length > 0) await tx.update(diagram_layouts).set({ ...win, updated_at: now }).where(eq(diagram_layouts.id, existing.id));
+        }
         return applied();
       }
       case 'group.create': {
         const p = payload as Payload<'group.create'>;
         const conv = convergeOrOwn(await one(tx.select().from(diagram_groups).where(eq(diagram_groups.id, p.id)).limit(1)), 'group', p.id);
         if (conv) return conv;
+        const ownDiagram = ownershipReject('diagram', p.diagram_id, await loadNodeRow(tx, p.diagram_id), userId);
+        if (ownDiagram) return ownDiagram;
         await tx.insert(diagram_groups).values({ id: p.id, user_id: userId, diagram_id: p.diagram_id, label: p.label, color: p.color ?? null, updated_at: now });
         return applied();
       }

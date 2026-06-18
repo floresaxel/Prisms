@@ -23,7 +23,15 @@ import {
   type Interval,
   type SchedulableTask,
 } from '@prisms/core';
-import { useAgenda, useCommands, type AgendaBlock, type CommandContext } from '@prisms/ui';
+import {
+  useAgenda,
+  useBlockTags,
+  useCommands,
+  useTagCatalog,
+  type AgendaBlock,
+  type BlockTagView,
+  type CommandContext,
+} from '@prisms/ui';
 
 const GRID_START_HOUR = 6;
 const GRID_END_HOUR = 22;
@@ -46,6 +54,104 @@ function fmtHour(h: number): string {
   return `${h12}${ampm}`;
 }
 
+const ANSWER_COLOR: Record<BlockTagView['answer'], string> = {
+  yes: 'var(--px-ok, #2e7d32)',
+  no: 'var(--px-danger, #c62828)',
+  pending: 'var(--px-dim, #888)',
+};
+
+/**
+ * Confirmable tags on a selected event (§ tags): each placed tag shows a
+ * Yes/No/pending tri-state; tags come from a reusable catalog (add an existing
+ * one or create a new one inline). Pending is a real state — it persists even
+ * after the event/task is completed.
+ */
+function BlockTagsPanel({ blockId, title, ctx }: { blockId: string; title: string; ctx: CommandContext }) {
+  const tags = useBlockTags(blockId);
+  const catalog = useTagCatalog();
+  const commands = useCommands(ctx);
+  const [newLabel, setNewLabel] = useState('');
+
+  const placed = new Set(tags.map((t) => t.tag.id));
+  const available = catalog.filter((t) => !placed.has(t.id));
+
+  async function setAnswer(view: BlockTagView, value: 'yes' | 'no') {
+    // tapping the current answer again clears it back to pending
+    if (view.answer === value) {
+      if (view.answerId) await commands.clearTagAnswer(view.answerId);
+      return;
+    }
+    await commands.answerTag({ existingId: view.answerId ?? undefined, placementId: view.placementId, value });
+  }
+
+  async function createAndPlace() {
+    const label = newLabel.trim();
+    if (!label) return;
+    const tagId = await commands.createTag({ label });
+    await commands.placeTag({ blockId, tagId });
+    setNewLabel('');
+  }
+
+  return (
+    <div className="px-block-tags" data-testid={`block-tags-${blockId}`} style={{ marginTop: 16 }}>
+      <h2 style={{ marginBottom: 4 }}>Tags</h2>
+      <p className="px-muted" style={{ marginTop: 0 }}>{title}</p>
+      {tags.length === 0 && <p className="px-muted">No tags on this event yet.</p>}
+      {tags.map((t) => (
+        <div
+          key={t.placementId}
+          data-testid={`tag-${blockId}-${t.tag.id}`}
+          style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0' }}
+        >
+          <span style={{ flex: 1 }}>{t.tag.label}</span>
+          <span data-testid={`tag-state-${t.placementId}`} style={{ color: ANSWER_COLOR[t.answer], fontSize: 12 }}>
+            {t.answer}
+          </span>
+          <button
+            className="px-btn"
+            data-testid={`tag-yes-${t.placementId}`}
+            aria-pressed={t.answer === 'yes'}
+            style={t.answer === 'yes' ? { borderColor: ANSWER_COLOR.yes } : undefined}
+            onClick={() => void setAnswer(t, 'yes')}
+          >
+            Yes
+          </button>
+          <button
+            className="px-btn"
+            data-testid={`tag-no-${t.placementId}`}
+            aria-pressed={t.answer === 'no'}
+            style={t.answer === 'no' ? { borderColor: ANSWER_COLOR.no } : undefined}
+            onClick={() => void setAnswer(t, 'no')}
+          >
+            No
+          </button>
+          <button className="px-btn px-btn--danger" aria-label="remove tag" onClick={() => void commands.unplaceTag(t.placementId)}>×</button>
+        </div>
+      ))}
+
+      {available.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+          {available.map((t) => (
+            <button key={t.id} className="px-btn" data-testid={`place-tag-${t.id}`} onClick={() => void commands.placeTag({ blockId, tagId: t.id })}>
+              + {t.label}
+            </button>
+          ))}
+        </div>
+      )}
+      <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+        <input
+          placeholder="New tag (e.g. on time?)"
+          data-testid="new-tag-label"
+          value={newLabel}
+          onChange={(e) => setNewLabel(e.target.value)}
+          style={{ flex: 1 }}
+        />
+        <button className="px-btn px-btn--primary" data-testid="create-tag" onClick={() => void createAndPlace()}>Add</button>
+      </div>
+    </div>
+  );
+}
+
 export function Agenda({ ctx }: { ctx: CommandContext }) {
   const [now, setNow] = useState<Instant>(asEpochMillis(Date.now()));
   useEffect(() => {
@@ -54,9 +160,11 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
   }, []);
 
   const [weekOffset, setWeekOffset] = useState(0);
+  const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
   const agenda = useAgenda(now);
   const commands = useCommands(ctx);
   const tz = agenda.input.timezone;
+  const selectedBlock = agenda.blocks.find((b) => b.id === selectedBlockId) ?? null;
 
   const [drag, setDrag] = useState<DragState | null>(null);
   const dragRef = useRef<DragState | null>(null);
@@ -161,6 +269,11 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
             </div>
           ))}
         </div>
+        {selectedBlock ? (
+          <BlockTagsPanel blockId={selectedBlock.id} title={selectedBlock.title} ctx={ctx} />
+        ) : (
+          <p className="px-muted" style={{ marginTop: 16 }}>Select an event to tag it.</p>
+        )}
       </div>
 
       <div className="px-agenda-cal">
@@ -215,12 +328,13 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
                       className={cls}
                       data-testid={`block-${b.id}`}
                       data-duration-min={Math.round((endForDisplay - b.startsAt) / MS_PER_MIN)}
-                      style={{ top: p.top, height: p.height, cursor: b.anchored ? 'not-allowed' : 'grab' }}
+                      style={{ top: p.top, height: p.height, cursor: b.anchored ? 'not-allowed' : 'grab', outline: b.id === selectedBlockId ? '2px solid var(--px-accent, #4c8bf5)' : undefined }}
                       onMouseDown={(e) => {
                         if (b.status !== 'committed') return;
                         e.preventDefault();
                         startBlockDrag(b);
                       }}
+                      onClick={() => setSelectedBlockId(b.id)}
                     >
                       <span className="px-cal-block-title">{b.anchored && <span aria-label="anchored">🔒 </span>}{b.title}</span>
                       {b.status === 'suggested' && (

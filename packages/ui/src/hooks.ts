@@ -51,6 +51,8 @@ import {
   type SchedulerDependency,
   type SchedulerInput,
   type StreakValue,
+  type Tag,
+  type TagAnswerValue,
   type TaskStatus,
   type TimeEntry,
   type TreeIndex,
@@ -74,6 +76,9 @@ import {
   toNode,
   toScheduleBlock,
   toSprint,
+  toTag,
+  toTagAnswer,
+  toTagPlacement,
   toTimeEntry,
   toUserSettings,
 } from './powersync/rows';
@@ -794,6 +799,27 @@ export interface AggregateRow {
   computedBy: 'client' | 'server';
 }
 
+export interface UserSettingsView {
+  hasRow: boolean;
+  dayResetHour: number;
+  timezone: string;
+  weatherLocation: unknown;
+}
+
+/** User settings row, with architecture defaults when a fresh account has not synced one yet. */
+export function useUserSettings(): UserSettingsView {
+  const rows = useRows('SELECT * FROM user_settings LIMIT 1');
+  return useMemo(() => {
+    const row = rows[0] ? toUserSettings(rows[0]) : null;
+    return {
+      hasRow: row !== null,
+      dayResetHour: row?.day_reset_hour ?? 4,
+      timezone: row?.timezone ?? 'America/New_York',
+      weatherLocation: row?.weather_location ?? null,
+    };
+  }, [rows]);
+}
+
 /** Server-computed aggregates (burndown, streaks, …) with their freshness. */
 export function useAggregates(): AggregateRow[] {
   const rows = useRows('SELECT * FROM computed_aggregates WHERE deleted_at IS NULL');
@@ -815,4 +841,43 @@ export function useAggregates(): AggregateRow[] {
 export function useCommands(ctx: CommandContext) {
   const db = usePowerSync();
   return useMemo(() => createCommands(db, ctx), [db, ctx]);
+}
+
+// --- tags (confirmable event tags) ----------------------------------------
+
+/** A tag placed on a block plus its current answer (pending = no live answer). */
+export interface BlockTagView {
+  tag: Tag;
+  /** The placement row id (to answer/unplace). */
+  placementId: string;
+  /** The live answer row id, or null when pending (to clear back to pending). */
+  answerId: string | null;
+  answer: TagAnswerValue | 'pending';
+}
+
+/** The reusable tag catalog for the picker (non-deleted, label-sorted). */
+export function useTagCatalog(): Tag[] {
+  const rows = useRows('SELECT * FROM tags WHERE deleted_at IS NULL ORDER BY label');
+  return useMemo(() => rows.map(toTag), [rows]);
+}
+
+/** Tags placed on one schedule block with their yes/no/pending answers (§ tags). */
+export function useBlockTags(blockId: string): BlockTagView[] {
+  const placements = useRows('SELECT * FROM tag_placements WHERE deleted_at IS NULL');
+  const tags = useRows('SELECT * FROM tags WHERE deleted_at IS NULL');
+  const answers = useRows('SELECT * FROM tag_answers WHERE deleted_at IS NULL');
+  return useMemo(() => {
+    const tagById = new Map(tags.map((r) => { const t = toTag(r); return [t.id, t] as const; }));
+    const answerByPlacement = new Map(answers.map((r) => { const a = toTagAnswer(r); return [a.placement_id, a] as const; }));
+    const out: BlockTagView[] = [];
+    for (const row of placements) {
+      const p = toTagPlacement(row);
+      if (p.block_id !== blockId) continue;
+      const tag = tagById.get(p.tag_id);
+      if (!tag) continue;
+      const ans = answerByPlacement.get(p.id) ?? null;
+      out.push({ tag, placementId: p.id, answerId: ans?.id ?? null, answer: ans?.value ?? 'pending' });
+    }
+    return out.sort((a, b) => a.tag.label.localeCompare(b.tag.label));
+  }, [placements, tags, answers, blockId]);
 }

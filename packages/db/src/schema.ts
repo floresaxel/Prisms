@@ -47,6 +47,7 @@ import type {
   NodeType,
   StreakMode,
   SubjectKind,
+  TagAnswerValue,
   UserSettings,
 } from '@prisms/core';
 
@@ -253,6 +254,73 @@ export const habit_completions = pgTable(
     completed_at: timestamptz('completed_at').notNull(),
   },
   (t) => [unique('habit_completions_habit_occurrence_uq').on(t.habit_id, t.occurrence_date)],
+);
+
+// --- TAGS (confirmable event tags) ---------------------------------------------------
+
+/** Reusable tag catalog ("on time?"). */
+export const tags = pgTable(
+  'tags',
+  {
+    ...baseColumns,
+    label: text('label').notNull(),
+    // NULL = global tag; non-NULL scopes it to a habit. Plain uuid (no FK), like nodes.habit_id.
+    habit_id: uuid('habit_id'),
+  },
+  (t) => [
+    // partial-unique: a soft-deleted label can be reused (mirrors entries_open).
+    uniqueIndex('tags_user_label_uq')
+      .on(t.user_id, t.label)
+      .where(sql`${t.deleted_at} IS NULL`),
+    index('tags_habit')
+      .on(t.user_id, t.habit_id)
+      .where(sql`${t.deleted_at} IS NULL`),
+  ],
+);
+
+/** A tag placed on a schedule block (so it can sit pending on the event). */
+export const tag_placements = pgTable(
+  'tag_placements',
+  {
+    ...baseColumns,
+    block_id: uuid('block_id')
+      .notNull()
+      .references(() => schedule_blocks.id),
+    tag_id: uuid('tag_id')
+      .notNull()
+      .references(() => tags.id),
+  },
+  (t) => [
+    uniqueIndex('tag_placements_block_tag_uq')
+      .on(t.block_id, t.tag_id)
+      .where(sql`${t.deleted_at} IS NULL`),
+    index('tag_placements_block')
+      .on(t.user_id, t.block_id)
+      .where(sql`${t.deleted_at} IS NULL`),
+    index('tag_placements_tag')
+      .on(t.user_id, t.tag_id)
+      .where(sql`${t.deleted_at} IS NULL`),
+  ],
+);
+
+/** The yes/no answer fact; pending = no live (non-deleted) row for the placement. */
+export const tag_answers = pgTable(
+  'tag_answers',
+  {
+    ...baseColumns,
+    placement_id: uuid('placement_id')
+      .notNull()
+      .references(() => tag_placements.id),
+    value: text('value').$type<TagAnswerValue>().notNull(),
+    answered_at: timestamptz('answered_at').notNull(),
+  },
+  (t) => [
+    check('tag_answers_value_check', sql`${t.value} IN ('yes','no')`),
+    // one current answer per placement; re-answering is a per-field LWW update.
+    uniqueIndex('tag_answers_placement_uq')
+      .on(t.placement_id)
+      .where(sql`${t.deleted_at} IS NULL`),
+  ],
 );
 
 // --- DECISION MATRIX ----------------------------------------------------------------
@@ -518,6 +586,9 @@ export const tables = {
   time_entries,
   habits,
   habit_completions,
+  tags,
+  tag_placements,
+  tag_answers,
   decision_boards,
   decision_criteria,
   decision_scores,

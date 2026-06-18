@@ -4,7 +4,7 @@
  * dates, and slot-relative dependency edges.
  *
  * All time math reads the triggering fact's timestamps, never the wall clock
- * (§9.3) — device and server backstop runs are mathematically identical.
+ * (§9.3) — duplicate server backstop runs are mathematically identical.
  */
 import { z } from 'zod';
 

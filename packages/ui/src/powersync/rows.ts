@@ -20,6 +20,9 @@ import type {
   ScheduleBlock,
   Sprint,
   SprintMembership,
+  Tag,
+  TagAnswer,
+  TagPlacement,
   TimeEntry,
   UserSettings,
 } from '@prisms/core';
@@ -210,6 +213,37 @@ export const toHabitCompletion = (r: Row): HabitCompletion => ({
   deleted_at: str(r['deleted_at']),
 });
 
+export const toTag = (r: Row): Tag => ({
+  id: String(r['id']),
+  user_id: String(r['user_id']),
+  label: String(r['label'] ?? ''),
+  habit_id: str(r['habit_id']),
+  created_at: String(r['created_at'] ?? ''),
+  updated_at: String(r['updated_at'] ?? ''),
+  deleted_at: str(r['deleted_at']),
+});
+
+export const toTagPlacement = (r: Row): TagPlacement => ({
+  id: String(r['id']),
+  user_id: String(r['user_id']),
+  block_id: String(r['block_id']),
+  tag_id: String(r['tag_id']),
+  created_at: String(r['created_at'] ?? ''),
+  updated_at: String(r['updated_at'] ?? ''),
+  deleted_at: str(r['deleted_at']),
+});
+
+export const toTagAnswer = (r: Row): TagAnswer => ({
+  id: String(r['id']),
+  user_id: String(r['user_id']),
+  placement_id: String(r['placement_id']),
+  value: r['value'] as TagAnswer['value'],
+  answered_at: String(r['answered_at']),
+  created_at: String(r['created_at'] ?? ''),
+  updated_at: String(r['updated_at'] ?? ''),
+  deleted_at: str(r['deleted_at']),
+});
+
 export const toDecisionBoard = (r: Row): DecisionBoard => ({
   id: String(r['id']),
   user_id: String(r['user_id']),
@@ -255,7 +289,8 @@ export const toComputedAggregate = (r: Row): ComputedAggregate => ({
   deleted_at: str(r['deleted_at']),
 });
 
-export const toUserSettings = (r: Row): Pick<UserSettings, 'day_reset_hour' | 'timezone'> => ({
+export const toUserSettings = (r: Row): Pick<UserSettings, 'day_reset_hour' | 'timezone' | 'weather_location'> => ({
   day_reset_hour: Number(r['day_reset_hour'] ?? 4),
   timezone: String(r['timezone'] ?? 'America/New_York'),
+  weather_location: json(r['weather_location'], null) as UserSettings['weather_location'],
 });

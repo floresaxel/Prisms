@@ -195,6 +195,39 @@ function decisionScoreCommand(entry: CrudLike): TranslatedCommand | null {
   return null;
 }
 
+function tagCommand(entry: CrudLike): TranslatedCommand | null {
+  const d = entry.opData;
+  if (entry.op === 'DELETE') return { name: 'tag.delete', payload: { id: entry.id } };
+  if (entry.op === 'PUT') {
+    return { name: 'tag.create', payload: { id: entry.id, label: d?.['label'], ...(has(d, 'habit_id') ? { habit_id: d!['habit_id'] ?? null } : {}) } };
+  }
+  if (has(d, 'deleted_at') && d!['deleted_at'] != null) return { name: 'tag.delete', payload: { id: entry.id } };
+  if (has(d, 'label')) return { name: 'tag.rename', payload: { id: entry.id, label: d!['label'] } };
+  return null;
+}
+
+function tagPlacementCommand(entry: CrudLike): TranslatedCommand | null {
+  const d = entry.opData;
+  if (entry.op === 'DELETE') return { name: 'tag.unplace', payload: { id: entry.id } };
+  if (entry.op === 'PUT') {
+    return { name: 'tag.place', payload: { id: entry.id, block_id: d?.['block_id'], tag_id: d?.['tag_id'] } };
+  }
+  if (has(d, 'deleted_at') && d!['deleted_at'] != null) return { name: 'tag.unplace', payload: { id: entry.id } };
+  return null;
+}
+
+function tagAnswerCommand(entry: CrudLike): TranslatedCommand | null {
+  const d = entry.opData;
+  // pending = no live row; clearing an answer soft-deletes it.
+  if (entry.op === 'DELETE') return { name: 'tag.clear_answer', payload: { id: entry.id } };
+  if (has(d, 'deleted_at') && d!['deleted_at'] != null) return { name: 'tag.clear_answer', payload: { id: entry.id } };
+  // tag.answer is an upsert keyed by placement_id; the writer re-states it on update.
+  if (entry.op === 'PUT' || (entry.op === 'PATCH' && (has(d, 'value') || has(d, 'answered_at')))) {
+    return { name: 'tag.answer', payload: { id: entry.id, placement_id: d?.['placement_id'], value: d?.['value'], answered_at: d?.['answered_at'] } };
+  }
+  return null;
+}
+
 function edgeCommand(entry: CrudLike): TranslatedCommand | null {
   const d = entry.opData;
   if (entry.op === 'DELETE') return { name: 'edge.delete', payload: { id: entry.id } };
@@ -295,6 +328,12 @@ export function crudToCommand(entry: CrudLike): TranslatedCommand | null {
       return habitCommand(entry);
     case 'habit_completions':
       return habitCompletionCommand(entry);
+    case 'tags':
+      return tagCommand(entry);
+    case 'tag_placements':
+      return tagPlacementCommand(entry);
+    case 'tag_answers':
+      return tagAnswerCommand(entry);
     case 'decision_boards':
       return decisionBoardCommand(entry);
     case 'decision_criteria':

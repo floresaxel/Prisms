@@ -90,6 +90,34 @@ const habit_completions = new Table({
   deleted_at: column.text,
 });
 
+const tags = new Table({
+  user_id: column.text,
+  label: column.text,
+  habit_id: column.text,
+  created_at: column.text,
+  updated_at: column.text,
+  deleted_at: column.text,
+});
+
+const tag_placements = new Table({
+  user_id: column.text,
+  block_id: column.text,
+  tag_id: column.text,
+  created_at: column.text,
+  updated_at: column.text,
+  deleted_at: column.text,
+});
+
+const tag_answers = new Table({
+  user_id: column.text,
+  placement_id: column.text,
+  value: column.text,
+  answered_at: column.text,
+  created_at: column.text,
+  updated_at: column.text,
+  deleted_at: column.text,
+});
+
 const decision_boards = new Table({
   user_id: column.text,
   title: column.text,
@@ -221,6 +249,9 @@ export const appSchema = new Schema({
   time_entries,
   habits,
   habit_completions,
+  tags,
+  tag_placements,
+  tag_answers,
   decision_boards,
   decision_criteria,
   decision_scores,

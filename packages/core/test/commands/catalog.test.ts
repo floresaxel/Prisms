@@ -27,8 +27,8 @@ import { buildTreeIndex } from '../../src/graph/tree';
 import { idOf, makeEdge, makeNode } from '../helpers/fixtures';
 
 describe('catalog completeness + strictness (DoD schema test)', () => {
-  it('registers all 49 §8.1 verbs and resolves names', () => {
-    expect(COMMAND_NAMES.length).toBe(49);
+  it('registers all 49 §8.1 verbs + 7 tag verbs and resolves names', () => {
+    expect(COMMAND_NAMES.length).toBe(56);
     expect(isCommandName('node.create')).toBe(true);
     expect(isCommandName('node.update')).toBe(false); // no generic update endpoint
   });
