@@ -44,16 +44,17 @@ describe.skipIf(!adminUrl)('migrations + seed against fresh postgres', () => {
       WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
       ORDER BY table_name`;
     // the 19 §6.0 tables + 4 better-auth tables + 2 server-internal
-    // (command_field_versions s12, push_subscriptions s14); drizzle
-    // bookkeeping lives in its own schema
+    // (command_field_versions s12, push_subscriptions s14) + 3 confirmable-tag
+    // tables (tags, tag_placements, tag_answers); drizzle bookkeeping lives in
+    // its own schema
     const expected = [
       'account', 'automation_rules', 'blocker_rules', 'command_field_versions',
       'command_log', 'computed_aggregates', 'decision_boards',
       'decision_criteria', 'decision_scores', 'diagram_groups',
       'diagram_layouts', 'edges', 'external_facts', 'habit_completions',
       'habits', 'nodes', 'push_subscriptions', 'schedule_blocks', 'session',
-      'sprint_memberships', 'sprints', 'time_entries', 'user', 'user_settings',
-      'verification',
+      'sprint_memberships', 'sprints', 'tag_answers', 'tag_placements', 'tags',
+      'time_entries', 'user', 'user_settings', 'verification',
     ];
     expect(rows.map((t) => t.table_name)).toEqual(expected);
   });

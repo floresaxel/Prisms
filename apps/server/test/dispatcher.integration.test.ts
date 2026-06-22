@@ -345,10 +345,11 @@ describe.skipIf(!adminUrl)('S11 command dispatcher (§8 pipeline, full catalog)'
     const block = await seedBlock(ids);
     await results([cmd('node.check_off', { id: ids.task, completed_at: '2026-06-13T11:00:00.000Z' })], ids.user);
     const placement = randomUUID();
+    const tag = randomUUID();
     const out = await results(
       [
-        cmd('tag.create', { id: randomUUID(), label: 'on time?' }),
-        cmd('tag.place', { id: placement, block_id: block, tag_id: (await sql`SELECT id FROM tags WHERE user_id = ${ids.user} LIMIT 1`)[0]!['id'] as string }),
+        cmd('tag.create', { id: tag, label: 'on time?' }),
+        cmd('tag.place', { id: placement, block_id: block, tag_id: tag }),
         cmd('tag.answer', { id: randomUUID(), placement_id: placement, value: 'yes', answered_at: '2026-06-13T12:00:00.000Z' }),
       ],
       ids.user,

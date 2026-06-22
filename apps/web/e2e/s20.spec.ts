@@ -129,8 +129,10 @@ test('rules: a rule built in the editor spawns a task on completion', async ({ p
   // let the rule.create reach the server before we trigger it
   await page.waitForTimeout(2000);
 
-  // complete the Lecture in the worklist → backstop spawns "Follow-up: Lecture"
+  // complete the Lecture in the worklist → backstop spawns "Follow-up: Lecture".
+  // The Done button opens the completed/obsolete check-off modal; confirm "Completed".
   await page.getByRole('link', { name: 'Worklist' }).click();
   await page.getByTestId(`check-${ids.lecture}`).click();
+  await page.getByTestId('checkoff-completed').click();
   await expect(page.getByTestId('worklist')).toContainText('Follow-up: Lecture', { timeout: 30_000 });
 });
