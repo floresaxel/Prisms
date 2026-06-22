@@ -75,11 +75,18 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Boot compose postgres + powersync (fresh volumes)
-        run: docker compose up -d --wait postgres powersync
+      - name: Boot postgres (fresh volumes)
+        run: docker compose up -d --wait postgres
 
-      - name: Apply migrations
+      - name: Apply migrations (before PowerSync starts, so it snapshots a populated schema)
         run: pnpm --filter @prisms/db db:migrate
+
+      # PowerSync replicates via logical replication and snapshots the schema at
+      # boot; starting it after the migrations guarantees it replicates the app
+      # tables down to the client (otherwise sync delivers nothing and every e2e
+      # times out waiting for seeded data).
+      - name: Boot PowerSync (after the tables exist)
+        run: docker compose up -d --wait powersync
 
       - name: Build web (production bundle for vite preview)
         run: pnpm --filter @prisms/web build
