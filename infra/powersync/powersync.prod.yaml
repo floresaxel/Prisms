@@ -24,6 +24,6 @@ client_auth:
     keys:
       - kty: oct
         alg: HS256
-        kid: !env POWERSYNC_JWT_KID
-        k: !env POWERSYNC_JWT_K_B64URL
-  audience: [!env POWERSYNC_JWT_AUDIENCE]
+        kid: !env PS_JWT_KID
+        k: !env PS_JWT_K_B64URL
+  audience: [!env PS_JWT_AUDIENCE]
