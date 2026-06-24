@@ -3,7 +3,7 @@
 Local-first goal-execution platform: `Vision → Roadmap → Project → Milestone → Task → Schedule`, with skills & habits as a parallel track.
 
 - **Spec:** [Blueprints/ARCHITECTURE.md](Blueprints/ARCHITECTURE.md) (normative)
-- **Build plan:** [Blueprints/BUILD_PLAN.md](Blueprints/BUILD_PLAN.md) (20 dependency-ordered sessions)
+- **Build plan:** [Blueprints/BUILD_PLAN.md](Blueprints/BUILD_PLAN.md) (23 dependency-ordered sessions)
 
 ## Workspace
 
