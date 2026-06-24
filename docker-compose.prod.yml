@@ -38,9 +38,9 @@ services:
       POWERSYNC_CONFIG_PATH: /config/powersync.yaml
       PS_DATABASE_URI: postgresql://${POSTGRES_USER:-prisms}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-prisms}
       PS_STORAGE_URI: postgresql://${POSTGRES_USER:-prisms}:${POSTGRES_PASSWORD}@postgres:5432/powersync_storage
-      POWERSYNC_JWT_KID: ${POWERSYNC_JWT_KID:-prisms}
-      POWERSYNC_JWT_K_B64URL: ${POWERSYNC_JWT_K_B64URL:?set POWERSYNC_JWT_K_B64URL (base64url of POWERSYNC_JWT_SECRET)}
-      POWERSYNC_JWT_AUDIENCE: ${POWERSYNC_JWT_AUDIENCE:-prisms}
+      PS_JWT_KID: ${POWERSYNC_JWT_KID:-prisms}
+      PS_JWT_K_B64URL: ${POWERSYNC_JWT_K_B64URL:?set POWERSYNC_JWT_K_B64URL (base64url of POWERSYNC_JWT_SECRET)}
+      PS_JWT_AUDIENCE: ${POWERSYNC_JWT_AUDIENCE:-prisms}
     volumes:
       - ./infra/powersync/powersync.prod.yaml:/config/powersync.yaml:ro
       - ./packages/db/sync-rules.yaml:/sync-rules.yaml:ro
