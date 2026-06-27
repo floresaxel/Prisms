@@ -22,8 +22,10 @@ import type {
   HabitCompletion,
   Node,
   ScheduleBlock,
+  ScheduleSuggestionBatch,
   Sprint,
   SprintMembership,
+  SyncReviewItem,
   Tag,
   TagAnswer,
   TagPlacement,
@@ -31,7 +33,7 @@ import type {
   UserSettings,
 } from '@prisms/core';
 
-import type { tables } from './schema';
+import type { schedule_suggestion_batches, sync_review_items, tables } from './schema';
 
 type Equal<A, B> =
   (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
@@ -63,3 +65,7 @@ export type AssertDiagramLayouts = Assert<Equal<Row<'diagram_layouts'>, DiagramL
 export type AssertDiagramGroups = Assert<Equal<Row<'diagram_groups'>, DiagramGroup>>;
 export type AssertCommandLog = Assert<Equal<Row<'command_log'>, CommandLogEntry>>;
 export type AssertUserSettings = Assert<Equal<Row<'user_settings'>, UserSettings>>;
+
+// New 1.3 synced tables (not yet in the `tables` registry — M4 wires sync).
+export type AssertSuggestionBatches = Assert<Equal<typeof schedule_suggestion_batches.$inferSelect, ScheduleSuggestionBatch>>;
+export type AssertReviewItems = Assert<Equal<typeof sync_review_items.$inferSelect, SyncReviewItem>>;

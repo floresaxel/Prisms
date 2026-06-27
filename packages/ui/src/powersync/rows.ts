@@ -3,28 +3,30 @@
  * entity types the selectors consume: JSON columns parsed, integer booleans
  * widened, absent columns normalized to null.
  */
-import type {
-  AutomationRule,
-  BlockerRule,
-  ComputedAggregate,
-  DecisionBoard,
-  DecisionCriterion,
-  DecisionScore,
-  DiagramGroup,
-  DiagramLayout,
-  Edge,
-  ExternalFact,
-  Habit,
-  HabitCompletion,
-  Node,
-  ScheduleBlock,
-  Sprint,
-  SprintMembership,
-  Tag,
-  TagAnswer,
-  TagPlacement,
-  TimeEntry,
-  UserSettings,
+import {
+  LEGACY_HLC,
+  type AutomationRule,
+  type BlockerRule,
+  type ComputedAggregate,
+  type DecisionBoard,
+  type DecisionCriterion,
+  type DecisionScore,
+  type DiagramGroup,
+  type DiagramLayout,
+  type Edge,
+  type ExternalFact,
+  type Habit,
+  type HabitCompletion,
+  type Node,
+  type ScheduleBlock,
+  type SourceKind,
+  type Sprint,
+  type SprintMembership,
+  type Tag,
+  type TagAnswer,
+  type TagPlacement,
+  type TimeEntry,
+  type UserSettings,
 } from '@prisms/core';
 
 const json = <T>(value: unknown, fallback: T): T => {
@@ -40,6 +42,21 @@ const nbool = (value: unknown): boolean | null => (value == null ? null : bool(v
 const str = (value: unknown): string | null => (value == null ? null : String(value));
 
 type Row = Record<string, unknown>;
+
+/**
+ * The 1.3 convergence columns (§7.1/§7.8/§7.11). Until M8 adds them to the
+ * PowerSync local schema they are usually absent locally, so each defaults to
+ * the legacy sentinel — the per-row values become meaningful once synced.
+ */
+const syncFields = (r: Row) => ({
+  hlc: String(r['hlc'] ?? LEGACY_HLC),
+  schema_version: r['schema_version'] == null ? 1 : Number(r['schema_version']),
+  created_by_command_id: str(r['created_by_command_id']),
+  last_modified_by_command_id: str(r['last_modified_by_command_id']),
+  source_kind: (r['source_kind'] ?? 'legacy') as SourceKind,
+  source_id: str(r['source_id']),
+  source_detail: json(r['source_detail'], {}),
+});
 
 export const toNode = (r: Row): Node => ({
   id: String(r['id']),
@@ -60,6 +77,7 @@ export const toNode = (r: Row): Node => ({
   created_at: String(r['created_at'] ?? ''),
   updated_at: String(r['updated_at'] ?? ''),
   deleted_at: str(r['deleted_at']),
+  ...syncFields(r),
 });
 
 export const toEdge = (r: Row): Edge => ({
@@ -72,6 +90,7 @@ export const toEdge = (r: Row): Edge => ({
   created_at: String(r['created_at'] ?? ''),
   updated_at: String(r['updated_at'] ?? ''),
   deleted_at: str(r['deleted_at']),
+  ...syncFields(r),
 });
 
 export const toTimeEntry = (r: Row): TimeEntry => ({
@@ -87,6 +106,7 @@ export const toTimeEntry = (r: Row): TimeEntry => ({
   created_at: String(r['created_at'] ?? ''),
   updated_at: String(r['updated_at'] ?? ''),
   deleted_at: str(r['deleted_at']),
+  ...syncFields(r),
 });
 
 export const toScheduleBlock = (r: Row): ScheduleBlock => ({
@@ -101,9 +121,13 @@ export const toScheduleBlock = (r: Row): ScheduleBlock => ({
   suggestion_reason: str(r['suggestion_reason']),
   computed_at: str(r['computed_at']),
   external_event_id: str(r['external_event_id']),
+  suggestion_batch_id: str(r['suggestion_batch_id']),
+  replaces_block_id: str(r['replaces_block_id']),
+  superseded_at: str(r['superseded_at']),
   created_at: String(r['created_at'] ?? ''),
   updated_at: String(r['updated_at'] ?? ''),
   deleted_at: str(r['deleted_at']),
+  ...syncFields(r),
 });
 
 export const toSprint = (r: Row): Sprint => ({
@@ -115,6 +139,7 @@ export const toSprint = (r: Row): Sprint => ({
   created_at: String(r['created_at'] ?? ''),
   updated_at: String(r['updated_at'] ?? ''),
   deleted_at: str(r['deleted_at']),
+  ...syncFields(r),
 });
 
 export const toMembership = (r: Row): SprintMembership => ({
@@ -125,6 +150,7 @@ export const toMembership = (r: Row): SprintMembership => ({
   created_at: String(r['created_at'] ?? ''),
   updated_at: String(r['updated_at'] ?? ''),
   deleted_at: str(r['deleted_at']),
+  ...syncFields(r),
 });
 
 export const toBlockerRule = (r: Row): BlockerRule => ({
@@ -137,6 +163,7 @@ export const toBlockerRule = (r: Row): BlockerRule => ({
   created_at: String(r['created_at'] ?? ''),
   updated_at: String(r['updated_at'] ?? ''),
   deleted_at: str(r['deleted_at']),
+  ...syncFields(r),
 });
 
 export const toAutomationRule = (r: Row): AutomationRule => ({
@@ -146,9 +173,11 @@ export const toAutomationRule = (r: Row): AutomationRule => ({
   conditions: json(r['conditions'], {}),
   actions: json(r['actions'], []),
   enabled: bool(r['enabled']),
+  rule_version: r['rule_version'] == null ? 1 : Number(r['rule_version']),
   created_at: String(r['created_at'] ?? ''),
   updated_at: String(r['updated_at'] ?? ''),
   deleted_at: str(r['deleted_at']),
+  ...syncFields(r),
 });
 
 export const toDiagramLayout = (r: Row): DiagramLayout => ({
@@ -164,6 +193,7 @@ export const toDiagramLayout = (r: Row): DiagramLayout => ({
   created_at: String(r['created_at'] ?? ''),
   updated_at: String(r['updated_at'] ?? ''),
   deleted_at: str(r['deleted_at']),
+  ...syncFields(r),
 });
 
 export const toDiagramGroup = (r: Row): DiagramGroup => ({
@@ -175,6 +205,7 @@ export const toDiagramGroup = (r: Row): DiagramGroup => ({
   created_at: String(r['created_at'] ?? ''),
   updated_at: String(r['updated_at'] ?? ''),
   deleted_at: str(r['deleted_at']),
+  ...syncFields(r),
 });
 
 export const toExternalFact = (r: Row): ExternalFact => ({
@@ -187,6 +218,7 @@ export const toExternalFact = (r: Row): ExternalFact => ({
   created_at: String(r['created_at'] ?? ''),
   updated_at: String(r['updated_at'] ?? ''),
   deleted_at: str(r['deleted_at']),
+  ...syncFields(r),
 });
 
 export const toHabit = (r: Row): Habit => ({
@@ -202,6 +234,7 @@ export const toHabit = (r: Row): Habit => ({
   created_at: String(r['created_at'] ?? ''),
   updated_at: String(r['updated_at'] ?? ''),
   deleted_at: str(r['deleted_at']),
+  ...syncFields(r),
 });
 
 export const toHabitCompletion = (r: Row): HabitCompletion => ({
@@ -213,6 +246,7 @@ export const toHabitCompletion = (r: Row): HabitCompletion => ({
   created_at: String(r['created_at'] ?? ''),
   updated_at: String(r['updated_at'] ?? ''),
   deleted_at: str(r['deleted_at']),
+  ...syncFields(r),
 });
 
 export const toTag = (r: Row): Tag => ({
@@ -223,6 +257,7 @@ export const toTag = (r: Row): Tag => ({
   created_at: String(r['created_at'] ?? ''),
   updated_at: String(r['updated_at'] ?? ''),
   deleted_at: str(r['deleted_at']),
+  ...syncFields(r),
 });
 
 export const toTagPlacement = (r: Row): TagPlacement => ({
@@ -233,6 +268,7 @@ export const toTagPlacement = (r: Row): TagPlacement => ({
   created_at: String(r['created_at'] ?? ''),
   updated_at: String(r['updated_at'] ?? ''),
   deleted_at: str(r['deleted_at']),
+  ...syncFields(r),
 });
 
 export const toTagAnswer = (r: Row): TagAnswer => ({
@@ -244,6 +280,7 @@ export const toTagAnswer = (r: Row): TagAnswer => ({
   created_at: String(r['created_at'] ?? ''),
   updated_at: String(r['updated_at'] ?? ''),
   deleted_at: str(r['deleted_at']),
+  ...syncFields(r),
 });
 
 export const toDecisionBoard = (r: Row): DecisionBoard => ({
@@ -253,6 +290,7 @@ export const toDecisionBoard = (r: Row): DecisionBoard => ({
   created_at: String(r['created_at'] ?? ''),
   updated_at: String(r['updated_at'] ?? ''),
   deleted_at: str(r['deleted_at']),
+  ...syncFields(r),
 });
 
 export const toDecisionCriterion = (r: Row): DecisionCriterion => ({
@@ -264,6 +302,7 @@ export const toDecisionCriterion = (r: Row): DecisionCriterion => ({
   created_at: String(r['created_at'] ?? ''),
   updated_at: String(r['updated_at'] ?? ''),
   deleted_at: str(r['deleted_at']),
+  ...syncFields(r),
 });
 
 export const toDecisionScore = (r: Row): DecisionScore => ({
@@ -275,6 +314,7 @@ export const toDecisionScore = (r: Row): DecisionScore => ({
   created_at: String(r['created_at'] ?? ''),
   updated_at: String(r['updated_at'] ?? ''),
   deleted_at: str(r['deleted_at']),
+  ...syncFields(r),
 });
 
 export const toComputedAggregate = (r: Row): ComputedAggregate => ({
@@ -289,6 +329,7 @@ export const toComputedAggregate = (r: Row): ComputedAggregate => ({
   created_at: String(r['created_at'] ?? ''),
   updated_at: String(r['updated_at'] ?? ''),
   deleted_at: str(r['deleted_at']),
+  ...syncFields(r),
 });
 
 export const toUserSettings = (r: Row): Pick<UserSettings, 'day_reset_hour' | 'timezone' | 'weather_location'> => ({

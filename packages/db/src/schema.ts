@@ -46,8 +46,13 @@ import type {
   JsonObject,
   JsonValue,
   NodeType,
+  ReviewItemType,
+  ReviewSeverity,
+  ReviewStatus,
+  SourceKind,
   StreakMode,
   SubjectKind,
+  SuggestionBatchSource,
   TagAnswerValue,
   UserSettings,
 } from '@prisms/core';
@@ -55,13 +60,29 @@ import type {
 const timestamptz = (name: string) =>
   timestamp(name, { withTimezone: true, mode: 'string' });
 
-/** §6: every synced table carries these. */
+// Sentinel HLC for legacy (pre-migration) rows — sorts before any real HLC.
+const LEGACY_HLC = '000000000000-0000-legacy';
+
+/**
+ * §6 base columns PLUS the 1.3 convergence columns (§7.1 per-row hlc, §7.11 row
+ * schema_version, §7.8 provenance). All server-assigned; every column ships a
+ * DB-level DEFAULT so the migration is live-DB-safe on a populated table
+ * (legacy rows backfill to the sentinel hlc, floor schema_version, and
+ * source_kind='legacy' = "origin unknown").
+ */
 const baseColumns = {
   id: uuid('id').primaryKey(),
   user_id: uuid('user_id').notNull(),
   created_at: timestamptz('created_at').notNull().defaultNow(),
   updated_at: timestamptz('updated_at').notNull(),
   deleted_at: timestamptz('deleted_at'),
+  hlc: text('hlc').notNull().default(LEGACY_HLC),
+  schema_version: integer('schema_version').notNull().default(1),
+  created_by_command_id: uuid('created_by_command_id'),
+  last_modified_by_command_id: uuid('last_modified_by_command_id'),
+  source_kind: text('source_kind').$type<SourceKind>().notNull().default('legacy'),
+  source_id: uuid('source_id'),
+  source_detail: jsonb('source_detail').$type<JsonObject>().notNull().default({}),
 };
 
 // --- THE TREE ---------------------------------------------------------------
@@ -128,7 +149,10 @@ export const edges = pgTable(
   },
   (t) => [
     check('edges_edge_type_check', sql`${t.edge_type} IN ('FS','SS','FF','SF')`),
-    unique('edges_pred_succ_uq').on(t.predecessor_id, t.successor_id),
+    // §7.7 partial unique: a soft-deleted edge can be recreated.
+    uniqueIndex('edges_pred_succ_uq')
+      .on(t.predecessor_id, t.successor_id)
+      .where(sql`${t.deleted_at} IS NULL`),
     index('edges_succ')
       .on(t.user_id, t.successor_id)
       .where(sql`${t.deleted_at} IS NULL`),
@@ -159,6 +183,10 @@ export const schedule_blocks = pgTable(
     computed_at: timestamptz('computed_at'),
     // reserved (v2 calendar sync)
     external_event_id: text('external_event_id'),
+    // suggestion lifecycle (§7.5)
+    suggestion_batch_id: uuid('suggestion_batch_id'),
+    replaces_block_id: uuid('replaces_block_id'),
+    superseded_at: timestamptz('superseded_at'),
   },
   (t) => [
     check(
@@ -262,7 +290,12 @@ export const habit_completions = pgTable(
     occurrence_date: date('occurrence_date', { mode: 'string' }).notNull(),
     completed_at: timestamptz('completed_at').notNull(),
   },
-  (t) => [unique('habit_completions_habit_occurrence_uq').on(t.habit_id, t.occurrence_date)],
+  (t) => [
+    // §7.7 partial unique: a soft-deleted completion can be recreated.
+    uniqueIndex('habit_completions_habit_occurrence_uq')
+      .on(t.habit_id, t.occurrence_date)
+      .where(sql`${t.deleted_at} IS NULL`),
+  ],
 );
 
 // --- TAGS (confirmable event tags) ---------------------------------------------------
@@ -366,7 +399,10 @@ export const decision_scores = pgTable(
   },
   (t) => [
     check('scores_score_check', sql`${t.score} BETWEEN 0 AND 10`),
-    unique('decision_scores_criterion_project_uq').on(t.criterion_id, t.project_id),
+    // §7.7 partial unique: a soft-deleted score can be recreated.
+    uniqueIndex('decision_scores_criterion_project_uq')
+      .on(t.criterion_id, t.project_id)
+      .where(sql`${t.deleted_at} IS NULL`),
   ],
 );
 // priority(project) = Σ weight×score / Σ weight   (computed in core, never stored)
@@ -391,7 +427,12 @@ export const sprint_memberships = pgTable(
       .notNull()
       .references(() => nodes.id),
   },
-  (t) => [unique('sprint_memberships_sprint_node_uq').on(t.sprint_id, t.node_id)],
+  (t) => [
+    // §7.7 partial unique: a soft-deleted membership can be recreated.
+    uniqueIndex('sprint_memberships_sprint_node_uq')
+      .on(t.sprint_id, t.node_id)
+      .where(sql`${t.deleted_at} IS NULL`),
+  ],
 );
 
 // --- AUTOMATION & BLOCKER RULES (declarative JSON, §9) -------------------------------
@@ -406,6 +447,8 @@ export const automation_rules = pgTable(
     // spawn templates, §9.3
     actions: jsonb('actions').$type<JsonValue>().notNull(),
     enabled: boolean('enabled').notNull().default(true),
+    // bumped on rule.update; recorded in spawned-row provenance (§10.2)
+    rule_version: integer('rule_version').notNull().default(1),
   },
   (t) => [
     check(
@@ -467,9 +510,14 @@ export const computed_aggregates = pgTable(
       'aggregates_computed_by_check',
       sql`${t.computed_by} IN ('client','server')`,
     ),
-    unique('computed_aggregates_subject_metric_uq')
+    // §7.7 dual partial unique for nullable subject_id: user-level (subject_id
+    // NULL) vs subject-level, both excluding soft-deleted rows.
+    uniqueIndex('computed_aggregates_user_metric_uq')
+      .on(t.user_id, t.subject_kind, t.metric)
+      .where(sql`${t.subject_id} IS NULL AND ${t.deleted_at} IS NULL`),
+    uniqueIndex('computed_aggregates_subject_metric_uq')
       .on(t.user_id, t.subject_kind, t.subject_id, t.metric)
-      .nullsNotDistinct(),
+      .where(sql`${t.subject_id} IS NOT NULL AND ${t.deleted_at} IS NULL`),
   ],
 );
 
@@ -492,7 +540,12 @@ export const diagram_layouts = pgTable(
     // set when produced by the layout job
     computed_at: timestamptz('computed_at'),
   },
-  (t) => [unique('diagram_layouts_diagram_node_uq').on(t.diagram_id, t.node_id)],
+  (t) => [
+    // §7.7 partial unique: a soft-deleted layout can be recreated.
+    uniqueIndex('diagram_layouts_diagram_node_uq')
+      .on(t.diagram_id, t.node_id)
+      .where(sql`${t.deleted_at} IS NULL`),
+  ],
 );
 
 export const diagram_groups = pgTable('diagram_groups', {
@@ -501,6 +554,58 @@ export const diagram_groups = pgTable('diagram_groups', {
   label: text('label').notNull(),
   color: text('color'),
 });
+
+// --- SUGGESTION BATCHES (§7.5) ----------------------------------------------------------
+// suggestion_batch_id / replaces_block_id / command_id are plain uuids (no FK),
+// matching the as-built style for cross-entity links (habit_id, completed_in_block_id).
+
+export const schedule_suggestion_batches = pgTable(
+  'schedule_suggestion_batches',
+  {
+    ...baseColumns,
+    source: text('source').$type<SuggestionBatchSource>().notNull(),
+    horizon_start: timestamptz('horizon_start').notNull(),
+    horizon_end: timestamptz('horizon_end').notNull(),
+    computed_at: timestamptz('computed_at').notNull(),
+    superseded_at: timestamptz('superseded_at'),
+  },
+  (t) => [
+    check(
+      'suggestion_batches_source_check',
+      sql`${t.source} IN ('past_due','nightly_optimize','manual_optimize')`,
+    ),
+    index('suggestion_batches_user')
+      .on(t.user_id, t.computed_at)
+      .where(sql`${t.deleted_at} IS NULL`),
+  ],
+);
+
+// --- REVIEW INBOX (§7.13) ---------------------------------------------------------------
+
+export const sync_review_items = pgTable(
+  'sync_review_items',
+  {
+    ...baseColumns,
+    command_id: uuid('command_id'),
+    item_type: text('item_type').$type<ReviewItemType>().notNull(),
+    severity: text('severity').$type<ReviewSeverity>().notNull(),
+    title: text('title').notNull(),
+    detail: jsonb('detail').$type<JsonObject>().notNull().default({}),
+    status: text('status').$type<ReviewStatus>().notNull().default('open'),
+    resolved_at: timestamptz('resolved_at'),
+  },
+  (t) => [
+    check(
+      'review_items_type_check',
+      sql`${t.item_type} IN ('command_rejection','dependency_rejection','hlc_conflict','stale_suggestion','automation_backstop','automation_drift','schema_version_block','import_warning','sync_warning')`,
+    ),
+    check('review_items_severity_check', sql`${t.severity} IN ('info','warning','error')`),
+    check('review_items_status_check', sql`${t.status} IN ('open','resolved','dismissed')`),
+    index('review_items_user_status')
+      .on(t.user_id, t.status)
+      .where(sql`${t.deleted_at} IS NULL`),
+  ],
+);
 
 // --- COMMAND LOG (audit; written server-side on every applied mutation) -----------------
 
@@ -515,6 +620,14 @@ export const command_log = pgTable(
     device_id: text('device_id').notNull(),
     // hybrid logical clock, §7.3
     hlc: text('hlc').notNull(),
+    // command-envelope versions + causal/provenance links (§7.2e/§7.2f)
+    command_version: integer('command_version').notNull().default(1),
+    schema_version: integer('schema_version').notNull().default(1),
+    client_version: text('client_version'),
+    effects: jsonb('effects').$type<JsonValue>().notNull().default([]),
+    parent_command_id: uuid('parent_command_id'),
+    triggering_command_id: uuid('triggering_command_id'),
+    depends_on: uuid('depends_on').array().notNull().default([]),
     applied_at: timestamptz('applied_at').notNull().defaultNow(),
     result: text('result').$type<CommandResult>().notNull(),
     reject_reason: text('reject_reason'),

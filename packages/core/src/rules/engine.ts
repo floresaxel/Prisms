@@ -16,6 +16,7 @@
  * partially-synced outputs are completed rather than duplicated.
  */
 import type { AutomationRule, Edge, Node } from '../domain/entities';
+import { SYNC_ROW_DEFAULTS } from '../domain/entities';
 import { uuidV5 } from '../domain/ids';
 import type { IsoDateTime, Uuid } from '../domain/primitives';
 import { findEdgeBetween } from '../graph/dag';
@@ -131,6 +132,7 @@ export function runAutomations(input: RulesEngineInput): RulesEngineOutput {
               created_at: baseIso,
               updated_at: baseIso,
               deleted_at: null,
+              ...SYNC_ROW_DEFAULTS,
               parent_id:
                 parentMode === 'same_as_trigger' ? trigger.node.parent_id : parentMode,
               node_type: 'task',
@@ -175,6 +177,7 @@ export function runAutomations(input: RulesEngineInput): RulesEngineOutput {
                 created_at: baseIso,
                 updated_at: baseIso,
                 deleted_at: null,
+                ...SYNC_ROW_DEFAULTS,
                 predecessor_id: predecessorId,
                 successor_id: successorId,
                 edge_type: action.template.edge_type ?? 'FS',

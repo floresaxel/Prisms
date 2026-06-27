@@ -24,14 +24,50 @@ import {
   uuidSchema,
 } from './primitives';
 
-/** Columns every synced table carries (§6): ids, audit timestamps, soft delete. */
+/** Provenance origin (1.3 §7.8). `legacy` = pre-migration rows ("origin unknown"). */
+export const SOURCE_KINDS = ['user', 'automation', 'scheduler', 'server_job', 'import', 'system', 'legacy'] as const;
+export const sourceKindSchema = z.enum(SOURCE_KINDS);
+export type SourceKind = z.infer<typeof sourceKindSchema>;
+
+/**
+ * Columns every synced table carries. v1.0 base (ids, audit timestamps, soft
+ * delete) PLUS the 1.3 convergence columns (R15/R16/R17, §7.1/§7.8/§7.11):
+ * a per-row HLC (backs `(sort_order, hlc)` + same-field LWW), a row
+ * `schema_version`, and server-assigned provenance. All server-assigned; legacy
+ * rows backfill to `SYNC_ROW_DEFAULTS`.
+ */
 const baseRow = {
   id: uuidSchema,
   user_id: uuidSchema,
   created_at: isoDateTimeSchema,
   updated_at: isoDateTimeSchema,
   deleted_at: isoDateTimeSchema.nullable(),
+  hlc: hlcStringSchema,
+  schema_version: z.number().int(),
+  created_by_command_id: uuidSchema.nullable(),
+  last_modified_by_command_id: uuidSchema.nullable(),
+  source_kind: sourceKindSchema,
+  source_id: uuidSchema.nullable(),
+  source_detail: jsonObjectSchema,
 };
+
+/** Sentinel HLC for legacy (pre-migration) rows — sorts before any real HLC. */
+export const LEGACY_HLC = '000000000000-0000-legacy';
+
+/**
+ * Default convergence-column values for a row built in-memory (automation
+ * spawns, synthetic fixtures, the StatusIndex). The server assigns the real
+ * values on apply; these keep pure constructors valid.
+ */
+export const SYNC_ROW_DEFAULTS = {
+  hlc: LEGACY_HLC,
+  schema_version: 1,
+  created_by_command_id: null,
+  last_modified_by_command_id: null,
+  source_kind: 'legacy',
+  source_id: null,
+  source_detail: {},
+} as const;
 
 // --- THE TREE ---------------------------------------------------------------
 
@@ -115,6 +151,12 @@ export const scheduleBlockSchema = z.strictObject({
   computed_at: isoDateTimeSchema.nullable(),
   /** Reserved for v2 calendar sync. */
   external_event_id: z.string().nullable(),
+  /** Suggestion lifecycle (§7.5): the batch that proposed this block. */
+  suggestion_batch_id: uuidSchema.nullable(),
+  /** The flexible block this suggestion would replace on accept (§7.5). */
+  replaces_block_id: uuidSchema.nullable(),
+  /** Set when a newer batch supersedes this non-accepted suggestion (§7.5). */
+  superseded_at: isoDateTimeSchema.nullable(),
 });
 export type ScheduleBlock = z.infer<typeof scheduleBlockSchema>;
 
@@ -265,6 +307,8 @@ export const automationRuleSchema = z.strictObject({
   /** §9.3 spawn templates as stored (jsonb); typed-validated in rules/validate. */
   actions: jsonValueSchema,
   enabled: z.boolean(),
+  /** Bumped on rule.update; recorded in spawned-row provenance (§10.2). */
+  rule_version: z.number().int(),
 });
 export type AutomationRule = z.infer<typeof automationRuleSchema>;
 
@@ -346,15 +390,31 @@ export const COMMAND_RESULTS = ['applied', 'rejected', 'noop'] as const;
 export const commandResultSchema = z.enum(COMMAND_RESULTS);
 export type CommandResult = z.infer<typeof commandResultSchema>;
 
-/** Note: no updated_at/deleted_at — the log is append-only (§6.0). */
+/**
+ * Note: no updated_at/deleted_at — the log is append-only (§6.0). Also the
+ * server command-dedup record (§7.2d): `id` equals the client command id, so a
+ * re-upload is a noop; retention.purge preserves entries < MAX_OFFLINE_HORIZON.
+ */
 export const commandLogEntrySchema = z.strictObject({
-  /** Client-generated command id (idempotency key, §8). */
+  /** Client-generated command id (idempotency key + dedup key, §8/§7.2d). */
   id: uuidSchema,
   user_id: uuidSchema,
   name: z.string().min(1),
   payload: jsonValueSchema,
   device_id: deviceIdSchema,
   hlc: hlcStringSchema,
+  /** Command-envelope versions (§7.2f / §8). */
+  command_version: z.number().int(),
+  schema_version: z.number().int(),
+  client_version: z.string().nullable(),
+  /** Compact summary of rows created/updated/deleted/superseded/rejected (§7.2f). */
+  effects: jsonValueSchema,
+  /** Links follow-ups/undo/retries/backstop to their cause (§7.2f). */
+  parent_command_id: uuidSchema.nullable(),
+  /** Links deterministic automation output to the triggering command (§7.2f). */
+  triggering_command_id: uuidSchema.nullable(),
+  /** Intra-device causal dependencies (§7.2e). */
+  depends_on: z.array(uuidSchema),
   applied_at: isoDateTimeSchema,
   result: commandResultSchema,
   reject_reason: z.string().nullable(),
@@ -381,6 +441,60 @@ export const userSettingsSchema = z.strictObject({
   updated_at: isoDateTimeSchema,
 });
 export type UserSettings = z.infer<typeof userSettingsSchema>;
+
+// --- SUGGESTION BATCHES (§7.5) ---------------------------------------------------------------------
+
+export const SUGGESTION_BATCH_SOURCES = ['past_due', 'nightly_optimize', 'manual_optimize'] as const;
+export const suggestionBatchSourceSchema = z.enum(SUGGESTION_BATCH_SOURCES);
+export type SuggestionBatchSource = z.infer<typeof suggestionBatchSourceSchema>;
+
+export const scheduleSuggestionBatchSchema = z.strictObject({
+  ...baseRow,
+  source: suggestionBatchSourceSchema,
+  horizon_start: isoDateTimeSchema,
+  horizon_end: isoDateTimeSchema,
+  computed_at: isoDateTimeSchema,
+  /** Set when a newer batch supersedes this one in the same horizon (§7.5). */
+  superseded_at: isoDateTimeSchema.nullable(),
+});
+export type ScheduleSuggestionBatch = z.infer<typeof scheduleSuggestionBatchSchema>;
+
+// --- REVIEW INBOX (§7.13) --------------------------------------------------------------------------
+
+export const REVIEW_ITEM_TYPES = [
+  'command_rejection',
+  'dependency_rejection',
+  'hlc_conflict',
+  'stale_suggestion',
+  'automation_backstop',
+  'automation_drift',
+  'schema_version_block',
+  'import_warning',
+  'sync_warning',
+] as const;
+export const reviewItemTypeSchema = z.enum(REVIEW_ITEM_TYPES);
+export type ReviewItemType = z.infer<typeof reviewItemTypeSchema>;
+
+export const REVIEW_SEVERITIES = ['info', 'warning', 'error'] as const;
+export const reviewSeveritySchema = z.enum(REVIEW_SEVERITIES);
+export type ReviewSeverity = z.infer<typeof reviewSeveritySchema>;
+
+export const REVIEW_STATUSES = ['open', 'resolved', 'dismissed'] as const;
+export const reviewStatusSchema = z.enum(REVIEW_STATUSES);
+export type ReviewStatus = z.infer<typeof reviewStatusSchema>;
+
+export const syncReviewItemSchema = z.strictObject({
+  ...baseRow,
+  /** The command that produced this item, when applicable (§7.13). */
+  command_id: uuidSchema.nullable(),
+  item_type: reviewItemTypeSchema,
+  severity: reviewSeveritySchema,
+  title: z.string(),
+  detail: jsonObjectSchema,
+  status: reviewStatusSchema,
+  resolved_at: isoDateTimeSchema.nullable(),
+});
+export type SyncReviewItem = z.infer<typeof syncReviewItemSchema>;
 
 // --- REGISTRY -------------------------------------------------------------------------------------
 

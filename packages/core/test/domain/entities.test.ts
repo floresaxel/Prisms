@@ -24,6 +24,14 @@ const base = {
   created_at: T1,
   updated_at: T1,
   deleted_at: null,
+  // 1.3 convergence columns (§7.1/§7.8/§7.11)
+  hlc: '018f6d3e0000-0001-device_A-1',
+  schema_version: 1,
+  created_by_command_id: null,
+  last_modified_by_command_id: null,
+  source_kind: 'user',
+  source_id: null,
+  source_detail: {},
 };
 
 /** One valid row per table — the §6.0 catalog. */
@@ -62,6 +70,9 @@ const validRows: { [K in EntityTable]: unknown } = {
     suggestion_reason: 'past_due_reschedule',
     computed_at: T1,
     external_event_id: null,
+    suggestion_batch_id: null,
+    replaces_block_id: null,
+    superseded_at: null,
   },
   time_entries: {
     ...base,
@@ -113,6 +124,7 @@ const validRows: { [K in EntityTable]: unknown } = {
     conditions: { all: [{ fact: 'node.title', op: 'matches', value: 'lecture' }] },
     actions: [{ action: 'spawn_task', slot: 0, template: { title: 'Pre-brief' } }],
     enabled: true,
+    rule_version: 1,
   },
   blocker_rules: {
     ...base,
@@ -160,6 +172,13 @@ const validRows: { [K in EntityTable]: unknown } = {
     payload: { id: ID_B, completed_at: T1 },
     device_id: 'device_A-1',
     hlc: '018f6d3e0000-0001-device_A-1',
+    command_version: 1,
+    schema_version: 1,
+    client_version: null,
+    effects: [],
+    parent_command_id: null,
+    triggering_command_id: null,
+    depends_on: [],
     applied_at: T1,
     result: 'applied',
     reject_reason: null,

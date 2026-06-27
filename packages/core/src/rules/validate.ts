@@ -15,6 +15,7 @@
  * task_created rules.
  */
 import type { AutomationRule, Node } from '../domain/entities';
+import { SYNC_ROW_DEFAULTS } from '../domain/entities';
 import { domainError } from '../domain/errors';
 import { err, ok, type Result } from '../domain/result';
 import { buildFactContext } from '../status/context';
@@ -41,6 +42,7 @@ const SYNTHETIC_BASE: Node = {
   created_at: '2026-01-01T00:00:00.000Z',
   updated_at: '2026-01-01T00:00:00.000Z',
   deleted_at: null,
+  ...SYNC_ROW_DEFAULTS,
   parent_id: null,
   node_type: 'task',
   title: '',

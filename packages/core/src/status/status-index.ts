@@ -27,6 +27,7 @@
  * M11/M12); fact effects drive `apply`.
  */
 import type { BlockerRule, Edge, ExternalFact, Node, ScheduleBlock, Sprint, SprintMembership, TimeEntry } from '../domain/entities';
+import { SYNC_ROW_DEFAULTS } from '../domain/entities';
 import type { Uuid } from '../domain/primitives';
 import { descendantsOf, type TreeIndex } from '../graph/tree';
 import { outgoingEdges, type EdgeIndex } from '../graph/dag';
@@ -55,6 +56,7 @@ const str = (v: unknown): string | null => (v == null ? null : String(v));
 
 function toNode(id: Uuid, f: Readonly<Record<string, unknown>>): Node {
   return {
+    ...SYNC_ROW_DEFAULTS,
     id,
     user_id: String(f['user_id'] ?? ''),
     parent_id: str(f['parent_id']),
