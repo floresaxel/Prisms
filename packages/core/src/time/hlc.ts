@@ -110,3 +110,45 @@ export function hlcTick(
   assertValidHlc(next);
   return next;
 }
+
+/**
+ * The HLC "receive" rule (1.3 §7.9a `mergeHlc`): advance the local clock on
+ * observing a remote event, so a subsequent local event is causally after both.
+ *
+ * The merged clock keeps THIS device's id (it is still this device's clock).
+ * physical = max(local, remote, now); the counter advances past whichever
+ * component(s) tie the new physical time, and overflows into +1ms. The result
+ * strictly dominates both `local` and `remote` in (physical, counter) order, so
+ * `hlcCompare(result, local) > 0` and `hlcCompare(result, remote) > 0`.
+ */
+export function mergeHlc(
+  local: Hlc | null,
+  remote: Hlc,
+  now: EpochMillis,
+  deviceId: DeviceId,
+): Hlc {
+  if (!DEVICE_ID_REGEX.test(deviceId)) {
+    throw new TypeError(`mergeHlc: invalid device id "${deviceId}"`);
+  }
+  assertValidHlc(remote);
+  const localPhys = local?.physicalMs ?? 0;
+  const localCounter = local?.counter ?? 0;
+  let physicalMs = Math.max(localPhys, remote.physicalMs, now, 0);
+  let counter: number;
+  if (physicalMs === localPhys && physicalMs === remote.physicalMs) {
+    counter = Math.max(localCounter, remote.counter) + 1;
+  } else if (physicalMs === localPhys) {
+    counter = localCounter + 1;
+  } else if (physicalMs === remote.physicalMs) {
+    counter = remote.counter + 1;
+  } else {
+    counter = 0;
+  }
+  if (counter > HLC_COUNTER_MAX) {
+    physicalMs += 1;
+    counter = 0;
+  }
+  const next: Hlc = { physicalMs, counter, deviceId };
+  assertValidHlc(next);
+  return next;
+}

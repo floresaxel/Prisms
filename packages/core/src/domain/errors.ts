@@ -40,6 +40,13 @@ export const ERROR_CODES = [
   // rules engine (§9)
   'E_RULE_SELF_TRIGGER',
   'E_RULE_DEPTH_EXCEEDED',
+  // convergence / sync (1.3 §7.2e, §7.6, §7.11, §8) — wired by M5
+  'E_DEPENDENCY_REJECTED', // §7.2e: a depends_on command was rejected
+  'E_UNKNOWN_TARGET', // §7.2e: references a row in neither replica nor own pending creates
+  'E_CLIENT_TOO_OLD', // §7.11: command from a client below the schema floor
+  'E_INVALID_RETYPE_CHILDREN', // §8: node.retype would orphan child types
+  'E_BLOCKED_TASK', // §8: timer.clock_in on a blocked task without force
+  'E_SCHEMA_NOT_ADDITIVE', // §7.11: a row-shape change is not additive within a major version
   // catch-all for bugs surfaced as data (never expected in normal operation)
   'E_INTERNAL',
 ] as const;

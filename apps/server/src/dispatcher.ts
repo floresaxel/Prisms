@@ -30,6 +30,7 @@ import {
   checkNodeRetype,
   checkRule,
   isCommandName,
+  renormalizedOrders,
   resolveOpenTimeEntries,
   softDeleteClosure,
   uploadRequestSchema,
@@ -825,6 +826,23 @@ export function createDispatcher(
           if (ownLayout) return ownLayout;
           const win = await lwwFields(tx, hlc, userId, 'diagram_layouts', existing.id, { collapsed: p.collapsed });
           if (Object.keys(win).length > 0) await tx.update(diagram_layouts).set({ ...win, updated_at: now }).where(eq(diagram_layouts.id, existing.id));
+        }
+        return applied();
+      }
+      case 'layout.renormalize_order': {
+        // §7.10a: deterministic, idempotent sort_order cleanup over a sibling
+        // group. Reassign clean, evenly-spaced fractions in canonical order;
+        // HLC-LWW so a concurrent reorder with a later HLC still wins.
+        const p = payload as Payload<'layout.renormalize_order'>;
+        for (const id of p.node_ids) {
+          const own = ownershipReject('node', id, await loadNodeRow(tx, id), userId);
+          if (own) return own;
+        }
+        const orders = renormalizedOrders(p.node_ids.length);
+        for (let i = 0; i < p.node_ids.length; i += 1) {
+          const id = p.node_ids[i]!;
+          const win = await lwwFields(tx, hlc, userId, 'nodes', id, { sort_order: orders[i]! });
+          if (Object.keys(win).length > 0) await tx.update(nodes).set({ ...win, updated_at: now }).where(eq(nodes.id, id));
         }
         return applied();
       }
