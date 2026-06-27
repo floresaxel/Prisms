@@ -45,6 +45,7 @@ export * from './graph/dag';
 export * from './graph/critical-path';
 export * from './graph/elk';
 export * from './commands/envelope';
+export * from './sync/overlay';
 export * from './commands/settings';
 export * from './commands/payloads';
 export * from './commands/invariants';

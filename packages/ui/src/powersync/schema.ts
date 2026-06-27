@@ -244,7 +244,8 @@ const user_settings = new Table({
   updated_at: column.text,
 });
 
-export const appSchema = new Schema({
+/** The synced tables (§7.3): the canonical replica streamed down from Postgres. */
+const syncedTables = {
   nodes,
   edges,
   schedule_blocks,
@@ -266,4 +267,78 @@ export const appSchema = new Schema({
   diagram_layouts,
   diagram_groups,
   user_settings,
+};
+
+/**
+ * The synced-table contract: exactly the rows the sync rules stream down. The
+ * two-layer overlay tables (below) are deliberately NOT here — they are
+ * client-local and must never be uploaded as row patches (1.3 §7.2, R15).
+ */
+export const appSchema = new Schema(syncedTables);
+
+// --- Two-layer client store (1.3 §7.2a, R15) — LOCAL-ONLY -------------------
+// `client_commands` is the pending-command upload queue; `overlay_effects` is
+// each command's optimistic row effects that the read-merge applies over the
+// replica; `sync_review_items` is the durable rejection/conflict inbox. All
+// three are `localOnly` so PowerSync never enqueues them in the CRUD upload
+// batch — the only trusted upload is the named command envelope read from
+// `client_commands` (see upload-commands.ts). M3 lands the server-synced
+// `sync_review_items`; the spike keeps a local copy to prove the rollback path.
+
+/** Pending-command queue. `id` = the client-minted UUIDv7 (V2, §7.2b). */
+export const client_commands = new Table(
+  {
+    name: column.text,
+    hlc: column.text,
+    payload: column.text, // JSON
+    status: column.text, // pending | applied | rejected
+    created_at: column.text,
+    reject_code: column.text,
+    reject_reason: column.text,
+  },
+  { localOnly: true },
+);
+
+/** Per-command optimistic row effects merged over the replica on read (§7.2). */
+export const overlay_effects = new Table(
+  {
+    command_id: column.text,
+    hlc: column.text,
+    table_name: column.text,
+    row_id: column.text,
+    op: column.text, // insert | update | delete
+    fields: column.text, // JSON
+    seq: column.integer,
+    created_at: column.text,
+  },
+  { localOnly: true },
+);
+
+/** Durable conflict/rejection inbox (§7.13); server-synced from M3 onward. */
+export const sync_review_items = new Table(
+  {
+    item_type: column.text,
+    severity: column.text,
+    title: column.text,
+    detail: column.text,
+    status: column.text,
+    command_id: column.text,
+    created_at: column.text,
+  },
+  { localOnly: true },
+);
+
+/** The local-only overlay table names — asserted absent from `appSchema`. */
+export const LOCAL_ONLY_TABLE_NAMES = ['client_commands', 'overlay_effects', 'sync_review_items'] as const;
+
+/**
+ * The full on-device schema: the synced replica PLUS the local-only overlay
+ * tables. PowerSync is opened with this so the overlay tables exist in SQLite,
+ * while `appSchema` stays the clean synced contract. (M8 wires the app to this.)
+ */
+export const clientSchema = new Schema({
+  ...syncedTables,
+  client_commands,
+  overlay_effects,
+  sync_review_items,
 });
