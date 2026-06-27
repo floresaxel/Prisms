@@ -1,0 +1,60 @@
+# PowerSync Sync Streams (ARCHITECTURE_1.3 §7.3). Replaces the v1.0 single
+# per-user bucket (legacy Sync Rules). Compiled streams (edition 3).
+#
+# Access control is the verified JWT user id ONLY — every query filters on
+# `auth.user_id()`. No stream reads a client-supplied parameter, so a client
+# cannot widen its scope and one user can never receive another's rows.
+#
+# Tiers (clients auto-subscribe to 0/1; Tier 2 is subscribed lazily, M12):
+#   bootstrap  (Tier 0) — the cold-start working set: settings, the tree, the
+#                         agenda, dependencies, suggestion batches, review inbox.
+#   active     (Tier 1) — the rest of the live working set.
+#   command_results     — a user-scoped command-result stream (NOT the broad
+#                         command_log audit table).
+#   history    (Tier 2) — archival rows, subscribed on demand. Modelled as
+#                         soft-deleted time-entry history: empty for a fresh
+#                         account, so it is genuinely absent until subscribed.
+config:
+  edition: 3
+
+streams:
+  bootstrap:
+    auto_subscribe: true
+    queries:
+      - SELECT user_id AS id, day_reset_hour, timezone, weather_location, updated_at FROM user_settings WHERE user_id = auth.user_id()
+      - SELECT * FROM nodes WHERE user_id = auth.user_id()
+      - SELECT * FROM edges WHERE user_id = auth.user_id()
+      - SELECT * FROM schedule_blocks WHERE user_id = auth.user_id()
+      - SELECT * FROM schedule_suggestion_batches WHERE user_id = auth.user_id()
+      - SELECT * FROM sprints WHERE user_id = auth.user_id()
+      - SELECT * FROM sprint_memberships WHERE user_id = auth.user_id()
+      - SELECT * FROM sync_review_items WHERE user_id = auth.user_id()
+
+  active:
+    auto_subscribe: true
+    queries:
+      - SELECT * FROM time_entries WHERE user_id = auth.user_id() AND deleted_at IS NULL
+      - SELECT * FROM habits WHERE user_id = auth.user_id()
+      - SELECT * FROM habit_completions WHERE user_id = auth.user_id()
+      - SELECT * FROM tags WHERE user_id = auth.user_id()
+      - SELECT * FROM tag_placements WHERE user_id = auth.user_id()
+      - SELECT * FROM tag_answers WHERE user_id = auth.user_id()
+      - SELECT * FROM decision_boards WHERE user_id = auth.user_id()
+      - SELECT * FROM decision_criteria WHERE user_id = auth.user_id()
+      - SELECT * FROM decision_scores WHERE user_id = auth.user_id()
+      - SELECT * FROM automation_rules WHERE user_id = auth.user_id()
+      - SELECT * FROM blocker_rules WHERE user_id = auth.user_id()
+      - SELECT * FROM external_facts WHERE user_id = auth.user_id()
+      - SELECT * FROM computed_aggregates WHERE user_id = auth.user_id()
+      - SELECT * FROM diagram_groups WHERE user_id = auth.user_id()
+      - SELECT * FROM diagram_layouts WHERE user_id = auth.user_id()
+
+  # Filtered command-result stream (§7.3): user-scoped, never the global audit.
+  command_results:
+    auto_subscribe: true
+    query: SELECT * FROM command_log WHERE user_id = auth.user_id()
+
+  # Tier 2 — lazily subscribed archival history (M12 wires the client).
+  history:
+    auto_subscribe: false
+    query: SELECT * FROM time_entries WHERE user_id = auth.user_id() AND deleted_at IS NOT NULL

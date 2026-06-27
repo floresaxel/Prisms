@@ -41,8 +41,9 @@ services:
       POWERSYNC_CONFIG_PATH: /config/powersync.yaml
     volumes:
       - ./infra/powersync:/config:ro
-      # real sync rules live with the schema (§16: versioned alongside)
-      - ./packages/db/sync-rules.yaml:/sync-rules.yaml:ro
+      # real sync config lives with the schema (§16: versioned alongside).
+      # Sync Streams (§7.3); mounted at the path powersync.yaml reads.
+      - ./packages/db/sync-streams.yaml:/sync-rules.yaml:ro
     ports:
       - '${PRISMS_POWERSYNC_PORT:-8080}:8080'
     healthcheck:

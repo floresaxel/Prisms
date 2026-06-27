@@ -722,6 +722,8 @@ export const tables = {
   computed_aggregates,
   diagram_layouts,
   diagram_groups,
+  schedule_suggestion_batches,
+  sync_review_items,
   command_log,
   user_settings,
 } as const;

@@ -43,7 +43,7 @@ services:
       POWERSYNC_JWT_AUDIENCE: ${POWERSYNC_JWT_AUDIENCE:-prisms}
     volumes:
       - ./infra/powersync/powersync.prod.yaml:/config/powersync.yaml:ro
-      - ./packages/db/sync-rules.yaml:/sync-rules.yaml:ro
+      - ./packages/db/sync-streams.yaml:/sync-rules.yaml:ro
     healthcheck:
       test: ['CMD', 'node', '-e', "fetch('http://localhost:8080/probes/liveness').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 10s
