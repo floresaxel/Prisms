@@ -46,6 +46,7 @@ export const ERROR_CODES = [
   'E_CLIENT_TOO_OLD', // §7.11: command from a client below the schema floor
   'E_INVALID_RETYPE_CHILDREN', // §8: node.retype would orphan child types
   'E_BLOCKED_TASK', // §8: timer.clock_in on a blocked task without force
+  'E_STALE_SUGGESTION', // §7.5: accepting a superseded/deleted suggestion batch
   'E_SCHEMA_NOT_ADDITIVE', // §7.11: a row-shape change is not additive within a major version
   // catch-all for bugs surfaced as data (never expected in normal operation)
   'E_INTERNAL',

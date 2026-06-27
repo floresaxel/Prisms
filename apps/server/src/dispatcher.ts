@@ -393,14 +393,69 @@ export function createDispatcher(
         return applied();
       }
       case 'block.accept_suggestion': {
+        // §7.5 accept transaction, run atomically inside the command txn.
         const p = payload as Payload<'block.accept_suggestion'>;
         const block = await one(tx.select().from(schedule_blocks).where(eq(schedule_blocks.id, p.id)).limit(1));
         const own = ownershipReject('block', p.id, block, userId);
         if (own) return own;
-        await tx.update(schedule_blocks).set({ status: 'committed', suggestion_reason: null, updated_at: now }).where(eq(schedule_blocks.id, p.id));
+        // not superseded or deleted (a stale batch cannot be accepted).
+        if (block!.deleted_at !== null || block!.superseded_at !== null) {
+          return reject('E_STALE_SUGGESTION', `suggestion ${p.id} is superseded or deleted (§7.5)`);
+        }
+        // already committed ⇒ converged no-op (idempotent accept).
+        if (block!.status !== 'suggested') return applied();
+        // the task must not be done (I8).
+        const task = await loadNodeRow(tx, block!.task_id);
+        if (task && task.completed_at !== null) return reject('E_DONE_IMMUTABLE', `task ${block!.task_id} is done (I8)`);
+        const startMs = new Date(block!.starts_at).getTime();
+        const endMs = new Date(block!.ends_at).getTime();
+        const overlaps = (s: string, e: string) => startMs < new Date(e).getTime() && new Date(s).getTime() < endMs;
+        // reject if it overlaps an anchored committed block (I9).
+        const committed = await tx
+          .select()
+          .from(schedule_blocks)
+          .where(and(eq(schedule_blocks.user_id, userId), eq(schedule_blocks.status, 'committed'), isNull(schedule_blocks.deleted_at)));
+        for (const b of committed) {
+          if (b.id === block!.id || b.anchor_type === 'none') continue;
+          if (overlaps(b.starts_at, b.ends_at)) {
+            return reject('E_SUGGESTION_OVERLAPS_ANCHOR', `suggestion overlaps anchored block ${b.id} (I9)`);
+          }
+        }
+        // soft-delete the flexible block this suggestion replaces, if any.
+        if (block!.replaces_block_id !== null) {
+          await tx
+            .update(schedule_blocks)
+            .set({ deleted_at: now, updated_at: now })
+            .where(and(eq(schedule_blocks.id, block!.replaces_block_id), eq(schedule_blocks.user_id, userId)));
+        }
+        // promote to committed; a committed block carries no suggestion metadata (§7.5).
+        await tx
+          .update(schedule_blocks)
+          .set({ status: 'committed', suggestion_reason: null, suggestion_batch_id: null, replaces_block_id: null, superseded_at: null, updated_at: now })
+          .where(eq(schedule_blocks.id, block!.id));
+        // supersede other live suggestions for the same task that overlap it.
+        const siblings = await tx
+          .select()
+          .from(schedule_blocks)
+          .where(
+            and(
+              eq(schedule_blocks.user_id, userId),
+              eq(schedule_blocks.task_id, block!.task_id),
+              eq(schedule_blocks.status, 'suggested'),
+              isNull(schedule_blocks.deleted_at),
+              isNull(schedule_blocks.superseded_at),
+            ),
+          );
+        for (const o of siblings) {
+          if (o.id === block!.id) continue;
+          if (overlaps(o.starts_at, o.ends_at)) {
+            await tx.update(schedule_blocks).set({ superseded_at: now, updated_at: now }).where(eq(schedule_blocks.id, o.id));
+          }
+        }
         return applied();
       }
       case 'block.reject_suggestion': {
+        // §7.5: soft-delete only the suggestion.
         const p = payload as Payload<'block.reject_suggestion'>;
         const block = await one(tx.select().from(schedule_blocks).where(eq(schedule_blocks.id, p.id)).limit(1));
         const own = ownershipReject('block', p.id, block, userId);
