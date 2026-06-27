@@ -8,11 +8,13 @@ import { describe, expect, it } from 'vitest';
 import {
   COMMAND_NAMES,
   COMMAND_SCHEMAS,
+  buildFactContext,
   checkActivityPromote,
   checkBlockCreate,
   checkBlockMove,
   checkClockIn,
   checkClockOut,
+  checkCompletion,
   checkEdgeCreate,
   checkHabitVision,
   checkNodeCreate,
@@ -20,11 +22,12 @@ import {
   checkNodeRetype,
   checkRule,
   isCommandName,
+  isoToEpochMillis,
   softDeleteClosure,
 } from '../../src/index';
 import { buildEdgeIndex } from '../../src/graph/dag';
 import { buildTreeIndex } from '../../src/graph/tree';
-import { idOf, makeEdge, makeNode } from '../helpers/fixtures';
+import { idOf, makeEdge, makeEntry, makeNode } from '../helpers/fixtures';
 
 describe('catalog completeness + strictness (DoD schema test)', () => {
   it('registers all 50 §8.1 verbs (incl. layout.renormalize_order) + 7 tag verbs and resolves names', () => {
@@ -209,10 +212,24 @@ describe('node.move revalidates I1/I3 (DoD)', () => {
 describe('other command-time checks', () => {
   it('node.retype revalidates I1 against parent and children', () => {
     const { project, tree } = world();
-    // demoting the project to a milestone would orphan its milestone child
+    // demoting the project to a milestone fails the OWN-parent typing (a
+    // milestone cannot sit under a roadmap) — E_HIERARCHY.
     const r = checkNodeRetype(tree, { id: project.id, node_type: 'milestone' });
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error.code).toBe('E_HIERARCHY');
+  });
+
+  it('node.retype rejects orphaning a child type with E_INVALID_RETYPE_CHILDREN (§8)', () => {
+    // milestone under a project, with a task child. Retyping milestone→task
+    // passes own-parent typing (task under project is fine) but would orphan the
+    // task child (a task cannot parent a task) → the orphan branch fires.
+    const project = makeNode({ id: idOf(1), node_type: 'project' });
+    const milestone = makeNode({ id: idOf(2), node_type: 'milestone', parent_id: project.id });
+    const task = makeNode({ id: idOf(3), node_type: 'task', parent_id: milestone.id });
+    const tree = buildTreeIndex([project, milestone, task]);
+    const r = checkNodeRetype(tree, { id: milestone.id, node_type: 'task' });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.code).toBe('E_INVALID_RETYPE_CHILDREN');
   });
 
   it('activity.promote requires a valid justification', () => {
@@ -241,5 +258,42 @@ describe('other command-time checks', () => {
     );
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error.code).toBe('E_RULE_SELF_TRIGGER');
+  });
+});
+
+describe('checkCompletion — §7.6 completion gates', () => {
+  const proj = makeNode({ id: idOf(1), node_type: 'project' });
+  const pred = makeNode({ id: idOf(2), node_type: 'task', parent_id: proj.id });
+  const succ = makeNode({ id: idOf(3), node_type: 'task', parent_id: proj.id });
+  const NOW = isoToEpochMillis('2026-06-13T12:00:00.000Z');
+  const edge = (type: 'FS' | 'FF' | 'SF' | 'SS', lag = 0) =>
+    makeEdge({ id: idOf(10), predecessor_id: pred.id, successor_id: succ.id, edge_type: type, lag_minutes: lag });
+  const ctx = (nodes: ReturnType<typeof makeNode>[], edges: ReturnType<typeof makeEdge>[], entries: ReturnType<typeof makeEntry>[] = []) =>
+    buildFactContext({ nodes, edges, time_entries: entries });
+
+  it('FS/FF block completion until the predecessor is completed', () => {
+    for (const type of ['FS', 'FF'] as const) {
+      const r = checkCompletion(succ, ctx([proj, pred, succ], [edge(type)]), NOW);
+      expect(r.ok, type).toBe(false);
+      if (!r.ok) expect(r.error.code).toBe('E_COMPLETION_BLOCKED');
+    }
+  });
+
+  it('FS completes once the predecessor is done (and respects lag)', () => {
+    const done = { ...pred, completed_at: '2026-06-13T11:00:00.000Z' };
+    expect(checkCompletion(succ, ctx([proj, done, succ], [edge('FS')]), NOW).ok).toBe(true);
+    // a 120-min lag from 11:00 is satisfied at 12:00? 11:00+120 = 13:00 > 12:00 → still blocked
+    expect(checkCompletion(succ, ctx([proj, done, succ], [edge('FS', 120)]), NOW).ok).toBe(false);
+  });
+
+  it('SF blocks until the predecessor has started; a time entry satisfies it', () => {
+    expect(checkCompletion(succ, ctx([proj, pred, succ], [edge('SF')]), NOW).ok).toBe(false);
+    const started = makeEntry({ id: idOf(20), task_id: pred.id, started_at: '2026-06-13T08:00:00.000Z' });
+    expect(checkCompletion(succ, ctx([proj, pred, succ], [edge('SF')], [started]), NOW).ok).toBe(true);
+  });
+
+  it('SS does not gate completion, and a task with no predecessors completes freely', () => {
+    expect(checkCompletion(succ, ctx([proj, pred, succ], [edge('SS')]), NOW).ok).toBe(true);
+    expect(checkCompletion(succ, ctx([proj, succ], []), NOW).ok).toBe(true);
   });
 });

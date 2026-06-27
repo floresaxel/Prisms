@@ -17,18 +17,23 @@
  */
 import {
   COMMAND_SCHEMAS,
+  asEpochMillis,
   buildEdgeIndex,
+  buildFactContext,
   buildTreeIndex,
   checkActivityPromote,
   checkBlockCreate,
   checkBlockMove,
   checkClockOut,
+  checkCompletion,
   checkEdgeCreate,
   checkHabitVision,
   checkNodeCreate,
   checkNodeMove,
   checkNodeRetype,
   checkRule,
+  incomingEdges,
+  isBlocked,
   isCommandName,
   renormalizedOrders,
   resolveOpenTimeEntries,
@@ -37,6 +42,7 @@ import {
   type CommandName,
   type CommandOutcome,
   type DomainError,
+  type FactContext,
   type Node as CoreNode,
   type Result,
   type TreeIndex,
@@ -52,6 +58,7 @@ import {
   diagram_groups,
   diagram_layouts,
   edges,
+  external_facts,
   habit_completions,
   habits,
   nodes,
@@ -149,6 +156,30 @@ export function createDispatcher(
     buildTreeIndex(await tx.select().from(nodes).where(eq(nodes.user_id, userId)));
   const loadEdgeIndex = async (tx: Tx, userId: string) =>
     buildEdgeIndex(await tx.select().from(edges).where(and(eq(edges.user_id, userId), isNull(edges.deleted_at))));
+  // The full FactContext for server-side status checks (completion gate §7.6,
+  // blocked-task clock-in §8). Loaded only when a command actually needs it.
+  const loadFactContext = async (tx: Tx, userId: string): Promise<FactContext> => {
+    const nodeRows = await tx.select().from(nodes).where(eq(nodes.user_id, userId));
+    const edgeRows = await tx.select().from(edges).where(eq(edges.user_id, userId));
+    const entryRows = await tx.select().from(time_entries).where(eq(time_entries.user_id, userId));
+    const blockRows = await tx.select().from(schedule_blocks).where(eq(schedule_blocks.user_id, userId));
+    const sprintRows = await tx.select().from(sprints).where(eq(sprints.user_id, userId));
+    const membershipRows = await tx.select().from(sprint_memberships).where(eq(sprint_memberships.user_id, userId));
+    const blockerRows = await tx.select().from(blocker_rules).where(eq(blocker_rules.user_id, userId));
+    const factRows = await tx.select().from(external_facts).where(eq(external_facts.user_id, userId));
+    const settings = await one(tx.select().from(user_settings).where(eq(user_settings.user_id, userId)).limit(1));
+    return buildFactContext({
+      nodes: nodeRows,
+      edges: edgeRows,
+      time_entries: entryRows,
+      schedule_blocks: blockRows,
+      sprints: sprintRows,
+      sprint_memberships: membershipRows,
+      blocker_rules: blockerRows,
+      external_facts: factRows,
+      user_settings: settings ?? null,
+    });
+  };
 
   /**
    * §7.3 last-writer-wins by HLC. Returns the subset of `candidate` fields
@@ -189,7 +220,13 @@ export function createDispatcher(
 
   async function runHandler(name: CommandName, tx: Tx, userId: string, deviceId: string, hlc: string, payload: unknown): Promise<HandlerOut> {
     const now = nowIso();
+    const nowMs = asEpochMillis(Date.parse(now));
     const applied = (backstop?: BackstopJob): HandlerOut => ({ status: 'applied', backstop });
+    /** §7.6 completion gate — load the context only when the task has predecessors. */
+    const completionGate = async (task: CoreNode): Promise<HandlerOut | null> => {
+      if (incomingEdges(await loadEdgeIndex(tx, userId), task.id).length === 0) return null;
+      return fromCheck(checkCompletion(task, await loadFactContext(tx, userId), nowMs));
+    };
     // §9.4 idempotent create: an existing row (same user) is a converged no-op.
     const convergeOrOwn = (existing: { user_id: string } | undefined, kind: string, id: string): HandlerOut | null =>
       !existing ? null : existing.user_id === userId ? { status: 'applied' } : reject('E_OWNERSHIP', `${kind} ${id} belongs to another user`);
@@ -275,6 +312,11 @@ export function createDispatcher(
         const row = await loadNodeRow(tx, p.id);
         const own = ownershipReject('node', p.id, row, userId);
         if (own) return own;
+        // §7.6: cannot complete while an FF/FS/SF predecessor requirement is unmet.
+        if (row!.completed_at === null) {
+          const gate = await completionGate(row as CoreNode);
+          if (gate) return gate;
+        }
         // Phase 3: when a completing-in block is named, it must exist and be owned
         // (any owned committed block — an unscheduled task may be logged into one).
         if (p.completed_in_block_id != null) {
@@ -473,6 +515,11 @@ export function createDispatcher(
         const own = ownershipReject('task', p.task_id, task, userId);
         if (own) return own;
         if ((task as CoreNode).completed_at !== null) return reject('E_DONE_IMMUTABLE', `task ${p.task_id} is done (I8)`);
+        // §8: clocking into a blocked task is rejected unless force; with force the
+        // resulting open entry makes the task `ongoing`, which wins precedence.
+        if (!p.force && isBlocked(task as CoreNode, await loadFactContext(tx, userId), nowMs)) {
+          return reject('E_BLOCKED_TASK', `task ${p.task_id} is blocked; clock in with force to override (§8)`);
+        }
 
         const openEntry = await one(
           tx.select().from(time_entries).where(and(eq(time_entries.user_id, userId), isNull(time_entries.ended_at), isNull(time_entries.deleted_at))).limit(1),
@@ -533,6 +580,9 @@ export function createDispatcher(
         if (p.completed_session && entry!.ended_at !== null) {
           const task = await loadNodeRow(tx, entry!.task_id);
           if (task && task.user_id === userId && task.completed_at === null) {
+            // §7.6: a review that would complete the task is gated like node.check_off.
+            const gate = await completionGate(task as CoreNode);
+            if (gate) return gate;
             const winC = await lwwFields(tx, hlc, userId, 'nodes', task.id, { completed_at: entry!.ended_at, completion_disposition: 'completed' as const });
             if (Object.keys(winC).length > 0) await tx.update(nodes).set({ ...winC, updated_at: now }).where(eq(nodes.id, task.id));
             return applied({ userId, trigger: 'task_completed', nodeId: task.id });

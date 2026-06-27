@@ -118,6 +118,8 @@ export const timerClockInSchema = z.strictObject({
   task_id: uuidSchema,
   started_at: isoDateTimeSchema,
   planned: z.boolean().optional(),
+  /** §8: override the blocked-task guard (ongoing then wins precedence). */
+  force: z.boolean().optional(),
 });
 export const timerClockOutSchema = z.strictObject({ entry_id: uuidSchema, ended_at: isoDateTimeSchema });
 export const timerReviewSchema = z.strictObject({
