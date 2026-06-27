@@ -60,6 +60,7 @@ export * from './status/context';
 export * from './status/phase';
 export * from './status/predicate';
 export * from './status/status';
+export * from './status/status-index';
 export * from './aggregates/effective';
 export * from './aggregates/occurrences';
 export * from './aggregates/practice';
