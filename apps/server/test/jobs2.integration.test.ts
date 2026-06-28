@@ -89,6 +89,13 @@ describe.skipIf(!adminUrl)('S14 jobs — scheduling & notify', () => {
     const ids = await projectWithTasks(2);
     const first = await runScheduleOptimize(db, ids.user, clock);
     expect(first.suggestions).toBe(2); // both unscheduled tasks proposed
+    expect(first.batchId).not.toBeNull();
+    // §7.5/§7.8: the suggestions belong to the batch and carry scheduler provenance.
+    const firstBlocks = await sql`
+      SELECT suggestion_batch_id, source_kind, source_id FROM schedule_blocks
+      WHERE user_id = ${ids.user} AND status = 'suggested' AND suggestion_reason = ${NIGHTLY_OPTIMIZATION}`;
+    expect(firstBlocks).toHaveLength(2);
+    expect(firstBlocks.every((b) => b['suggestion_batch_id'] === first.batchId && b['source_kind'] === 'scheduler' && b['source_id'] === first.batchId)).toBe(true);
 
     // commit one task at exactly its suggested slot, then re-optimize
     const taskAId = ids.tasks[0]!;
@@ -100,10 +107,18 @@ describe.skipIf(!adminUrl)('S14 jobs — scheduling & notify', () => {
 
     const second = await runScheduleOptimize(db, ids.user, clock);
     expect(second.suggestions).toBe(1); // taskA matches its committed block ⇒ no diff
+    expect(second.batchId).not.toBe(first.batchId);
+    // §7.5: the newer batch supersedes the older; the new one is active.
+    const [oldBatch] = await sql`SELECT superseded_at FROM schedule_suggestion_batches WHERE id = ${first.batchId}`;
+    expect(oldBatch!['superseded_at']).not.toBeNull();
+    const [newBatch] = await sql`SELECT superseded_at FROM schedule_suggestion_batches WHERE id = ${second.batchId}`;
+    expect(newBatch!['superseded_at']).toBeNull();
+
     const suggestedTasks = await sql`
-      SELECT task_id FROM schedule_blocks
+      SELECT task_id, suggestion_batch_id FROM schedule_blocks
       WHERE user_id = ${ids.user} AND status = 'suggested' AND suggestion_reason = ${NIGHTLY_OPTIMIZATION}`;
     expect(suggestedTasks.map((r) => r['task_id'])).toEqual([ids.tasks[1]]);
+    expect(suggestedTasks[0]!['suggestion_batch_id']).toBe(second.batchId); // links to the active batch
   });
 
   it('pastdue.scan yields exactly one suggestion row + a notification, idempotently (DoD)', async () => {
@@ -118,11 +133,16 @@ describe.skipIf(!adminUrl)('S14 jobs — scheduling & notify', () => {
     expect(notes).toEqual([{ userId: ids.user, taskId: task, title: 'T0' }]);
 
     const rows = await sql`
-      SELECT id, starts_at FROM schedule_blocks
+      SELECT id, starts_at, suggestion_batch_id, source_kind, source_id FROM schedule_blocks
       WHERE user_id = ${ids.user} AND task_id = ${task} AND status = 'suggested' AND suggestion_reason = ${PAST_DUE_RESCHEDULE}`;
     expect(rows).toHaveLength(1);
     // the replacement block is at or after "now"
     expect(new Date(rows[0]!['starts_at'] as string).getTime()).toBeGreaterThanOrEqual(NOW_MS);
+    // §7.5/§7.8: the suggestion belongs to a past_due batch and carries scheduler provenance.
+    expect(rows[0]!['source_kind']).toBe('scheduler');
+    expect(rows[0]!['source_id']).toBe(rows[0]!['suggestion_batch_id']);
+    const [batch] = await sql`SELECT source FROM schedule_suggestion_batches WHERE id = ${rows[0]!['suggestion_batch_id']}`;
+    expect(batch!['source']).toBe('past_due');
 
     // re-scan: still exactly one suggestion (idempotent)
     const second = await runPastdueScan(db, ids.user, clock);

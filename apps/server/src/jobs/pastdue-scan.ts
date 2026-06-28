@@ -11,7 +11,7 @@
 import { randomUUID } from 'node:crypto';
 
 import { asEpochMillis, bucketDate, rescheduleTask } from '@prisms/core';
-import { nodes, schedule_blocks, user_settings } from '@prisms/db';
+import { nodes, schedule_blocks, schedule_suggestion_batches, user_settings } from '@prisms/db';
 import { and, eq, isNull } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 
@@ -60,19 +60,52 @@ export async function runPastdueScan(
   const pastDue = taskRows.filter((t) => t.due_date !== null && t.due_date < today && !hasFutureCommitted.has(t.id));
   if (pastDue.length === 0) return { pastDue: 0, suggested: 0, notifications: [] };
 
+  // warn for every past-due task (independent of whether a suggestion is produced).
+  const notifications: PastDueNotification[] = pastDue.map((t) => ({ userId, taskId: t.id, title: t.title }));
+  for (const n of notifications) enqueueNotify?.(n);
+
   const input = await loadSchedulerInput(db, userId, { now, mode: 'greedy' });
-  const notifications: PastDueNotification[] = [];
-  let suggested = 0;
 
-  for (const task of pastDue) {
-    const notification = { userId, taskId: task.id, title: task.title };
-    notifications.push(notification);
-    enqueueNotify?.(notification);
-    if (hasPastDueSuggestion.has(task.id)) continue; // exactly one suggestion per task
+  return db.transaction(async (tx) => {
+    // Reuse the active past_due batch (idempotent across scans); create it lazily on
+    // the first new suggestion. §7.8: suggestions carry source_kind='scheduler'.
+    let batchId = (
+      await tx
+        .select({ id: schedule_suggestion_batches.id })
+        .from(schedule_suggestion_batches)
+        .where(
+          and(
+            eq(schedule_suggestion_batches.user_id, userId),
+            eq(schedule_suggestion_batches.source, 'past_due'),
+            isNull(schedule_suggestion_batches.superseded_at),
+            isNull(schedule_suggestion_batches.deleted_at),
+          ),
+        )
+        .limit(1)
+    )[0]?.id as string | undefined;
 
-    const result = rescheduleTask(task.id, { ...input, tasks: input.tasks.map((t) => (t.id === task.id ? { ...t, notBefore: nowMs } : t)) });
-    if ('startsAt' in result) {
-      await db.insert(schedule_blocks).values({
+    let suggested = 0;
+    for (const task of pastDue) {
+      if (hasPastDueSuggestion.has(task.id)) continue; // exactly one suggestion per task
+
+      const result = rescheduleTask(task.id, { ...input, tasks: input.tasks.map((t) => (t.id === task.id ? { ...t, notBefore: nowMs } : t)) });
+      if (!('startsAt' in result)) continue;
+
+      if (batchId === undefined) {
+        batchId = randomUUID();
+        await tx.insert(schedule_suggestion_batches).values({
+          id: batchId,
+          user_id: userId,
+          source: 'past_due',
+          horizon_start: nowIso,
+          horizon_end: new Date(nowMs + 7 * 86_400_000).toISOString(),
+          computed_at: nowIso,
+          superseded_at: null,
+          updated_at: nowIso,
+          source_kind: 'server_job',
+        });
+      }
+      await tx.insert(schedule_blocks).values({
         id: randomUUID(),
         user_id: userId,
         task_id: task.id,
@@ -81,13 +114,16 @@ export async function runPastdueScan(
         anchor_type: 'none',
         status: 'suggested',
         suggestion_reason: PAST_DUE_RESCHEDULE,
+        suggestion_batch_id: batchId,
         computed_at: nowIso,
         updated_at: nowIso,
+        source_kind: 'scheduler',
+        source_id: batchId,
       });
       suggested += 1;
     }
-  }
-  return { pastDue: pastDue.length, suggested, notifications };
+    return { pastDue: pastDue.length, suggested, notifications };
+  });
 }
 
 /** Cron entry point: scan every user that has settings. */
