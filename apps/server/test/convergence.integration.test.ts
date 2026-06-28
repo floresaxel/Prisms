@@ -261,7 +261,7 @@ describe.skipIf(!adminUrl)('S12 convergence harness (two devices, offline edits)
     }
   });
 
-  it('scenario 5 — duplicate server automation backstops converge via UUIDv5', async () => {
+  it('scenario 5 — in-txn automation converges via UUIDv5 (backstop is a no-op)', async () => {
     const p = await project();
     const ruleId = randomUUID();
     await seed(p.user, [
@@ -282,6 +282,13 @@ describe.skipIf(!adminUrl)('S12 convergence harness (two devices, offline edits)
     await a.sync(dispatcher, p.user);
     await b.sync(dispatcher, p.user);
 
+    // §10.1: each device's check_off ran automation IN ITS txn; the deterministic
+    // UUIDv5 id makes the two devices converge to exactly ONE follow-up.
+    const afterSync = await sql`SELECT id FROM nodes WHERE user_id = ${p.user} AND title = 'Follow-up' AND deleted_at IS NULL`;
+    expect(afterSync).toHaveLength(1);
+
+    // the backstop still fires per trigger but is now only a drift safety-net:
+    // the rows are already present, so it is a structural no-op.
     expect(backstops).toEqual([
       { userId: p.user, trigger: 'task_completed', nodeId: p.task },
       { userId: p.user, trigger: 'task_completed', nodeId: p.task },
@@ -289,8 +296,8 @@ describe.skipIf(!adminUrl)('S12 convergence harness (two devices, offline edits)
 
     const first = await runAutomationBackstop(drizzle(sql), backstops[0]!);
     const second = await runAutomationBackstop(drizzle(sql), backstops[1]!);
-    expect(first.nodesInserted).toBe(1);
-    expect(first.noop).toBe(false);
+    expect(first.nodesInserted).toBe(0);
+    expect(first.noop).toBe(true);
     expect(second.nodesInserted).toBe(0);
     expect(second.noop).toBe(true);
 

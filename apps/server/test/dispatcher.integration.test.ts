@@ -200,6 +200,29 @@ describe.skipIf(!adminUrl)('S11 command dispatcher (§8 pipeline, full catalog)'
     expect(backstops).toContainEqual({ userId: ids.user, trigger: 'task_completed', nodeId: ids.task });
   });
 
+  it('runs automation in-txn: a triggering command spawns the follow-up in its own transaction (§10.1)', async () => {
+    const ids = await seedTree();
+    await results(
+      [
+        cmd('rule.create', {
+          id: randomUUID(),
+          trigger: 'task_completed',
+          conditions: { all: [] },
+          actions: [{ action: 'spawn_task', slot: 0, template: { title: 'Follow-up', parent: 'same_as_trigger' } }],
+        }),
+      ],
+      ids.user,
+    );
+    const [done] = await results([cmd('node.check_off', { id: ids.task, completed_at: '2026-06-13T09:00:00.000Z' })], ids.user);
+    expect(done!.result).toBe('applied');
+    // the follow-up exists immediately — created by the check_off's OWN txn, with no backstop run.
+    const spawned = await sql`SELECT title, parent_id, source_kind, created_by_command_id FROM nodes WHERE user_id = ${ids.user} AND title = 'Follow-up'`;
+    expect(spawned).toHaveLength(1);
+    expect(spawned[0]!['parent_id']).toBe(ids.milestone); // same_as_trigger → the trigger task's parent
+    expect(spawned[0]!['source_kind']).toBe('automation');
+    expect(spawned[0]!['created_by_command_id']).toBe(done!.id);
+  });
+
   it('node.check_off records the disposition: default completed, explicit obsolete; uncheck clears (Phase 2)', async () => {
     const ids = await seedTree();
     // default: a check-off with no disposition records 'completed'

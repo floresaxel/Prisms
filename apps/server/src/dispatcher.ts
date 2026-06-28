@@ -38,13 +38,16 @@ import {
   isCommandName,
   renormalizedOrders,
   resolveOpenTimeEntries,
+  runAutomations,
   softDeleteClosure,
   stripTrustFields,
   uploadRequestSchema,
   ROW_SCHEMA_VERSION,
+  type AutomationRule,
   type CommandName,
   type CommandOutcome,
   type DomainError,
+  type Edge as CoreEdge,
   type FactContext,
   type Node as CoreNode,
   type Result,
@@ -207,6 +210,44 @@ export function createDispatcher(
       user_settings: settings ?? null,
     });
   };
+
+  /**
+   * §10.1 automation, run SYNCHRONOUSLY inside the command transaction and
+   * re-applied authoritatively by the server. The pure rules engine computes
+   * the full fixpoint (MAX_DEPTH=5) over the live fact set; spawned rows are
+   * deterministic (UUIDv5) so two devices' triggers converge and a replay is a
+   * structural no-op (ON CONFLICT DO NOTHING on the id). The async
+   * automation-backstop (M6) is now only a drift/offline-gap safety-net.
+   * Provenance is server-assigned: source_kind='automation', the triggering
+   * command id, and the trigger in source_detail.
+   */
+  async function runAutomationInTx(tx: Tx, job: BackstopJob, commandId: string): Promise<void> {
+    const triggerNode = (await loadNodeRow(tx, job.nodeId)) as CoreNode | undefined;
+    if (!triggerNode || triggerNode.deleted_at !== null) return;
+    const [nodeRows, edgeRows, ruleRows] = await Promise.all([
+      tx.select().from(nodes).where(eq(nodes.user_id, job.userId)),
+      tx.select().from(edges).where(and(eq(edges.user_id, job.userId), isNull(edges.deleted_at))),
+      tx.select().from(automation_rules).where(and(eq(automation_rules.user_id, job.userId), isNull(automation_rules.deleted_at))),
+    ]);
+    const out = runAutomations({
+      trigger: { kind: job.trigger, node: triggerNode },
+      rules: ruleRows as AutomationRule[],
+      rows: { nodes: nodeRows as CoreNode[], edges: edgeRows as CoreEdge[] },
+    });
+    const stampProv = <T extends object>(row: T): T => ({
+      ...row,
+      source_kind: 'automation',
+      created_by_command_id: commandId,
+      last_modified_by_command_id: commandId,
+      source_detail: { trigger_command_id: commandId, trigger_node_id: job.nodeId },
+    });
+    for (const node of out.nodes) {
+      await tx.insert(nodes).values(stampProv(node) as typeof nodes.$inferInsert).onConflictDoNothing({ target: nodes.id });
+    }
+    for (const edge of out.edges) {
+      await tx.insert(edges).values(stampProv(edge) as typeof edges.$inferInsert).onConflictDoNothing({ target: edges.id });
+    }
+  }
 
   /**
    * §7.3 last-writer-wins by HLC. Returns the subset of `candidate` fields
@@ -1157,6 +1198,8 @@ export function createDispatcher(
     try {
       const { out } = await db.transaction(async (tx) => {
         const result = await runHandler(cmd.name as CommandName, tx, userId, deviceId, cmd.id, cmd.hlc, parsed.data);
+        // §10.1: run automation to fixpoint in the SAME txn (authoritative).
+        if (result.status === 'applied' && result.backstop) await runAutomationInTx(tx, result.backstop, cmd.id);
         await tx.insert(command_log).values({
           id: cmd.id,
           user_id: userId,

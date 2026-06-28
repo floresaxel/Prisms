@@ -48,14 +48,17 @@ export async function runAutomationBackstop(db: PostgresJsDatabase, job: Backsto
       rows: { nodes: nodeRows as CoreNode[], edges: edgeRows as Edge[] },
     });
 
+    // backstop-filled rows are server automation output (§7.8); the in-txn path
+    // (dispatcher §10.1) is authoritative, so this only fills offline/drift gaps.
+    const prov = <T extends object>(row: T): T => ({ ...row, source_kind: 'automation', source_detail: { trigger_node_id: job.nodeId, backstop: true } });
     let nodesInserted = 0;
     for (const node of out.nodes) {
-      const res = await tx.insert(nodes).values(node as typeof nodes.$inferInsert).onConflictDoNothing({ target: nodes.id });
+      const res = await tx.insert(nodes).values(prov(node) as typeof nodes.$inferInsert).onConflictDoNothing({ target: nodes.id });
       nodesInserted += res.count ?? 0;
     }
     let edgesInserted = 0;
     for (const edge of out.edges) {
-      const res = await tx.insert(edges).values(edge as typeof edges.$inferInsert).onConflictDoNothing({ target: edges.id });
+      const res = await tx.insert(edges).values(prov(edge) as typeof edges.$inferInsert).onConflictDoNothing({ target: edges.id });
       edgesInserted += res.count ?? 0;
     }
 

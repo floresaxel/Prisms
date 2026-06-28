@@ -143,17 +143,16 @@ describe.skipIf(!adminUrl)('S13 jobs — facts & truth', () => {
       cmd('node.check_off', { id: ids.task, completed_at: '2026-06-13T14:00:00.000Z' }),
     ]);
 
-    const first = await runAutomationBackstop(db, { userId: user, trigger: 'task_completed', nodeId: ids.task });
-    expect(first.nodesInserted).toBe(1);
-    expect(first.noop).toBe(false);
-    const spawned = await sql_`SELECT title, parent_id FROM nodes WHERE user_id = ${user} AND title = 'Pre-brief: Lecture'`;
+    // §10.1: node.check_off ran automation IN ITS txn — the follow-up already exists.
+    const spawned = await sql_`SELECT title, parent_id, source_kind FROM nodes WHERE user_id = ${user} AND title = 'Pre-brief: Lecture'`;
     expect(spawned).toHaveLength(1);
     expect(spawned[0]!['parent_id']).toBe(ids.project); // parent: same_as_trigger
+    expect(spawned[0]!['source_kind']).toBe('automation');
 
-    // re-run: deterministic UUIDv5 ⇒ structural no-op
-    const second = await runAutomationBackstop(db, { userId: user, trigger: 'task_completed', nodeId: ids.task });
-    expect(second.nodesInserted).toBe(0);
-    expect(second.noop).toBe(true);
+    // the backstop is now a no-op safety-net: the row is already present (UUIDv5).
+    const first = await runAutomationBackstop(db, { userId: user, trigger: 'task_completed', nodeId: ids.task });
+    expect(first.nodesInserted).toBe(0);
+    expect(first.noop).toBe(true);
     const stillOne = await sql_`SELECT count(*)::int AS n FROM nodes WHERE user_id = ${user} AND title = 'Pre-brief: Lecture'`;
     expect(stillOne[0]!['n']).toBe(1);
   });
