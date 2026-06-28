@@ -19,7 +19,7 @@ import { createDispatcher, type Dispatcher } from '../src/dispatcher';
 import { createRateLimiter } from '../src/rate-limit';
 import { runAggregatesRecompute } from '../src/jobs/aggregates-recompute';
 import { runAutomationBackstop } from '../src/jobs/automation-backstop';
-import { runRetentionPurge, RETENTION_DAYS } from '../src/jobs/retention-purge';
+import { runRetentionPurge, RETENTION_DAYS, MAX_OFFLINE_HORIZON_DAYS } from '../src/jobs/retention-purge';
 import { runWeatherPoll, locationSlug, type DailyForecast } from '../src/jobs/weather-poll';
 
 loadRootEnv();
@@ -272,5 +272,22 @@ describe.skipIf(!adminUrl)('S13 jobs — facts & truth', () => {
     expect(sprintsLeft.map((r) => r['id'])).toEqual([recentSprint]); // recent survives
     const nodeGone = await sql_`SELECT count(*)::int AS n FROM nodes WHERE id = ${oldNode}`;
     expect(nodeGone[0]!['n']).toBe(0);
+  });
+
+  it('retention.purge deletes command-dedup past the offline horizon but keeps records inside it (R18/§7.2d)', async () => {
+    const user = randomUUID();
+    const oldCmd = randomUUID();
+    const recentCmd = randomUUID();
+    const beyond = new Date(NOW_MS - (MAX_OFFLINE_HORIZON_DAYS + 5) * 86_400_000).toISOString();
+    const inside = new Date(NOW_MS - 5 * 86_400_000).toISOString();
+    await sql_`
+      INSERT INTO command_log (id, user_id, name, payload, device_id, hlc, result, applied_at)
+      VALUES (${oldCmd}, ${user}, 'node.rename', '{}'::jsonb, 'dev-1', '000000000001-0000-x', 'applied', ${beyond}),
+             (${recentCmd}, ${user}, 'node.rename', '{}'::jsonb, 'dev-1', '000000000002-0000-x', 'applied', ${inside})`;
+
+    const res = await runRetentionPurge(db, clock);
+    expect(res.deleted['command_log']).toBeGreaterThanOrEqual(1);
+    const left = await sql_`SELECT id FROM command_log WHERE id IN (${oldCmd}, ${recentCmd})`;
+    expect(left.map((r) => r['id'])).toEqual([recentCmd]); // beyond-horizon purged; in-horizon dedup survives
   });
 });

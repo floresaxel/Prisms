@@ -14,6 +14,14 @@ import type { JobClock } from './clock';
 
 export const RETENTION_DAYS = 90;
 
+/**
+ * R18/§7.2d: server command-dedup records (command_log) are retained at least
+ * this long. A device offline up to the horizon must never re-apply an
+ * already-applied command, so the purge deletes dedup records only OLDER than
+ * this and preserves anything younger.
+ */
+export const MAX_OFFLINE_HORIZON_DAYS = 90;
+
 /** Soft-delete tables in FK-safe (referencing-first) order; nodes handled separately. */
 const PURGE_ORDER = [
   'habit_completions',
@@ -67,6 +75,13 @@ export async function runRetentionPurge(
       AND NOT EXISTS (SELECT 1 FROM diagram_layouts l WHERE l.node_id = n.id)
   `);
   deleted['nodes'] = res.count ?? 0;
+
+  // R18/§7.2d: purge command-dedup records only PAST the offline horizon; records
+  // younger than MAX_OFFLINE_HORIZON survive so a long-dormant device reconnecting
+  // never re-applies an already-applied command.
+  const horizonCutoff = new Date(clock.now() - MAX_OFFLINE_HORIZON_DAYS * 86_400_000).toISOString();
+  const dedup = await db.execute(sql`DELETE FROM command_log WHERE applied_at < ${horizonCutoff}`);
+  deleted['command_log'] = dedup.count ?? 0;
 
   return { cutoff, deleted };
 }
