@@ -79,7 +79,7 @@ import {
   user_settings,
 } from '@prisms/db';
 import { randomUUID } from 'node:crypto';
-import { and, eq, isNull, inArray } from 'drizzle-orm';
+import { and, eq, isNull, inArray, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { z } from 'zod';
 
@@ -307,10 +307,51 @@ export function createDispatcher(
   }
 
   /**
+   * §7.13: when a field write LOSES last-writer-wins to a strictly-newer writer
+   * and its value materially differs from the winner, surface an `hlc_conflict`
+   * review item that preserves the losing value so the user can reconcile. The
+   * materiality check (value actually differs) keeps convergent re-writes — same
+   * value, older HLC — from creating noise. The winning value is read with safe
+   * identifier quoting; `table`/`field` are internal catalog constants, not input.
+   */
+  async function maybeHlcConflict(
+    tx: Tx,
+    userId: string,
+    table: string,
+    rowId: string,
+    field: string,
+    losingValue: unknown,
+    winningHlc: string,
+    losingHlc: string,
+  ): Promise<void> {
+    const res = (await tx.execute(
+      sql`SELECT ${sql.identifier(field)} AS v FROM ${sql.identifier(table)} WHERE id = ${rowId} LIMIT 1`,
+    )) as unknown as { v: unknown }[];
+    const winningValue = res[0]?.v;
+    if (winningValue === undefined) return;
+    if (JSON.stringify(winningValue) === JSON.stringify(losingValue)) return; // not materially different
+    const at = nowIso();
+    await tx.insert(sync_review_items).values({
+      id: randomUUID(),
+      user_id: userId,
+      command_id: null,
+      item_type: 'hlc_conflict',
+      severity: 'warning',
+      title: `A concurrent edit to ${table}.${field} won; your older value was not applied`,
+      detail: { table, row_id: rowId, field, winning_value: winningValue, losing_value: losingValue, winning_hlc: winningHlc, losing_hlc: losingHlc } as typeof sync_review_items.$inferInsert.detail,
+      status: 'open',
+      source_kind: 'system',
+      created_at: at,
+      updated_at: at,
+    });
+  }
+
+  /**
    * §7.3 last-writer-wins by HLC. Returns the subset of `candidate` fields
    * whose incoming HLC beats the recorded last writer (and records the new
    * winner). HLC strings are zero-padded so lexical compare == HLC order.
-   * Losing fields are simply not written (the command is still logged).
+   * Losing fields are not written; a strictly-older material loss raises an
+   * `hlc_conflict` item (§7.13).
    */
   async function lwwFields<T extends Record<string, unknown>>(
     tx: Tx,
@@ -338,6 +379,10 @@ export function createDispatcher(
             target: [command_field_versions.table_name, command_field_versions.row_id, command_field_versions.field],
             set: { hlc },
           });
+      } else if (hlc < current.hlc) {
+        // strictly older than the recorded winner → a losing concurrent write.
+        // (hlc === current.hlc is an idempotent replay/tie, not a conflict.)
+        await maybeHlcConflict(tx, userId, table, rowId, key, candidate[key], current.hlc, hlc);
       }
     }
     return winning;
