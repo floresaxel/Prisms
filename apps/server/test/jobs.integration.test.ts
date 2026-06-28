@@ -127,6 +127,32 @@ describe.skipIf(!adminUrl)('S13 jobs — facts & truth', () => {
     expect(canonicalStreak).not.toBe(999);
   });
 
+  it('aggregates.recompute does NOT clobber a value written after its snapshot (§7.4 guard)', async () => {
+    const user = randomUUID();
+    const vision = randomUUID();
+    const habit = randomUUID();
+    await apply(user, [
+      cmd('node.create', { id: vision, node_type: 'vision', title: 'V', sort_order: 'a0' }),
+      cmd('habit.create', { id: habit, vision_id: vision, title: 'Run', rrule: 'FREQ=DAILY', streak_mode: 'daily' }),
+      cmd('habit.check_off', { id: randomUUID(), habit_id: habit, occurrence_date: '2026-06-13', completed_at: '2026-06-13T12:00:00.000Z' }),
+    ]);
+    await sql_`UPDATE habits SET created_at = '2026-06-01T00:00:00Z' WHERE id = ${habit}`;
+    await runAggregatesRecompute(db, user, clock); // establish the server row
+
+    // a later command writes a fresher value, stamped AFTER this run's snapshot.
+    const fresh = JSON.stringify({ current: 42, longest: 42, priorRun: 0, computedThrough: '2026-06-13' });
+    const future = new Date(NOW_MS + 60_000).toISOString();
+    await sql_`
+      UPDATE computed_aggregates SET value = ${fresh}::jsonb, computed_by = 'client', updated_at = ${future}
+      WHERE subject_id = ${habit} AND metric = 'streak'`;
+
+    // recompute must NOT clobber it — the guard skips a row written after the snapshot.
+    await runAggregatesRecompute(db, user, clock);
+    const [kept] = await sql_`SELECT value, computed_by FROM computed_aggregates WHERE subject_id = ${habit} AND metric = 'streak'`;
+    expect((kept!['value'] as { current: number }).current).toBe(42); // the later write survived
+    expect(kept!['computed_by']).toBe('client');
+  });
+
   it('automation.backstop fills a missed spawn, then no-ops on the already-spawned row (DoD)', async () => {
     const user = randomUUID();
     const ids = { vision: randomUUID(), roadmap: randomUUID(), project: randomUUID(), task: randomUUID(), rule: randomUUID() };
