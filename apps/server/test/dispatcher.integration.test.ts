@@ -330,6 +330,38 @@ describe.skipIf(!adminUrl)('S11 command dispatcher (§8 pipeline, full catalog)'
     expect(edgeCount[0]!['n']).toBe(0); // the edge dangling off the dropped node was dropped, not FK-inserted
   });
 
+  it('raises a sync_warning review item when an automation cascade hits the depth limit (§7.13)', async () => {
+    const ids = await seedTree();
+    // chain: <trigger> completed → D1 (task_created) → D2 → … past MAX_DEPTH (5).
+    const rules = [
+      cmd('rule.create', {
+        id: randomUUID(),
+        trigger: 'task_completed',
+        conditions: { all: [] },
+        actions: [{ action: 'spawn_task', slot: 0, template: { title: 'D1', parent: 'same_as_trigger' } }],
+      }),
+    ];
+    for (let i = 1; i <= 5; i += 1) {
+      rules.push(
+        cmd('rule.create', {
+          id: randomUUID(),
+          trigger: 'task_created',
+          conditions: { all: [{ fact: 'node.title', op: 'matches', value: `d${i}` }] },
+          actions: [{ action: 'spawn_task', slot: 0, template: { title: `D${i + 1}`, parent: 'same_as_trigger' } }],
+        }),
+      );
+    }
+    await results(rules, ids.user);
+    const [done] = await results([cmd('node.check_off', { id: ids.task, completed_at: '2026-06-13T09:00:00.000Z' })], ids.user);
+    expect(done!.result).toBe('applied'); // the command still applies despite the truncated cascade
+    const items = await sql`
+      SELECT severity, detail FROM sync_review_items
+      WHERE user_id = ${ids.user} AND command_id = ${done!.id} AND item_type = 'sync_warning'`;
+    expect(items).toHaveLength(1);
+    expect(items[0]!['severity']).toBe('warning');
+    expect((items[0]!['detail'] as { reason: string }).reason).toBe('max_depth');
+  });
+
   it('node.check_off records the disposition: default completed, explicit obsolete; uncheck clears (Phase 2)', async () => {
     const ids = await seedTree();
     // default: a check-off with no disposition records 'completed'

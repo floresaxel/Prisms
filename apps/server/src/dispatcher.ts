@@ -234,6 +234,23 @@ export function createDispatcher(
       rules: ruleRows as AutomationRule[],
       rows: { nodes: nodeRows as CoreNode[], edges: edgeRows as CoreEdge[] },
     });
+    // §7.13: a cascade cut off at MAX_DEPTH is surfaced as a warning (rare; deep fan-out).
+    if (out.depthLimited) {
+      const at = nowIso();
+      await tx.insert(sync_review_items).values({
+        id: randomUUID(),
+        user_id: job.userId,
+        command_id: commandId,
+        item_type: 'sync_warning',
+        severity: 'warning',
+        title: 'Automation cascade reached the depth limit and was truncated',
+        detail: { trigger_node_id: job.nodeId, reason: 'max_depth' },
+        status: 'open',
+        source_kind: 'server_job',
+        created_at: at,
+        updated_at: at,
+      });
+    }
     if (out.nodes.length === 0 && out.edges.length === 0) return;
 
     // §6.7: spawned rows are server-authoritative but must still satisfy the

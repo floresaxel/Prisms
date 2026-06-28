@@ -20,6 +20,7 @@ import { createRateLimiter } from '../src/rate-limit';
 import { runAggregatesRecompute } from '../src/jobs/aggregates-recompute';
 import { runAutomationBackstop } from '../src/jobs/automation-backstop';
 import { runRetentionPurge, RETENTION_DAYS, MAX_OFFLINE_HORIZON_DAYS } from '../src/jobs/retention-purge';
+import { runReviewExpireResolved, REVIEW_RESOLVED_RETENTION_DAYS } from '../src/jobs/review-expire';
 import { runWeatherPoll, locationSlug, type DailyForecast } from '../src/jobs/weather-poll';
 
 loadRootEnv();
@@ -289,5 +290,24 @@ describe.skipIf(!adminUrl)('S13 jobs — facts & truth', () => {
     expect(res.deleted['command_log']).toBeGreaterThanOrEqual(1);
     const left = await sql_`SELECT id FROM command_log WHERE id IN (${oldCmd}, ${recentCmd})`;
     expect(left.map((r) => r['id'])).toEqual([recentCmd]); // beyond-horizon purged; in-horizon dedup survives
+  });
+
+  it('review.expire_resolved soft-deletes old closed items, keeps open + in-horizon ones (§12)', async () => {
+    const user = randomUUID();
+    const oldResolved = randomUUID();
+    const recentResolved = randomUUID();
+    const stillOpen = randomUUID();
+    const beyond = new Date(NOW_MS - (REVIEW_RESOLVED_RETENTION_DAYS + 5) * 86_400_000).toISOString();
+    const inside = new Date(NOW_MS - 5 * 86_400_000).toISOString();
+    await sql_`
+      INSERT INTO sync_review_items (id, user_id, command_id, item_type, severity, title, detail, status, resolved_at, updated_at, source_kind) VALUES
+        (${oldResolved}, ${user}, NULL, 'command_rejection', 'warning', 'old', '{}'::jsonb, 'resolved', ${beyond}, ${beyond}, 'server_job'),
+        (${recentResolved}, ${user}, NULL, 'command_rejection', 'warning', 'recent', '{}'::jsonb, 'resolved', ${inside}, ${inside}, 'server_job'),
+        (${stillOpen}, ${user}, NULL, 'command_rejection', 'warning', 'open', '{}'::jsonb, 'open', NULL, ${beyond}, 'server_job')`;
+
+    const res = await runReviewExpireResolved(db, clock);
+    expect(res.expired).toBe(1); // only the beyond-retention resolved item
+    const live = await sql_`SELECT id FROM sync_review_items WHERE user_id = ${user} AND deleted_at IS NULL`;
+    expect(live.map((r) => r['id']).sort()).toEqual([recentResolved, stillOpen].sort()); // recent-resolved + open survive
   });
 });
