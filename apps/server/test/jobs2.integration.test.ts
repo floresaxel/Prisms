@@ -14,8 +14,12 @@ import { drizzle, type PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { exportManifestSchema } from '@prisms/core';
+
 import { createDispatcher, type Dispatcher } from '../src/dispatcher';
 import { createRateLimiter } from '../src/rate-limit';
+import { runBackupSnapshot } from '../src/jobs/backup-snapshot';
+import { runImportValidate } from '../src/jobs/import-validate';
 import { runScheduleOptimize, NIGHTLY_OPTIMIZATION } from '../src/jobs/schedule-optimize';
 import { runPastdueScan, PAST_DUE_RESCHEDULE, type PastDueNotification } from '../src/jobs/pastdue-scan';
 import { runLayoutPrecompute } from '../src/jobs/layout-precompute';
@@ -200,5 +204,36 @@ describe.skipIf(!adminUrl)('S14 jobs — scheduling & notify', () => {
     expect(web.target.keys).toEqual({ p256dh: 'k', auth: 'a' });
     expect(web.notification).toEqual(notification);
     expect(calls.find((c) => c.kind === 'expo')!.target.endpoint).toBe('ExponentPushToken[xyz]');
+  });
+
+  it('backup.snapshot exports portable rows; import.validate dry-runs without writing data (§13.1)', async () => {
+    const ids = await projectWithTasks(2);
+    const manifest = await runBackupSnapshot(db, ids.user, clock);
+    expect(exportManifestSchema.safeParse(manifest).success).toBe(true); // a valid prisms-export
+    expect(manifest.format).toBe('prisms-export');
+    expect(manifest.tables['nodes']!.length).toBeGreaterThanOrEqual(5); // vision+roadmap+project+2 tasks
+
+    const nodesBefore = (await sql`SELECT count(*)::int AS n FROM nodes WHERE user_id = ${ids.user}`)[0]!['n'];
+
+    // re-importing the SAME data → every id collides; the dry-run reports + warns, writes no data.
+    const report = await runImportValidate(db, ids.user, manifest, clock);
+    expect(report.format_ok).toBe(true);
+    expect(report.conflicts.length).toBeGreaterThanOrEqual(5);
+    expect(report.conflicts.every((c) => c.reason.includes('already exists'))).toBe(true);
+    const nodesAfter = (await sql`SELECT count(*)::int AS n FROM nodes WHERE user_id = ${ids.user}`)[0]!['n'];
+    expect(nodesAfter).toBe(nodesBefore); // dry-run wrote no data rows
+
+    const items = await sql`SELECT severity FROM sync_review_items WHERE user_id = ${ids.user} AND item_type = 'import_warning'`;
+    expect(items.length).toBeGreaterThanOrEqual(1);
+    expect(items[0]!['severity']).toBe('warning');
+  });
+
+  it('import.validate flags a malformed manifest with an import_warning (§13.1)', async () => {
+    const user = randomUUID();
+    const report = await runImportValidate(db, user, { format: 'not-prisms', garbage: true }, clock);
+    expect(report.format_ok).toBe(false);
+    expect(report.warnings.length).toBeGreaterThan(0);
+    const items = await sql`SELECT count(*)::int AS n FROM sync_review_items WHERE user_id = ${user} AND item_type = 'import_warning'`;
+    expect(items[0]!['n']).toBe(1);
   });
 });
