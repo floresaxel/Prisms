@@ -145,4 +145,59 @@ describe.skipIf(!adminUrl)('M5 — causal ordering + schema floor + review inbox
     const items = await reviewItems(attacker, cmd.id);
     expect(items[0]).toMatchObject({ item_type: 'command_rejection', severity: 'warning' });
   });
+
+  it('accepts a command at the schema floor and one that omits schema_version', async () => {
+    const user = randomUUID();
+    const p = await project(user);
+    const atFloor = mk('node.rename', { id: p.task, title: 'at floor' }, { schema_version: 1 });
+    const omitted = mk('node.set_description', { id: p.task, description: 'd' }); // no schema_version
+    const res = await upload(user, [atFloor, omitted]);
+    if (res.kind !== 'ok') throw new Error(res.kind);
+    expect(res.results.every((r) => r.result === 'applied')).toBe(true);
+  });
+
+  it('persists depends_on to command_log for an applied dependent', async () => {
+    const user = randomUUID();
+    const p = await project(user);
+    const first = mk('node.rename', { id: p.task, title: 'a' });
+    const second = mk('node.set_description', { id: p.task, description: 'b' }, { depends_on: [first.id] });
+    const res = await upload(user, [first, second]);
+    if (res.kind !== 'ok') throw new Error(res.kind);
+    expect(res.results.every((r) => r.result === 'applied')).toBe(true);
+    expect(res.results.find((r) => r.id === second.id)!.review_item_ids).toBeUndefined();
+    const [log] = await sql`SELECT depends_on FROM command_log WHERE id = ${second.id}`;
+    expect(log!['depends_on']).toEqual([first.id]);
+  });
+
+  it('cascades dependency rejection transitively (A rejected → B → C)', async () => {
+    const user = randomUUID();
+    const p = await project(user);
+    const a = mk('node.rename', { id: randomUUID(), title: 'ghost' }); // E_NOT_FOUND
+    const b = mk('node.rename', { id: p.task, title: 'b' }, { depends_on: [a.id] });
+    const c = mk('node.set_description', { id: p.task, description: 'c' }, { depends_on: [b.id] });
+    const res = await upload(user, [a, b, c]);
+    if (res.kind !== 'ok') throw new Error(res.kind);
+    const byId = Object.fromEntries(res.results.map((r) => [r.id, r]));
+    expect(byId[a.id]).toMatchObject({ result: 'rejected', reject_code: 'E_NOT_FOUND' });
+    expect(byId[b.id]).toMatchObject({ result: 'rejected', reject_code: 'E_DEPENDENCY_REJECTED' });
+    expect(byId[c.id]).toMatchObject({ result: 'rejected', reject_code: 'E_DEPENDENCY_REJECTED' });
+    // the task is untouched and each rejection produced a review item
+    const [row] = await sql`SELECT title FROM nodes WHERE id = ${p.task}`;
+    expect(row!['title']).toBe('T');
+    expect(byId[c.id]!.review_item_ids).toHaveLength(1);
+  });
+
+  it('rejects a depends_on referencing another user\'s command id as unknown (no cross-user oracle)', async () => {
+    const owner = randomUUID();
+    const other = randomUUID();
+    const po = await project(owner);
+    const applied = mk('node.rename', { id: po.task, title: 'owned' });
+    await upload(owner, [applied]); // a real APPLIED command of `owner`
+    // `other` references owner's applied command id — must be unknown, not satisfied.
+    const pOther = await project(other);
+    const cmd = mk('node.rename', { id: pOther.task, title: 'x' }, { depends_on: [applied.id] });
+    const res = await upload(other, [cmd]);
+    if (res.kind !== 'ok') throw new Error(res.kind);
+    expect(res.results[0]).toMatchObject({ result: 'rejected', reject_code: 'E_UNKNOWN_TARGET' });
+  });
 });

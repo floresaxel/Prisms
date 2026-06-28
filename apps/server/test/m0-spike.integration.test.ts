@@ -130,6 +130,26 @@ describe.skipIf(!adminUrl)('M0 spike — client command identity (V2)', () => {
 
     const log = await sql`SELECT count(*)::int AS n FROM command_log WHERE id = ${cmd.id}`;
     expect(log[0]!['n']).toBe(1); // one row, idempotent by command id
+    // §7.13: an applied command + its noop replay create NO review item.
+    const items = await sql`SELECT count(*)::int AS n FROM sync_review_items WHERE command_id = ${cmd.id}`;
+    expect(items[0]!['n']).toBe(0);
+  });
+
+  it('stamps create provenance on an inserted row and preserves it across updates (§7.8)', async () => {
+    const user = randomUUID();
+    const p = await project(user);
+    const taskId = randomUUID();
+    const create = clientCommand('node.create', { id: taskId, node_type: 'task', title: 'fresh', sort_order: 'a5', parent_id: p.project });
+    await upload(user, 'web-1', [create]);
+    const [created] = await sql`SELECT created_by_command_id, last_modified_by_command_id, source_kind, schema_version FROM nodes WHERE id = ${taskId}`;
+    expect(created).toMatchObject({ created_by_command_id: create.id, last_modified_by_command_id: create.id, source_kind: 'user', schema_version: 1 });
+
+    // a later rename from a DIFFERENT command preserves created_by, updates last_modified.
+    const rename = clientCommand('node.rename', { id: taskId, title: 'renamed' });
+    await upload(user, 'web-1', [rename]);
+    const [updated] = await sql`SELECT created_by_command_id, last_modified_by_command_id FROM nodes WHERE id = ${taskId}`;
+    expect(updated!['created_by_command_id']).toBe(create.id); // creation provenance survives the update
+    expect(updated!['last_modified_by_command_id']).toBe(rename.id);
   });
 
   it('rejects a cross-user command (JWT/ownership scoping blocks foreign rows)', async () => {
