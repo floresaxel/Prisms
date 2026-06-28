@@ -34,6 +34,7 @@ import {
   checkRule,
   incomingEdges,
   isBlocked,
+  isClientTooOld,
   isCommandName,
   renormalizedOrders,
   resolveOpenTimeEntries,
@@ -67,6 +68,7 @@ import {
   schedule_blocks,
   sprint_memberships,
   sprints,
+  sync_review_items,
   tag_answers,
   tag_placements,
   tags,
@@ -92,6 +94,26 @@ export interface BackstopJob {
 
 type HandlerRejected = { status: 'rejected'; code: string; reason: string };
 type HandlerOut = { status: 'applied'; backstop?: BackstopJob } | HandlerRejected;
+
+/** A command envelope as received (§7.2e adds depends_on; §8 adds versions). */
+interface Cmd {
+  id: string;
+  name: string;
+  hlc: string;
+  payload: unknown;
+  depends_on?: readonly string[];
+  schema_version?: number;
+}
+
+/** The lowest client row schema_version the server still accepts (§7.11). */
+const MIN_CLIENT_SCHEMA_VERSION = ROW_SCHEMA_VERSION;
+
+/** Map a rejection code to the review-item it produces (§7.13). */
+function reviewItemFor(code: string) {
+  if (code === 'E_CLIENT_TOO_OLD') return { item_type: 'schema_version_block', severity: 'error' } as const;
+  if (code === 'E_DEPENDENCY_REJECTED') return { item_type: 'dependency_rejection', severity: 'warning' } as const;
+  return { item_type: 'command_rejection', severity: 'warning' } as const;
+}
 
 export type UploadResponse =
   | { kind: 'parse_error'; issues: unknown }
@@ -1009,7 +1031,7 @@ export function createDispatcher(
   async function logResult(
     userId: string,
     deviceId: string,
-    cmd: { id: string; name: string; hlc: string; payload: unknown },
+    cmd: Cmd,
     result: 'applied' | 'rejected',
     rejectReason: string | null,
   ): Promise<void> {
@@ -1020,15 +1042,62 @@ export function createDispatcher(
       payload: cmd.payload as never,
       device_id: deviceId,
       hlc: cmd.hlc,
+      depends_on: cmd.depends_on ? [...cmd.depends_on] : [],
       result,
       reject_reason: rejectReason,
     });
   }
 
+  /** Create a durable review item for a rejection (§7.13); returns its id. */
+  async function createReviewItem(userId: string, cmd: Cmd, code: string, reason: string): Promise<string> {
+    const id = randomUUID();
+    const at = nowIso();
+    const { item_type, severity } = reviewItemFor(code);
+    await db.insert(sync_review_items).values({
+      id,
+      user_id: userId,
+      command_id: cmd.id,
+      item_type,
+      severity,
+      title: `${cmd.name} rejected (${code})`,
+      detail: { reject_code: code, reason, ...(cmd.depends_on ? { depends_on: [...cmd.depends_on] } : {}) },
+      status: 'open',
+      created_at: at,
+      updated_at: at,
+      hlc: cmd.hlc,
+      schema_version: ROW_SCHEMA_VERSION,
+      source_kind: 'system',
+      created_by_command_id: cmd.id,
+      last_modified_by_command_id: cmd.id,
+    });
+    return id;
+  }
+
+  /**
+   * §7.2e causal check, run in HLC order. A command whose `depends_on` lists a
+   * command rejected in this batch (or previously) is `dependency_rejected`; one
+   * listing an id the server has never seen (not in this batch, not in the log)
+   * references an `unknown_target`.
+   */
+  async function causalReject(cmd: Cmd, rejectedInBatch: ReadonlySet<string>, batchIds: ReadonlySet<string>): Promise<HandlerRejected | null> {
+    for (const dep of cmd.depends_on ?? []) {
+      if (rejectedInBatch.has(dep)) return reject('E_DEPENDENCY_REJECTED', `depends on ${dep}, which was rejected`);
+      const prior = await one(db.select({ result: command_log.result }).from(command_log).where(eq(command_log.id, dep)).limit(1));
+      if (prior) {
+        if (prior.result === 'rejected') return reject('E_DEPENDENCY_REJECTED', `depends on ${dep}, which was rejected`);
+        continue; // applied/noop — satisfied
+      }
+      if (!batchIds.has(dep)) return reject('E_UNKNOWN_TARGET', `depends on ${dep}, which the server has not seen`);
+    }
+    return null;
+  }
+
   async function handleCommand(
     userId: string,
     deviceId: string,
-    cmd: { id: string; name: string; hlc: string; payload: unknown },
+    cmd: Cmd,
+    rejectedInBatch: ReadonlySet<string>,
+    batchIds: ReadonlySet<string>,
   ): Promise<CommandOutcome> {
     const prior = await one(
       db.select({ user_id: command_log.user_id, result: command_log.result }).from(command_log).where(eq(command_log.id, cmd.id)).limit(1),
@@ -1038,6 +1107,20 @@ export function createDispatcher(
         return { id: cmd.id, result: 'rejected', reject_code: 'E_OWNERSHIP', reject_reason: 'command id belongs to another user' };
       }
       return { id: cmd.id, result: 'noop', original_result: prior.result === 'applied' ? 'applied' : 'rejected' };
+    }
+
+    // §7.11 schema floor: a client below the floor is rejected, never guessed.
+    if (cmd.schema_version !== undefined && isClientTooOld(cmd.schema_version, MIN_CLIENT_SCHEMA_VERSION)) {
+      const reason = `client schema_version ${cmd.schema_version} is below the floor ${MIN_CLIENT_SCHEMA_VERSION}`;
+      await logResult(userId, deviceId, cmd, 'rejected', `E_CLIENT_TOO_OLD: ${reason}`);
+      return { id: cmd.id, result: 'rejected', reject_code: 'E_CLIENT_TOO_OLD', reject_reason: reason };
+    }
+
+    // §7.2e causal dependency / unknown-target gate.
+    const causal = await causalReject(cmd, rejectedInBatch, batchIds);
+    if (causal) {
+      await logResult(userId, deviceId, cmd, 'rejected', `${causal.code}: ${causal.reason}`);
+      return { id: cmd.id, result: 'rejected', reject_code: causal.code, reject_reason: causal.reason };
     }
 
     if (!isCommandName(cmd.name)) {
@@ -1065,6 +1148,7 @@ export function createDispatcher(
           payload: cmd.payload as never,
           device_id: deviceId,
           hlc: cmd.hlc,
+          depends_on: cmd.depends_on ? [...cmd.depends_on] : [],
           result: result.status === 'applied' ? 'applied' : 'rejected',
           reject_reason: result.status === 'rejected' ? `${result.code}: ${result.reason}` : null,
         });
@@ -1099,9 +1183,22 @@ export function createDispatcher(
         if (!res.allowed) return { kind: 'rate_limited', verb, retryAfterSeconds: res.retryAfterSeconds };
       }
 
-      const results: CommandOutcome[] = [];
-      for (const cmd of commands) results.push(await handleCommand(userId, device_id, cmd));
-      return { kind: 'ok', results };
+      // §7.2e: apply in HLC order per device (commands carry a monotonic HLC).
+      const ordered = [...commands].sort((a, b) => (a.hlc < b.hlc ? -1 : a.hlc > b.hlc ? 1 : 0));
+      const batchIds = new Set(commands.map((c) => c.id));
+      const rejectedInBatch = new Set<string>();
+      const byId = new Map<string, CommandOutcome>();
+      for (const cmd of ordered) {
+        const outcome = await handleCommand(userId, device_id, cmd, rejectedInBatch, batchIds);
+        if (outcome.result === 'rejected') {
+          rejectedInBatch.add(cmd.id);
+          // §7.13: every server rejection produces a durable review item.
+          outcome.review_item_ids = [await createReviewItem(userId, cmd, outcome.reject_code ?? 'E_INTERNAL', outcome.reject_reason ?? '')];
+        }
+        byId.set(cmd.id, outcome);
+      }
+      // respond in request order (clients match by id; keep it deterministic).
+      return { kind: 'ok', results: commands.map((c) => byId.get(c.id)!) };
     },
   };
 }
