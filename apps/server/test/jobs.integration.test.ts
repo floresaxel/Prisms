@@ -9,6 +9,7 @@
  */
 import { randomUUID } from 'node:crypto';
 
+import { spawnedTaskId } from '@prisms/core';
 import { loadRootEnv, runMigrations } from '@prisms/db';
 import { drizzle, type PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
@@ -155,6 +156,72 @@ describe.skipIf(!adminUrl)('S13 jobs — facts & truth', () => {
     expect(first.noop).toBe(true);
     const stillOne = await sql_`SELECT count(*)::int AS n FROM nodes WHERE user_id = ${user} AND title = 'Pre-brief: Lecture'`;
     expect(stillOne[0]!['n']).toBe(1);
+  });
+
+  it('automation.backstop fills a missed spawn and raises an automation_backstop item (§10.2 offline gap)', async () => {
+    const user = randomUUID();
+    const ids = { vision: randomUUID(), roadmap: randomUUID(), project: randomUUID(), task: randomUUID(), rule: randomUUID() };
+    await apply(user, [
+      cmd('node.create', { id: ids.vision, node_type: 'vision', title: 'V', sort_order: 'a0' }),
+      cmd('node.create', { id: ids.roadmap, node_type: 'roadmap', title: 'R', sort_order: 'a0', parent_id: ids.vision }),
+      cmd('node.create', { id: ids.project, node_type: 'project', title: 'P', sort_order: 'a0', parent_id: ids.roadmap }),
+      cmd('node.create', { id: ids.task, node_type: 'task', title: 'Lecture', sort_order: 'a0', parent_id: ids.project }),
+      cmd('rule.create', {
+        id: ids.rule,
+        trigger: 'task_completed',
+        conditions: { all: [{ fact: 'node.title', op: 'matches', value: 'lecture' }] },
+        actions: [{ action: 'spawn_task', slot: 0, template: { title: 'Pre-brief: {trigger.title}', parent: 'same_as_trigger' } }],
+      }),
+    ]);
+    // an offline device completed the task elsewhere; this server's in-txn automation never ran for it.
+    await sql_`UPDATE nodes SET completed_at = '2026-06-13T14:00:00.000Z' WHERE id = ${ids.task}`;
+
+    const res = await runAutomationBackstop(db, { userId: user, trigger: 'task_completed', nodeId: ids.task });
+    expect(res.nodesInserted).toBe(1);
+    expect(res.noop).toBe(false);
+    const spawned = await sql_`SELECT parent_id, source_kind, source_id, source_detail FROM nodes WHERE user_id = ${user} AND title = 'Pre-brief: Lecture'`;
+    expect(spawned).toHaveLength(1);
+    expect(spawned[0]).toMatchObject({ parent_id: ids.project, source_kind: 'automation', source_id: ids.rule });
+    expect(spawned[0]!['source_detail']).toMatchObject({ backstop: true, trigger_node_id: ids.task });
+    const items = await sql_`SELECT severity, detail FROM sync_review_items WHERE user_id = ${user} AND item_type = 'automation_backstop'`;
+    expect(items).toHaveLength(1);
+    expect(items[0]!['severity']).toBe('info');
+    expect((items[0]!['detail'] as { filled_ids: string[] }).filled_ids).toContain(spawnedTaskId(ids.rule, ids.task, 0));
+  });
+
+  it('automation.backstop raises an automation_drift item and does NOT overwrite a divergent row at the deterministic id (§10.2)', async () => {
+    const user = randomUUID();
+    const ids = { vision: randomUUID(), roadmap: randomUUID(), project: randomUUID(), task: randomUUID(), rule: randomUUID() };
+    const spawnId = spawnedTaskId(ids.rule, ids.task, 0);
+    await apply(user, [
+      cmd('node.create', { id: ids.vision, node_type: 'vision', title: 'V', sort_order: 'a0' }),
+      cmd('node.create', { id: ids.roadmap, node_type: 'roadmap', title: 'R', sort_order: 'a0', parent_id: ids.vision }),
+      cmd('node.create', { id: ids.project, node_type: 'project', title: 'P', sort_order: 'a0', parent_id: ids.roadmap }),
+      cmd('node.create', { id: ids.task, node_type: 'task', title: 'Lecture', sort_order: 'a0', parent_id: ids.project }),
+      cmd('rule.create', {
+        id: ids.rule,
+        trigger: 'task_completed',
+        conditions: { all: [{ fact: 'node.title', op: 'matches', value: 'lecture' }] },
+        actions: [{ action: 'spawn_task', slot: 0, template: { title: 'Pre-brief: {trigger.title}', parent: 'same_as_trigger' } }],
+      }),
+      // a divergent row already occupies the deterministic id (an older template version / a colliding user row).
+      cmd('node.create', { id: spawnId, node_type: 'task', title: 'OLD: Lecture', sort_order: 'a1', parent_id: ids.project }),
+    ]);
+    await sql_`UPDATE nodes SET completed_at = '2026-06-13T14:00:00.000Z' WHERE id = ${ids.task}`;
+
+    const res = await runAutomationBackstop(db, { userId: user, trigger: 'task_completed', nodeId: ids.task });
+    expect(res.nodesInserted).toBe(0); // the id is present, so nothing is inserted
+    expect(res.driftItems).toBe(1);
+    expect(res.noop).toBe(false);
+    // §10.2: keep the existing row, do NOT overwrite.
+    const [row] = await sql_`SELECT title FROM nodes WHERE id = ${spawnId}`;
+    expect(row!['title']).toBe('OLD: Lecture');
+    const items = await sql_`SELECT severity, detail FROM sync_review_items WHERE user_id = ${user} AND item_type = 'automation_drift'`;
+    expect(items).toHaveLength(1);
+    expect(items[0]!['severity']).toBe('info');
+    const d = items[0]!['detail'] as { id: string; existing_content_hash: string; spawned_content_hash: string };
+    expect(d.id).toBe(spawnId);
+    expect(d.existing_content_hash).not.toBe(d.spawned_content_hash); // content genuinely diverged
   });
 
   it('retention.purge hard-deletes only rows past the 90-day cutoff (clock-injected)', async () => {

@@ -63,6 +63,12 @@ export interface RulesEngineOutput {
   depthLimited: boolean;
   /** Attribution for each spawned node/edge id → its producing rule + slot (§7.8). */
   provenance: SpawnProvenance[];
+  /**
+   * Would-be nodes whose deterministic id already exists (replays). NOT inserted;
+   * the §10.2 backstop compares their content against the existing row to detect
+   * rule/template version drift.
+   */
+  replayedNodes: Node[];
 }
 
 /** §9.4: spawned.id = uuidv5(PRISMS_NS, rule_id + ':' + trigger_node_id + ':' + slot). */
@@ -73,6 +79,38 @@ export function spawnedTaskId(ruleId: Uuid, triggerNodeId: Uuid, slot: number): 
 /** Deterministic id for the edge a slot's `edge_from_slot` produces. */
 export function spawnedEdgeId(ruleId: Uuid, triggerNodeId: Uuid, slot: number): Uuid {
   return uuidV5(`${ruleId}:${triggerNodeId}:${slot}:edge`);
+}
+
+/**
+ * §10.2 (V6) canonical content of a spawned NODE — the template-determined
+ * fields only (NOT id/provenance/hlc/timestamps). UUIDv5 guarantees the same id
+ * across devices, not the same content; the backstop compares this to detect
+ * rule/template version drift. Fixed key order ⇒ a stable, comparable string.
+ */
+export function spawnedNodeContent(
+  n: Pick<Node, 'node_type' | 'title' | 'description' | 'parent_id' | 'due_date' | 'estimate_minutes' | 'habit_id'>,
+): string {
+  return JSON.stringify({
+    node_type: n.node_type,
+    title: n.title,
+    description: n.description,
+    parent_id: n.parent_id,
+    due_date: n.due_date,
+    estimate_minutes: n.estimate_minutes,
+    habit_id: n.habit_id,
+  });
+}
+
+/** §10.2 canonical content of a spawned EDGE (the `edge_from_slot` fields). */
+export function spawnedEdgeContent(
+  e: Pick<Edge, 'predecessor_id' | 'successor_id' | 'edge_type' | 'lag_minutes'>,
+): string {
+  return JSON.stringify({
+    predecessor_id: e.predecessor_id,
+    successor_id: e.successor_id,
+    edge_type: e.edge_type,
+    lag_minutes: e.lag_minutes,
+  });
 }
 
 /** The instant every §9.3 computation on this trigger reads (never the wall clock). */
@@ -92,6 +130,7 @@ export function runAutomations(input: RulesEngineInput): RulesEngineOutput {
   const spawnedEdges: Edge[] = [];
   const firedRuleIds: Uuid[] = [];
   const spawnedProvenance: SpawnProvenance[] = [];
+  const replayedNodes: Node[] = [];
 
   let queue: TriggerEvent[] = [input.trigger];
   let wave = 1;
@@ -128,46 +167,50 @@ export function runAutomations(input: RulesEngineInput): RulesEngineOutput {
           const id = spawnedTaskId(rule.id, trigger.node.id, action.slot);
           nodeIdBySlot.set(action.slot, id);
 
-          const existing =
-            ctx.node(id) ?? spawnedNodes.find((n) => n.id === id);
+          // Build the would-be node regardless of existence, so the §10.2 backstop
+          // can compare CONTENT even when the deterministic id already exists.
+          const template = action.template;
+          const parentMode = template.parent ?? 'same_as_trigger';
+          const node: Node = {
+            id,
+            user_id: trigger.node.user_id,
+            created_at: baseIso,
+            updated_at: baseIso,
+            deleted_at: null,
+            ...SYNC_ROW_DEFAULTS,
+            parent_id:
+              parentMode === 'same_as_trigger' ? trigger.node.parent_id : parentMode,
+            node_type: 'task',
+            title: interpolate(template.title, trigger.node),
+            description:
+              template.description === undefined
+                ? ''
+                : interpolate(template.description, trigger.node),
+            sort_order: slotOrders[index]!,
+            start_date: null,
+            due_date:
+              template.due === undefined
+                ? null
+                : resolveTriggerDate(template.due, trigger.node, ctx),
+            estimate_minutes: template.estimate_minutes ?? null,
+            completed_at: null,
+            completion_disposition: null,
+            completed_in_block_id: null,
+            habit_id:
+              parentMode === 'same_as_trigger' ? trigger.node.habit_id : null,
+            attributes: {},
+          };
+          spawnedProvenance.push({ id, rule_id: rule.id, slot: action.slot });
+
+          const existing = ctx.node(id) ?? spawnedNodes.find((n) => n.id === id);
           if (existing !== undefined) {
-            // Replay: the row is already there. Still cascade through it so a
-            // re-run completes partially-synced descendants (all dedupe).
+            // Replay: the row is already there. Record the would-be content for
+            // §10.2 drift detection, but cascade through the REAL existing node so
+            // a re-run completes partially-synced descendants (all dedupe).
+            replayedNodes.push(node);
             nextQueue.push({ kind: 'task_created', node: existing });
           } else {
-            const template = action.template;
-            const parentMode = template.parent ?? 'same_as_trigger';
-            const node: Node = {
-              id,
-              user_id: trigger.node.user_id,
-              created_at: baseIso,
-              updated_at: baseIso,
-              deleted_at: null,
-              ...SYNC_ROW_DEFAULTS,
-              parent_id:
-                parentMode === 'same_as_trigger' ? trigger.node.parent_id : parentMode,
-              node_type: 'task',
-              title: interpolate(template.title, trigger.node),
-              description:
-                template.description === undefined
-                  ? ''
-                  : interpolate(template.description, trigger.node),
-              sort_order: slotOrders[index]!,
-              start_date: null,
-              due_date:
-                template.due === undefined
-                  ? null
-                  : resolveTriggerDate(template.due, trigger.node, ctx),
-              estimate_minutes: template.estimate_minutes ?? null,
-              completed_at: null,
-              completion_disposition: null,
-              completed_in_block_id: null,
-              habit_id:
-                parentMode === 'same_as_trigger' ? trigger.node.habit_id : null,
-              attributes: {},
-            };
             spawnedNodes.push(node);
-            spawnedProvenance.push({ id, rule_id: rule.id, slot: action.slot });
             fired = true;
             nextQueue.push({ kind: 'task_created', node });
           }
@@ -234,5 +277,5 @@ export function runAutomations(input: RulesEngineInput): RulesEngineOutput {
     );
   }
 
-  return { nodes: spawnedNodes, edges: spawnedEdges, firedRuleIds, depthLimited, provenance: spawnedProvenance };
+  return { nodes: spawnedNodes, edges: spawnedEdges, firedRuleIds, depthLimited, provenance: spawnedProvenance, replayedNodes };
 }
