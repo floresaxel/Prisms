@@ -255,11 +255,16 @@ describe.skipIf(!adminUrl)('S11 command dispatcher (§8 pipeline, full catalog)'
     expect(logs[0]!['n']).toBe(1);
   });
 
-  it('rejects unknown verbs, malformed payloads, and full-row-write attempts', async () => {
+  it('rejects unknown verbs and malformed payloads; strips client-supplied trust fields (§7.2c)', async () => {
     const [unknown] = await results([cmd('node.update', { id: randomUUID() })]);
     expect(unknown).toMatchObject({ result: 'rejected', reject_code: 'E_UNKNOWN_COMMAND' });
-    const [parse] = await results([cmd('node.rename', { id: randomUUID(), title: 'x', user_id: OTHER })]);
+    // a non-trust extra field is still rejected — no generic full-row write.
+    const [parse] = await results([cmd('node.rename', { id: randomUUID(), title: 'x', estimate_minutes: 5 })]);
     expect(parse).toMatchObject({ result: 'rejected', reject_code: 'E_PARSE' });
+    // a forged trust field (user_id) is STRIPPED, not E_PARSE'd; the command then
+    // fails only because the target row is absent.
+    const [stripped] = await results([cmd('node.rename', { id: randomUUID(), title: 'x', user_id: OTHER })]);
+    expect(stripped).toMatchObject({ result: 'rejected', reject_code: 'E_NOT_FOUND' });
   });
 
   it('enforces ownership: another user cannot touch these rows or command ids', async () => {

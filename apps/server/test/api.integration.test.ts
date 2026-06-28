@@ -168,7 +168,8 @@ describe.skipIf(!adminUrl)('S10 API integration (auth, PowerSync JWT, settings.u
     const res = await upload([firstUpdate]);
     expect(res.status).toBe(200);
     const body = (await res.json()) as { results: { result: string }[] };
-    expect(body.results).toEqual([{ id: firstUpdate.id, result: 'applied' }]);
+    // applied results now carry the provenance link (M5 response contract).
+    expect(body.results).toEqual([{ id: firstUpdate.id, result: 'applied', created_by_command_id: firstUpdate.id }]);
 
     const [row] = await sql`
       SELECT day_reset_hour, timezone, weather_location FROM user_settings

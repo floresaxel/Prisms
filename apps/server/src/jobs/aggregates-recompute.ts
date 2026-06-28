@@ -26,7 +26,7 @@ import {
   type TimeEntry,
 } from '@prisms/core';
 import { computed_aggregates, habits, habit_completions, nodes, schedule_blocks, tags, tag_placements, tag_answers, time_entries, user_settings } from '@prisms/db';
-import { eq } from 'drizzle-orm';
+import { and, eq, isNotNull, isNull } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 
 import type { JobClock } from './clock';
@@ -65,23 +65,33 @@ export async function runAggregatesRecompute(
   const tree = buildTreeIndex(nodeRows as CoreNode[]);
 
   const upsert = async (subjectKind: 'habit' | 'node' | 'user', subjectId: string | null, metric: string, value: unknown) => {
-    await db
-      .insert(computed_aggregates)
-      .values({
-        id: randomUUID(),
-        user_id: userId,
-        subject_kind: subjectKind,
-        subject_id: subjectId,
-        metric,
-        value: value as never,
-        computed_at: nowIso,
-        computed_by: 'server',
-        updated_at: nowIso,
-      })
-      .onConflictDoUpdate({
-        target: [computed_aggregates.user_id, computed_aggregates.subject_kind, computed_aggregates.subject_id, computed_aggregates.metric],
-        set: { value: value as never, computed_at: nowIso, computed_by: 'server', updated_at: nowIso },
+    const set = { value: value as never, computed_at: nowIso, computed_by: 'server' as const, updated_at: nowIso };
+    const ins = db.insert(computed_aggregates).values({
+      id: randomUUID(),
+      user_id: userId,
+      subject_kind: subjectKind,
+      subject_id: subjectId,
+      metric,
+      value: value as never,
+      computed_at: nowIso,
+      computed_by: 'server',
+      updated_at: nowIso,
+    });
+    // §7.7 dual partial unique index: target the user-level index for a NULL
+    // subject_id and the subject-level index otherwise, with matching predicates.
+    if (subjectId === null) {
+      await ins.onConflictDoUpdate({
+        target: [computed_aggregates.user_id, computed_aggregates.subject_kind, computed_aggregates.metric],
+        targetWhere: and(isNull(computed_aggregates.subject_id), isNull(computed_aggregates.deleted_at)),
+        set,
       });
+    } else {
+      await ins.onConflictDoUpdate({
+        target: [computed_aggregates.user_id, computed_aggregates.subject_kind, computed_aggregates.subject_id, computed_aggregates.metric],
+        targetWhere: and(isNotNull(computed_aggregates.subject_id), isNull(computed_aggregates.deleted_at)),
+        set,
+      });
+    }
   };
 
   const tagList = tagRows as Tag[];

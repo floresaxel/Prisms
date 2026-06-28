@@ -59,6 +59,7 @@ export async function runLayoutPrecompute(db: PostgresJsDatabase, job: LayoutJob
       })
       .onConflictDoUpdate({
         target: [diagram_layouts.diagram_id, diagram_layouts.node_id],
+        targetWhere: isNull(diagram_layouts.deleted_at), // §7.7 partial unique index
         set: { x: child.x ?? 0, y: child.y ?? 0, computed_at: nowIso, updated_at: nowIso },
       });
     nodesLaidOut += 1;

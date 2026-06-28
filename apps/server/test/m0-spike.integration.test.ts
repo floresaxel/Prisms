@@ -102,16 +102,20 @@ describe.skipIf(!adminUrl)('M0 spike — client command identity (V2)', () => {
     const res = await upload(user, 'web-1', [cmd]);
     expect(res.kind).toBe('ok');
     if (res.kind !== 'ok') return;
-    expect(res.results[0]).toMatchObject({ id: cmd.id, result: 'applied' });
+    // response contract (M5): applied + the provenance id == the command id.
+    expect(res.results[0]).toMatchObject({ id: cmd.id, result: 'applied', created_by_command_id: cmd.id });
 
     // V2: the server stored the command under the SAME id the client minted.
     const log = await sql`SELECT id, name, hlc, result FROM command_log WHERE id = ${cmd.id}`;
     expect(log).toHaveLength(1);
     expect(log[0]).toMatchObject({ id: cmd.id, name: 'node.rename', hlc: cmd.hlc, result: 'applied' });
 
-    // the canonical row the overlay reconciles to carries the optimistic title.
-    const [row] = await sql`SELECT title FROM nodes WHERE id = ${p.task}`;
+    // the canonical row carries the optimistic title + server-assigned provenance.
+    const [row] = await sql`SELECT title, last_modified_by_command_id, hlc, source_kind FROM nodes WHERE id = ${p.task}`;
     expect(row!['title']).toBe('Renamed');
+    expect(row!['last_modified_by_command_id']).toBe(cmd.id); // §7.2b/§7.8
+    expect(row!['hlc']).toBe(cmd.hlc);
+    expect(row!['source_kind']).toBe('user');
   });
 
   it('replaying the same command id is an idempotent noop (overlay still reconciles)', async () => {
@@ -143,15 +147,20 @@ describe.skipIf(!adminUrl)('M0 spike — client command identity (V2)', () => {
     expect(row!['title']).toBe('T'); // untouched
   });
 
-  it('rejects a payload carrying a client-supplied trust field (strict catalog)', async () => {
+  it('strips a client-supplied trust field and applies with the server value (§7.2c)', async () => {
     const user = randomUUID();
     const p = await project(user);
-    // the client strips these (stripTrustFields); the server is the backstop.
-    const cmd = clientCommand('node.rename', { id: p.task, title: 'X', user_id: 'forged' });
+    // a client that forges user_id is NOT rejected — the field is stripped before
+    // parse and the server keeps the JWT owner.
+    const cmd = clientCommand('node.rename', { id: p.task, title: 'X', user_id: randomUUID() });
 
     const res = await upload(user, 'web-1', [cmd]);
     expect(res.kind).toBe('ok');
     if (res.kind !== 'ok') return;
-    expect(res.results[0]).toMatchObject({ id: cmd.id, result: 'rejected', reject_code: 'E_PARSE' });
+    expect(res.results[0]).toMatchObject({ id: cmd.id, result: 'applied' });
+
+    const [row] = await sql`SELECT title, user_id FROM nodes WHERE id = ${p.task}`;
+    expect(row!['title']).toBe('X'); // the legitimate field applied
+    expect(row!['user_id']).toBe(user); // the forged user_id was ignored
   });
 });

@@ -38,7 +38,9 @@ import {
   renormalizedOrders,
   resolveOpenTimeEntries,
   softDeleteClosure,
+  stripTrustFields,
   uploadRequestSchema,
+  ROW_SCHEMA_VERSION,
   type CommandName,
   type CommandOutcome,
   type DomainError,
@@ -218,9 +220,15 @@ export function createDispatcher(
     return winning;
   }
 
-  async function runHandler(name: CommandName, tx: Tx, userId: string, deviceId: string, hlc: string, payload: unknown): Promise<HandlerOut> {
+  async function runHandler(name: CommandName, tx: Tx, userId: string, deviceId: string, commandId: string, hlc: string, payload: unknown): Promise<HandlerOut> {
     const now = nowIso();
     const nowMs = asEpochMillis(Date.parse(now));
+    // §7.2c server-assigned trust fields. `sys` stamps every update (the row's
+    // last writer + hlc); `born` adds create-time provenance for inserts. The
+    // command id is the provenance link (== command_log.id, §7.2b). Client
+    // values for these are stripped before parse. (user_settings is exempt.)
+    const sys = { updated_at: now, last_modified_by_command_id: commandId, hlc };
+    const born = { ...sys, created_by_command_id: commandId, source_kind: 'user' as const, schema_version: ROW_SCHEMA_VERSION };
     const applied = (backstop?: BackstopJob): HandlerOut => ({ status: 'applied', backstop });
     /** §7.6 completion gate — load the context only when the task has predecessors. */
     const completionGate = async (task: CoreNode): Promise<HandlerOut | null> => {
@@ -235,7 +243,7 @@ export function createDispatcher(
       const own = ownershipReject('node', id, await loadNodeRow(tx, id), userId);
       if (own) return own;
       const win = await lwwFields(tx, hlc, userId, 'nodes', id, fields);
-      if (Object.keys(win).length > 0) await tx.update(nodes).set({ ...win, updated_at: now }).where(eq(nodes.id, id));
+      if (Object.keys(win).length > 0) await tx.update(nodes).set({ ...win, ...sys }).where(eq(nodes.id, id));
       return applied();
     };
 
@@ -260,7 +268,7 @@ export function createDispatcher(
           estimate_minutes: p.estimate_minutes ?? null,
           habit_id: p.habit_id ?? null,
           attributes: p.attributes ?? {},
-          updated_at: now,
+          ...born,
         });
         return applied(p.node_type === 'task' ? { userId, trigger: 'task_created', nodeId: p.id } : undefined);
       }
@@ -279,7 +287,7 @@ export function createDispatcher(
         const bad = fromCheck(checkNodeMove(await loadTree(tx, userId), p));
         if (bad) return bad;
         const win = await lwwFields(tx, hlc, userId, 'nodes', p.id, { parent_id: p.new_parent_id, sort_order: p.sort_order });
-        if (Object.keys(win).length > 0) await tx.update(nodes).set({ ...win, updated_at: now }).where(eq(nodes.id, p.id));
+        if (Object.keys(win).length > 0) await tx.update(nodes).set({ ...win, ...sys }).where(eq(nodes.id, p.id));
         return applied();
       }
       case 'node.retype': {
@@ -289,7 +297,7 @@ export function createDispatcher(
         const bad = fromCheck(checkNodeRetype(await loadTree(tx, userId), p));
         if (bad) return bad;
         const win = await lwwFields(tx, hlc, userId, 'nodes', p.id, { node_type: p.node_type });
-        if (Object.keys(win).length > 0) await tx.update(nodes).set({ ...win, updated_at: now }).where(eq(nodes.id, p.id));
+        if (Object.keys(win).length > 0) await tx.update(nodes).set({ ...win, ...sys }).where(eq(nodes.id, p.id));
         return applied();
       }
       case 'node.set_dates': {
@@ -328,7 +336,7 @@ export function createDispatcher(
           completion_disposition: p.disposition ?? 'completed',
           completed_in_block_id: p.completed_in_block_id ?? null,
         });
-        if (Object.keys(win).length > 0) await tx.update(nodes).set({ ...win, updated_at: now }).where(eq(nodes.id, p.id));
+        if (Object.keys(win).length > 0) await tx.update(nodes).set({ ...win, ...sys }).where(eq(nodes.id, p.id));
         return applied(row!.node_type === 'task' ? { userId, trigger: 'task_completed', nodeId: p.id } : undefined);
       }
       case 'node.uncheck': {
@@ -341,7 +349,7 @@ export function createDispatcher(
         if (own) return own;
         const ids = softDeleteClosure(await loadTree(tx, userId), p.id); // I10
         if (ids.length > 0) {
-          await tx.update(nodes).set({ deleted_at: now, updated_at: now }).where(and(eq(nodes.user_id, userId), inArray(nodes.id, ids)));
+          await tx.update(nodes).set({ deleted_at: now, ...sys }).where(and(eq(nodes.user_id, userId), inArray(nodes.id, ids)));
         }
         return applied();
       }
@@ -352,7 +360,7 @@ export function createDispatcher(
         const bad = fromCheck(checkActivityPromote(await loadTree(tx, userId), p));
         if (bad) return bad;
         const win = await lwwFields(tx, hlc, userId, 'nodes', p.id, { node_type: 'task' as const, parent_id: p.parent_id ?? null, habit_id: p.habit_id ?? null });
-        if (Object.keys(win).length > 0) await tx.update(nodes).set({ ...win, updated_at: now }).where(eq(nodes.id, p.id));
+        if (Object.keys(win).length > 0) await tx.update(nodes).set({ ...win, ...sys }).where(eq(nodes.id, p.id));
         return applied({ userId, trigger: 'task_created', nodeId: p.id });
       }
 
@@ -370,7 +378,7 @@ export function createDispatcher(
           successor_id: p.successor_id,
           edge_type: p.edge_type ?? 'FS',
           lag_minutes: p.lag_minutes ?? 0,
-          updated_at: now,
+          ...born,
         });
         return applied();
       }
@@ -379,7 +387,7 @@ export function createDispatcher(
         const row = await one(tx.select().from(edges).where(eq(edges.id, p.id)).limit(1));
         const own = ownershipReject('edge', p.id, row, userId);
         if (own) return own;
-        await tx.update(edges).set({ deleted_at: now, updated_at: now }).where(eq(edges.id, p.id));
+        await tx.update(edges).set({ deleted_at: now, ...sys }).where(eq(edges.id, p.id));
         return applied();
       }
 
@@ -401,7 +409,7 @@ export function createDispatcher(
           ends_at: p.ends_at,
           anchor_type: p.anchor_type ?? 'none',
           status: 'committed',
-          updated_at: now,
+          ...born,
         });
         return applied();
       }
@@ -414,7 +422,7 @@ export function createDispatcher(
         const bad = fromCheck(checkBlockMove(block!, p.id, task as CoreNode | undefined, p));
         if (bad) return bad;
         const win = await lwwFields(tx, hlc, userId, 'schedule_blocks', p.id, { starts_at: p.starts_at, ends_at: p.ends_at });
-        if (Object.keys(win).length > 0) await tx.update(schedule_blocks).set({ ...win, updated_at: now }).where(eq(schedule_blocks.id, p.id));
+        if (Object.keys(win).length > 0) await tx.update(schedule_blocks).set({ ...win, ...sys }).where(eq(schedule_blocks.id, p.id));
         return applied();
       }
       case 'block.set_anchor': {
@@ -423,7 +431,7 @@ export function createDispatcher(
         const own = ownershipReject('block', p.id, block, userId);
         if (own) return own;
         const win = await lwwFields(tx, hlc, userId, 'schedule_blocks', p.id, { anchor_type: p.anchor_type });
-        if (Object.keys(win).length > 0) await tx.update(schedule_blocks).set({ ...win, updated_at: now }).where(eq(schedule_blocks.id, p.id));
+        if (Object.keys(win).length > 0) await tx.update(schedule_blocks).set({ ...win, ...sys }).where(eq(schedule_blocks.id, p.id));
         return applied();
       }
       case 'block.delete': {
@@ -431,7 +439,7 @@ export function createDispatcher(
         const block = await one(tx.select().from(schedule_blocks).where(eq(schedule_blocks.id, p.id)).limit(1));
         const own = ownershipReject('block', p.id, block, userId);
         if (own) return own;
-        await tx.update(schedule_blocks).set({ deleted_at: now, updated_at: now }).where(eq(schedule_blocks.id, p.id));
+        await tx.update(schedule_blocks).set({ deleted_at: now, ...sys }).where(eq(schedule_blocks.id, p.id));
         return applied();
       }
       case 'block.accept_suggestion': {
@@ -467,13 +475,13 @@ export function createDispatcher(
         if (block!.replaces_block_id !== null) {
           await tx
             .update(schedule_blocks)
-            .set({ deleted_at: now, updated_at: now })
+            .set({ deleted_at: now, ...sys })
             .where(and(eq(schedule_blocks.id, block!.replaces_block_id), eq(schedule_blocks.user_id, userId)));
         }
         // promote to committed; a committed block carries no suggestion metadata (§7.5).
         await tx
           .update(schedule_blocks)
-          .set({ status: 'committed', suggestion_reason: null, suggestion_batch_id: null, replaces_block_id: null, superseded_at: null, updated_at: now })
+          .set({ status: 'committed', suggestion_reason: null, suggestion_batch_id: null, replaces_block_id: null, superseded_at: null, ...sys })
           .where(eq(schedule_blocks.id, block!.id));
         // supersede other live suggestions for the same task that overlap it.
         const siblings = await tx
@@ -491,7 +499,7 @@ export function createDispatcher(
         for (const o of siblings) {
           if (o.id === block!.id) continue;
           if (overlaps(o.starts_at, o.ends_at)) {
-            await tx.update(schedule_blocks).set({ superseded_at: now, updated_at: now }).where(eq(schedule_blocks.id, o.id));
+            await tx.update(schedule_blocks).set({ superseded_at: now, ...sys }).where(eq(schedule_blocks.id, o.id));
           }
         }
         return applied();
@@ -502,7 +510,7 @@ export function createDispatcher(
         const block = await one(tx.select().from(schedule_blocks).where(eq(schedule_blocks.id, p.id)).limit(1));
         const own = ownershipReject('block', p.id, block, userId);
         if (own) return own;
-        await tx.update(schedule_blocks).set({ deleted_at: now, updated_at: now }).where(eq(schedule_blocks.id, p.id));
+        await tx.update(schedule_blocks).set({ deleted_at: now, ...sys }).where(eq(schedule_blocks.id, p.id));
         return applied();
       }
 
@@ -534,7 +542,7 @@ export function createDispatcher(
             completed_session: endedAt === null ? undefined : null,
             planned: p.planned ?? true,
             device_id: deviceId,
-            updated_at: now,
+            ...born,
           });
 
         if (!openEntry) {
@@ -553,7 +561,7 @@ export function createDispatcher(
           { id: p.entry_id, started_at: p.started_at },
         ])!;
         if (res.keepOpenId === p.entry_id) {
-          await tx.update(time_entries).set({ ended_at: res.closures[0]!.ended_at, completed_session: null, updated_at: now }).where(eq(time_entries.id, openEntry.id));
+          await tx.update(time_entries).set({ ended_at: res.closures[0]!.ended_at, completed_session: null, ...sys }).where(eq(time_entries.id, openEntry.id));
           await insertEntry(null);
         } else {
           await insertEntry(res.closures.find((c) => c.id === p.entry_id)!.ended_at);
@@ -567,7 +575,7 @@ export function createDispatcher(
         if (own) return own;
         const bad = fromCheck(checkClockOut(entry, p.entry_id, p));
         if (bad) return bad;
-        await tx.update(time_entries).set({ ended_at: p.ended_at, updated_at: now }).where(eq(time_entries.id, p.entry_id));
+        await tx.update(time_entries).set({ ended_at: p.ended_at, ...sys }).where(eq(time_entries.id, p.entry_id));
         return applied();
       }
       case 'timer.review': {
@@ -576,7 +584,7 @@ export function createDispatcher(
         const own = ownershipReject('time entry', p.entry_id, entry, userId);
         if (own) return own;
         const win = await lwwFields(tx, hlc, userId, 'time_entries', p.entry_id, { focus_factor: p.focus_factor, completed_session: p.completed_session });
-        if (Object.keys(win).length > 0) await tx.update(time_entries).set({ ...win, updated_at: now }).where(eq(time_entries.id, p.entry_id));
+        if (Object.keys(win).length > 0) await tx.update(time_entries).set({ ...win, ...sys }).where(eq(time_entries.id, p.entry_id));
         if (p.completed_session && entry!.ended_at !== null) {
           const task = await loadNodeRow(tx, entry!.task_id);
           if (task && task.user_id === userId && task.completed_at === null) {
@@ -584,7 +592,7 @@ export function createDispatcher(
             const gate = await completionGate(task as CoreNode);
             if (gate) return gate;
             const winC = await lwwFields(tx, hlc, userId, 'nodes', task.id, { completed_at: entry!.ended_at, completion_disposition: 'completed' as const });
-            if (Object.keys(winC).length > 0) await tx.update(nodes).set({ ...winC, updated_at: now }).where(eq(nodes.id, task.id));
+            if (Object.keys(winC).length > 0) await tx.update(nodes).set({ ...winC, ...sys }).where(eq(nodes.id, task.id));
             return applied({ userId, trigger: 'task_completed', nodeId: task.id });
           }
         }
@@ -608,7 +616,7 @@ export function createDispatcher(
           daily_target_minutes: p.daily_target_minutes ?? null,
           mastery_target_hours: p.mastery_target_hours ?? null,
           level_thresholds_hours: p.level_thresholds_hours ?? [],
-          updated_at: now,
+          ...born,
         });
         return applied();
       }
@@ -624,14 +632,14 @@ export function createDispatcher(
         if ('mastery_target_hours' in p) candidate['mastery_target_hours'] = p.mastery_target_hours ?? null;
         if (p.level_thresholds_hours !== undefined) candidate['level_thresholds_hours'] = p.level_thresholds_hours;
         const win = await lwwFields(tx, hlc, userId, 'habits', p.id, candidate);
-        if (Object.keys(win).length > 0) await tx.update(habits).set({ ...win, updated_at: now }).where(eq(habits.id, p.id));
+        if (Object.keys(win).length > 0) await tx.update(habits).set({ ...win, ...sys }).where(eq(habits.id, p.id));
         return applied();
       }
       case 'habit.delete': {
         const p = payload as Payload<'habit.delete'>;
         const own = ownershipReject('habit', p.id, await one(tx.select().from(habits).where(eq(habits.id, p.id)).limit(1)), userId);
         if (own) return own;
-        await tx.update(habits).set({ deleted_at: now, updated_at: now }).where(eq(habits.id, p.id));
+        await tx.update(habits).set({ deleted_at: now, ...sys }).where(eq(habits.id, p.id));
         return applied();
       }
       case 'habit.check_off': {
@@ -642,8 +650,9 @@ export function createDispatcher(
         if (own) return own;
         await tx
           .insert(habit_completions)
-          .values({ id: p.id, user_id: userId, habit_id: p.habit_id, occurrence_date: p.occurrence_date, completed_at: p.completed_at, updated_at: now })
-          .onConflictDoNothing({ target: [habit_completions.habit_id, habit_completions.occurrence_date] });
+          .values({ id: p.id, user_id: userId, habit_id: p.habit_id, occurrence_date: p.occurrence_date, completed_at: p.completed_at, ...born })
+          // partial unique index (§7.7): the arbiter predicate must match.
+          .onConflictDoNothing({ target: [habit_completions.habit_id, habit_completions.occurrence_date], where: isNull(habit_completions.deleted_at) });
         return applied();
       }
 
@@ -652,7 +661,7 @@ export function createDispatcher(
         const p = payload as Payload<'sprint.create'>;
         const conv = convergeOrOwn(await one(tx.select().from(sprints).where(eq(sprints.id, p.id)).limit(1)), 'sprint', p.id);
         if (conv) return conv;
-        await tx.insert(sprints).values({ id: p.id, user_id: userId, title: p.title, starts_on: p.starts_on, ends_on: p.ends_on, updated_at: now });
+        await tx.insert(sprints).values({ id: p.id, user_id: userId, title: p.title, starts_on: p.starts_on, ends_on: p.ends_on, ...born });
         return applied();
       }
       case 'sprint.add_node': {
@@ -663,21 +672,21 @@ export function createDispatcher(
         if (ownS) return ownS;
         const ownN = ownershipReject('node', p.node_id, await loadNodeRow(tx, p.node_id), userId);
         if (ownN) return ownN;
-        await tx.insert(sprint_memberships).values({ id: p.id, user_id: userId, sprint_id: p.sprint_id, node_id: p.node_id, updated_at: now }).onConflictDoNothing({ target: [sprint_memberships.sprint_id, sprint_memberships.node_id] });
+        await tx.insert(sprint_memberships).values({ id: p.id, user_id: userId, sprint_id: p.sprint_id, node_id: p.node_id, ...born }).onConflictDoNothing({ target: [sprint_memberships.sprint_id, sprint_memberships.node_id], where: isNull(sprint_memberships.deleted_at) });
         return applied();
       }
       case 'sprint.remove_node': {
         const p = payload as Payload<'sprint.remove_node'>;
         const own = ownershipReject('sprint membership', p.id, await one(tx.select().from(sprint_memberships).where(eq(sprint_memberships.id, p.id)).limit(1)), userId);
         if (own) return own;
-        await tx.update(sprint_memberships).set({ deleted_at: now, updated_at: now }).where(eq(sprint_memberships.id, p.id));
+        await tx.update(sprint_memberships).set({ deleted_at: now, ...sys }).where(eq(sprint_memberships.id, p.id));
         return applied();
       }
       case 'sprint.delete': {
         const p = payload as Payload<'sprint.delete'>;
         const own = ownershipReject('sprint', p.id, await one(tx.select().from(sprints).where(eq(sprints.id, p.id)).limit(1)), userId);
         if (own) return own;
-        await tx.update(sprints).set({ deleted_at: now, updated_at: now }).where(eq(sprints.id, p.id));
+        await tx.update(sprints).set({ deleted_at: now, ...sys }).where(eq(sprints.id, p.id));
         return applied();
       }
 
@@ -686,7 +695,7 @@ export function createDispatcher(
         const p = payload as Payload<'board.create'>;
         const conv = convergeOrOwn(await one(tx.select().from(decision_boards).where(eq(decision_boards.id, p.id)).limit(1)), 'board', p.id);
         if (conv) return conv;
-        await tx.insert(decision_boards).values({ id: p.id, user_id: userId, title: p.title, updated_at: now });
+        await tx.insert(decision_boards).values({ id: p.id, user_id: userId, title: p.title, ...born });
         return applied();
       }
       case 'criterion.create': {
@@ -695,7 +704,7 @@ export function createDispatcher(
         if (conv) return conv;
         const own = ownershipReject('board', p.board_id, await one(tx.select().from(decision_boards).where(eq(decision_boards.id, p.board_id)).limit(1)), userId);
         if (own) return own;
-        await tx.insert(decision_criteria).values({ id: p.id, user_id: userId, board_id: p.board_id, label: p.label, weight: p.weight, updated_at: now });
+        await tx.insert(decision_criteria).values({ id: p.id, user_id: userId, board_id: p.board_id, label: p.label, weight: p.weight, ...born });
         return applied();
       }
       case 'criterion.set_weight': {
@@ -703,7 +712,7 @@ export function createDispatcher(
         const own = ownershipReject('criterion', p.id, await one(tx.select().from(decision_criteria).where(eq(decision_criteria.id, p.id)).limit(1)), userId);
         if (own) return own;
         const win = await lwwFields(tx, hlc, userId, 'decision_criteria', p.id, { weight: p.weight });
-        if (Object.keys(win).length > 0) await tx.update(decision_criteria).set({ ...win, updated_at: now }).where(eq(decision_criteria.id, p.id));
+        if (Object.keys(win).length > 0) await tx.update(decision_criteria).set({ ...win, ...sys }).where(eq(decision_criteria.id, p.id));
         return applied();
       }
       case 'score.set': {
@@ -724,11 +733,11 @@ export function createDispatcher(
 
         const existing = existingById ?? (await loadDecisionScoreByPair(tx, p.criterion_id, p.project_id));
         if (!existing) {
-          await tx.insert(decision_scores).values({ id: p.id, user_id: userId, criterion_id: p.criterion_id, project_id: p.project_id, score: p.score, updated_at: now });
+          await tx.insert(decision_scores).values({ id: p.id, user_id: userId, criterion_id: p.criterion_id, project_id: p.project_id, score: p.score, ...born });
           await lwwFields(tx, hlc, userId, 'decision_scores', p.id, { score: p.score });
         } else {
           const win = await lwwFields(tx, hlc, userId, 'decision_scores', existing.id, { score: p.score });
-          if (Object.keys(win).length > 0) await tx.update(decision_scores).set({ ...win, updated_at: now }).where(eq(decision_scores.id, existing.id));
+          if (Object.keys(win).length > 0) await tx.update(decision_scores).set({ ...win, ...sys }).where(eq(decision_scores.id, existing.id));
         }
         return applied();
       }
@@ -742,7 +751,7 @@ export function createDispatcher(
           const ownHabit = ownershipReject('habit', p.habit_id, await one(tx.select().from(habits).where(eq(habits.id, p.habit_id)).limit(1)), userId);
           if (ownHabit) return ownHabit;
         }
-        await tx.insert(tags).values({ id: p.id, user_id: userId, label: p.label, habit_id: p.habit_id ?? null, updated_at: now });
+        await tx.insert(tags).values({ id: p.id, user_id: userId, label: p.label, habit_id: p.habit_id ?? null, ...born });
         return applied();
       }
       case 'tag.rename': {
@@ -750,14 +759,14 @@ export function createDispatcher(
         const own = ownershipReject('tag', p.id, await one(tx.select().from(tags).where(eq(tags.id, p.id)).limit(1)), userId);
         if (own) return own;
         const win = await lwwFields(tx, hlc, userId, 'tags', p.id, { label: p.label });
-        if (Object.keys(win).length > 0) await tx.update(tags).set({ ...win, updated_at: now }).where(eq(tags.id, p.id));
+        if (Object.keys(win).length > 0) await tx.update(tags).set({ ...win, ...sys }).where(eq(tags.id, p.id));
         return applied();
       }
       case 'tag.delete': {
         const p = payload as Payload<'tag.delete'>;
         const own = ownershipReject('tag', p.id, await one(tx.select().from(tags).where(eq(tags.id, p.id)).limit(1)), userId);
         if (own) return own;
-        await tx.update(tags).set({ deleted_at: now, updated_at: now }).where(eq(tags.id, p.id));
+        await tx.update(tags).set({ deleted_at: now, ...sys }).where(eq(tags.id, p.id));
         return applied();
       }
       case 'tag.place': {
@@ -771,14 +780,14 @@ export function createDispatcher(
         // Placing on a block whose task is already done is allowed (the core scenario).
         // Converged no-op if the live (block, tag) pair is already placed.
         if (await loadTagPlacementByPair(tx, p.block_id, p.tag_id)) return applied();
-        await tx.insert(tag_placements).values({ id: p.id, user_id: userId, block_id: p.block_id, tag_id: p.tag_id, updated_at: now });
+        await tx.insert(tag_placements).values({ id: p.id, user_id: userId, block_id: p.block_id, tag_id: p.tag_id, ...born });
         return applied();
       }
       case 'tag.unplace': {
         const p = payload as Payload<'tag.unplace'>;
         const own = ownershipReject('tag placement', p.id, await one(tx.select().from(tag_placements).where(eq(tag_placements.id, p.id)).limit(1)), userId);
         if (own) return own;
-        await tx.update(tag_placements).set({ deleted_at: now, updated_at: now }).where(eq(tag_placements.id, p.id));
+        await tx.update(tag_placements).set({ deleted_at: now, ...sys }).where(eq(tag_placements.id, p.id));
         return applied();
       }
       case 'tag.answer': {
@@ -794,11 +803,11 @@ export function createDispatcher(
         // upsert keyed by placement (one live answer per placement); LWW the value.
         const existing = existingById ?? (await loadTagAnswerByPlacement(tx, p.placement_id));
         if (!existing) {
-          await tx.insert(tag_answers).values({ id: p.id, user_id: userId, placement_id: p.placement_id, value: p.value, answered_at: p.answered_at, updated_at: now });
+          await tx.insert(tag_answers).values({ id: p.id, user_id: userId, placement_id: p.placement_id, value: p.value, answered_at: p.answered_at, ...born });
           await lwwFields(tx, hlc, userId, 'tag_answers', p.id, { value: p.value, answered_at: p.answered_at });
         } else {
           const win = await lwwFields(tx, hlc, userId, 'tag_answers', existing.id, { value: p.value, answered_at: p.answered_at });
-          if (Object.keys(win).length > 0) await tx.update(tag_answers).set({ ...win, updated_at: now }).where(eq(tag_answers.id, existing.id));
+          if (Object.keys(win).length > 0) await tx.update(tag_answers).set({ ...win, ...sys }).where(eq(tag_answers.id, existing.id));
         }
         return applied();
       }
@@ -806,7 +815,7 @@ export function createDispatcher(
         const p = payload as Payload<'tag.clear_answer'>;
         const own = ownershipReject('tag answer', p.id, await one(tx.select().from(tag_answers).where(eq(tag_answers.id, p.id)).limit(1)), userId);
         if (own) return own;
-        await tx.update(tag_answers).set({ deleted_at: now, updated_at: now }).where(eq(tag_answers.id, p.id));
+        await tx.update(tag_answers).set({ deleted_at: now, ...sys }).where(eq(tag_answers.id, p.id));
         return applied();
       }
 
@@ -818,7 +827,7 @@ export function createDispatcher(
         const existingRules = await tx.select().from(automation_rules).where(and(eq(automation_rules.user_id, userId), isNull(automation_rules.deleted_at)));
         const bad = fromCheck(checkRule({ trigger: p.trigger, conditions: p.conditions, actions: p.actions }, existingRules));
         if (bad) return bad;
-        await tx.insert(automation_rules).values({ id: p.id, user_id: userId, trigger: p.trigger, conditions: p.conditions, actions: p.actions, enabled: p.enabled ?? true, updated_at: now });
+        await tx.insert(automation_rules).values({ id: p.id, user_id: userId, trigger: p.trigger, conditions: p.conditions, actions: p.actions, enabled: p.enabled ?? true, ...born });
         return applied();
       }
       case 'rule.update': {
@@ -835,7 +844,7 @@ export function createDispatcher(
         if (p.conditions !== undefined) candidate['conditions'] = p.conditions;
         if (p.actions !== undefined) candidate['actions'] = p.actions;
         const win = await lwwFields(tx, hlc, userId, 'automation_rules', p.id, candidate);
-        if (Object.keys(win).length > 0) await tx.update(automation_rules).set({ ...win, updated_at: now }).where(eq(automation_rules.id, p.id));
+        if (Object.keys(win).length > 0) await tx.update(automation_rules).set({ ...win, ...sys }).where(eq(automation_rules.id, p.id));
         return applied();
       }
       case 'rule.toggle': {
@@ -843,21 +852,21 @@ export function createDispatcher(
         const own = ownershipReject('rule', p.id, await one(tx.select().from(automation_rules).where(eq(automation_rules.id, p.id)).limit(1)), userId);
         if (own) return own;
         const win = await lwwFields(tx, hlc, userId, 'automation_rules', p.id, { enabled: p.enabled });
-        if (Object.keys(win).length > 0) await tx.update(automation_rules).set({ ...win, updated_at: now }).where(eq(automation_rules.id, p.id));
+        if (Object.keys(win).length > 0) await tx.update(automation_rules).set({ ...win, ...sys }).where(eq(automation_rules.id, p.id));
         return applied();
       }
       case 'rule.delete': {
         const p = payload as Payload<'rule.delete'>;
         const own = ownershipReject('rule', p.id, await one(tx.select().from(automation_rules).where(eq(automation_rules.id, p.id)).limit(1)), userId);
         if (own) return own;
-        await tx.update(automation_rules).set({ deleted_at: now, updated_at: now }).where(eq(automation_rules.id, p.id));
+        await tx.update(automation_rules).set({ deleted_at: now, ...sys }).where(eq(automation_rules.id, p.id));
         return applied();
       }
       case 'blocker.create': {
         const p = payload as Payload<'blocker.create'>;
         const conv = convergeOrOwn(await one(tx.select().from(blocker_rules).where(eq(blocker_rules.id, p.id)).limit(1)), 'blocker', p.id);
         if (conv) return conv;
-        await tx.insert(blocker_rules).values({ id: p.id, user_id: userId, scope: p.scope, predicate: p.predicate, label: p.label, enabled: p.enabled ?? true, updated_at: now });
+        await tx.insert(blocker_rules).values({ id: p.id, user_id: userId, scope: p.scope, predicate: p.predicate, label: p.label, enabled: p.enabled ?? true, ...born });
         return applied();
       }
       case 'blocker.update': {
@@ -869,7 +878,7 @@ export function createDispatcher(
         if (p.predicate !== undefined) candidate['predicate'] = p.predicate;
         if (p.label !== undefined) candidate['label'] = p.label;
         const win = await lwwFields(tx, hlc, userId, 'blocker_rules', p.id, candidate);
-        if (Object.keys(win).length > 0) await tx.update(blocker_rules).set({ ...win, updated_at: now }).where(eq(blocker_rules.id, p.id));
+        if (Object.keys(win).length > 0) await tx.update(blocker_rules).set({ ...win, ...sys }).where(eq(blocker_rules.id, p.id));
         return applied();
       }
       case 'blocker.toggle': {
@@ -877,14 +886,14 @@ export function createDispatcher(
         const own = ownershipReject('blocker', p.id, await one(tx.select().from(blocker_rules).where(eq(blocker_rules.id, p.id)).limit(1)), userId);
         if (own) return own;
         const win = await lwwFields(tx, hlc, userId, 'blocker_rules', p.id, { enabled: p.enabled });
-        if (Object.keys(win).length > 0) await tx.update(blocker_rules).set({ ...win, updated_at: now }).where(eq(blocker_rules.id, p.id));
+        if (Object.keys(win).length > 0) await tx.update(blocker_rules).set({ ...win, ...sys }).where(eq(blocker_rules.id, p.id));
         return applied();
       }
       case 'blocker.delete': {
         const p = payload as Payload<'blocker.delete'>;
         const own = ownershipReject('blocker', p.id, await one(tx.select().from(blocker_rules).where(eq(blocker_rules.id, p.id)).limit(1)), userId);
         if (own) return own;
-        await tx.update(blocker_rules).set({ deleted_at: now, updated_at: now }).where(eq(blocker_rules.id, p.id));
+        await tx.update(blocker_rules).set({ deleted_at: now, ...sys }).where(eq(blocker_rules.id, p.id));
         return applied();
       }
 
@@ -905,13 +914,13 @@ export function createDispatcher(
         const fields = { x: p.x, y: p.y, group_id: p.group_id ?? null };
         if (!existing) {
           const id = randomUUID();
-          await tx.insert(diagram_layouts).values({ id, user_id: userId, diagram_id: p.diagram_id, node_id: p.node_id, ...fields, updated_at: now });
+          await tx.insert(diagram_layouts).values({ id, user_id: userId, diagram_id: p.diagram_id, node_id: p.node_id, ...fields, ...born });
           await lwwFields(tx, hlc, userId, 'diagram_layouts', id, fields);
         } else {
           const ownLayout = ownershipReject('layout', existing.id, existing, userId);
           if (ownLayout) return ownLayout;
           const win = await lwwFields(tx, hlc, userId, 'diagram_layouts', existing.id, fields);
-          if (Object.keys(win).length > 0) await tx.update(diagram_layouts).set({ ...win, updated_at: now }).where(eq(diagram_layouts.id, existing.id));
+          if (Object.keys(win).length > 0) await tx.update(diagram_layouts).set({ ...win, ...sys }).where(eq(diagram_layouts.id, existing.id));
         }
         return applied();
       }
@@ -924,13 +933,13 @@ export function createDispatcher(
         const existing = await loadLayoutByPair(tx, p.diagram_id, p.node_id);
         if (!existing) {
           const id = randomUUID();
-          await tx.insert(diagram_layouts).values({ id, user_id: userId, diagram_id: p.diagram_id, node_id: p.node_id, x: 0, y: 0, collapsed: p.collapsed, updated_at: now });
+          await tx.insert(diagram_layouts).values({ id, user_id: userId, diagram_id: p.diagram_id, node_id: p.node_id, x: 0, y: 0, collapsed: p.collapsed, ...born });
           await lwwFields(tx, hlc, userId, 'diagram_layouts', id, { collapsed: p.collapsed });
         } else {
           const ownLayout = ownershipReject('layout', existing.id, existing, userId);
           if (ownLayout) return ownLayout;
           const win = await lwwFields(tx, hlc, userId, 'diagram_layouts', existing.id, { collapsed: p.collapsed });
-          if (Object.keys(win).length > 0) await tx.update(diagram_layouts).set({ ...win, updated_at: now }).where(eq(diagram_layouts.id, existing.id));
+          if (Object.keys(win).length > 0) await tx.update(diagram_layouts).set({ ...win, ...sys }).where(eq(diagram_layouts.id, existing.id));
         }
         return applied();
       }
@@ -947,7 +956,7 @@ export function createDispatcher(
         for (let i = 0; i < p.node_ids.length; i += 1) {
           const id = p.node_ids[i]!;
           const win = await lwwFields(tx, hlc, userId, 'nodes', id, { sort_order: orders[i]! });
-          if (Object.keys(win).length > 0) await tx.update(nodes).set({ ...win, updated_at: now }).where(eq(nodes.id, id));
+          if (Object.keys(win).length > 0) await tx.update(nodes).set({ ...win, ...sys }).where(eq(nodes.id, id));
         }
         return applied();
       }
@@ -957,7 +966,7 @@ export function createDispatcher(
         if (conv) return conv;
         const ownDiagram = ownershipReject('diagram', p.diagram_id, await loadNodeRow(tx, p.diagram_id), userId);
         if (ownDiagram) return ownDiagram;
-        await tx.insert(diagram_groups).values({ id: p.id, user_id: userId, diagram_id: p.diagram_id, label: p.label, color: p.color ?? null, updated_at: now });
+        await tx.insert(diagram_groups).values({ id: p.id, user_id: userId, diagram_id: p.diagram_id, label: p.label, color: p.color ?? null, ...born });
         return applied();
       }
       case 'group.update': {
@@ -968,14 +977,14 @@ export function createDispatcher(
         if (p.label !== undefined) candidate['label'] = p.label;
         if ('color' in p) candidate['color'] = p.color ?? null;
         const win = await lwwFields(tx, hlc, userId, 'diagram_groups', p.id, candidate);
-        if (Object.keys(win).length > 0) await tx.update(diagram_groups).set({ ...win, updated_at: now }).where(eq(diagram_groups.id, p.id));
+        if (Object.keys(win).length > 0) await tx.update(diagram_groups).set({ ...win, ...sys }).where(eq(diagram_groups.id, p.id));
         return applied();
       }
       case 'group.delete': {
         const p = payload as Payload<'group.delete'>;
         const own = ownershipReject('group', p.id, await one(tx.select().from(diagram_groups).where(eq(diagram_groups.id, p.id)).limit(1)), userId);
         if (own) return own;
-        await tx.update(diagram_groups).set({ deleted_at: now, updated_at: now }).where(eq(diagram_groups.id, p.id));
+        await tx.update(diagram_groups).set({ deleted_at: now, ...sys }).where(eq(diagram_groups.id, p.id));
         return applied();
       }
 
@@ -1035,7 +1044,10 @@ export function createDispatcher(
       await logResult(userId, deviceId, cmd, 'rejected', 'E_UNKNOWN_COMMAND: unknown command');
       return { id: cmd.id, result: 'rejected', reject_code: 'E_UNKNOWN_COMMAND', reject_reason: `unknown command "${cmd.name}"` };
     }
-    const parsed = COMMAND_SCHEMAS[cmd.name].safeParse(cmd.payload);
+    // §7.2c: strip server-owned trust fields BEFORE validation — a client that
+    // supplies user_id/provenance/hlc/schema_version is not rejected; the values
+    // are dropped and the server assigns its own.
+    const parsed = COMMAND_SCHEMAS[cmd.name].safeParse(stripTrustFields(cmd.payload));
     if (!parsed.success) {
       const first = parsed.error.issues[0];
       const reason = first ? `${first.path.join('.') || 'payload'}: ${first.message}` : 'invalid payload';
@@ -1045,7 +1057,7 @@ export function createDispatcher(
 
     try {
       const { out } = await db.transaction(async (tx) => {
-        const result = await runHandler(cmd.name as CommandName, tx, userId, deviceId, cmd.hlc, parsed.data);
+        const result = await runHandler(cmd.name as CommandName, tx, userId, deviceId, cmd.id, cmd.hlc, parsed.data);
         await tx.insert(command_log).values({
           id: cmd.id,
           user_id: userId,
@@ -1060,7 +1072,9 @@ export function createDispatcher(
       });
       if (out.status === 'applied') {
         if (out.backstop && options.enqueueBackstop) await options.enqueueBackstop(out.backstop);
-        return { id: cmd.id, result: 'applied' };
+        // §7.2b: the provenance id stamped on every created/updated row == the
+        // command id, so the optimistic overlay reconciles without identity churn.
+        return { id: cmd.id, result: 'applied', created_by_command_id: cmd.id };
       }
       return { id: cmd.id, result: 'rejected', reject_code: out.code, reject_reason: out.reason };
     } catch (error) {
