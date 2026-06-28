@@ -221,7 +221,7 @@ export function createDispatcher(
    * Provenance is server-assigned: source_kind='automation', the triggering
    * command id, and the trigger in source_detail.
    */
-  async function runAutomationInTx(tx: Tx, job: BackstopJob, commandId: string): Promise<void> {
+  async function runAutomationInTx(tx: Tx, job: BackstopJob, commandId: string, hlc: string): Promise<void> {
     const triggerNode = (await loadNodeRow(tx, job.nodeId)) as CoreNode | undefined;
     if (!triggerNode || triggerNode.deleted_at !== null) return;
     const [nodeRows, edgeRows, ruleRows] = await Promise.all([
@@ -234,18 +234,58 @@ export function createDispatcher(
       rules: ruleRows as AutomationRule[],
       rows: { nodes: nodeRows as CoreNode[], edges: edgeRows as CoreEdge[] },
     });
-    const stampProv = <T extends object>(row: T): T => ({
-      ...row,
-      source_kind: 'automation',
-      created_by_command_id: commandId,
-      last_modified_by_command_id: commandId,
-      source_detail: { trigger_command_id: commandId, trigger_node_id: job.nodeId },
+    if (out.nodes.length === 0 && out.edges.length === 0) return;
+
+    // §6.7: spawned rows are server-authoritative but must still satisfy the
+    // hierarchy (I1) + justification (I3) invariants the user write-path enforces
+    // — a rule whose template targets a type-illegal or absent parent must not
+    // commit an invariant-violating row. Validate against live + spawned nodes
+    // and drop any spawn that fails (and any edge that would dangle off it).
+    const tree = buildTreeIndex([...(nodeRows as CoreNode[]), ...out.nodes]);
+    const liveIds = new Set((nodeRows as CoreNode[]).filter((n) => n.deleted_at === null).map((n) => n.id));
+    const keptNodeIds = new Set<string>();
+    const keepNodes = out.nodes.filter((n) => {
+      if (fromCheck(checkNodeCreate(tree, n))) return false; // I1/I3 violation → drop
+      keptNodeIds.add(n.id);
+      return true;
     });
-    for (const node of out.nodes) {
-      await tx.insert(nodes).values(stampProv(node) as typeof nodes.$inferInsert).onConflictDoNothing({ target: nodes.id });
-    }
-    for (const edge of out.edges) {
-      await tx.insert(edges).values(stampProv(edge) as typeof edges.$inferInsert).onConflictDoNothing({ target: edges.id });
+    const endpointOk = (id: string) => liveIds.has(id) || keptNodeIds.has(id);
+    const keepEdges = out.edges.filter((e) => endpointOk(e.predecessor_id) && endpointOk(e.successor_id));
+
+    // §7.8 server-assigned provenance: real version-of-record hlc + current row
+    // schema_version (not the engine's legacy sentinel/defaults), source_kind
+    // 'automation', and the producing rule + slot.
+    const provById = new Map(out.provenance.map((p) => [p.id, p]));
+    const stampProv = <T extends { id: string }>(row: T) => {
+      const p = provById.get(row.id);
+      return {
+        ...row,
+        hlc,
+        schema_version: ROW_SCHEMA_VERSION,
+        source_kind: 'automation' as const,
+        source_id: p?.rule_id ?? null,
+        created_by_command_id: commandId,
+        last_modified_by_command_id: commandId,
+        source_detail: { trigger_command_id: commandId, trigger_node_id: job.nodeId, action_slot: p?.slot ?? null },
+      };
+    };
+
+    // §10.1: automation is authoritative but best-effort — a residual stored-rule
+    // defect must NOT roll back the user's command. Run the inserts in a SAVEPOINT
+    // so any failure rolls back only the automation; the enqueued backstop (M6)
+    // retries. Bare onConflictDoNothing() skips on ANY unique index (the id PK and
+    // the §7.7 partial endpoint index on edges), not just the id.
+    try {
+      await tx.transaction(async (sp) => {
+        for (const node of keepNodes) {
+          await sp.insert(nodes).values(stampProv(node) as typeof nodes.$inferInsert).onConflictDoNothing();
+        }
+        for (const edge of keepEdges) {
+          await sp.insert(edges).values(stampProv(edge) as typeof edges.$inferInsert).onConflictDoNothing();
+        }
+      });
+    } catch {
+      // automation rolled back atomically; the command + command_log still commit.
     }
   }
 
@@ -1199,7 +1239,7 @@ export function createDispatcher(
       const { out } = await db.transaction(async (tx) => {
         const result = await runHandler(cmd.name as CommandName, tx, userId, deviceId, cmd.id, cmd.hlc, parsed.data);
         // §10.1: run automation to fixpoint in the SAME txn (authoritative).
-        if (result.status === 'applied' && result.backstop) await runAutomationInTx(tx, result.backstop, cmd.id);
+        if (result.status === 'applied' && result.backstop) await runAutomationInTx(tx, result.backstop, cmd.id, cmd.hlc);
         await tx.insert(command_log).values({
           id: cmd.id,
           user_id: userId,

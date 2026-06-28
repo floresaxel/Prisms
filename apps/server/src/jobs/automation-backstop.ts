@@ -50,7 +50,19 @@ export async function runAutomationBackstop(db: PostgresJsDatabase, job: Backsto
 
     // backstop-filled rows are server automation output (§7.8); the in-txn path
     // (dispatcher §10.1) is authoritative, so this only fills offline/drift gaps.
-    const prov = <T extends object>(row: T): T => ({ ...row, source_kind: 'automation', source_detail: { trigger_node_id: job.nodeId, backstop: true } });
+    // Stamp the producing rule (source_id) + slot to match the in-txn provenance;
+    // hlc stays the engine default here (a backstop job has no command hlc — the
+    // M6 drift rework owns this path).
+    const provById = new Map(out.provenance.map((p) => [p.id, p]));
+    const prov = <T extends { id: string }>(row: T) => {
+      const p = provById.get(row.id);
+      return {
+        ...row,
+        source_kind: 'automation' as const,
+        source_id: p?.rule_id ?? null,
+        source_detail: { trigger_node_id: job.nodeId, action_slot: p?.slot ?? null, backstop: true },
+      };
+    };
     let nodesInserted = 0;
     for (const node of out.nodes) {
       const res = await tx.insert(nodes).values(prov(node) as typeof nodes.$inferInsert).onConflictDoNothing({ target: nodes.id });

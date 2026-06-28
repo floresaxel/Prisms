@@ -46,6 +46,14 @@ export interface RulesEngineInput {
   rows: FactRows;
 }
 
+/** Per-spawned-row attribution (§7.8 provenance: which rule + slot produced it). */
+export interface SpawnProvenance {
+  /** The spawned node or edge id. */
+  id: Uuid;
+  rule_id: Uuid;
+  slot: number;
+}
+
 export interface RulesEngineOutput {
   nodes: Node[];
   edges: Edge[];
@@ -53,6 +61,8 @@ export interface RulesEngineOutput {
   firedRuleIds: Uuid[];
   /** True when a cascade reached MAX_DEPTH and was cut off. */
   depthLimited: boolean;
+  /** Attribution for each spawned node/edge id → its producing rule + slot (§7.8). */
+  provenance: SpawnProvenance[];
 }
 
 /** §9.4: spawned.id = uuidv5(PRISMS_NS, rule_id + ':' + trigger_node_id + ':' + slot). */
@@ -81,6 +91,7 @@ export function runAutomations(input: RulesEngineInput): RulesEngineOutput {
   const spawnedNodes: Node[] = [];
   const spawnedEdges: Edge[] = [];
   const firedRuleIds: Uuid[] = [];
+  const spawnedProvenance: SpawnProvenance[] = [];
 
   let queue: TriggerEvent[] = [input.trigger];
   let wave = 1;
@@ -156,6 +167,7 @@ export function runAutomations(input: RulesEngineInput): RulesEngineOutput {
               attributes: {},
             };
             spawnedNodes.push(node);
+            spawnedProvenance.push({ id, rule_id: rule.id, slot: action.slot });
             fired = true;
             nextQueue.push({ kind: 'task_created', node });
           }
@@ -171,8 +183,9 @@ export function runAutomations(input: RulesEngineInput): RulesEngineOutput {
                 (e) => e.predecessor_id === predecessorId && e.successor_id === successorId,
               );
             if (!edgeExists) {
+              const edgeId = spawnedEdgeId(rule.id, trigger.node.id, action.slot);
               spawnedEdges.push({
-                id: spawnedEdgeId(rule.id, trigger.node.id, action.slot),
+                id: edgeId,
                 user_id: trigger.node.user_id,
                 created_at: baseIso,
                 updated_at: baseIso,
@@ -183,6 +196,7 @@ export function runAutomations(input: RulesEngineInput): RulesEngineOutput {
                 edge_type: action.template.edge_type ?? 'FS',
                 lag_minutes: action.template.lag_minutes ?? 0,
               });
+              spawnedProvenance.push({ id: edgeId, rule_id: rule.id, slot: action.slot });
               fired = true;
             }
           }
@@ -220,5 +234,5 @@ export function runAutomations(input: RulesEngineInput): RulesEngineOutput {
     );
   }
 
-  return { nodes: spawnedNodes, edges: spawnedEdges, firedRuleIds, depthLimited };
+  return { nodes: spawnedNodes, edges: spawnedEdges, firedRuleIds, depthLimited, provenance: spawnedProvenance };
 }
