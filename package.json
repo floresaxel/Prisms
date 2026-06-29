@@ -11,6 +11,7 @@
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
+    "test:convergence": "pnpm --filter @prisms/server test:convergence",
     "ci": "turbo run lint typecheck test"
   },
   "devDependencies": {
