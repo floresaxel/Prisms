@@ -44,9 +44,17 @@ function AuthedApp({ user, onSignOut }: { user: SessionUser; onSignOut: () => vo
   const ctx: CommandContext = useMemo(() => ({ userId: user.id, deviceId: getDeviceId() }), [user.id]);
 
   useEffect(() => {
-    void connectDb(db, setRejections);
+    let stopUpload: (() => void) | undefined;
+    connectDb(db, setRejections)
+      .then((stop) => {
+        stopUpload = stop;
+      })
+      .catch(() => undefined);
     void registerForPush();
-    return () => { void db.disconnect(); };
+    return () => {
+      stopUpload?.();
+      void db.disconnect();
+    };
   }, [db]);
 
   return (

@@ -10,9 +10,11 @@
       "outputs": []
     },
     "typecheck": {
+      "dependsOn": ["^typecheck"],
       "outputs": []
     },
     "test": {
+      "dependsOn": ["^typecheck"],
       "outputs": []
     }
   }
