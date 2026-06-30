@@ -21,7 +21,8 @@ export {
   type SqlTx,
   type ReviewItem,
 } from './powersync/overlay-store';
-export { createExecuteCommand, type ExecuteCommand, type ExecuteContext, type ExecuteDeps } from './powersync/execute';
+export { createExecuteCommand, type ExecuteCommand, type ExecuteContext, type ExecuteDeps, type ExecuteOptions } from './powersync/execute';
+export { buildOptimisticEffects, type EffectSpec, type OptimisticEffectCtx } from './powersync/effects';
 export { uploadClientCommands, type UploadCommandsOptions, type UploadSummary } from './powersync/upload-commands';
 
 // hooks

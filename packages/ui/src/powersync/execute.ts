@@ -8,18 +8,23 @@
  *      — not at upload, so `command_log.id` equals this id (V2),
  *   4. write `client_commands` + `overlay_effects` in ONE transaction (R15).
  *
- * M0 ships the `node.rename` slice; M8 generalizes to the full catalog. The id
- * minting / HLC tick / clock are injected so the spike harness is deterministic;
- * the app passes the browser-tier `newId` / `createHlc` defaults.
+ * `execute(name, payload)` is the generic writer over the full §8.1 catalog
+ * (the optimistic effects come from `buildOptimisticEffects`); `renameNode` is a
+ * thin convenience wrapper kept from the M0 slice. The id minting / HLC tick /
+ * clock are injected so the harness is deterministic; the app passes the
+ * browser-tier `newId` / `createHlc` defaults. Effects may be supplemented by the
+ * caller (e.g. soft-delete closure, layout row-id resolution) via `extraEffects`.
  */
 import {
   COMMAND_SCHEMAS,
-  buildRenameEffect,
   stripTrustFields,
   type ClientCommand,
+  type CommandName,
+  type OverlayEffect,
 } from '@prisms/core';
 
 import { createHlc, newId } from './client-runtime';
+import { buildOptimisticEffects, type EffectSpec } from './effects';
 import type { OverlayStore } from './overlay-store';
 
 export interface ExecuteContext {
@@ -36,8 +41,21 @@ export interface ExecuteDeps {
   now?: () => string;
 }
 
+/** Per-call overrides for verbs whose full effect set needs live state. */
+export interface ExecuteOptions {
+  /**
+   * Effects to use INSTEAD of `buildOptimisticEffects` (for verbs whose target
+   * row id isn't in the payload, e.g. layout upserts), or [] to skip the overlay.
+   */
+  effects?: EffectSpec[];
+  /** Effects to APPEND to the built ones (e.g. the §I10 soft-delete closure). */
+  extraEffects?: EffectSpec[];
+}
+
 export interface ExecuteCommand {
-  /** node.rename (M0 slice): optimistic title update + queued command envelope. */
+  /** Generic writer: validate → mint id/HLC → queue command + overlay effects. */
+  execute(name: CommandName, payload: Record<string, unknown>, opts?: ExecuteOptions): Promise<string>;
+  /** node.rename convenience wrapper (M0 slice). */
   renameNode(nodeId: string, title: string): Promise<string>;
 }
 
@@ -46,29 +64,46 @@ export function createExecuteCommand(store: OverlayStore, ctx: ExecuteContext, d
   const nextHlc = deps.nextHlc ?? createHlc(ctx.deviceId);
   const now = deps.now ?? (() => new Date().toISOString());
 
+  async function execute(name: CommandName, rawPayload: Record<string, unknown>, opts: ExecuteOptions = {}): Promise<string> {
+    const payload = stripTrustFields(rawPayload);
+    const parsed = COMMAND_SCHEMAS[name].safeParse(payload);
+    if (!parsed.success) {
+      const first = parsed.error.issues[0];
+      throw new Error(`${name} invalid: ${first ? `${first.path.join('.') || 'payload'}: ${first.message}` : 'bad payload'}`);
+    }
+
+    const commandId = mintId();
+    const hlc = nextHlc();
+    const createdAt = now();
+
+    const specs = opts.effects ?? buildOptimisticEffects(name, parsed.data, { userId: ctx.userId, deviceId: ctx.deviceId, now: createdAt });
+    const allSpecs = [...specs, ...(opts.extraEffects ?? [])];
+    const effects: OverlayEffect[] = allSpecs.map((s, seq) => ({
+      command_id: commandId,
+      hlc,
+      table: s.table,
+      row_id: s.row_id,
+      op: s.op,
+      fields: s.fields,
+      seq,
+    }));
+
+    const command: ClientCommand = {
+      id: commandId,
+      name,
+      hlc,
+      payload: parsed.data as ClientCommand['payload'],
+      status: 'pending',
+      created_at: createdAt,
+    };
+    await store.enqueue(command, effects);
+    return commandId;
+  }
+
   return {
-    async renameNode(nodeId, title) {
-      const commandId = mintId();
-      const hlc = nextHlc();
-      const payload = stripTrustFields({ id: nodeId, title });
-
-      const parsed = COMMAND_SCHEMAS['node.rename'].safeParse(payload);
-      if (!parsed.success) {
-        const first = parsed.error.issues[0];
-        throw new Error(`node.rename invalid: ${first ? `${first.path.join('.') || 'payload'}: ${first.message}` : 'bad payload'}`);
-      }
-
-      const command: ClientCommand = {
-        id: commandId,
-        name: 'node.rename',
-        hlc,
-        payload,
-        status: 'pending',
-        created_at: now(),
-      };
-      const effect = buildRenameEffect({ commandId, hlc, nodeId, title });
-      await store.enqueue(command, [effect]);
-      return commandId;
+    execute,
+    renameNode(nodeId, title) {
+      return execute('node.rename', { id: nodeId, title });
     },
   };
 }
