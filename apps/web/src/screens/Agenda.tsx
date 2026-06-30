@@ -33,6 +33,8 @@ import {
   type CommandContext,
 } from '@prisms/ui';
 
+import { WhyButton } from '../components/Why';
+
 const GRID_START_HOUR = 6;
 const GRID_END_HOUR = 22;
 const HOUR_PX = 44;
@@ -270,7 +272,13 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
           ))}
         </div>
         {selectedBlock ? (
-          <BlockTagsPanel blockId={selectedBlock.id} title={selectedBlock.title} ctx={ctx} />
+          <>
+            <div className="px-why-inline" style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span className="px-muted">{selectedBlock.status === 'suggested' ? 'Suggested event' : 'Event'}</span>
+              <WhyButton row={selectedBlock.provenance} suggestionReason={selectedBlock.suggestionReason} testId={`why-block-${selectedBlock.id}`} />
+            </div>
+            <BlockTagsPanel blockId={selectedBlock.id} title={selectedBlock.title} ctx={ctx} />
+          </>
         ) : (
           <p className="px-muted" style={{ marginTop: 16 }}>Select an event to tag it.</p>
         )}
@@ -319,6 +327,7 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
                   const cls = [
                     'px-cal-block',
                     b.status === 'suggested' ? 'px-cal-block--suggested' : '',
+                    b.superseded ? 'px-cal-block--superseded' : '',
                     !b.justified ? 'px-cal-block--unjustified' : '',
                     b.anchored ? 'px-cal-block--anchored' : '',
                   ].filter(Boolean).join(' ');
@@ -337,6 +346,9 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
                       onClick={() => setSelectedBlockId(b.id)}
                     >
                       <span className="px-cal-block-title">{b.anchored && <span aria-label="anchored">🔒 </span>}{b.title}</span>
+                      {b.superseded && (
+                        <span className="px-cal-block-stale" data-testid={`superseded-${b.id}`}>superseded</span>
+                      )}
                       {b.status === 'suggested' && (
                         <span className="px-cal-block-actions">
                           <button className="px-btn px-btn--primary" data-testid={`accept-${b.id}`} onMouseDown={(e) => e.stopPropagation()} onClick={() => void commands.acceptSuggestion(b.id)}>✓</button>

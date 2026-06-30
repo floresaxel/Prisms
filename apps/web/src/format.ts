@@ -10,6 +10,26 @@ export function formatElapsed(ms: number): string {
   return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
 }
 
+/** A machine-readable command rejection code → a human, actionable message (§7.13, M9). */
+export function rejectionMessage(code: string | undefined): string {
+  switch (code) {
+    case 'E_STALE_SUGGESTION':
+      return 'That suggestion was superseded by a newer plan and could not be accepted.';
+    case 'E_SUGGESTION_OVERLAPS_ANCHOR':
+      return 'That suggestion overlaps a locked block, so it could not be accepted.';
+    case 'E_BLOCKED_TASK':
+      return 'That task is blocked — use “Force clock in” to override the blocker.';
+    case 'E_CLIENT_TOO_OLD':
+      return 'This app version is too old to sync that change. Please update Prisms.';
+    case 'E_DEPENDENCY_REJECTED':
+      return 'A change this one depended on was rejected, so this was rolled back.';
+    case 'E_DONE_IMMUTABLE':
+      return 'That task is already done, so the change was rolled back.';
+    default:
+      return `Change rejected${code ? ` (${code})` : ''} and reverted.`;
+  }
+}
+
 /** A signed minute count → human duration, e.g. `1h 30m`, `45m`, `−20m` (over). */
 export function formatMinutes(min: number): string {
   const sign = min < 0 ? '−' : '';

@@ -22,6 +22,14 @@ const nodes = new Table({
   completed_in_block_id: column.text,
   habit_id: column.text,
   attributes: column.text,
+  // §7.8 provenance (server-assigned, streamed via SELECT *) — surfaced so the
+  // UI can answer "why does this exist?" for tasks (M9). Absent on legacy rows
+  // → the mapper defaults source_kind='legacy' ("origin unknown").
+  created_by_command_id: column.text,
+  last_modified_by_command_id: column.text,
+  source_kind: column.text,
+  source_id: column.text,
+  source_detail: column.text,
   created_at: column.text,
   updated_at: column.text,
   deleted_at: column.text,
@@ -49,6 +57,17 @@ const schedule_blocks = new Table({
   suggestion_reason: column.text,
   computed_at: column.text,
   external_event_id: column.text,
+  // §7.5 suggestion lifecycle — so the agenda reflects supersession and the
+  // optimistic accept can mirror the server transaction (M9).
+  suggestion_batch_id: column.text,
+  replaces_block_id: column.text,
+  superseded_at: column.text,
+  // §7.8 provenance — "why is this suggestion here?" (source_kind='scheduler').
+  created_by_command_id: column.text,
+  last_modified_by_command_id: column.text,
+  source_kind: column.text,
+  source_id: column.text,
+  source_detail: column.text,
   created_at: column.text,
   updated_at: column.text,
   deleted_at: column.text,

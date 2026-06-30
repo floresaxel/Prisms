@@ -22,6 +22,9 @@ const SCORE = '66666666-6666-7666-8666-666666666666';
 const CRITERION = '77777777-7777-7777-8777-777777777777';
 const PROJECT = '88888888-8888-7888-8888-888888888888';
 const DIAGRAM = '99999999-9999-7999-8999-999999999999';
+const BLOCK = 'aaaaaaaa-aaaa-7aaa-8aaa-aaaaaaaaaaaa';
+const REPLACED = 'bbbbbbbb-bbbb-7bbb-8bbb-bbbbbbbbbbbb';
+const SIBLING = 'cccccccc-cccc-7ccc-8ccc-cccccccccccc';
 
 function captureStore() {
   const commands: ClientCommand[] = [];
@@ -136,6 +139,35 @@ describe('createCommands — special cases', () => {
     await createCommands(b.store, ctx, deps()).setLayoutPosition({ diagramId: DIAGRAM, nodeId: NODE, x: 5, y: 6 });
     expect(b.commands[0]!.name).toBe('layout.set_position'); // command still uploads
     expect(b.effects).toHaveLength(0); // server mints the row id → it syncs back, no overlay
+  });
+
+  it('clockIn with force → timer.clock_in carries force:true (§8 blocked-task override)', async () => {
+    const { store, commands } = captureStore();
+    await createCommands(store, ctx, deps()).clockIn(TASK, { force: true });
+    expect(commands[0]).toMatchObject({ name: 'timer.clock_in', payload: { task_id: TASK, force: true } });
+  });
+
+  it('clockIn without force → no force key (default guarded clock-in)', async () => {
+    const { store, commands } = captureStore();
+    await createCommands(store, ctx, deps()).clockIn(TASK);
+    expect(Object.keys(commands[0]!.payload as object)).not.toContain('force');
+  });
+
+  it('acceptSuggestion mirrors §7.5: promote + soft-delete the replaced block + supersede overlapping siblings', async () => {
+    const blocks: Record<string, unknown>[] = [
+      { id: BLOCK, task_id: TASK, status: 'suggested', starts_at: '2026-07-01T14:00:00.000Z', ends_at: '2026-07-01T15:00:00.000Z', replaces_block_id: REPLACED, superseded_at: null, deleted_at: null },
+      { id: SIBLING, task_id: TASK, status: 'suggested', starts_at: '2026-07-01T14:30:00.000Z', ends_at: '2026-07-01T15:30:00.000Z', replaces_block_id: null, superseded_at: null, deleted_at: null },
+      { id: REPLACED, task_id: TASK, status: 'committed', starts_at: '2026-07-01T09:00:00.000Z', ends_at: '2026-07-01T10:00:00.000Z', replaces_block_id: null, superseded_at: null, deleted_at: null },
+    ];
+    const { store, commands, effects } = captureStore();
+    store.replicaRows = async (table) => (table === 'schedule_blocks' ? blocks : []);
+    await createCommands(store, ctx, deps()).acceptSuggestion(BLOCK);
+
+    expect(commands[0]).toMatchObject({ name: 'block.accept_suggestion', payload: { id: BLOCK } });
+    const byRow = new Map(effects.map((e) => [e.row_id, e]));
+    expect(byRow.get(BLOCK)).toMatchObject({ op: 'update', fields: { status: 'committed', suggestion_reason: null } });
+    expect(byRow.get(REPLACED)).toMatchObject({ op: 'delete' });
+    expect(byRow.get(SIBLING)).toMatchObject({ op: 'update', fields: { superseded_at: '2026-06-28T00:00:00.000Z' } });
   });
 
   it('setScore upserts by the carried row id (existing or freshly minted)', async () => {

@@ -13,9 +13,9 @@
  * overlay.
  */
 import { newId } from './client-runtime';
-import type { EffectSpec } from './effects';
+import { buildAcceptSuggestionEffects, type AcceptSuggestionBlock, type EffectSpec } from './effects';
 import { createExecuteCommand, type ExecuteDeps } from './execute';
-import type { OverlayStore } from './overlay-store';
+import { readMergedRows, type OverlayStore } from './overlay-store';
 
 export interface CommandContext {
   userId: string;
@@ -78,9 +78,10 @@ export function createCommands(store: OverlayStore, ctx: CommandContext, deps: E
       });
       return id;
     },
-    async clockIn(taskId: string): Promise<string> {
+    /** Clock in (§8). `force` overrides the blocked-task guard; the open entry then makes the task `ongoing`. */
+    async clockIn(taskId: string, opts?: { force?: boolean }): Promise<string> {
       const id = newId();
-      await run('timer.clock_in', { entry_id: id, task_id: taskId, started_at: iso(ctx) });
+      await run('timer.clock_in', { entry_id: id, task_id: taskId, started_at: iso(ctx), ...(opts?.force ? { force: true } : {}) });
       return id;
     },
     async clockOut(entryId: string): Promise<void> {
@@ -113,9 +114,28 @@ export function createCommands(store: OverlayStore, ctx: CommandContext, deps: E
     async deleteBlock(id: string): Promise<void> {
       await run('block.delete', { id });
     },
-    /** Promote a suggested block to a committed fact (§7.5). */
+    /**
+     * Promote a suggested block to a committed fact (§7.5). The optimistic
+     * effects MIRROR the server transaction: besides promoting the suggestion,
+     * they soft-delete the flexible block it replaces and supersede overlapping
+     * sibling suggestions — read from the merged block state so the agenda
+     * reflects the whole §7.5 outcome instantly. The server re-applies
+     * authoritatively; a stale suggestion is rejected (E_STALE_SUGGESTION) and
+     * the overlay rolls back into a review item.
+     */
     async acceptSuggestion(id: string): Promise<void> {
-      await run('block.accept_suggestion', { id });
+      const rows = (await readMergedRows(store, 'schedule_blocks')) as Record<string, unknown>[];
+      const blocks: AcceptSuggestionBlock[] = rows.map((r) => ({
+        id: String(r['id']),
+        task_id: String(r['task_id']),
+        status: String(r['status']),
+        starts_at: String(r['starts_at']),
+        ends_at: String(r['ends_at']),
+        replaces_block_id: r['replaces_block_id'] == null ? null : String(r['replaces_block_id']),
+        superseded_at: r['superseded_at'] == null ? null : String(r['superseded_at']),
+        deleted_at: r['deleted_at'] == null ? null : String(r['deleted_at']),
+      }));
+      await run('block.accept_suggestion', { id }, { effects: buildAcceptSuggestionEffects(blocks, id, iso(ctx)) });
     },
     /** Dismiss a suggested block (§7.5). */
     async rejectSuggestion(id: string): Promise<void> {

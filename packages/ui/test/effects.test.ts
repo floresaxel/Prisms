@@ -12,7 +12,7 @@ import { describe, expect, it } from 'vitest';
 
 import { COMMAND_SCHEMAS, mergeTable, type CommandName, type OverlayEffect } from '@prisms/core';
 
-import { buildOptimisticEffects, type EffectSpec } from '../src/powersync/effects';
+import { buildAcceptSuggestionEffects, buildOptimisticEffects, type AcceptSuggestionBlock, type EffectSpec } from '../src/powersync/effects';
 import { toAutomationRule, toNode, toTimeEntry } from '../src/powersync/rows';
 
 const ctx = { userId: 'u1', deviceId: 'dev-1', now: '2026-06-28T00:00:00.000Z' };
@@ -35,6 +35,13 @@ describe('buildOptimisticEffects — inserts seed a complete row', () => {
     const [eff] = buildOptimisticEffects('timer.clock_in', { entry_id: 'e1', task_id: 't1', started_at: '2026-06-28T10:00:00.000Z' }, ctx);
     expect(eff).toMatchObject({ table: 'time_entries', row_id: 'e1', op: 'insert' });
     expect(eff!.fields).toMatchObject({ task_id: 't1', started_at: '2026-06-28T10:00:00.000Z', planned: 1, device_id: 'dev-1' });
+  });
+
+  it('inserts predict source_kind="user" for overlay display (§7.8) — so a just-created row is not "origin unknown"', () => {
+    const [node] = buildOptimisticEffects('node.create', { id: 'n1', node_type: 'task', title: 'T', sort_order: 'a0' }, ctx);
+    expect(node!.fields['source_kind']).toBe('user');
+    const [block] = buildOptimisticEffects('block.create', { id: 'b1', task_id: 't1', starts_at: '2026-06-28T10:00:00.000Z', ends_at: '2026-06-28T11:00:00.000Z' }, ctx);
+    expect(block!.fields['source_kind']).toBe('user');
   });
 });
 
@@ -94,6 +101,51 @@ describe('buildOptimisticEffects — special cases', () => {
     const [eff] = buildOptimisticEffects('score.set', { id: 's1', criterion_id: 'c1', project_id: 'pr1', score: 3 }, ctx);
     expect(eff).toMatchObject({ table: 'decision_scores', row_id: 's1', op: 'insert' });
     expect(eff!.fields).toMatchObject({ id: 's1', criterion_id: 'c1', project_id: 'pr1', score: 3 });
+  });
+
+  it('block.accept_suggestion (base) → promote + clear ALL suggestion metadata (mirrors §7.5)', () => {
+    const effs = buildOptimisticEffects('block.accept_suggestion', { id: 'b1' }, ctx);
+    expect(effs).toEqual([
+      { table: 'schedule_blocks', row_id: 'b1', op: 'update', fields: { status: 'committed', suggestion_reason: null, suggestion_batch_id: null, replaces_block_id: null, superseded_at: null } },
+    ]);
+  });
+});
+
+describe('buildAcceptSuggestionEffects — mirrors the server §7.5 transaction', () => {
+  const block = (over: Partial<AcceptSuggestionBlock> & { id: string }): AcceptSuggestionBlock => ({
+    task_id: 'task-1', status: 'suggested', starts_at: '2026-07-01T14:00:00.000Z', ends_at: '2026-07-01T15:00:00.000Z',
+    replaces_block_id: null, superseded_at: null, deleted_at: null, ...over,
+  });
+
+  it('promotes the accepted suggestion, clearing suggestion metadata', () => {
+    const effs = buildAcceptSuggestionEffects([block({ id: 'b1' })], 'b1', ctx.now);
+    expect(effs).toEqual([
+      { table: 'schedule_blocks', row_id: 'b1', op: 'update', fields: { status: 'committed', suggestion_reason: null, suggestion_batch_id: null, replaces_block_id: null, superseded_at: null } },
+    ]);
+  });
+
+  it('soft-deletes the flexible block it replaces (DoD: the replaced block resolves)', () => {
+    const effs = buildAcceptSuggestionEffects([block({ id: 'b1', replaces_block_id: 'old' })], 'b1', ctx.now);
+    expect(effs).toContainEqual({ table: 'schedule_blocks', row_id: 'old', op: 'delete', fields: {} });
+  });
+
+  it('supersedes overlapping LIVE sibling suggestions for the same task', () => {
+    const blocks = [
+      block({ id: 'b1' }), // 14:00–15:00
+      block({ id: 'b2', starts_at: '2026-07-01T14:30:00.000Z', ends_at: '2026-07-01T15:30:00.000Z' }), // overlaps → superseded
+      block({ id: 'b3', starts_at: '2026-07-01T16:00:00.000Z', ends_at: '2026-07-01T17:00:00.000Z' }), // no overlap → untouched
+      block({ id: 'b4', task_id: 'other', starts_at: '2026-07-01T14:30:00.000Z', ends_at: '2026-07-01T15:30:00.000Z' }), // other task → untouched
+      block({ id: 'b5', starts_at: '2026-07-01T14:30:00.000Z', ends_at: '2026-07-01T15:30:00.000Z', superseded_at: '2026-06-01T00:00:00Z' }), // already superseded → untouched
+    ];
+    const effs = buildAcceptSuggestionEffects(blocks, 'b1', ctx.now);
+    // the promote (b1) clears superseded_at to null; only a sibling supersede stamps a timestamp.
+    const superseded = effs.filter((e) => typeof e.fields['superseded_at'] === 'string').map((e) => e.row_id);
+    expect(superseded).toEqual(['b2']);
+    expect(effs.find((e) => e.row_id === 'b2')!.fields['superseded_at']).toBe(ctx.now);
+  });
+
+  it('unknown id → still emits the promote (server is authoritative)', () => {
+    expect(buildAcceptSuggestionEffects([], 'missing', ctx.now)).toHaveLength(1);
   });
 });
 

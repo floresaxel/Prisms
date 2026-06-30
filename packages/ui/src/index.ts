@@ -29,8 +29,11 @@ export {
   type ReviewItem,
 } from './powersync/overlay-store';
 export { createExecuteCommand, type ExecuteCommand, type ExecuteContext, type ExecuteDeps, type ExecuteOptions } from './powersync/execute';
-export { buildOptimisticEffects, type EffectSpec, type OptimisticEffectCtx } from './powersync/effects';
+export { buildOptimisticEffects, buildAcceptSuggestionEffects, type EffectSpec, type OptimisticEffectCtx, type AcceptSuggestionBlock } from './powersync/effects';
 export { uploadClientCommands, type UploadCommandsOptions, type UploadSummary } from './powersync/upload-commands';
+
+// provenance ("why does this exist?", §7.8) — M9
+export { explainProvenance, type ProvenanceFields, type ProvenanceExplanation } from './provenance';
 
 // hooks
 export {
@@ -59,8 +62,10 @@ export {
   useBlockTags,
   useTimeBlocksForDay,
   useGroupedWorklist,
+  useBlockedTasks,
   useHabitTasks,
   type WorklistItem,
+  type BlockedTask,
   type RunningTimer,
   type PromoteTarget,
   type Agenda,

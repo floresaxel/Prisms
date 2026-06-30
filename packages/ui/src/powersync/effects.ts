@@ -63,7 +63,11 @@ export function buildOptimisticEffects(name: CommandName, payload: unknown, ctx:
     table,
     row_id: String(rowId),
     op: 'insert',
-    fields: clean({ id: rowId, user_id: ctx.userId, ...fields, created_at: ctx.now, updated_at: ctx.now }),
+    // §7.8: the optimistic client MAY predict source_kind='user' for overlay display
+    // only (so a just-created row's "why?" reads "You created this", not "origin
+    // unknown"). The server re-assigns provenance authoritatively (R17) and the
+    // identical canonical row reconciles it away.
+    fields: clean({ id: rowId, user_id: ctx.userId, source_kind: 'user', ...fields, created_at: ctx.now, updated_at: ctx.now }),
   });
   const upd = (table: string, rowId: unknown, fields: Record<string, unknown>): EffectSpec => ({
     table,
@@ -161,9 +165,11 @@ export function buildOptimisticEffects(name: CommandName, payload: unknown, ctx:
     case 'block.delete':
       return [del('schedule_blocks', id)];
     case 'block.accept_suggestion':
-      // optimistic promote; the server §7.5 txn also supersedes siblings + soft-
-      // deletes the replaced block (those reconcile on sync).
-      return [upd('schedule_blocks', id, { status: 'committed', suggestion_reason: null })];
+      // promote, clearing the suggestion metadata exactly as the server §7.5 txn
+      // does. The replaced-block soft-delete + sibling supersession also belong to
+      // §7.5 but need live block state, so the live writer (commands.ts) supplies
+      // the full set via `buildAcceptSuggestionEffects` — see that function.
+      return [upd('schedule_blocks', id, { status: 'committed', suggestion_reason: null, suggestion_batch_id: null, replaces_block_id: null, superseded_at: null })];
     case 'block.reject_suggestion':
       return [del('schedule_blocks', id)];
 
@@ -332,4 +338,60 @@ export function buildOptimisticEffects(name: CommandName, payload: unknown, ctx:
       return [];
     }
   }
+}
+
+/** The block fields the §7.5 accept mirror reads (the merged-read row subset). */
+export interface AcceptSuggestionBlock {
+  id: string;
+  task_id: string;
+  status: string;
+  starts_at: string;
+  ends_at: string;
+  replaces_block_id: string | null;
+  superseded_at: string | null;
+  deleted_at: string | null;
+}
+
+/**
+ * The FULL optimistic effect set of `block.accept_suggestion` (§7.5), mirroring
+ * the server transaction (dispatcher.ts) so the agenda reflects the whole
+ * outcome instantly — not just the promotion:
+ *   1. promote the suggestion to `committed`, clearing its suggestion metadata,
+ *   2. soft-delete the flexible block it replaces (`replaces_block_id`), if any,
+ *   3. supersede other live suggestions for the same task that overlap it.
+ * The server re-applies authoritatively (R17); these identical effects reconcile
+ * away on sync. PURE — a function of the merged block set + the accepted id.
+ * (Anchored-overlap rejection (I9) and the task-done check (I8) are server-only
+ * gates; the optimistic path shows the promote and rolls back if rejected.)
+ */
+export function buildAcceptSuggestionEffects(
+  blocks: readonly AcceptSuggestionBlock[],
+  id: string,
+  now: string,
+): EffectSpec[] {
+  const effects: EffectSpec[] = [
+    {
+      table: 'schedule_blocks',
+      row_id: id,
+      op: 'update',
+      fields: { status: 'committed', suggestion_reason: null, suggestion_batch_id: null, replaces_block_id: null, superseded_at: null },
+    },
+  ];
+  const block = blocks.find((b) => b.id === id);
+  if (!block) return effects;
+
+  if (block.replaces_block_id) {
+    effects.push({ table: 'schedule_blocks', row_id: block.replaces_block_id, op: 'delete', fields: {} });
+  }
+
+  const startMs = Date.parse(block.starts_at);
+  const endMs = Date.parse(block.ends_at);
+  for (const o of blocks) {
+    if (o.id === id || o.task_id !== block.task_id) continue;
+    if (o.status !== 'suggested' || o.deleted_at !== null || o.superseded_at !== null) continue;
+    if (Date.parse(o.starts_at) < endMs && startMs < Date.parse(o.ends_at)) {
+      effects.push({ table: 'schedule_blocks', row_id: o.id, op: 'update', fields: { superseded_at: now } });
+    }
+  }
+  return effects;
 }

@@ -21,6 +21,7 @@ import {
   criticalPath,
   DEFAULT_WINDOWS,
   descendantsOf,
+  evaluateBlockerRules,
   habitTaskIds,
   isJustified,
   isoToEpochMillis,
@@ -63,6 +64,7 @@ import {
 
 import { createCommands, type CommandContext } from './powersync/commands';
 import { createSqlOverlayStore, type SqlExecutor } from './powersync/overlay-store';
+import { type ProvenanceFields } from './provenance';
 import { groupWorklistBySchedule, type WorklistGroup } from './worklist-grouping';
 import {
   toAutomationRule,
@@ -183,6 +185,12 @@ export interface WorklistItem {
   scheduled: boolean;
   /** The committed block to auto-associate a completion with (null = none/unscheduled). */
   committedBlockId: string | null;
+  /**
+   * Labels of in-scope blocker rules that evaluated `unknown` (e.g. weather
+   * unverified, §10.3) — advisory only: the task is still actionable, the UI
+   * just surfaces a "weather unverified" badge. Never gates a command.
+   */
+  unverified: string[];
 }
 
 /** The committed block to default a completion to: covering now, else most recent, else earliest. */
@@ -222,6 +230,9 @@ export function useWorklist(now: Instant): WorklistItem[] {
       if (status === 'done' || status === 'blocked') continue;
       const open = ctx.openEntryFor(node.id);
       const taskBlocks = blocksByTask.get(node.id) ?? [];
+      // advisory: in-scope blocker rules that returned `unknown` (e.g. weather
+      // unverified, §10.3). The task is not blocked — this only drives a badge.
+      const unverified = evaluateBlockerRules(node, ctx, now).unverified.map((r) => r.label);
       items.push({
         task: node,
         status,
@@ -230,6 +241,7 @@ export function useWorklist(now: Instant): WorklistItem[] {
         minutesLeftInTask: minutesLeftInTask(node, entries),
         scheduled: taskBlocks.length > 0,
         committedBlockId: pickCommittedBlock(taskBlocks, now),
+        unverified,
       });
     }
     const rank: Record<TaskStatus, number> = { ongoing: 0, scheduled: 1, prioritized: 2, available: 3, blocked: 4, done: 5 };
@@ -267,6 +279,35 @@ export function useTimeBlocksForDay(now: Instant): TimeBlockOption[] {
 export function useGroupedWorklist(now: Instant): WorklistGroup[] {
   const items = useWorklist(now);
   return useMemo(() => groupWorklistBySchedule(items), [items]);
+}
+
+export interface BlockedTask {
+  task: Node;
+  /** Labels of blocker rules that evaluated `true` — why it is blocked. */
+  blockedBy: string[];
+  /** Labels of in-scope rules that evaluated `unknown` (weather unverified, §10.3). */
+  unverified: string[];
+}
+
+/**
+ * Blocked tasks (§8, §10.3) — kept OUT of `useWorklist` (which only lists
+ * actionable items) so the UI can surface them separately with a `force`
+ * clock-in affordance. Forcing a clock-in opens a time entry, which makes the
+ * task `ongoing` (ongoing wins precedence over blocked), so it then leaves this
+ * list and appears as the running timer.
+ */
+export function useBlockedTasks(now: Instant): BlockedTask[] {
+  const ctx = useFactContext();
+  return useMemo(() => {
+    const out: BlockedTask[] = [];
+    for (const node of ctx.tree.byId.values()) {
+      if (node.node_type !== 'task' || node.completed_at !== null) continue;
+      if (taskStatus(node, ctx, now) !== 'blocked') continue;
+      const ev = evaluateBlockerRules(node, ctx, now);
+      out.push({ task: node, blockedBy: ev.blockedBy.map((r) => r.label), unverified: ev.unverified.map((r) => r.label) });
+    }
+    return out.sort((a, b) => (a.task.title < b.task.title ? -1 : a.task.title > b.task.title ? 1 : a.task.id < b.task.id ? -1 : 1));
+  }, [ctx, now]);
 }
 
 export interface HabitTasksView {
@@ -376,6 +417,10 @@ export interface AgendaBlock {
   /** §12.2: ancestry reaches no vision/habit → render dark grey. */
   justified: boolean;
   suggestionReason: string | null;
+  /** §7.5: a newer batch superseded this suggestion — stale, reflected in the UI. */
+  superseded: boolean;
+  /** §7.8 provenance for the "why is this here?" affordance (scheduler/user/…). */
+  provenance: ProvenanceFields;
 }
 
 export interface AgendaEntry {
@@ -479,6 +524,14 @@ export function useAgenda(now: Instant, horizonDays = 7): Agenda {
       anchored: b.anchor_type !== 'none',
       justified: isJustified(tree, b.task_id),
       suggestionReason: b.suggestion_reason,
+      superseded: b.superseded_at !== null,
+      provenance: {
+        source_kind: b.source_kind,
+        source_id: b.source_id,
+        source_detail: b.source_detail,
+        created_by_command_id: b.created_by_command_id,
+        last_modified_by_command_id: b.last_modified_by_command_id,
+      },
     }));
 
     const entries: AgendaEntry[] = entryRows

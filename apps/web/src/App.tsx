@@ -10,7 +10,9 @@ import { PowerSyncContext } from '@powersync/react';
 import { getDeviceId, Layout, type CommandContext, type CommandRejection } from '@prisms/ui';
 
 import { getSession, signOut, type SessionUser } from './auth';
+import { ReviewBanner } from './components/ReviewBanner';
 import { isDesktop, osNotify } from './desktop';
+import { rejectionMessage } from './format';
 import { connectDb, createDb } from './powersync';
 import { Agenda } from './screens/Agenda';
 import { Blockers } from './screens/Blockers';
@@ -110,9 +112,10 @@ function AuthedApp({ user, onSignOut }: { user: SessionUser; onSignOut: () => vo
           </>
         }
       >
+        <ReviewBanner />
         {rejections.length > 0 && (
           <div className="px-error" data-testid="rejection-toast" onClick={() => setRejections([])}>
-            Change rejected: {rejections.map((r) => r.reject_code).join(', ')} (reverted)
+            {rejections.map((r) => rejectionMessage(r.reject_code)).join(' ')}
           </div>
         )}
         {({
