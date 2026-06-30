@@ -14,7 +14,6 @@
  * M0 wires this as an additive path alongside the existing CRUD connector; M8
  * makes it the connector's only `uploadData` and deletes the CRUD bridge.
  */
-import { newId } from './client-runtime';
 import type { CommandRejection } from './connector';
 import type { OverlayStore } from './overlay-store';
 
@@ -35,10 +34,6 @@ export interface UploadCommandsOptions {
   fetch?: typeof fetch;
   /** Surface rejected commands to the UI (the overlay has already rolled back). */
   onReject?: (rejections: CommandRejection[]) => void;
-  /** Mint review-item ids. Defaults to the browser-tier `newId`. */
-  mintId?: () => string;
-  /** ISO timestamp for review items. Defaults to wall clock. */
-  now?: () => string;
 }
 
 export interface UploadSummary {
@@ -51,8 +46,6 @@ export interface UploadSummary {
 export async function uploadClientCommands(options: UploadCommandsOptions): Promise<UploadSummary> {
   const { store, apiBaseUrl, deviceId } = options;
   const doFetch = options.fetch ?? fetch;
-  const mintId = options.mintId ?? newId;
-  const now = options.now ?? (() => new Date().toISOString());
 
   const commands = await store.pendingCommands();
   const summary: UploadSummary = { uploaded: commands.length, applied: 0, rejected: 0, noop: 0 };
@@ -79,21 +72,8 @@ export async function uploadClientCommands(options: UploadCommandsOptions): Prom
     const result = byId.get(command.id);
     if (!result) continue; // server omitted it — leave pending, retry next sync.
     if (result.result === 'rejected') {
-      await store.rollbackRejected({
-        commandId: command.id,
-        rejectCode: result.reject_code,
-        rejectReason: result.reject_reason,
-        reviewItem: {
-          id: mintId(),
-          item_type: 'command_rejection',
-          severity: 'warning',
-          title: `${command.name} was rejected`,
-          detail: result.reject_reason ?? result.reject_code ?? 'rejected',
-          status: 'open',
-          command_id: command.id,
-          created_at: now(),
-        },
-      });
+      // drop the overlay (rollback); the server-created review item syncs down (§7.13).
+      await store.rollbackRejected({ commandId: command.id, rejectCode: result.reject_code, rejectReason: result.reject_reason });
       rejections.push({ id: command.id, name: command.name, reject_code: result.reject_code, reject_reason: result.reject_reason });
       summary.rejected += 1;
     } else {

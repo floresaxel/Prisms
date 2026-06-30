@@ -244,6 +244,26 @@ const user_settings = new Table({
   updated_at: column.text,
 });
 
+/**
+ * The durable conflict/rejection inbox (§7.13). SERVER-OWNED: the dispatcher (M5)
+ * and jobs (M6) create items; they stream down here (M4) for the review inbox.
+ * The client never writes these (a rejection just drops the overlay; the item
+ * arrives via sync), so it stays out of LOCAL_ONLY_TABLE_NAMES and is never
+ * uploaded as a row patch.
+ */
+const sync_review_items = new Table({
+  user_id: column.text,
+  command_id: column.text,
+  item_type: column.text,
+  severity: column.text,
+  title: column.text,
+  detail: column.text,
+  status: column.text,
+  created_at: column.text,
+  updated_at: column.text,
+  deleted_at: column.text,
+});
+
 /** The synced tables (§7.3): the canonical replica streamed down from Postgres. */
 const syncedTables = {
   nodes,
@@ -267,7 +287,10 @@ const syncedTables = {
   diagram_layouts,
   diagram_groups,
   user_settings,
+  sync_review_items,
 };
+
+export { sync_review_items };
 
 /**
  * The synced-table contract: exactly the rows the sync rules stream down. The
@@ -279,11 +302,11 @@ export const appSchema = new Schema(syncedTables);
 // --- Two-layer client store (1.3 §7.2a, R15) — LOCAL-ONLY -------------------
 // `client_commands` is the pending-command upload queue; `overlay_effects` is
 // each command's optimistic row effects that the read-merge applies over the
-// replica; `sync_review_items` is the durable rejection/conflict inbox. All
-// three are `localOnly` so PowerSync never enqueues them in the CRUD upload
-// batch — the only trusted upload is the named command envelope read from
-// `client_commands` (see upload-commands.ts). M3 lands the server-synced
-// `sync_review_items`; the spike keeps a local copy to prove the rollback path.
+// replica. Both are `localOnly` so PowerSync never enqueues them in the CRUD
+// upload batch — the only trusted upload is the named command envelope read from
+// `client_commands` (see upload-commands.ts). `sync_review_items` is NOT here: it
+// is server-owned and SYNCED down (above), since M5 creates the items and the
+// client only reads them (a rejection drops the overlay; the item arrives via sync).
 
 /** Pending-command queue. `id` = the client-minted UUIDv7 (V2, §7.2b). */
 export const client_commands = new Table(
@@ -314,31 +337,16 @@ export const overlay_effects = new Table(
   { localOnly: true },
 );
 
-/** Durable conflict/rejection inbox (§7.13); server-synced from M3 onward. */
-export const sync_review_items = new Table(
-  {
-    item_type: column.text,
-    severity: column.text,
-    title: column.text,
-    detail: column.text,
-    status: column.text,
-    command_id: column.text,
-    created_at: column.text,
-  },
-  { localOnly: true },
-);
-
 /** The local-only overlay table names — asserted absent from `appSchema`. */
-export const LOCAL_ONLY_TABLE_NAMES = ['client_commands', 'overlay_effects', 'sync_review_items'] as const;
+export const LOCAL_ONLY_TABLE_NAMES = ['client_commands', 'overlay_effects'] as const;
 
 /**
  * The full on-device schema: the synced replica PLUS the local-only overlay
  * tables. PowerSync is opened with this so the overlay tables exist in SQLite,
- * while `appSchema` stays the clean synced contract. (M8 wires the app to this.)
+ * while `appSchema` stays the clean synced contract.
  */
 export const clientSchema = new Schema({
   ...syncedTables,
   client_commands,
   overlay_effects,
-  sync_review_items,
 });

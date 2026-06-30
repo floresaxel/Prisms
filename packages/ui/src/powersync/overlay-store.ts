@@ -51,14 +51,13 @@ export interface OverlayStore {
   replicaRows(table: string): Promise<OverlayRow[]>;
   /** Applied/noop: drop the overlay; the identical canonical row carries it. */
   reconcileApplied(commandId: string): Promise<void>;
-  /** Rejected: drop the overlay (rollback) + record a review item bound to the id. */
-  rollbackRejected(args: {
-    commandId: string;
-    reviewItem: ReviewItem;
-    rejectCode?: string;
-    rejectReason?: string;
-  }): Promise<void>;
-  /** Open review items (the inbox), newest first. */
+  /**
+   * Rejected: drop the overlay (rollback) + mark the command. The durable review
+   * item is SERVER-created (M5) and syncs down (§7.13) — the client writes none
+   * (sync_review_items is a synced, server-owned table, never a client write).
+   */
+  rollbackRejected(args: { commandId: string; rejectCode?: string; rejectReason?: string }): Promise<void>;
+  /** Open review items (the inbox), newest first — the synced server-owned inbox. */
   reviewItems(): Promise<ReviewItem[]>;
 }
 
@@ -136,7 +135,8 @@ export function createSqlOverlayStore(sql: SqlExecutor): OverlayStore {
         await tx.execute('DELETE FROM client_commands WHERE id = ?', [commandId]);
       });
     },
-    async rollbackRejected({ commandId, reviewItem, rejectCode, rejectReason }) {
+    async rollbackRejected({ commandId, rejectCode, rejectReason }) {
+      // only the local overlay tables — the server-owned review item syncs down.
       await sql.writeTransaction(async (tx) => {
         await tx.execute('DELETE FROM overlay_effects WHERE command_id = ?', [commandId]);
         await tx.execute('UPDATE client_commands SET status = ?, reject_code = ?, reject_reason = ? WHERE id = ?', [
@@ -145,23 +145,10 @@ export function createSqlOverlayStore(sql: SqlExecutor): OverlayStore {
           rejectReason ?? null,
           commandId,
         ]);
-        await tx.execute(
-          'INSERT INTO sync_review_items (id, item_type, severity, title, detail, status, command_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-          [
-            reviewItem.id,
-            reviewItem.item_type,
-            reviewItem.severity,
-            reviewItem.title,
-            reviewItem.detail,
-            reviewItem.status,
-            reviewItem.command_id,
-            reviewItem.created_at,
-          ],
-        );
       });
     },
     async reviewItems() {
-      const rows = await sql.getAll("SELECT * FROM sync_review_items WHERE status = 'open' ORDER BY created_at DESC");
+      const rows = await sql.getAll("SELECT * FROM sync_review_items WHERE status = 'open' AND deleted_at IS NULL ORDER BY created_at DESC");
       return rows.map(toReviewItem);
     },
   };

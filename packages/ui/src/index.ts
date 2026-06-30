@@ -54,6 +54,7 @@ export {
   useUserSettings,
   useAggregates,
   useCommands,
+  useReviewInbox,
   useTagCatalog,
   useBlockTags,
   useTimeBlocksForDay,
@@ -81,6 +82,7 @@ export {
   type BlockTagView,
   type TimeBlockOption,
   type HabitTasksView,
+  type ReviewItemView,
 } from './hooks';
 export { groupWorklistBySchedule, type WorklistGroup } from './worklist-grouping';
 

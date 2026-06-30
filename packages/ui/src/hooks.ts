@@ -1001,6 +1001,41 @@ export function useCommands(ctx: CommandContext) {
   return useMemo(() => createCommands(createSqlOverlayStore(db as unknown as SqlExecutor), ctx), [db, ctx]);
 }
 
+export interface ReviewItemView {
+  id: string;
+  itemType: string;
+  severity: string;
+  title: string;
+  detail: string;
+  status: string;
+  commandId: string | null;
+  createdAt: string;
+}
+
+/**
+ * The conflict/rejection inbox (§7.13): open, server-synced `sync_review_items`,
+ * newest first. The server (M5) and jobs (M6) create them — command rejections,
+ * dependency rejections, HLC conflicts, stale suggestions, automation drift/
+ * backstop, schema blocks, import/sync warnings — and they stream down here.
+ */
+export function useReviewInbox(): ReviewItemView[] {
+  const rows = useRows("SELECT * FROM sync_review_items WHERE status = 'open' AND deleted_at IS NULL ORDER BY created_at DESC");
+  return useMemo(
+    () =>
+      rows.map((r) => ({
+        id: String(r['id']),
+        itemType: String(r['item_type']),
+        severity: String(r['severity'] ?? 'warning'),
+        title: String(r['title'] ?? ''),
+        detail: typeof r['detail'] === 'string' ? r['detail'] : JSON.stringify(r['detail'] ?? ''),
+        status: String(r['status'] ?? 'open'),
+        commandId: r['command_id'] == null ? null : String(r['command_id']),
+        createdAt: String(r['created_at'] ?? ''),
+      })),
+    [rows],
+  );
+}
+
 // --- tags (confirmable event tags) ----------------------------------------
 
 /** A tag placed on a block plus its current answer (pending = no live answer). */

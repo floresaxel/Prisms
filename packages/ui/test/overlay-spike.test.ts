@@ -22,7 +22,6 @@ import {
   clientSchema,
   client_commands,
   overlay_effects,
-  sync_review_items,
   createExecuteCommand,
   readMergedRows,
   uploadClientCommands,
@@ -62,12 +61,11 @@ function memoryStore(seedReplica: Record<string, OverlayRow[]> = {}) {
       effects = effects.filter((e) => e.command_id !== commandId);
       commands = commands.filter((c) => c.id !== commandId);
     },
-    async rollbackRejected({ commandId, reviewItem, rejectCode, rejectReason }) {
+    async rollbackRejected({ commandId, rejectCode, rejectReason }) {
       effects = effects.filter((e) => e.command_id !== commandId);
       commands = commands.map((c) =>
         c.id === commandId ? { ...c, status: 'rejected', reject_code: rejectCode, reject_reason: rejectReason } : c,
       );
-      reviews.push(reviewItem);
     },
     async reviewItems() {
       return reviews.filter((r) => r.status === 'open');
@@ -97,18 +95,19 @@ const stubDeps = () => {
 describe('schema: overlay tables are local-only and out of appSchema (R15)', () => {
   const names = (s: { tables: { name: string }[] }) => s.tables.map((t) => t.name);
 
-  it('appSchema excludes the overlay tables', () => {
-    for (const t of ['client_commands', 'overlay_effects', 'sync_review_items']) {
+  it('appSchema excludes the local-only overlay tables but INCLUDES synced sync_review_items', () => {
+    for (const t of ['client_commands', 'overlay_effects']) {
       expect(names(appSchema)).not.toContain(t);
     }
-    expect(appSchema.tables).toHaveLength(21);
+    // §7.13: the review inbox is server-owned and streams down, so it IS synced.
+    expect(names(appSchema)).toContain('sync_review_items');
+    expect(appSchema.tables).toHaveLength(22);
   });
 
-  it('clientSchema includes them and marks them local-only', () => {
+  it('clientSchema includes the overlay tables and marks ONLY those local-only', () => {
     expect(names(clientSchema)).toEqual(expect.arrayContaining(['client_commands', 'overlay_effects', 'sync_review_items']));
     expect(client_commands.localOnly).toBe(true);
     expect(overlay_effects.localOnly).toBe(true);
-    expect(sync_review_items.localOnly).toBe(true);
   });
 });
 
@@ -191,7 +190,7 @@ describe('uploadClientCommands: envelope upload + reconciliation (V2, §7.2)', (
     expect(await readMergedRows(seed.store, 'nodes')).toEqual([{ id: NODE, title: 'New title', user_id: 'u1' }]);
   });
 
-  it('rejected: rolls back the overlay and records a review item bound to the command id', async () => {
+  it('rejected: rolls back the overlay (drops it) and surfaces onReject — the durable item is server-synced', async () => {
     const seed = memoryStore({ nodes: [{ id: NODE, title: 'Old', user_id: 'u1' }] });
     const exec = createExecuteCommand(seed.store, { userId: 'u1', deviceId: 'web-1' }, stubDeps());
     const commandId = await exec.renameNode(NODE, 'New title');
@@ -208,17 +207,14 @@ describe('uploadClientCommands: envelope upload + reconciliation (V2, §7.2)', (
       deviceId: 'web-1',
       fetch: fetch as never,
       onReject: (r) => rejections.push(...r),
-      mintId: () => 'review-1',
-      now: () => '2026-06-27T00:00:00.000Z',
     });
 
     // overlay rolled back → merged read reverts to the canonical row
     expect(await readMergedRows(seed.store, 'nodes')).toEqual([{ id: NODE, title: 'Old', user_id: 'u1' }]);
     expect(await seed.store.effectsFor('nodes')).toHaveLength(0);
-    // a synced review item bound to the rejected command id
-    const items = await seed.store.reviewItems();
-    expect(items).toHaveLength(1);
-    expect(items[0]).toMatchObject({ item_type: 'command_rejection', command_id: commandId, status: 'open', detail: 'nope' });
+    // the client writes NO local review item — the server creates it (M5) and it
+    // streams down to the synced inbox (§7.13).
+    expect(await seed.store.reviewItems()).toHaveLength(0);
     expect(rejections).toEqual([{ id: commandId, name: 'node.rename', reject_code: 'E_OWNERSHIP', reject_reason: 'nope' }]);
     expect(summary).toEqual({ uploaded: 1, applied: 0, rejected: 1, noop: 0 });
   });
