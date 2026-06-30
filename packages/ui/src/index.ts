@@ -7,9 +7,16 @@ export const UI_PACKAGE = '@prisms/ui' as const;
 
 // data layer
 export { appSchema, clientSchema, client_commands, overlay_effects, sync_review_items, LOCAL_ONLY_TABLE_NAMES } from './powersync/schema';
-export { createConnector, type ConnectorOptions, type CommandRejection } from './powersync/connector';
-export { crudToCommand, type CrudLike, type CrudOp, type TranslatedCommand } from './powersync/crud-to-command';
-export { createCommands, type Commands, type CommandContext, type WritableDb } from './powersync/commands';
+export {
+  createConnector,
+  startCommandUpload,
+  type ConnectorOptions,
+  type CommandRejection,
+  type CommandUploadOptions,
+  type WatchableDb,
+} from './powersync/connector';
+export { crudToCommand, assertNoReplicaCrud, type CrudLike, type CrudOp, type TranslatedCommand } from './powersync/crud-to-command';
+export { createCommands, type Commands, type CommandContext } from './powersync/commands';
 export { newId, createHlc, getDeviceId, browserClock, browserRng } from './powersync/client-runtime';
 
 // two-layer client store (1.3 §7.2, R15) — M0 spike

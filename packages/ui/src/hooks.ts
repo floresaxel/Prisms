@@ -24,6 +24,7 @@ import {
   habitTaskIds,
   isJustified,
   isoToEpochMillis,
+  mergeTable,
   minutesLeftInDay,
   minutesLeftInTask,
   minutesUntilNextBlock,
@@ -45,6 +46,7 @@ import {
   type Instant,
   type IsoDate,
   type Node,
+  type OverlayEffect,
   type PracticeValue,
   type ProgressValue,
   type ScheduleBlock,
@@ -60,6 +62,7 @@ import {
 } from '@prisms/core';
 
 import { createCommands, type CommandContext } from './powersync/commands';
+import { createSqlOverlayStore, type SqlExecutor } from './powersync/overlay-store';
 import { groupWorklistBySchedule, type WorklistGroup } from './worklist-grouping';
 import {
   toAutomationRule,
@@ -86,7 +89,51 @@ import {
 } from './powersync/rows';
 
 type Row = Record<string, unknown>;
-const useRows = (sql: string) => useQuery<Row>(sql).data ?? [];
+
+/** The table a simple `SELECT … FROM <table> …` reads (each hook queries one table). */
+function tableFromSql(sql: string): string | null {
+  const m = /\bfrom\s+([a-z_][a-z0-9_]*)/i.exec(sql);
+  return m ? m[1]!.toLowerCase() : null;
+}
+
+const toOverlayEffect = (r: Row): OverlayEffect => {
+  const raw = r['fields'];
+  let fields: OverlayEffect['fields'] = {};
+  if (typeof raw === 'string' && raw.length > 0) {
+    try {
+      fields = JSON.parse(raw) as OverlayEffect['fields'];
+    } catch {
+      fields = {};
+    }
+  }
+  return {
+    command_id: String(r['command_id']),
+    hlc: String(r['hlc']),
+    table: String(r['table_name']),
+    row_id: String(r['row_id']),
+    op: r['op'] as OverlayEffect['op'],
+    fields,
+    seq: Number(r['seq'] ?? 0),
+  };
+};
+
+/**
+ * The merged read (1.3 §7.2): the replica query patched by the pending overlay
+ * for its table. Optimistic writes (`overlay_effects`) show instantly and a
+ * rollback (overlay dropped) reverts — both via PowerSync's reactive queries.
+ * A table with no pending overlay returns exactly the replica result. (M11 hoists
+ * the per-table overlay subscription into the provider; M8 keeps it per-hook.)
+ */
+const useRows = (sql: string): Row[] => {
+  const replica = useQuery<Row>(sql).data ?? [];
+  const table = tableFromSql(sql);
+  const effectRows =
+    useQuery<Row>('SELECT command_id, hlc, table_name, row_id, op, fields, seq FROM overlay_effects WHERE table_name = ?', [table ?? '']).data ?? [];
+  return useMemo(() => {
+    if (effectRows.length === 0) return replica;
+    return mergeTable(replica, effectRows.map(toOverlayEffect)) as Row[];
+  }, [replica, effectRows]);
+};
 
 /** Live tree of non-deleted nodes. */
 export function useNodeTree(): TreeIndex {
@@ -950,7 +997,8 @@ export function useAggregates(): AggregateRow[] {
 /** Optimistic command writers bound to the live PowerSync database. */
 export function useCommands(ctx: CommandContext) {
   const db = usePowerSync();
-  return useMemo(() => createCommands(db, ctx), [db, ctx]);
+  // The two-layer overlay store over PowerSync's SQLite (execute/getAll/writeTransaction).
+  return useMemo(() => createCommands(createSqlOverlayStore(db as unknown as SqlExecutor), ctx), [db, ctx]);
 }
 
 // --- tags (confirmable event tags) ----------------------------------------

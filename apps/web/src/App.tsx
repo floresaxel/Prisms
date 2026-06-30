@@ -51,11 +51,17 @@ function AuthedApp({ user, onSignOut }: { user: SessionUser; onSignOut: () => vo
 
   useEffect(() => {
     let cancelled = false;
+    let stopUpload: (() => void) | undefined;
     connectDb(db, (r) => setRejections(r))
-      .then(() => !cancelled && setConnected(true))
+      .then((stop) => {
+        stopUpload = stop;
+        if (cancelled) stop();
+        else setConnected(true);
+      })
       .catch((e: unknown) => console.error('powersync connect failed', e));
     return () => {
       cancelled = true;
+      stopUpload?.();
       void db.disconnect();
     };
   }, [db]);

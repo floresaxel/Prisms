@@ -316,6 +316,24 @@ function settingsCommand(entry: CrudLike): TranslatedCommand | null {
   return Object.keys(payload).length > 0 ? { name: 'settings.update', payload } : null;
 }
 
+/**
+ * Loud guard (M8, §7.2/R15): after the two-layer cutover every optimistic write
+ * goes to the LOCAL-ONLY overlay (`client_commands` + `overlay_effects`), so the
+ * PowerSync CRUD queue for synced replica tables must stay EMPTY — the only
+ * trusted upload is the named command envelope. If a replica-table op reaches the
+ * upload batch, a writer bypassed `executeCommand`; fail LOUDLY rather than
+ * silently uploading a row patch. (`crudToCommand` stays exported with its test
+ * until M15 retires this guard behind a CommandName-coverage proof.)
+ */
+export function assertNoReplicaCrud(entries: readonly CrudLike[]): void {
+  if (entries.length === 0) return;
+  const detail = entries.slice(0, 5).map((e) => `${e.op} ${e.table}/${e.id}`).join(', ');
+  throw new Error(
+    `[prisms] ${entries.length} replica CRUD op(s) reached the upload batch — a write bypassed executeCommand (R15, §7.2). ` +
+      `Optimistic writes must go through the overlay, never the replica. Offenders: ${detail}`,
+  );
+}
+
 /** Map a CRUD entry to its command, or null when it carries no mutation we ship. */
 export function crudToCommand(entry: CrudLike): TranslatedCommand | null {
   switch (entry.table) {
