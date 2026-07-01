@@ -35,7 +35,10 @@ is initialized automatically.
 
 Generate strong values (`openssl rand -base64 48`) for:
 
-- `POSTGRES_PASSWORD` — database password.
+- `POSTGRES_PASSWORD` — database password. **Use a URL-safe value**
+  (`openssl rand -hex 32`): it goes into the `postgresql://…` connection URIs,
+  and a base64 value can contain `/`, which breaks URI parsing and stops the
+  `api` and `powersync` services from connecting.
 - `BETTER_AUTH_SECRET` — session/JWT signing for auth.
 - `POWERSYNC_JWT_SECRET` — the API signs short-lived HS256 PowerSync tokens with
   this (§13).
