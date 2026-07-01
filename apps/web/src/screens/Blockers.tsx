@@ -5,7 +5,7 @@
  */
 import { useState } from 'react';
 
-import { List, ListItem, useBlockers, useCommands, type CommandContext } from '@prisms/ui';
+import { List, ListItem, useBlockers, useCommands, useIsHydrated, type CommandContext } from '@prisms/ui';
 
 const FACTS = [
   { fact: 'weather.precip_prob', label: 'weather: rain probability', op: 'gt', value: '0.6' },
@@ -17,6 +17,7 @@ const FACTS = [
 export function Blockers({ ctx }: { ctx: CommandContext }) {
   const blockers = useBlockers();
   const commands = useCommands(ctx);
+  const hydrated = useIsHydrated();
 
   const [label, setLabel] = useState('');
   const [factIdx, setFactIdx] = useState(0);
@@ -54,7 +55,7 @@ export function Blockers({ ctx }: { ctx: CommandContext }) {
       </div>
 
       <div data-testid="blockers" style={{ marginTop: 18 }}>
-        <List empty="No blocker rules yet.">
+        <List empty="No blocker rules yet." loading={!hydrated}>
           {blockers.map((b) => (
             <ListItem
               key={b.id}

@@ -24,9 +24,11 @@ import {
   type SchedulableTask,
 } from '@prisms/core';
 import {
+  Skeleton,
   useAgenda,
   useBlockTags,
   useCommands,
+  useIsHydrated,
   useTagCatalog,
   type AgendaBlock,
   type BlockTagView,
@@ -165,6 +167,7 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
   const agenda = useAgenda(now);
   const commands = useCommands(ctx);
+  const hydrated = useIsHydrated();
   const tz = agenda.input.timezone;
   const selectedBlock = agenda.blocks.find((b) => b.id === selectedBlockId) ?? null;
 
@@ -255,7 +258,8 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
         <h2>To-do</h2>
         <p className="px-muted">Drag a task onto the week to schedule it.</p>
         <div data-testid="todo-list" className="px-list">
-          {agenda.todo.length === 0 && <div className="px-list-empty">Nothing to place.</div>}
+          {agenda.todo.length === 0 &&
+            (hydrated ? <div className="px-list-empty">Nothing to place.</div> : <Skeleton testId="todo-skeleton" rows={4} />)}
           {agenda.todo.map(({ task, schedulable }) => (
             <div
               key={task.id}

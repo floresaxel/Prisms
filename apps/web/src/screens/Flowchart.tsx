@@ -25,7 +25,7 @@ import {
 import '@xyflow/react/dist/style.css';
 
 import { validateEdge } from '@prisms/core';
-import { useCommands, useFlowchart, useNodeTree, type CommandContext, type FlowNode } from '@prisms/ui';
+import { Skeleton, useCommands, useFlowchart, useIsHydrated, useNodeTree, type CommandContext, type FlowNode } from '@prisms/ui';
 
 interface PrismNodeData extends Record<string, unknown> {
   label: string;
@@ -63,6 +63,7 @@ export function Flowchart({ ctx }: { ctx: CommandContext }) {
   const [rootId, setRootId] = useState<string>('');
   const [mode, setMode] = useState<'dates' | 'nodates'>('nodates');
   const activeRoot = rootId || roots[0]?.id || '';
+  const hydrated = useIsHydrated();
 
   const view = useFlowchart(activeRoot || null, mode);
 
@@ -114,7 +115,7 @@ export function Flowchart({ ctx }: { ctx: CommandContext }) {
 
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 10 }}>
         <select className="px-select" data-testid="diagram-root" value={activeRoot} onChange={(e) => setRootId(e.target.value)}>
-          {roots.length === 0 && <option value="">No diagrams yet</option>}
+          {roots.length === 0 && <option value="">{hydrated ? 'No diagrams yet' : 'Loading…'}</option>}
           {roots.map((r) => <option key={r.id} value={r.id}>{r.title} ({r.node_type})</option>)}
         </select>
         <button className="px-btn" data-testid="mode-toggle" onClick={() => setMode((m) => (m === 'dates' ? 'nodates' : 'dates'))}>
@@ -167,7 +168,8 @@ export function Flowchart({ ctx }: { ctx: CommandContext }) {
 
       <div data-testid="edge-list" style={{ marginTop: 12 }}>
         <h3>Dependencies ({view.edges.length})</h3>
-        {view.edges.length === 0 && <p className="px-muted">None yet.</p>}
+        {view.edges.length === 0 &&
+          (hydrated ? <p className="px-muted">None yet.</p> : <Skeleton testId="edge-skeleton" rows={2} />)}
         {view.edges.map((e) => (
           <div key={e.id} className="px-flow-edge-row" data-testid={`edge-row-${e.id}`}>
             <span>{titleById.get(e.predecessorId) ?? '?'} → {titleById.get(e.successorId) ?? '?'} <span className="px-muted">({e.edgeType})</span></span>

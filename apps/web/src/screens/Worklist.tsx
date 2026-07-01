@@ -15,9 +15,11 @@ import {
   List,
   ListItem,
   Modal,
+  Skeleton,
   useBlockedTasks,
   useCommands,
   useDayTimeLeft,
+  useIsHydrated,
   useNextBlockMinutes,
   useGroupedWorklist,
   useRunningTimer,
@@ -66,6 +68,7 @@ export function Worklist({ ctx }: { ctx: CommandContext }) {
   const dayLeft = useDayTimeLeft(now);
   const nextBlock = useNextBlockMinutes(now);
   const commands = useCommands(ctx);
+  const hydrated = useIsHydrated();
 
   const [review, setReview] = useState<ReviewTarget | null>(null);
   const [focus, setFocus] = useState(1.0);
@@ -126,9 +129,12 @@ export function Worklist({ ctx }: { ctx: CommandContext }) {
       )}
 
       <div data-testid="worklist">
-        {groups.length === 0 && (
-          <div className="px-list-empty">No available tasks — everything is done or blocked.</div>
-        )}
+        {groups.length === 0 &&
+          (hydrated ? (
+            <div className="px-list-empty">No available tasks — everything is done or blocked.</div>
+          ) : (
+            <Skeleton testId="worklist-skeleton" />
+          ))}
         {groups.map((group) => (
           <div key={group.key} data-testid={`worklist-group-${group.key}`}>
             <h3 className="px-muted" style={{ margin: '10px 0 4px' }}>{group.title}</h3>

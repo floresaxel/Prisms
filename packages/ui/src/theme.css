@@ -38,6 +38,15 @@ body {
 .px-list-leading, .px-list-trailing { display: flex; align-items: center; gap: 8px; }
 .px-list-empty { color: var(--px-text-dim); padding: 16px; text-align: center; }
 
+/* loading-aware reads (§7.15, M12): skeletons render while a read hydrates, so a
+   fresh login / cold read shows shimmer bars instead of flashing the empty state. */
+.px-skeleton { display: block; border-radius: 6px; background: linear-gradient(90deg, var(--px-surface-2) 25%, var(--px-border) 37%, var(--px-surface-2) 63%); background-size: 400% 100%; animation: px-shimmer 1.4s ease infinite; }
+.px-skeleton-line { height: 14px; margin: 5px 0; width: 100%; }
+.px-skeleton-block { padding: 6px 0; }
+.px-skeleton-item .px-skeleton-line { margin: 0; }
+@keyframes px-shimmer { 0% { background-position: 100% 50%; } 100% { background-position: 0 50%; } }
+@media (prefers-reduced-motion: reduce) { .px-skeleton { animation: none; } }
+
 .px-badge { font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; padding: 3px 8px; border-radius: 999px; background: var(--px-surface-2); color: var(--px-text-dim); }
 .px-badge--ongoing { background: rgba(91,140,255,0.18); color: var(--px-accent); }
 .px-badge--scheduled { background: rgba(70,192,138,0.16); color: var(--px-ok); }

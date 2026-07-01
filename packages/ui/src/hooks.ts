@@ -2,7 +2,7 @@
  * Reactive hooks (§12.2): PowerSync reactive queries → core selectors → React.
  * No view caches derived status; it recomputes on data change (microseconds).
  */
-import { useMemo } from 'react';
+import { useEffect, useMemo, useSyncExternalStore } from 'react';
 
 import { usePowerSync, useQuery } from '@powersync/react';
 import {
@@ -89,34 +89,168 @@ import {
 
 type Row = Record<string, unknown>;
 
+const EMPTY_ROWS: readonly Row[] = Object.freeze([]);
+
 /** The table a simple `SELECT … FROM <table> …` reads (each hook queries one table). */
 function tableFromSql(sql: string): string | null {
   const m = /\bfrom\s+([a-z_][a-z0-9_]*)/i.exec(sql);
   return m ? m[1]!.toLowerCase() : null;
 }
 
+// ── Loading-aware, stale-while-revalidate read layer (1.4 §7.15, Fix C; M12) ──
+//
+// v1.0's `useRows = useQuery(sql).data ?? []` discarded the loading signal, so a
+// fresh login (empty replica, sync in flight) and every screen remount resolved
+// empty-before-data and flashed the empty branch. M12 fixes both:
+//
+//   • ROWS_CACHE — the last-known MERGED rows per (sql+params), module-scoped so
+//     it SURVIVES a screen unmount/remount. On a warm revisit the read returns the
+//     prior rows synchronously (no cold empty frame); a full reload clears it and
+//     the read re-hydrates from local SQLite.
+//   • PRODUCED — the set of read-keys that have yielded ≥1 replica result this
+//     session. A reactive external store (bump `producedVersion` + notify) so the
+//     `isHydrated` companions re-render exactly when their table first produces —
+//     without opening a second subscription per table.
+//
+// `isHydrated` (skeleton gating) is grounded at the SESSION level in the provider
+// (hasSynced ∨ a base row already exists, §7.14) and combined here with per-read
+// "produced" so a screen-local table shows a skeleton until its first result, the
+// empty branch only once it is confirmed empty, and cached rows on remount.
+
+const ROWS_CACHE = new Map<string, Row[]>();
+const PRODUCED = new Set<string>();
+const producedListeners = new Set<() => void>();
+let producedVersion = 0;
+
+/** Record that `key` has produced a result and wake the hydration subscribers. */
+function markProduced(key: string): void {
+  if (PRODUCED.has(key)) return;
+  PRODUCED.add(key);
+  producedVersion += 1;
+  for (const l of producedListeners) l();
+}
+function subscribeProduced(cb: () => void): () => void {
+  producedListeners.add(cb);
+  return () => {
+    producedListeners.delete(cb);
+  };
+}
+const getProducedVersion = (): number => producedVersion;
+/** Re-render when ANY read first produces (so `isHydrated` flips reactively). */
+function useProducedVersion(): void {
+  useSyncExternalStore(subscribeProduced, getProducedVersion, getProducedVersion);
+}
+
+const keyOf = (sql: string, params: readonly unknown[]): string =>
+  params.length ? `${sql} :: ${JSON.stringify(params)}` : sql;
+
 /**
- * The merged read (1.3 §7.2) for SCREEN-LOCAL tables: the replica query patched
- * by the pending overlay for its table. Optimistic writes (`overlay_effects`)
- * show instantly and a rollback (overlay dropped) reverts. A table with no pending
- * overlay returns exactly the replica result.
- *
- * M11 (Fix A): the 9 provider-shared tables no longer come through here — they are
- * subscribed once in `PrismsDataProvider` (`usePrismsData`) and read warm. `useRows`
- * now serves only screen-local tables (decision_*, diagram_*, automation_rules,
- * habits/habit_completions, tags*, computed_aggregates, sync_review_items), which
- * M12 makes flash-proof.
+ * Test-only: reset the module SWR cache + hydration registry between renders in a
+ * fresh test. No-op contract for production (never called by app code).
  */
-const useRows = (sql: string): Row[] => {
-  const replica = useQuery<Row>(sql).data ?? [];
+export function __resetReadCacheForTests(): void {
+  ROWS_CACHE.clear();
+  PRODUCED.clear();
+  producedVersion += 1;
+  for (const l of producedListeners) l();
+}
+
+export interface RowsRead {
+  /** The merged (replica + overlay) rows, or the last-known cached rows while (re)loading. */
+  data: Row[];
+  /** No result this mount AND nothing cached — the true cold-load window. */
+  isLoading: boolean;
+  /** A refetch is in flight (data may be stale-but-shown). */
+  isFetching: boolean;
+}
+
+/**
+ * The merged read (1.3 §7.2) for SCREEN-LOCAL tables, made loading-aware and
+ * remount-surviving (§7.15). The replica query is patched by the pending overlay
+ * for its table; optimistic writes (`overlay_effects`) show instantly and a
+ * rollback (overlay dropped) reverts. While the replica is first loading, the
+ * last-known merged rows from `ROWS_CACHE` are returned so a remount does not
+ * flash empty.
+ *
+ * M11 (Fix A): the 9 provider-shared tables never come through here — they are
+ * subscribed once in `PrismsDataProvider` and read warm. This primitive serves
+ * only screen-local tables (decision_*, diagram_*, automation_rules,
+ * habits/habit_completions, tags*, computed_aggregates, sync_review_items).
+ */
+function useRowsRead(sql: string, params: readonly unknown[] = EMPTY_ROWS as readonly unknown[]): RowsRead {
+  const key = keyOf(sql, params);
   const table = tableFromSql(sql);
-  const effectRows =
-    useQuery<Row>('SELECT command_id, hlc, table_name, row_id, op, fields, seq FROM overlay_effects WHERE table_name = ?', [table ?? '']).data ?? [];
-  return useMemo(() => {
-    if (effectRows.length === 0) return replica;
-    return mergeTable(replica, effectRows.map(toOverlayEffect)) as Row[];
-  }, [replica, effectRows]);
-};
+  const replicaQ = useQuery<Row>(sql, params as unknown[]);
+  const overlayQ = useQuery<Row>(
+    'SELECT command_id, hlc, table_name, row_id, op, fields, seq FROM overlay_effects WHERE table_name = ?',
+    [table ?? ''],
+  );
+  const replica = replicaQ.data; // undefined while first-loading (distinct from an empty result)
+  const effectRows = overlayQ.data ?? (EMPTY_ROWS as Row[]);
+  const produced = replica !== undefined;
+
+  const data = useMemo(() => {
+    if (!produced || replica === undefined) return ROWS_CACHE.get(key) ?? (EMPTY_ROWS as Row[]);
+    const merged =
+      effectRows.length === 0 ? replica : (mergeTable(replica, effectRows.map(toOverlayEffect)) as Row[]);
+    ROWS_CACHE.set(key, merged);
+    return merged;
+  }, [produced, replica, effectRows, key]);
+
+  // Flip the reactive hydration signal AFTER commit (never setState-during-render).
+  useEffect(() => {
+    if (produced) markProduced(key);
+  }, [produced, key]);
+
+  return {
+    data,
+    isLoading: !produced && !ROWS_CACHE.has(key),
+    isFetching: replicaQ.isFetching || overlayQ.isFetching,
+  };
+}
+
+/** Data-only screen-local read (existing call sites), now remount-surviving. */
+const useRows = (sql: string, params?: readonly unknown[]): Row[] => useRowsRead(sql, params).data;
+
+/**
+ * Session-level hydration (§7.14/§7.15): the provider has produced a first base
+ * result AND either PowerSync's first sync completed OR a base row already exists
+ * locally. Screens gate provider-backed empty branches on this — empty renders
+ * only when `isHydrated && length === 0`, a skeleton otherwise.
+ */
+export function useIsHydrated(): boolean {
+  return usePrismsData().isHydrated;
+}
+
+/**
+ * Screen-local hydration: session-hydrated AND the given screen-local read has
+ * produced ≥1 result this session. A table that has never loaded (first visit,
+ * still loading) is NOT hydrated → skeleton; once it produces (even empty) the
+ * screen may show its confirmed-empty branch. Survives remount (PRODUCED is
+ * module-scoped), so a tab-away-and-back is instantly hydrated.
+ */
+function useScreenLocalHydrated(sql: string, params?: readonly unknown[]): boolean {
+  const session = usePrismsData().isHydrated;
+  useProducedVersion();
+  return session && PRODUCED.has(keyOf(sql, params ?? (EMPTY_ROWS as readonly unknown[])));
+}
+
+// Primary screen-local reads whose hydration a screen gates its empty branch on.
+// Extracted so the data hook and its `…Hydrated` companion key on the SAME sql
+// string (a drift between the two would leave the screen stuck on a skeleton).
+const Q_HABITS = 'SELECT * FROM habits WHERE deleted_at IS NULL';
+const Q_DECISION_BOARDS = 'SELECT * FROM decision_boards WHERE deleted_at IS NULL';
+const Q_RULES = 'SELECT * FROM automation_rules WHERE deleted_at IS NULL';
+const Q_REVIEW = 'SELECT * FROM sync_review_items';
+
+/** Habits list hydration (§7.15) — gate the "No habits yet" empty branch + vision `<select>`. */
+export const useHabitsHydrated = (): boolean => useScreenLocalHydrated(Q_HABITS);
+/** Decision-board list hydration — gate the "No boards yet" empty branch. */
+export const useDecisionsHydrated = (): boolean => useScreenLocalHydrated(Q_DECISION_BOARDS);
+/** Automation-rule list hydration — gate the "No automation rules yet" empty branch. */
+export const useRulesHydrated = (): boolean => useScreenLocalHydrated(Q_RULES);
+/** Review-inbox hydration — gate the "Nothing to review" empty branch. */
+export const useReviewInboxHydrated = (): boolean => useScreenLocalHydrated(Q_REVIEW);
 
 /** Live tree of non-deleted nodes — served warm from the session read layer (§7.14). */
 export function useNodeTree(): TreeIndex {
@@ -279,7 +413,7 @@ export interface HabitTasksView {
 /** Each habit's recurring task instances (nodes.habit_id) as actionable items (Phase 4a). */
 export function useHabitTasks(now: Instant): HabitTasksView[] {
   const items = useWorklist(now);
-  const habitRows = useRows('SELECT * FROM habits WHERE deleted_at IS NULL');
+  const habitRows = useRows(Q_HABITS);
   return useMemo(() => {
     const byHabit = new Map<string, WorklistItem[]>();
     for (const item of items) {
@@ -548,7 +682,7 @@ export interface HabitView {
  */
 export function useHabits(now: Instant): HabitView[] {
   const { factContext: ctx, rows } = usePrismsData();
-  const habitRows = useRows('SELECT * FROM habits WHERE deleted_at IS NULL');
+  const habitRows = useRows(Q_HABITS);
   const completionRows = useRows('SELECT * FROM habit_completions WHERE deleted_at IS NULL');
   const entryRows = rows.time_entries;
   const blockRows = rows.schedule_blocks;
@@ -674,7 +808,7 @@ export interface DecisionBoardView {
 /** Decision boards with their criteria, score grid, and live ranking (§6.0). */
 export function useDecisionBoards(): DecisionBoardView[] {
   const tree = useNodeTree();
-  const boardRows = useRows('SELECT * FROM decision_boards WHERE deleted_at IS NULL');
+  const boardRows = useRows(Q_DECISION_BOARDS);
   const criterionRows = useRows('SELECT * FROM decision_criteria WHERE deleted_at IS NULL');
   const scoreRows = useRows('SELECT * FROM decision_scores WHERE deleted_at IS NULL');
 
@@ -957,7 +1091,7 @@ export function useGantt(projectId: string | null, now: Instant): GanttView {
 
 /** Automation rules (§9) for the rule editor. */
 export function useRules(): AutomationRule[] {
-  const rows = useRows('SELECT * FROM automation_rules WHERE deleted_at IS NULL');
+  const rows = useRows(Q_RULES);
   return useMemo(() => rows.map(toAutomationRule).sort((a, b) => (a.created_at < b.created_at ? -1 : 1)), [rows]);
 }
 
@@ -1044,7 +1178,7 @@ export interface ReviewItemView {
  * item (and any server-side soft-deleted one) must be post-filtered out here.
  */
 export function useReviewInbox(): ReviewItemView[] {
-  const rows = useRows('SELECT * FROM sync_review_items');
+  const rows = useRows(Q_REVIEW);
   return useMemo(
     () =>
       rows

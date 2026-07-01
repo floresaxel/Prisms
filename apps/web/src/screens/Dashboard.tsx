@@ -8,7 +8,7 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import { asEpochMillis, type BurndownValue, type Instant } from '@prisms/core';
-import { List, ListItem, useCommands, useDashboard, useDecisionBoards, useHabits, useNodeTree, type CommandContext } from '@prisms/ui';
+import { List, ListItem, useCommands, useDashboard, useDecisionBoards, useDecisionsHydrated, useHabits, useHabitsHydrated, useIsHydrated, useNodeTree, type CommandContext } from '@prisms/ui';
 
 function Burndown({ value }: { value: BurndownValue }) {
   const days = value.days;
@@ -45,6 +45,11 @@ export function Dashboard({ ctx }: { ctx: CommandContext }) {
   const tree = useNodeTree();
   const commands = useCommands(ctx);
   const priority = boards[0]?.ranking ?? [];
+  // §7.15: each panel gates its own empty branch — completion on the shared base
+  // tables, priority on the decision-board read, streaks on the habits read.
+  const sessionHydrated = useIsHydrated();
+  const boardsHydrated = useDecisionsHydrated();
+  const habitsHydrated = useHabitsHydrated();
 
   const proj = data.burndown.projection;
   const visions = useMemo(() => [...tree.byId.values()].filter((n) => n.node_type === 'vision'), [tree]);
@@ -78,7 +83,7 @@ export function Dashboard({ ctx }: { ctx: CommandContext }) {
         <div>
           <h2>Project completion</h2>
           <div data-testid="completion">
-            <List empty="No projects yet.">
+            <List empty="No projects yet." loading={!sessionHydrated}>
               {data.completion.map(({ project, value }) => (
                 <ListItem key={project.id} trailing={<span className="px-muted">{Math.round(value.percent)}%</span>}>
                   {project.title}
@@ -94,7 +99,7 @@ export function Dashboard({ ctx }: { ctx: CommandContext }) {
         <div>
           <h2>Priority items</h2>
           <div data-testid="priority-list">
-            <List empty="No decision board yet — create one to rank projects.">
+            <List empty="No decision board yet — create one to rank projects." loading={!boardsHydrated}>
               {priority.map((r, i) => (
                 <ListItem key={r.project.id} leading={<span className="px-badge">{i + 1}</span>} trailing={<span className="px-muted">{r.priority.toFixed(1)}</span>}>
                   <span data-testid={`priority-${r.project.id}`}>{r.project.title}</span>
@@ -105,7 +110,7 @@ export function Dashboard({ ctx }: { ctx: CommandContext }) {
 
           <h2 style={{ marginTop: 24 }}>Streaks</h2>
           <div data-testid="streak-summary">
-            <List empty="No habits yet.">
+            <List empty="No habits yet." loading={!habitsHydrated}>
               {habits.map((h) => {
                 const tc = h.tagConfirmation;
                 const total = tc.yes + tc.no + tc.pending;

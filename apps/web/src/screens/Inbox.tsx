@@ -12,6 +12,7 @@ import {
   ListItem,
   useActivityInbox,
   useCommands,
+  useIsHydrated,
   usePromoteTargets,
   type CommandContext,
   type PromoteTarget,
@@ -69,6 +70,7 @@ export function Inbox({ ctx }: { ctx: CommandContext }) {
   const activities = useActivityInbox();
   const targets = usePromoteTargets();
   const commands = useCommands(ctx);
+  const hydrated = useIsHydrated();
   const [title, setTitle] = useState('');
 
   async function add(e: React.FormEvent) {
@@ -99,7 +101,7 @@ export function Inbox({ ctx }: { ctx: CommandContext }) {
       </form>
 
       <div data-testid="inbox">
-        <List empty="Inbox is empty.">
+        <List empty="Inbox is empty." loading={!hydrated}>
           {activities.map((activity) => (
             <InboxRow
               key={activity.id}

@@ -7,7 +7,7 @@
  * `review.resolve`/`review.dismiss` commands — optimistic, so a closed item
  * leaves the list instantly and reconciles when the server confirms.
  */
-import { useReviewInbox, useCommands, type CommandContext, type ReviewItemView } from '@prisms/ui';
+import { ListSkeleton, useReviewInbox, useReviewInboxHydrated, useCommands, type CommandContext, type ReviewItemView } from '@prisms/ui';
 
 /** item_type → a human, scannable label. */
 const ITEM_TYPE_LABEL: Record<string, string> = {
@@ -78,6 +78,7 @@ function ReviewRow({ item, onResolve, onDismiss }: { item: ReviewItemView; onRes
 export function Review({ ctx }: { ctx: CommandContext }) {
   const items = useReviewInbox();
   const commands = useCommands(ctx);
+  const hydrated = useReviewInboxHydrated();
 
   return (
     <section data-testid="review-inbox">
@@ -89,10 +90,8 @@ export function Review({ ctx }: { ctx: CommandContext }) {
         it doesn&rsquo;t matter.
       </p>
 
-      <ul className="px-list">
-        {items.length === 0 ? (
-          <li className="px-list-empty" data-testid="review-empty">Nothing to review — you&rsquo;re all caught up.</li>
-        ) : (
+      <ul className="px-list" aria-busy={!hydrated || undefined}>
+        {items.length > 0 ? (
           items.map((item) => (
             <ReviewRow
               key={item.id}
@@ -101,6 +100,10 @@ export function Review({ ctx }: { ctx: CommandContext }) {
               onDismiss={() => void commands.dismissReviewItem(item.id)}
             />
           ))
+        ) : hydrated ? (
+          <li className="px-list-empty" data-testid="review-empty">Nothing to review — you&rsquo;re all caught up.</li>
+        ) : (
+          <ListSkeleton />
         )}
       </ul>
     </section>

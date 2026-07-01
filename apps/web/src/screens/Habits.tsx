@@ -9,7 +9,7 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import { asEpochMillis, type Instant } from '@prisms/core';
-import { List, ListItem, Modal, useCommands, useFactContext, useHabits, useHabitTasks, useNodeTree, type CommandContext, type HabitView } from '@prisms/ui';
+import { List, ListItem, Modal, useCommands, useFactContext, useHabits, useHabitsHydrated, useHabitTasks, useIsHydrated, useNodeTree, type CommandContext, type HabitView } from '@prisms/ui';
 
 import { formatMinutes } from '../format';
 
@@ -83,6 +83,10 @@ export function Habits({ ctx }: { ctx: CommandContext }) {
   const habits = useHabits(now);
   const habitTasks = useHabitTasks(now);
   const commands = useCommands(ctx);
+  // §7.15: gate the empty branch + the vision `<select>` placeholder on hydration
+  // (the habits list on its own read, the vision picker on the shared base tables).
+  const habitsHydrated = useHabitsHydrated();
+  const hydrated = useIsHydrated();
 
   const visions = useMemo(
     () => [...tree.byId.values()].filter((n) => n.node_type === 'vision').sort((a, b) => (a.sort_order < b.sort_order ? -1 : 1)),
@@ -145,7 +149,7 @@ export function Habits({ ctx }: { ctx: CommandContext }) {
       <form onSubmit={create} className="px-habit-form" data-testid="habit-form">
         <input className="px-input" placeholder="New habit…" value={title} data-testid="habit-title" onChange={(e) => setTitle(e.target.value)} />
         <select className="px-select" value={selectedVision} data-testid="habit-vision" onChange={(e) => setVisionId(e.target.value)} disabled={visions.length === 0}>
-          {visions.length === 0 && <option value="">Create a vision first</option>}
+          {visions.length === 0 && <option value="">{hydrated ? 'Create a vision first' : 'Loading…'}</option>}
           {visions.map((v) => <option key={v.id} value={v.id}>{v.title}</option>)}
         </select>
         <select className="px-select" value={mode} data-testid="habit-mode" onChange={(e) => setMode(e.target.value as StreakMode)}>
@@ -158,7 +162,7 @@ export function Habits({ ctx }: { ctx: CommandContext }) {
       </form>
 
       <div data-testid="habits" style={{ marginTop: 18 }}>
-        <List empty="No habits yet.">
+        <List empty="No habits yet." loading={!habitsHydrated}>
           {habits.map((view) => (
             <ListItem
               key={view.habit.id}

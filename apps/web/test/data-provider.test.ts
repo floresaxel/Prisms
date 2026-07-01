@@ -69,6 +69,23 @@ function Harness() {
   );
 }
 
+/** A screen with a per-second `now` tick — the ONLY state that changes here. */
+function TickingScreen() {
+  const [, setNow] = useState(0);
+  useFactContext();
+  return createElement(
+    Fragment,
+    null,
+    createElement('button', { 'data-testid': 'tick', onClick: () => setNow((n) => n + 1) }, 'tick'),
+    createElement('div', { 'data-testid': 'screen' }, 'S'),
+  );
+}
+
+/** The `now` tick lives in the screen, above nothing shared — so it re-renders the screen only. */
+function TickHarness() {
+  return createElement(PrismsDataProvider, null, createElement(TickingScreen));
+}
+
 afterEach(() => {
   cleanup();
   useQueryCalls.length = 0;
@@ -96,5 +113,19 @@ describe('§7.14 PrismsDataProvider — build-count + subscription-count invaria
     // …yet the fact index was NOT rebuilt and NO new base subscription was opened
     expect(buildSpy.mock.calls.length).toBe(buildsAfterMount);
     expect(new Set(useQueryCalls)).toEqual(distinctBefore);
+  });
+
+  // §7.15 item 4: confirm the 1s `now` tick does not rebuild the fact/tree index
+  // (structurally true after M11 — FactContext is provider-level, memoized on the
+  // shared rows, so a screen-local `now` state change re-renders only the screen).
+  it('a screen-local `now` tick does not rebuild FactContext', () => {
+    render(createElement(TickHarness));
+    const buildsAfterMount = buildSpy.mock.calls.length;
+    expect(buildsAfterMount).toBe(1);
+
+    // simulate several per-second ticks
+    for (let i = 0; i < 5; i += 1) fireEvent.click(screen.getByTestId('tick'));
+
+    expect(buildSpy.mock.calls.length).toBe(buildsAfterMount);
   });
 });

@@ -7,7 +7,7 @@
 import { useEffect, useState } from 'react';
 
 import { asEpochMillis, type Instant } from '@prisms/core';
-import { useCommands, useKanban, type CommandContext } from '@prisms/ui';
+import { Skeleton, useCommands, useIsHydrated, useKanban, type CommandContext } from '@prisms/ui';
 
 export function Kanban({ ctx }: { ctx: CommandContext }) {
   const [now, setNow] = useState<Instant>(asEpochMillis(Date.now()));
@@ -18,6 +18,7 @@ export function Kanban({ ctx }: { ctx: CommandContext }) {
 
   const columns = useKanban(now);
   const commands = useCommands(ctx);
+  const hydrated = useIsHydrated();
 
   const [dragId, setDragId] = useState<string | null>(null);
   useEffect(() => {
@@ -37,7 +38,8 @@ export function Kanban({ ctx }: { ctx: CommandContext }) {
     <section>
       <h1>Kanban</h1>
       <p className="px-muted">Drag a task between days to re-date it.</p>
-      <div className="px-kanban" style={dragId ? { userSelect: 'none' } : undefined}>
+      {!hydrated && <Skeleton testId="kanban-skeleton" rows={4} />}
+      <div className="px-kanban" style={dragId ? { userSelect: 'none' } : undefined} hidden={!hydrated}>
         {columns.map((col) => (
           <div
             key={col.key}

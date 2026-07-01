@@ -70,8 +70,14 @@ describe('§7.14 persistent read layer — shared subscriptions live only in the
 
   it('screen-local tables still read through useRows in hooks.ts (not accidentally hoisted)', () => {
     for (const t of SCREEN_LOCAL) {
-      const re = new RegExp(`useRows\\([^)]*\\bfrom\\s+${t}\\b`, 'i');
-      expect(re.test(hooksSrc), `screen-local table "${t}" should still be read via useRows in hooks.ts`).toBe(true);
+      // Either inline — useRows('… FROM t …') — or via a named const whose SELECT
+      // reads t and is passed to useRows(Q_…). M12 (§7.15) extracted the primary
+      // reads (habits, automation_rules, decision_boards, sync_review_items) to
+      // module constants so a hook and its `…Hydrated` companion key on the SAME sql.
+      const inline = new RegExp(`useRows\\([^)]*\\bfrom\\s+${t}\\b`, 'i').test(hooksSrc);
+      const constDef = new RegExp(`const\\s+(Q_[A-Z_]+)\\s*=\\s*'[^']*\\bfrom\\s+${t}\\b`, 'i').exec(hooksSrc);
+      const viaConst = constDef !== null && new RegExp(`useRows\\(\\s*${constDef[1]}\\b`).test(hooksSrc);
+      expect(inline || viaConst, `screen-local table "${t}" should still be read via useRows in hooks.ts`).toBe(true);
     }
   });
 });

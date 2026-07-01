@@ -67,6 +67,14 @@ export {
   useGroupedWorklist,
   useBlockedTasks,
   useHabitTasks,
+  // loading-aware read layer (1.4 §7.15, Fix C) — M12
+  useIsHydrated,
+  useHabitsHydrated,
+  useDecisionsHydrated,
+  useRulesHydrated,
+  useReviewInboxHydrated,
+  __resetReadCacheForTests,
+  type RowsRead,
   type WorklistItem,
   type BlockedTask,
   type RunningTimer,
@@ -96,5 +104,5 @@ export { groupWorklistBySchedule, type WorklistGroup } from './worklist-grouping
 
 // design system
 export { Layout, type LayoutProps, type NavLinkSpec } from './components/Layout';
-export { List, ListItem, type ListProps, type ListItemProps } from './components/List';
+export { List, ListItem, Skeleton, ListSkeleton, type ListProps, type ListItemProps, type SkeletonProps } from './components/List';
 export { Modal, type ModalProps } from './components/Modal';
