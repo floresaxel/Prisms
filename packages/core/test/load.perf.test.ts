@@ -11,6 +11,7 @@ import { describe, expect, it } from 'vitest';
 
 import { buildFactContext } from '../src/status/context';
 import { taskStatus } from '../src/status/status';
+import { StatusIndex } from '../src/status/status-index';
 import { asEpochMillis } from '../src/time/instant';
 import type { Edge, Node } from '../src/domain/entities';
 import { idOf, makeEdge, makeNode } from './helpers/fixtures';
@@ -112,5 +113,32 @@ describe('100k-node load sanity (§15)', () => {
     // figure in the logged line above.
     expect(buildMs).toBeLessThan(10_000);
     expect(counted).toBeGreaterThan(90_000);
+  });
+
+  // M15 (§7.12): the PER-COMMAND path. v1.0 rescanned every task on each data
+  // change (the 100k cliff); the incremental StatusIndex recomputes only the
+  // affected node + its dependency neighbours. This gates BOTH that the touch set
+  // stays local (not a full scan) AND that a per-command apply is well within the
+  // 16ms budget on a 100k account.
+  it('StatusIndex.apply recomputes only affected nodes per command, within budget (100k)', () => {
+    const { nodes, edges } = buildTree();
+    const index = new StatusIndex({ nodes, edges }, NOW);
+
+    // completing the first task in the dependency chain: it + its FS successor.
+    const firstTaskId = idOf(VISIONS + ROADMAPS + PROJECTS + 1);
+    const effect = { table: 'nodes', op: 'update' as const, row_id: firstTaskId, fields: { completed_at: '2026-06-14T09:00:00.000Z' } };
+
+    index.apply([effect]); // warm
+    const a0 = performance.now();
+    const result = index.apply([effect]);
+    const applyMs = performance.now() - a0;
+
+    // eslint-disable-next-line no-console
+    console.log(`[load] StatusIndex.apply over ${nodes.length} nodes · recomputed ${result.recomputed.length} node(s) · ${applyMs.toFixed(3)}ms`);
+
+    // the touch set is BOUNDED by the local neighbourhood, NOT the 100k table.
+    expect(result.recomputed.length).toBeLessThan(100);
+    // a per-command recompute stays inside the §15 16ms budget with headroom.
+    expect(applyMs).toBeLessThan(16);
   });
 });

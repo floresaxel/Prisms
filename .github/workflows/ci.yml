@@ -62,7 +62,11 @@ jobs:
         run: docker compose down -v
 
   e2e:
-    name: Web Playwright e2e (offline + convergence + graph/rules) vs live stack
+    # Runs every apps/web/e2e/*.spec.ts: the v1.0 behavioural suite (dod, s16–s20)
+    # PLUS the v1.4 surface — m9 (suggestions/provenance/force clock-in), m10
+    # (review inbox + freshness), m13 (import/export round-trip), and v14 (§7.15
+    # read-path: no empty-then-fill flash + warm synchronous tab revisit).
+    name: Web Playwright e2e (offline + convergence + graph/rules + read-path + portability) vs live stack
     runs-on: ubuntu-latest
     # The web client defaults powersyncUrl to :8081 (apps/web/src/config.ts — the
     # maintainer's dev port). Map the powersync container to 8081 so the browser

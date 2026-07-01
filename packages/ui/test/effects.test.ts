@@ -206,7 +206,12 @@ describe('full catalog coverage', () => {
     title: 't', label: 'l', sort_order: 'a0', node_type: 'task', trigger: 'task_completed',
   };
 
-  it('every CommandName produces an array (no throw) — runtime exhaustiveness', () => {
+  // M15 RETIRE-GATE: this is the coverage proof that let `crud-to-command.ts` be
+  // deleted — `buildOptimisticEffects` (the executeCommand writer) handles EVERY
+  // CommandName, so the named command envelope is the ONLY client write path and
+  // no verb is left on the old CRUD-patch translator. Compile-time exhaustive
+  // (the switch has no fall-through) AND runtime (no throw for any catalog verb).
+  it('every CommandName has an executeCommand writer (no throw) — the only trusted write path', () => {
     const names = Object.keys(COMMAND_SCHEMAS) as CommandName[];
     expect(names.length).toBeGreaterThan(50);
     for (const name of names) {

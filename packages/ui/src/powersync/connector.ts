@@ -15,7 +15,6 @@
  */
 import type { AbstractPowerSyncDatabase, PowerSyncBackendConnector, PowerSyncCredentials } from '@powersync/common';
 
-import { assertNoReplicaCrud, type CrudOp } from './crud-to-command';
 import { createSqlOverlayStore, type SqlExecutor } from './overlay-store';
 import { uploadClientCommands } from './upload-commands';
 
@@ -48,14 +47,23 @@ export function createConnector(options: ConnectorOptions): PowerSyncBackendConn
     },
 
     async uploadData(database: AbstractPowerSyncDatabase): Promise<void> {
-      // The overlay tables are local-only, so a well-behaved write enqueues NO
-      // replica CRUD and this body is a no-op. Any entry here means a replica
-      // write bypassed the overlay — fail loudly (the guard throws).
+      // R15/§7.2: optimistic writes land in the LOCAL-ONLY overlay
+      // (`client_commands` + `overlay_effects`), so the replica CRUD queue stays
+      // EMPTY — the only trusted upload is the named command envelope
+      // (`startCommandUpload`). A non-empty batch means a write bypassed
+      // `executeCommand`; fail loudly rather than silently ack-and-drop the patch.
+      // (M15 retired the standalone crud-to-command translator + its guard once a
+      // coverage test proved every CommandName has an executeCommand writer; this
+      // inline check is all that remains — a permanent invariant, not staged code.)
       const batch = await database.getCrudBatch();
       if (!batch) return;
-      assertNoReplicaCrud(
-        batch.crud.map((e) => ({ op: String(e.op) as CrudOp, table: e.table, id: e.id, opData: e.opData as Record<string, unknown> | null })),
-      );
+      if (batch.crud.length > 0) {
+        const detail = batch.crud.slice(0, 5).map((e) => `${String(e.op)} ${e.table}/${e.id}`).join(', ');
+        throw new Error(
+          `[prisms] ${batch.crud.length} replica CRUD op(s) reached the upload batch — a write bypassed executeCommand (R15, §7.2). ` +
+            `Optimistic writes must go through the overlay, never the replica. Offenders: ${detail}`,
+        );
+      }
       await batch.complete();
     },
   };

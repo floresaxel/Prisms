@@ -15,7 +15,6 @@ export {
   type CommandUploadOptions,
   type WatchableDb,
 } from './powersync/connector';
-export { crudToCommand, assertNoReplicaCrud, type CrudLike, type CrudOp, type TranslatedCommand } from './powersync/crud-to-command';
 export { createCommands, type Commands, type CommandContext } from './powersync/commands';
 export {
   newId,
