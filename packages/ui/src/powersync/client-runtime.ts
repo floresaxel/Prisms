@@ -3,9 +3,44 @@
  * unlike core). UUIDv7 ids for new rows + command envelopes, and a per-device
  * HLC that stamps every uploaded command for §7.3 LWW.
  */
-import { asEpochMillis, hlcEncode, hlcTick, uuidV7, type Clock, type Hlc, type Rng } from '@prisms/core';
+import { asEpochMillis, hlcCompare, hlcEncode, hlcParse, hlcTick, uuidV7, type Clock, type Hlc, type Rng } from '@prisms/core';
 
 export const browserClock: Clock = { now: () => asEpochMillis(Date.now()) };
+
+// Import HLC floor (1.3 §13.1, R20): after an import the device clock must be
+// advanced past the maximum imported HLC so every subsequent local write orders
+// AFTER the imported state (monotonicity). A shared module floor lets an import
+// that happens mid-session dominate even an already-constructed `createHlc` — the
+// next tick observes it — and it is persisted so a reload re-observes it.
+const HLC_FLOOR_KEY = 'prisms.hlc_floor';
+let hlcFloor: Hlc | null = null;
+
+/** Raise the in-memory import floor to `encoded` if it dominates the current one. */
+export function observeImportedHlc(encoded: string): void {
+  const parsed = hlcParse(encoded);
+  if (parsed.ok && (hlcFloor === null || hlcCompare(parsed.value, hlcFloor) > 0)) hlcFloor = parsed.value;
+}
+
+/** Persist + observe the imported high-water (call after a successful import). */
+export function persistImportedHlc(
+  encoded: string,
+  storage: Pick<Storage, 'getItem' | 'setItem'> = localStorage,
+): void {
+  observeImportedHlc(encoded);
+  const prev = storage.getItem(HLC_FLOOR_KEY);
+  if (prev === null || encoded > prev) storage.setItem(HLC_FLOOR_KEY, encoded);
+}
+
+/** Re-observe the persisted floor at startup (call once when the app boots). */
+export function loadImportedHlcFloor(storage: Pick<Storage, 'getItem'> = localStorage): void {
+  const stored = storage.getItem(HLC_FLOOR_KEY);
+  if (stored !== null) observeImportedHlc(stored);
+}
+
+/** Test-only: clear the module floor between cases. */
+export function __resetHlcFloorForTests(): void {
+  hlcFloor = null;
+}
 
 export const browserRng: Rng = {
   randomBytes: (length: number) => {
@@ -20,11 +55,17 @@ export function newId(): string {
   return uuidV7(browserClock, browserRng);
 }
 
-/** A monotonic per-device HLC; call `next()` once per uploaded command. */
+/**
+ * A monotonic per-device HLC; call `next()` once per uploaded command. Each tick
+ * also dominates any observed import floor (§13.1), so a command minted after an
+ * import always orders after the imported rows.
+ */
 export function createHlc(deviceId: string): () => string {
   let prev: Hlc | null = null;
   return () => {
-    prev = hlcTick(prev, asEpochMillis(Date.now()), deviceId);
+    // base = the more-recent of the previous tick and the import floor.
+    const base = hlcFloor !== null && (prev === null || hlcCompare(hlcFloor, prev) > 0) ? hlcFloor : prev;
+    prev = hlcTick(base, asEpochMillis(Date.now()), deviceId);
     return hlcEncode(prev);
   };
 }

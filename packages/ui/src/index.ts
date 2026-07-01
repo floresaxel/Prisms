@@ -17,7 +17,41 @@ export {
 } from './powersync/connector';
 export { crudToCommand, assertNoReplicaCrud, type CrudLike, type CrudOp, type TranslatedCommand } from './powersync/crud-to-command';
 export { createCommands, type Commands, type CommandContext } from './powersync/commands';
-export { newId, createHlc, getDeviceId, browserClock, browserRng } from './powersync/client-runtime';
+export {
+  newId,
+  createHlc,
+  getDeviceId,
+  browserClock,
+  browserRng,
+  observeImportedHlc,
+  persistImportedHlc,
+  loadImportedHlcFloor,
+  __resetHlcFloorForTests,
+} from './powersync/client-runtime';
+
+// portability + privacy adapters (1.3 §13.1/§13.2, R13/R20) — M13
+export {
+  type SecureStorage,
+  createWebSecureStorage,
+  createMemorySecureStorage,
+} from './adapters/secure-storage';
+export { type DbEncryptionAdapter, noopDbEncryption, createStaticDbEncryption } from './adapters/db-encryption';
+export {
+  encryptExport,
+  decryptExport,
+  isEncryptedExport,
+  ENCRYPTED_EXPORT_FORMAT,
+  ENCRYPTED_EXPORT_VERSION,
+  type EncryptedExport,
+} from './portability/crypto';
+export {
+  serializeExport,
+  parseImportFile,
+  exportFilename,
+  ImportFormatError,
+  type SerializeOptions,
+  type ParseOptions,
+} from './portability/export-import';
 
 // two-layer client store (1.3 §7.2, R15) — M0 spike
 export {

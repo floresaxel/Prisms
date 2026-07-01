@@ -7,7 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 
 import type { PowerSyncDatabase } from '@powersync/web';
 import { PowerSyncContext } from '@powersync/react';
-import { getDeviceId, Layout, PrismsDataProvider, type CommandContext, type CommandRejection } from '@prisms/ui';
+import { getDeviceId, Layout, loadImportedHlcFloor, PrismsDataProvider, type CommandContext, type CommandRejection } from '@prisms/ui';
 
 import { getSession, signOut, type SessionUser } from './auth';
 import { ReviewBanner } from './components/ReviewBanner';
@@ -48,6 +48,14 @@ function AuthedApp({ user, onSignOut }: { user: SessionUser; onSignOut: () => vo
   const dbRef = useRef<PowerSyncDatabase | null>(null);
   if (dbRef.current === null) dbRef.current = createDb();
   const db = dbRef.current;
+
+  // §13.1/R20: re-observe the persisted import HLC floor before any command is
+  // minted, so a post-import reload still orders new edits after imported state.
+  const flooredRef = useRef(false);
+  if (!flooredRef.current) {
+    flooredRef.current = true;
+    loadImportedHlcFloor();
+  }
 
   const [rejections, setRejections] = useState<CommandRejection[]>([]);
   const [route, setRoute] = useState<Route>((window.location.pathname as Route) || '/');

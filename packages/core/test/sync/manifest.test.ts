@@ -8,6 +8,8 @@ import {
   EXPORT_FORMAT_VERSION,
   exportManifestSchema,
   importReportSchema,
+  importSourceDetail,
+  isSupportedExportVersion,
 } from '../../src/sync/manifest';
 
 const validManifest = {
@@ -39,6 +41,23 @@ describe('exportManifestSchema', () => {
 
   it('rejects an unknown top-level key (strict)', () => {
     expect(exportManifestSchema.safeParse({ ...validManifest, secret: 'leak' }).success).toBe(false);
+  });
+});
+
+describe('isSupportedExportVersion (R11)', () => {
+  it('accepts 1..current and rejects a newer or non-positive version', () => {
+    expect(isSupportedExportVersion(1)).toBe(true);
+    expect(isSupportedExportVersion(EXPORT_FORMAT_VERSION)).toBe(true);
+    expect(isSupportedExportVersion(EXPORT_FORMAT_VERSION + 1)).toBe(false);
+    expect(isSupportedExportVersion(0)).toBe(false);
+    expect(isSupportedExportVersion(1.5)).toBe(false);
+  });
+});
+
+describe('importSourceDetail (§7.8/§13.1)', () => {
+  it('captures the source export so imported rows explain themselves', () => {
+    const d = importSourceDetail({ device_id: 'web-1', exported_at: '2026-06-30T00:00:00.000Z', format_version: 1 });
+    expect(d).toMatchObject({ imported: true, imported_from_device: 'web-1', export_format_version: 1 });
   });
 });
 

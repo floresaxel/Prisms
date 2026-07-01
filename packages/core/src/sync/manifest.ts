@@ -30,6 +30,31 @@ export const exportManifestSchema = z.strictObject({
 });
 export type ExportManifest = z.infer<typeof exportManifestSchema>;
 
+/**
+ * Export format versions this build can import (R11): explicit support, never a
+ * silent schema guess. A newer file is an explicit unsupported-version error at
+ * the import boundary (client + server share this check).
+ */
+export function isSupportedExportVersion(formatVersion: number): boolean {
+  return Number.isInteger(formatVersion) && formatVersion >= 1 && formatVersion <= EXPORT_FORMAT_VERSION;
+}
+
+/**
+ * The `source_detail` stamped on every imported row alongside `source_kind='import'`
+ * (§7.8/§13.1): which export the row came from, so provenance ("why does this
+ * exist?") can answer "restored from an import" for post-import rows.
+ */
+export function importSourceDetail(
+  m: Pick<ExportManifest, 'device_id' | 'exported_at' | 'format_version'>,
+): Record<string, unknown> {
+  return {
+    imported: true,
+    imported_from_device: m.device_id,
+    exported_at: m.exported_at,
+    export_format_version: m.format_version,
+  };
+}
+
 /** A single conflict surfaced by a dry-run import (becomes an import_warning, §7.13). */
 export const importConflictSchema = z.strictObject({
   table: z.string(),

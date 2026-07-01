@@ -17,6 +17,10 @@ import postgres from 'postgres';
 import { createAuth, type Auth } from './auth';
 import { createDispatcher, type BackstopJob } from './dispatcher';
 import type { PowersyncJwtConfig } from './env';
+import { runBackupSnapshot } from './jobs/backup-snapshot';
+import { systemClock } from './jobs/clock';
+import { runImportRestore } from './jobs/import-restore';
+import { runImportValidate } from './jobs/import-validate';
 import { createRateLimiter } from './rate-limit';
 import { requestLog } from './request-log';
 
@@ -123,6 +127,32 @@ export function createApp(options: AppOptions): PrismsServer {
       case 'ok':
         return c.json({ results: outcome.results });
     }
+  });
+
+  // Portable export (§13.1): a versioned prisms-export of the user's rows-as-data
+  // (secrets excluded). The client optionally passphrase-encrypts it before saving.
+  app.get('/sync/export', requireSession, async (c) => {
+    const manifest = await runBackupSnapshot(db, c.get('userId'), systemClock);
+    return c.json(manifest);
+  });
+
+  // Import (§13.1): `?dry_run=1` returns the validation report and writes only
+  // import_warning items; otherwise the explicit import transaction RESTORES the
+  // rows as data (never replays commands) and returns what it restored.
+  app.post('/sync/import', requireSession, async (c) => {
+    let body: unknown;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ error: 'E_PARSE', message: 'body must be JSON' }, 400);
+    }
+    const userId = c.get('userId');
+    if (c.req.query('dry_run') !== undefined && c.req.query('dry_run') !== '0') {
+      const report = await runImportValidate(db, userId, body, systemClock);
+      return c.json(report);
+    }
+    const result = await runImportRestore(db, userId, body, systemClock);
+    return c.json(result, result.ok ? 200 : 400);
   });
 
   return {
