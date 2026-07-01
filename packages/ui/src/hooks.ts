@@ -10,8 +10,6 @@ import {
   asEpochMillis,
   bucketDate,
   buildEdgeIndex,
-  buildFactContext,
-  buildTreeIndex,
   canonicalBurndown,
   canonicalCompletion,
   canonicalPractice,
@@ -47,7 +45,6 @@ import {
   type Instant,
   type IsoDate,
   type Node,
-  type OverlayEffect,
   type PracticeValue,
   type ProgressValue,
   type ScheduleBlock,
@@ -63,6 +60,7 @@ import {
 } from '@prisms/core';
 
 import { createCommands, type CommandContext } from './powersync/commands';
+import { usePrismsData, toOverlayEffect } from './powersync/data-provider';
 import { createSqlOverlayStore, type SqlExecutor } from './powersync/overlay-store';
 import { type ProvenanceFields } from './provenance';
 import { groupWorklistBySchedule, type WorklistGroup } from './worklist-grouping';
@@ -76,7 +74,6 @@ import {
   toDiagramGroup,
   toDiagramLayout,
   toEdge,
-  toExternalFact,
   toHabit,
   toHabitCompletion,
   toMembership,
@@ -98,33 +95,17 @@ function tableFromSql(sql: string): string | null {
   return m ? m[1]!.toLowerCase() : null;
 }
 
-const toOverlayEffect = (r: Row): OverlayEffect => {
-  const raw = r['fields'];
-  let fields: OverlayEffect['fields'] = {};
-  if (typeof raw === 'string' && raw.length > 0) {
-    try {
-      fields = JSON.parse(raw) as OverlayEffect['fields'];
-    } catch {
-      fields = {};
-    }
-  }
-  return {
-    command_id: String(r['command_id']),
-    hlc: String(r['hlc']),
-    table: String(r['table_name']),
-    row_id: String(r['row_id']),
-    op: r['op'] as OverlayEffect['op'],
-    fields,
-    seq: Number(r['seq'] ?? 0),
-  };
-};
-
 /**
- * The merged read (1.3 §7.2): the replica query patched by the pending overlay
- * for its table. Optimistic writes (`overlay_effects`) show instantly and a
- * rollback (overlay dropped) reverts — both via PowerSync's reactive queries.
- * A table with no pending overlay returns exactly the replica result. (M11 hoists
- * the per-table overlay subscription into the provider; M8 keeps it per-hook.)
+ * The merged read (1.3 §7.2) for SCREEN-LOCAL tables: the replica query patched
+ * by the pending overlay for its table. Optimistic writes (`overlay_effects`)
+ * show instantly and a rollback (overlay dropped) reverts. A table with no pending
+ * overlay returns exactly the replica result.
+ *
+ * M11 (Fix A): the 9 provider-shared tables no longer come through here — they are
+ * subscribed once in `PrismsDataProvider` (`usePrismsData`) and read warm. `useRows`
+ * now serves only screen-local tables (decision_*, diagram_*, automation_rules,
+ * habits/habit_completions, tags*, computed_aggregates, sync_review_items), which
+ * M12 makes flash-proof.
  */
 const useRows = (sql: string): Row[] => {
   const replica = useQuery<Row>(sql).data ?? [];
@@ -137,39 +118,18 @@ const useRows = (sql: string): Row[] => {
   }, [replica, effectRows]);
 };
 
-/** Live tree of non-deleted nodes. */
+/** Live tree of non-deleted nodes — served warm from the session read layer (§7.14). */
 export function useNodeTree(): TreeIndex {
-  const rows = useRows('SELECT * FROM nodes WHERE deleted_at IS NULL');
-  return useMemo(() => buildTreeIndex(rows.map(toNode)), [rows]);
+  return usePrismsData().tree;
 }
 
-/** The full FactContext used by status + blocker evaluation. */
+/**
+ * The full FactContext used by status + blocker evaluation. Served warm from the
+ * `PrismsDataProvider` (§7.14, Fix A): built once per session over the 9 shared
+ * subscriptions, not re-derived on navigation or the 1s `now` tick.
+ */
 export function useFactContext(): FactContext {
-  const nodes = useRows('SELECT * FROM nodes WHERE deleted_at IS NULL');
-  const edges = useRows('SELECT * FROM edges WHERE deleted_at IS NULL');
-  const entries = useRows('SELECT * FROM time_entries WHERE deleted_at IS NULL');
-  const blocks = useRows('SELECT * FROM schedule_blocks WHERE deleted_at IS NULL');
-  const sprints = useRows('SELECT * FROM sprints WHERE deleted_at IS NULL');
-  const memberships = useRows('SELECT * FROM sprint_memberships WHERE deleted_at IS NULL');
-  const blockers = useRows('SELECT * FROM blocker_rules WHERE deleted_at IS NULL');
-  const facts = useRows('SELECT * FROM external_facts WHERE deleted_at IS NULL');
-  const settings = useRows('SELECT * FROM user_settings LIMIT 1');
-
-  return useMemo(
-    () =>
-      buildFactContext({
-        nodes: nodes.map(toNode),
-        edges: edges.map(toEdge),
-        time_entries: entries.map(toTimeEntry),
-        schedule_blocks: blocks.map(toScheduleBlock),
-        sprints: sprints.map(toSprint),
-        sprint_memberships: memberships.map(toMembership),
-        blocker_rules: blockers.map(toBlockerRule),
-        external_facts: facts.map(toExternalFact),
-        user_settings: settings[0] ? toUserSettings(settings[0]) : null,
-      }),
-    [nodes, edges, entries, blocks, sprints, memberships, blockers, facts, settings],
-  );
+  return usePrismsData().factContext;
 }
 
 export interface WorklistItem {
@@ -212,9 +172,9 @@ function pickCommittedBlock(blocks: readonly ScheduleBlock[], now: Instant): str
  * progress (§7.2) and time-left-in-task indicator.
  */
 export function useWorklist(now: Instant): WorklistItem[] {
-  const ctx = useFactContext();
-  const entryRows = useRows('SELECT * FROM time_entries WHERE deleted_at IS NULL');
-  const blockRows = useRows("SELECT * FROM schedule_blocks WHERE status = 'committed' AND deleted_at IS NULL");
+  const { factContext: ctx, rows } = usePrismsData();
+  const entryRows = rows.time_entries;
+  const blockRows = useMemo(() => rows.schedule_blocks.filter((r) => r['status'] === 'committed'), [rows.schedule_blocks]);
   return useMemo(() => {
     const entries = entryRows.map(toTimeEntry);
     const blocksByTask = new Map<string, ScheduleBlock[]>();
@@ -258,8 +218,8 @@ export interface TimeBlockOption {
 
 /** Committed blocks bucketed to the current day — options for the "which block?" picker (Phase 3). */
 export function useTimeBlocksForDay(now: Instant): TimeBlockOption[] {
-  const ctx = useFactContext();
-  const blockRows = useRows("SELECT * FROM schedule_blocks WHERE status = 'committed' AND deleted_at IS NULL");
+  const { factContext: ctx, rows } = usePrismsData();
+  const blockRows = useMemo(() => rows.schedule_blocks.filter((r) => r['status'] === 'committed'), [rows.schedule_blocks]);
   return useMemo(() => {
     const today = bucketDate(now, ctx.dayResetHour, ctx.timezone);
     return blockRows
@@ -350,10 +310,10 @@ export interface RunningTimer {
  * the same winner the server's merge keeps — so the UI never shows two.
  */
 export function useRunningTimer(now: Instant): RunningTimer | null {
-  const rows = useRows('SELECT * FROM time_entries WHERE ended_at IS NULL AND deleted_at IS NULL');
-  const tree = useNodeTree();
+  const { rows, tree } = usePrismsData();
+  const openRows = useMemo(() => rows.time_entries.filter((r) => r['ended_at'] == null), [rows.time_entries]);
   return useMemo(() => {
-    const open = rows.map(toTimeEntry);
+    const open = openRows.map(toTimeEntry);
     if (open.length === 0) return null;
     const winner = open.reduce((a, b) =>
       b.started_at > a.started_at || (b.started_at === a.started_at && b.id > a.id) ? b : a,
@@ -363,23 +323,22 @@ export function useRunningTimer(now: Instant): RunningTimer | null {
       task: tree.byId.get(winner.task_id),
       elapsedMs: Math.max(0, now - isoToEpochMillis(winner.started_at)),
     };
-  }, [rows, tree, now]);
+  }, [openRows, tree, now]);
 }
 
 /** Activity inbox (§1.2): parentless `activity` items awaiting promotion. */
 export function useActivityInbox(): Node[] {
-  const rows = useRows("SELECT * FROM nodes WHERE node_type = 'activity' AND deleted_at IS NULL");
+  const { rows } = usePrismsData();
   return useMemo(
     () =>
-      rows
+      rows.nodes
         .map(toNode)
-        // Re-apply the WHERE on the MERGED row: an optimistic activity.promote flips
-        // node_type 'activity'→'task' in the overlay, but useRows evaluates the SQL
-        // predicate only against the replica — so a promoted (or overlay-inserted-
-        // then-retyped) node must be post-filtered out of the inbox here.
+        // Filter the shared (unfiltered) node set down to live activities: an
+        // optimistic activity.promote flips node_type 'activity'→'task' in the
+        // overlay, so re-apply the predicate on the MERGED row here.
         .filter((n) => n.node_type === 'activity' && n.deleted_at === null)
         .sort((a, b) => (a.sort_order < b.sort_order ? -1 : a.sort_order > b.sort_order ? 1 : a.id < b.id ? -1 : 1)),
-    [rows],
+    [rows.nodes],
   );
 }
 
@@ -409,8 +368,8 @@ export function useDayTimeLeft(now: Instant): number {
 
 /** Minutes until the next committed block starts (§7.2 time-left trio); null when none ahead. */
 export function useNextBlockMinutes(now: Instant, taskId?: string): number | null {
-  const rows = useRows('SELECT * FROM schedule_blocks WHERE deleted_at IS NULL');
-  return useMemo(() => minutesUntilNextBlock(rows.map(toScheduleBlock), now, taskId), [rows, now, taskId]);
+  const { rows } = usePrismsData();
+  return useMemo(() => minutesUntilNextBlock(rows.schedule_blocks.map(toScheduleBlock), now, taskId), [rows.schedule_blocks, now, taskId]);
 }
 
 export interface AgendaBlock {
@@ -462,12 +421,12 @@ export interface Agenda {
  * (unjustified) rule, and the time-entry history layer all work offline.
  */
 export function useAgenda(now: Instant, horizonDays = 7): Agenda {
-  const ctx = useFactContext();
-  const edgeRows = useRows('SELECT * FROM edges WHERE deleted_at IS NULL');
-  const blockRows = useRows('SELECT * FROM schedule_blocks WHERE deleted_at IS NULL');
-  const entryRows = useRows('SELECT * FROM time_entries WHERE deleted_at IS NULL');
-  const sprintRows = useRows('SELECT * FROM sprints WHERE deleted_at IS NULL');
-  const membershipRows = useRows('SELECT * FROM sprint_memberships WHERE deleted_at IS NULL');
+  const { factContext: ctx, rows } = usePrismsData();
+  const edgeRows = rows.edges;
+  const blockRows = rows.schedule_blocks;
+  const entryRows = rows.time_entries;
+  const sprintRows = rows.sprints;
+  const membershipRows = rows.sprint_memberships;
 
   return useMemo(() => {
     const tree = ctx.tree;
@@ -588,11 +547,11 @@ export interface HabitView {
  * server aggregate's `computed_at` is surfaced for the freshness label.
  */
 export function useHabits(now: Instant): HabitView[] {
-  const ctx = useFactContext();
+  const { factContext: ctx, rows } = usePrismsData();
   const habitRows = useRows('SELECT * FROM habits WHERE deleted_at IS NULL');
   const completionRows = useRows('SELECT * FROM habit_completions WHERE deleted_at IS NULL');
-  const entryRows = useRows('SELECT * FROM time_entries WHERE deleted_at IS NULL');
-  const blockRows = useRows('SELECT * FROM schedule_blocks WHERE deleted_at IS NULL');
+  const entryRows = rows.time_entries;
+  const blockRows = rows.schedule_blocks;
   const tagRows = useRows('SELECT * FROM tags WHERE deleted_at IS NULL');
   const placementRows = useRows('SELECT * FROM tag_placements WHERE deleted_at IS NULL');
   const answerRows = useRows('SELECT * FROM tag_answers WHERE deleted_at IS NULL');
@@ -767,11 +726,11 @@ export interface DashboardData {
  * the dashboard renders fully offline.
  */
 export function useDashboard(now: Instant, days = 14): DashboardData {
-  const ctx = useFactContext();
+  const { factContext: ctx, rows } = usePrismsData();
   // include soft-deleted tasks so the burndown scope-out (a deleted task
-  // leaving the series) is reflected.
-  const taskRows = useRows("SELECT * FROM nodes WHERE node_type = 'task'");
-  const blockRows = useRows('SELECT * FROM schedule_blocks WHERE deleted_at IS NULL');
+  // leaving the series) is reflected — the shared `nodes` set is unfiltered.
+  const taskRows = useMemo(() => rows.nodes.filter((r) => r['node_type'] === 'task'), [rows.nodes]);
+  const blockRows = rows.schedule_blocks;
   const aggRows = useRows("SELECT * FROM computed_aggregates WHERE deleted_at IS NULL AND subject_kind = 'user'");
 
   return useMemo(() => {
@@ -842,8 +801,8 @@ const ROW_H = 110;
  * local rows, so it renders + validates offline.
  */
 export function useFlowchart(diagramId: string | null, mode: 'dates' | 'nodates' = 'nodates'): FlowchartView {
-  const tree = useNodeTree();
-  const edgeRows = useRows('SELECT * FROM edges WHERE deleted_at IS NULL');
+  const { tree, rows } = usePrismsData();
+  const edgeRows = rows.edges;
   const layoutRows = useRows('SELECT * FROM diagram_layouts WHERE deleted_at IS NULL');
   const groupRows = useRows('SELECT * FROM diagram_groups WHERE deleted_at IS NULL');
 
@@ -930,9 +889,9 @@ export interface GanttView {
  * item so the screen can lay out a simple time axis.
  */
 export function useGantt(projectId: string | null, now: Instant): GanttView {
-  const ctx = useFactContext();
-  const edgeRows = useRows('SELECT * FROM edges WHERE deleted_at IS NULL');
-  const blockRows = useRows('SELECT * FROM schedule_blocks WHERE deleted_at IS NULL');
+  const { factContext: ctx, rows } = usePrismsData();
+  const edgeRows = rows.edges;
+  const blockRows = rows.schedule_blocks;
 
   return useMemo(() => {
     if (projectId === null) return { bars: [], edges: [], fromDate: null, days: 0, criticalPathIds: [] };
@@ -1002,10 +961,10 @@ export function useRules(): AutomationRule[] {
   return useMemo(() => rows.map(toAutomationRule).sort((a, b) => (a.created_at < b.created_at ? -1 : 1)), [rows]);
 }
 
-/** Blocker rules (§9) for the blocker editor. */
+/** Blocker rules (§9) for the blocker editor — served warm (§7.14). */
 export function useBlockers(): BlockerRule[] {
-  const rows = useRows('SELECT * FROM blocker_rules WHERE deleted_at IS NULL');
-  return useMemo(() => rows.map(toBlockerRule).sort((a, b) => (a.created_at < b.created_at ? -1 : 1)), [rows]);
+  const { rows } = usePrismsData();
+  return useMemo(() => rows.blocker_rules.map(toBlockerRule).sort((a, b) => (a.created_at < b.created_at ? -1 : 1)), [rows.blocker_rules]);
 }
 
 export interface AggregateRow {
@@ -1026,16 +985,16 @@ export interface UserSettingsView {
 
 /** User settings row, with architecture defaults when a fresh account has not synced one yet. */
 export function useUserSettings(): UserSettingsView {
-  const rows = useRows('SELECT * FROM user_settings LIMIT 1');
+  const { rows } = usePrismsData();
   return useMemo(() => {
-    const row = rows[0] ? toUserSettings(rows[0]) : null;
+    const row = rows.user_settings[0] ? toUserSettings(rows.user_settings[0]) : null;
     return {
       hasRow: row !== null,
       dayResetHour: row?.day_reset_hour ?? 4,
       timezone: row?.timezone ?? 'America/New_York',
       weatherLocation: row?.weather_location ?? null,
     };
-  }, [rows]);
+  }, [rows.user_settings]);
 }
 
 /** Server-computed aggregates (burndown, streaks, …) with their freshness. */

@@ -6,24 +6,24 @@
  */
 import { useEffect, useState } from 'react';
 
-import { useQuery } from '@powersync/react';
-import { useCommands, useFactContext, type CommandContext } from '@prisms/ui';
+import { useCommands, useUserSettings, type CommandContext } from '@prisms/ui';
 
 export function Settings({ ctx }: { ctx: CommandContext }) {
-  const fact = useFactContext();
+  // §7.14: settings come from the warm shared read layer, not a screen-local
+  // subscription (user_settings is provider-owned). hasRow drives insert vs update.
+  const settings = useUserSettings();
   const commands = useCommands(ctx);
-  const existing = useQuery<{ id: string }>('SELECT id FROM user_settings LIMIT 1').data ?? [];
-  const hasRow = existing.length > 0;
+  const hasRow = settings.hasRow;
 
-  const [hour, setHour] = useState(String(fact.dayResetHour));
-  const [tz, setTz] = useState(fact.timezone);
+  const [hour, setHour] = useState(String(settings.dayResetHour));
+  const [tz, setTz] = useState(settings.timezone);
   const [saved, setSaved] = useState(false);
 
   // keep inputs in sync if settings arrive after mount
   useEffect(() => {
-    setHour(String(fact.dayResetHour));
-    setTz(fact.timezone);
-  }, [fact.dayResetHour, fact.timezone]);
+    setHour(String(settings.dayResetHour));
+    setTz(settings.timezone);
+  }, [settings.dayResetHour, settings.timezone]);
 
   async function save() {
     const day_reset_hour = Math.min(23, Math.max(0, Number(hour) || 0));

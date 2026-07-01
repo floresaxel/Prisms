@@ -13,7 +13,7 @@ import { NavigationContainer, DarkTheme } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { PowerSyncContext } from '@powersync/react';
 import type { PowerSyncDatabase } from '@powersync/react-native';
-import { type CommandContext, type CommandRejection } from '@prisms/ui';
+import { PrismsDataProvider, type CommandContext, type CommandRejection } from '@prisms/ui';
 
 import { getSession, signOut, type SessionUser } from './src/auth';
 import { getDeviceId, loadDeviceId } from './src/device';
@@ -59,24 +59,28 @@ function AuthedApp({ user, onSignOut }: { user: SessionUser; onSignOut: () => vo
 
   return (
     <PowerSyncContext.Provider value={db}>
-      {rejections.length > 0 && (
-        <View style={{ backgroundColor: theme.danger, padding: 8 }}>
-          <Text style={{ color: '#fff' }} onPress={() => setRejections([])}>
-            Change rejected: {rejections.map((r) => r.reject_code).join(', ')} (reverted)
-          </Text>
-        </View>
-      )}
-      <NavigationContainer theme={navTheme}>
-        <Tab.Navigator screenOptions={{ headerStyle: { backgroundColor: theme.surface }, headerTintColor: theme.text }}>
-          <Tab.Screen name="Worklist">{() => <Worklist ctx={ctx} />}</Tab.Screen>
-          <Tab.Screen name="Agenda">{() => <Agenda ctx={ctx} />}</Tab.Screen>
-          <Tab.Screen name="Kanban">{() => <Kanban ctx={ctx} />}</Tab.Screen>
-          <Tab.Screen name="Habits">{() => <Habits ctx={ctx} />}</Tab.Screen>
-          <Tab.Screen name="Graph">{() => <Graph />}</Tab.Screen>
-          <Tab.Screen name="Dashboard">{() => <Dashboard />}</Tab.Screen>
-          <Tab.Screen name="Account">{() => <Account user={user} onSignOut={onSignOut} />}</Tab.Screen>
-        </Tab.Navigator>
-      </NavigationContainer>
+      {/* §7.14 (Fix A): shared read layer mounted above the tab navigator, so its
+          subscriptions + FactContext survive tab switches (parity with web). */}
+      <PrismsDataProvider>
+        {rejections.length > 0 && (
+          <View style={{ backgroundColor: theme.danger, padding: 8 }}>
+            <Text style={{ color: '#fff' }} onPress={() => setRejections([])}>
+              Change rejected: {rejections.map((r) => r.reject_code).join(', ')} (reverted)
+            </Text>
+          </View>
+        )}
+        <NavigationContainer theme={navTheme}>
+          <Tab.Navigator screenOptions={{ headerStyle: { backgroundColor: theme.surface }, headerTintColor: theme.text }}>
+            <Tab.Screen name="Worklist">{() => <Worklist ctx={ctx} />}</Tab.Screen>
+            <Tab.Screen name="Agenda">{() => <Agenda ctx={ctx} />}</Tab.Screen>
+            <Tab.Screen name="Kanban">{() => <Kanban ctx={ctx} />}</Tab.Screen>
+            <Tab.Screen name="Habits">{() => <Habits ctx={ctx} />}</Tab.Screen>
+            <Tab.Screen name="Graph">{() => <Graph />}</Tab.Screen>
+            <Tab.Screen name="Dashboard">{() => <Dashboard />}</Tab.Screen>
+            <Tab.Screen name="Account">{() => <Account user={user} onSignOut={onSignOut} />}</Tab.Screen>
+          </Tab.Navigator>
+        </NavigationContainer>
+      </PrismsDataProvider>
     </PowerSyncContext.Provider>
   );
 }

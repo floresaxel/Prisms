@@ -7,7 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 
 import type { PowerSyncDatabase } from '@powersync/web';
 import { PowerSyncContext } from '@powersync/react';
-import { getDeviceId, Layout, type CommandContext, type CommandRejection } from '@prisms/ui';
+import { getDeviceId, Layout, PrismsDataProvider, type CommandContext, type CommandRejection } from '@prisms/ui';
 
 import { getSession, signOut, type SessionUser } from './auth';
 import { ReviewBanner } from './components/ReviewBanner';
@@ -79,8 +79,12 @@ function AuthedApp({ user, onSignOut }: { user: SessionUser; onSignOut: () => vo
 
   return (
     <PowerSyncContext.Provider value={db}>
-      <Layout
-        title="Prisms"
+      {/* §7.14 (Fix A): the shared read layer is mounted ABOVE the router, so its
+          9 base subscriptions + FactContext/TreeIndex are created once per session
+          and survive navigation (navigate() only swaps the screen below). */}
+      <PrismsDataProvider>
+        <Layout
+          title="Prisms"
         nav={[
           { label: 'Worklist', href: '/', active: route === '/' },
           { label: 'Inbox', href: '/inbox', active: route === '/inbox' },
@@ -136,7 +140,8 @@ function AuthedApp({ user, onSignOut }: { user: SessionUser; onSignOut: () => vo
           '/review': <Review ctx={ctx} />,
           '/settings': <Settings ctx={ctx} />,
         } satisfies Record<Route, ReactNode>)[route] ?? <Worklist ctx={ctx} />}
-      </Layout>
+        </Layout>
+      </PrismsDataProvider>
     </PowerSyncContext.Provider>
   );
 }

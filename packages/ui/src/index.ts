@@ -32,6 +32,9 @@ export { createExecuteCommand, type ExecuteCommand, type ExecuteContext, type Ex
 export { buildOptimisticEffects, buildAcceptSuggestionEffects, type EffectSpec, type OptimisticEffectCtx, type AcceptSuggestionBlock } from './powersync/effects';
 export { uploadClientCommands, type UploadCommandsOptions, type UploadSummary } from './powersync/upload-commands';
 
+// persistent client read layer (1.4 §7.14, Fix A) — M11
+export { PrismsDataProvider, usePrismsData, toOverlayEffect, type PrismsData, type SharedRows } from './powersync/data-provider';
+
 // provenance ("why does this exist?", §7.8) — M9
 export { explainProvenance, type ProvenanceFields, type ProvenanceExplanation } from './provenance';
 
