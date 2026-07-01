@@ -69,6 +69,9 @@ export { uploadClientCommands, type UploadCommandsOptions, type UploadSummary } 
 // persistent client read layer (1.4 §7.14, Fix A) — M11
 export { PrismsDataProvider, usePrismsData, toOverlayEffect, type PrismsData, type SharedRows } from './powersync/data-provider';
 
+// sync-stream tiers — lazy Tier 2 (1.3 §7.3) — M14
+export { subscribeHistory, HISTORY_STREAM, type StreamSubscriber, type StreamSubscription, type HistorySubscribeOptions } from './powersync/streams';
+
 // provenance ("why does this exist?", §7.8) — M9
 export { explainProvenance, type ProvenanceFields, type ProvenanceExplanation } from './provenance';
 

@@ -119,6 +119,21 @@ export function Meter({ fill }: { fill: number }) {
   );
 }
 
+/**
+ * §7.15 loading placeholder (M14 parity): shown while a read has not hydrated, so
+ * a fresh login / cold tab renders skeleton bars instead of flashing the empty
+ * state. Screens gate on `useIsHydrated()` / the per-read `…Hydrated` hooks.
+ */
+export function Skeleton({ rows = 3, testID }: { rows?: number; testID?: string }) {
+  return (
+    <View testID={testID} accessibilityState={{ busy: true }} style={s.skeletonBlock}>
+      {Array.from({ length: rows }, (_, i) => (
+        <View key={i} style={s.skeletonBar} />
+      ))}
+    </View>
+  );
+}
+
 const s = StyleSheet.create({
   screen: { flex: 1, backgroundColor: theme.bg },
   screenContent: { padding: 16, gap: 10 },
@@ -139,4 +154,6 @@ const s = StyleSheet.create({
   field: { color: theme.text, backgroundColor: theme.bg, borderColor: theme.border, borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 15 },
   meter: { height: 8, borderRadius: 999, backgroundColor: theme.surface2, overflow: 'hidden' },
   meterFill: { height: '100%', backgroundColor: theme.accent, borderRadius: 999 },
+  skeletonBlock: { gap: 8, paddingVertical: 4 },
+  skeletonBar: { height: 44, borderRadius: 10, backgroundColor: theme.surface2, opacity: 0.6 },
 });

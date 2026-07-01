@@ -6,9 +6,9 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import { asEpochMillis, epochMillisToIso, validWindowsFor, type Instant, type Interval } from '@prisms/core';
-import { useAgenda, useCommands, type CommandContext } from '@prisms/ui';
+import { useAgenda, useCommands, useIsHydrated, type CommandContext } from '@prisms/ui';
 
-import { Btn, Card, H1, H2, Muted, Row, Screen, Txt } from '../ui';
+import { Btn, Card, H1, H2, Muted, Row, Screen, Skeleton, Txt } from '../ui';
 
 const fmt = (ms: number): string => new Date(ms).toLocaleString(undefined, { weekday: 'short', hour: '2-digit', minute: '2-digit' });
 
@@ -21,6 +21,7 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
 
   const agenda = useAgenda(now);
   const commands = useCommands(ctx);
+  const hydrated = useIsHydrated();
   const [selected, setSelected] = useState<string | null>(null);
 
   const windows = useMemo<Interval[]>(() => {
@@ -44,7 +45,7 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
       <Muted>Tap a task, then tap a highlighted window to schedule it.</Muted>
 
       <H2>To-do</H2>
-      {agenda.todo.length === 0 && <Muted>Nothing to place.</Muted>}
+      {agenda.todo.length === 0 && (hydrated ? <Muted>Nothing to place.</Muted> : <Skeleton testID="todo-skeleton" rows={2} />)}
       {agenda.todo.map(({ task, schedulable }) => (
         <Card key={task.id} testID={`todo-${task.id}`}>
           <Row>

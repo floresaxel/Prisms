@@ -8,10 +8,10 @@ import { useEffect, useState } from 'react';
 import { Modal, View } from 'react-native';
 
 import { asEpochMillis, type Instant } from '@prisms/core';
-import { useCommands, useDayTimeLeft, useNextBlockMinutes, useRunningTimer, useWorklist, type CommandContext } from '@prisms/ui';
+import { useCommands, useDayTimeLeft, useIsHydrated, useNextBlockMinutes, useRunningTimer, useWorklist, type CommandContext } from '@prisms/ui';
 
 import { formatElapsed, formatMinutes } from '../format';
-import { Badge, Btn, Card, H1, Meter, Muted, Row, Screen, Txt } from '../ui';
+import { Badge, Btn, Card, H1, Meter, Muted, Row, Screen, Skeleton, Txt } from '../ui';
 
 interface ReviewTarget { entryId: string; taskId: string; taskTitle: string }
 const FACTORS = [0.5, 0.75, 1.0];
@@ -28,6 +28,7 @@ export function Worklist({ ctx }: { ctx: CommandContext }) {
   const dayLeft = useDayTimeLeft(now);
   const nextBlock = useNextBlockMinutes(now);
   const commands = useCommands(ctx);
+  const hydrated = useIsHydrated();
 
   const [review, setReview] = useState<ReviewTarget | null>(null);
   const [focus, setFocus] = useState(1.0);
@@ -66,7 +67,8 @@ export function Worklist({ ctx }: { ctx: CommandContext }) {
         </Card>
       )}
 
-      {items.length === 0 && <Muted>No available tasks — everything is done or blocked.</Muted>}
+      {items.length === 0 &&
+        (hydrated ? <Muted>No available tasks — everything is done or blocked.</Muted> : <Skeleton testID="worklist-skeleton" />)}
       {items.map((item) => (
         <Card key={item.task.id} testID={`task-${item.task.id}`}>
           <Row>

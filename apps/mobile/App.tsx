@@ -18,14 +18,16 @@ import { PrismsDataProvider, type CommandContext, type CommandRejection } from '
 import { getSession, signOut, type SessionUser } from './src/auth';
 import { getDeviceId, loadDeviceId } from './src/device';
 import { registerForPush, scheduleReminder } from './src/notifications';
+import { exportAndShare } from './src/portability';
 import { connectDb, getDb } from './src/powersync';
-import { theme } from './src/ui';
+import { Btn, Field, Muted, theme } from './src/ui';
 import { Agenda } from './src/screens/Agenda';
 import { Dashboard } from './src/screens/Dashboard';
 import { Graph } from './src/screens/Graph';
 import { Habits } from './src/screens/Habits';
 import { Kanban } from './src/screens/Kanban';
 import { Login } from './src/screens/Login';
+import { Review } from './src/screens/Review';
 import { Worklist } from './src/screens/Worklist';
 
 const Tab = createBottomTabNavigator();
@@ -77,6 +79,7 @@ function AuthedApp({ user, onSignOut }: { user: SessionUser; onSignOut: () => vo
             <Tab.Screen name="Habits">{() => <Habits ctx={ctx} />}</Tab.Screen>
             <Tab.Screen name="Graph">{() => <Graph />}</Tab.Screen>
             <Tab.Screen name="Dashboard">{() => <Dashboard />}</Tab.Screen>
+            <Tab.Screen name="Review">{() => <Review ctx={ctx} />}</Tab.Screen>
             <Tab.Screen name="Account">{() => <Account user={user} onSignOut={onSignOut} />}</Tab.Screen>
           </Tab.Navigator>
         </NavigationContainer>
@@ -86,11 +89,37 @@ function AuthedApp({ user, onSignOut }: { user: SessionUser; onSignOut: () => vo
 }
 
 function Account({ user, onSignOut }: { user: SessionUser; onSignOut: () => void }) {
+  const [passphrase, setPassphrase] = useState('');
+  const [status, setStatus] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function onExport() {
+    setBusy(true);
+    setStatus(null);
+    try {
+      await exportAndShare(passphrase);
+      setStatus('Encrypted export shared.');
+      setPassphrase('');
+    } catch (e) {
+      setStatus(e instanceof Error ? e.message : 'export failed');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <View style={{ flex: 1, backgroundColor: theme.bg, padding: 16, gap: 14 }}>
       <Text style={{ color: theme.text, fontSize: 16 }}>{user.email}</Text>
+
+      {/* §13.1: installed-target export is encrypted by default — a passphrase is required. */}
+      <Text style={{ color: theme.text, fontSize: 15, marginTop: 8 }}>Backup &amp; export</Text>
+      <Muted>Exports are encrypted on this device — set a passphrase, then share the file.</Muted>
+      <Field value={passphrase} onChangeText={setPassphrase} placeholder="export passphrase" secureTextEntry testID="export-passphrase" />
+      <Btn title="Export encrypted" variant="primary" testID="export-share" disabled={busy || passphrase.length === 0} onPress={() => void onExport()} />
+      {status !== null && <Muted testID="export-status">{status}</Muted>}
+
       <Text
-        style={{ color: theme.accent }}
+        style={{ color: theme.accent, marginTop: 8 }}
         testID="test-reminder"
         onPress={() => void scheduleReminder('Prisms reminder', 'This fires even with the network off.', 5)}
       >

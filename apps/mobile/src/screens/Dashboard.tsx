@@ -7,9 +7,9 @@ import { useEffect, useState } from 'react';
 import { View } from 'react-native';
 
 import { asEpochMillis, type Instant } from '@prisms/core';
-import { useDashboard, useDecisionBoards, useHabits } from '@prisms/ui';
+import { useDashboard, useDecisionBoards, useDecisionsHydrated, useHabits, useHabitsHydrated, useIsHydrated } from '@prisms/ui';
 
-import { Card, H1, H2, Meter, Muted, Row, Screen, Txt } from '../ui';
+import { Card, H1, H2, Meter, Muted, Row, Screen, Skeleton, Txt } from '../ui';
 
 export function Dashboard() {
   const [now, setNow] = useState<Instant>(asEpochMillis(Date.now()));
@@ -22,6 +22,9 @@ export function Dashboard() {
   const boards = useDecisionBoards();
   const habits = useHabits(now);
   const priority = boards[0]?.ranking ?? [];
+  const sessionHydrated = useIsHydrated();
+  const boardsHydrated = useDecisionsHydrated();
+  const habitsHydrated = useHabitsHydrated();
   const proj = data.burndown.projection;
   const today = data.burndown.days.at(-1);
 
@@ -36,7 +39,7 @@ export function Dashboard() {
       </Card>
 
       <H2>Project completion</H2>
-      {data.completion.length === 0 && <Muted>No projects yet.</Muted>}
+      {data.completion.length === 0 && (sessionHydrated ? <Muted>No projects yet.</Muted> : <Skeleton testID="completion-skeleton" rows={2} />)}
       {data.completion.map(({ project, value }) => (
         <Card key={project.id}>
           <Row>
@@ -48,7 +51,7 @@ export function Dashboard() {
       ))}
 
       <H2>Priority items</H2>
-      {priority.length === 0 && <Muted>No decision board yet.</Muted>}
+      {priority.length === 0 && (boardsHydrated ? <Muted>No decision board yet.</Muted> : <Skeleton testID="priority-skeleton" rows={2} />)}
       {priority.map((r, i) => (
         <Card key={r.project.id} testID={`priority-${r.project.id}`}>
           <Row>
@@ -59,7 +62,7 @@ export function Dashboard() {
       ))}
 
       <H2>Streaks</H2>
-      {habits.length === 0 && <Muted>No habits yet.</Muted>}
+      {habits.length === 0 && (habitsHydrated ? <Muted>No habits yet.</Muted> : <Skeleton testID="streaks-skeleton" rows={2} />)}
       {habits.map((h) => (
         <Card key={h.habit.id}>
           <Txt>🔥 {h.streak.current} · {h.habit.title}</Txt>

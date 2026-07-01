@@ -6,9 +6,11 @@
  */
 import { useEffect, useRef, useState } from 'react';
 
+import { usePowerSync } from '@powersync/react';
 import type { ImportReport } from '@prisms/core';
-import { useCommands, useUserSettings, type CommandContext } from '@prisms/ui';
+import { subscribeHistory, useCommands, useUserSettings, type CommandContext, type StreamSubscriber } from '@prisms/ui';
 
+import { isDesktop } from '../desktop';
 import { downloadExport, dryRunImport, fetchExport, readImportFile, restoreImport } from '../portability';
 
 export function Settings({ ctx }: { ctx: CommandContext }) {
@@ -71,9 +73,36 @@ function Portability() {
   const [report, setReport] = useState<ImportReport | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [plaintextOptOut, setPlaintextOptOut] = useState(false);
+  const [historyOn, setHistoryOn] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const db = usePowerSync();
+  const historyUnsub = useRef<(() => void) | null>(null);
+
+  // §7.3 Tier 2: subscribe the `history` stream on demand (soft-deleted / old data).
+  async function toggleHistory() {
+    if (historyUnsub.current) {
+      historyUnsub.current();
+      historyUnsub.current = null;
+      setHistoryOn(false);
+      return;
+    }
+    try {
+      historyUnsub.current = await subscribeHistory(db as unknown as StreamSubscriber);
+      setHistoryOn(true);
+    } catch (e) {
+      setStatus(e instanceof Error ? e.message : 'could not load history');
+    }
+  }
+  useEffect(() => () => historyUnsub.current?.(), []);
+
+  // §13.1: installed targets (desktop) export encrypted BY DEFAULT — a passphrase
+  // is required unless the user explicitly opts out of encryption (with a warning).
+  const installed = isDesktop();
+  const needsPassphrase = installed && exportPass.length === 0 && !plaintextOptOut;
 
   async function onExport() {
+    if (needsPassphrase) return;
     setBusy(true);
     setStatus(null);
     try {
@@ -143,20 +172,39 @@ function Portability() {
       <h2>Backup &amp; restore</h2>
       <p className="px-muted">Export all your data to a file, or import a previous export. Import restores data — it never re-runs your history.</p>
 
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 20 }}>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: installed ? 6 : 20 }}>
         <input
           className="px-input"
           type="password"
-          placeholder="passphrase (optional — encrypts the file)"
+          placeholder={installed ? 'passphrase (required on this device)' : 'passphrase (optional — encrypts the file)'}
           data-testid="export-passphrase"
           value={exportPass}
           onChange={(e) => setExportPass(e.target.value)}
           style={{ minWidth: 280 }}
         />
-        <button className="px-btn px-btn--primary" data-testid="export-download" disabled={busy} onClick={() => void onExport()}>
+        <button className="px-btn px-btn--primary" data-testid="export-download" disabled={busy || needsPassphrase} onClick={() => void onExport()}>
           Download export
         </button>
       </div>
+      {installed && (
+        <div className="px-muted" style={{ marginBottom: 20, fontSize: 13 }} data-testid="export-encryption-note">
+          {plaintextOptOut ? (
+            <span style={{ color: 'var(--px-danger)' }}>⚠ Plaintext export — this file will not be encrypted.</span>
+          ) : (
+            <>Exports are encrypted by default on this device. </>
+          )}
+          {exportPass.length === 0 && (
+            <button
+              className="px-btn"
+              data-testid="export-plaintext-optout"
+              style={{ marginLeft: 8, padding: '2px 8px', fontSize: 12 }}
+              onClick={() => setPlaintextOptOut((v) => !v)}
+            >
+              {plaintextOptOut ? 'Encrypt instead' : 'Export without encryption'}
+            </button>
+          )}
+        </div>
+      )}
 
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
         <input ref={fileRef} type="file" accept=".json,application/json" data-testid="import-file" onChange={onFile} />
@@ -190,6 +238,16 @@ function Portability() {
         </div>
       )}
       {status && <div className="px-muted" data-testid="portability-status" style={{ marginTop: 10 }}>{status}</div>}
+
+      <div style={{ marginTop: 24 }}>
+        <h3 style={{ marginBottom: 4 }}>Older history</h3>
+        <p className="px-muted" style={{ marginTop: 0, fontSize: 13 }}>
+          Old and archived data (Tier 2) isn&rsquo;t synced by default to keep the app light. Load it on demand.
+        </p>
+        <button className="px-btn" data-testid="history-toggle" onClick={() => void toggleHistory()}>
+          {historyOn ? 'Stop syncing history' : 'Load older history'}
+        </button>
+      </div>
     </div>
   );
 }

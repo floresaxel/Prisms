@@ -7,9 +7,9 @@
 import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 
-import { useFlowchart, useNodeTree } from '@prisms/ui';
+import { useFlowchart, useIsHydrated, useNodeTree } from '@prisms/ui';
 
-import { Badge, H1, Muted, Row, Screen, theme, Txt } from '../ui';
+import { Badge, H1, Muted, Row, Screen, Skeleton, theme, Txt } from '../ui';
 
 const SCALE = 0.8;
 const NODE_W = 150;
@@ -24,6 +24,7 @@ export function Graph() {
   const [rootId, setRootId] = useState<string | null>(null);
   const active = rootId ?? roots[0]?.id ?? null;
   const view = useFlowchart(active, 'nodates');
+  const hydrated = useIsHydrated();
 
   const activeNode = active !== null ? tree.byId.get(active) : undefined;
   const hasChildren = (id: string) => (tree.childrenByParent.get(id)?.length ?? 0) > 0;
@@ -56,7 +57,7 @@ export function Graph() {
       )}
 
       {view.nodes.length === 0 ? (
-        <Muted>No child nodes to show.</Muted>
+        hydrated ? <Muted>No child nodes to show.</Muted> : <Skeleton testID="graph-skeleton" />
       ) : (
         <ScrollView horizontal style={{ borderColor: theme.border, borderWidth: 1, borderRadius: 10, backgroundColor: theme.bg }}>
           <View style={{ width, height, position: 'relative' }}>
