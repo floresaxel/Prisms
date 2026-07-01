@@ -1,7 +1,7 @@
 # Prisms API image (Hono + Better Auth + pg-boss jobs). Built from the repo
 # root context so the pnpm workspace (core, db, server) resolves.
 # syntax=docker/dockerfile:1
-FROM node:20-bookworm-slim
+FROM node:24-bookworm-slim
 
 WORKDIR /app
 RUN npm install -g pnpm@11.5.3
