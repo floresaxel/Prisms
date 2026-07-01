@@ -38,9 +38,9 @@ services:
       POWERSYNC_CONFIG_PATH: /config/powersync.yaml
       PS_DATABASE_URI: postgresql://${POSTGRES_USER:-prisms}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-prisms}
       PS_STORAGE_URI: postgresql://${POSTGRES_USER:-prisms}:${POSTGRES_PASSWORD}@postgres:5432/powersync_storage
-      PS_JWT_KID: ${POWERSYNC_JWT_KID:-prisms}
-      PS_JWT_K_B64URL: ${POWERSYNC_JWT_K_B64URL:?set POWERSYNC_JWT_K_B64URL (base64url of POWERSYNC_JWT_SECRET)}
-      PS_JWT_AUDIENCE: ${POWERSYNC_JWT_AUDIENCE:-prisms}
+      PS_JWT_KID: ${PS_JWT_KID:-prisms}
+      PS_JWT_K_B64URL: ${PS_JWT_K_B64URL:?set PS_JWT_K_B64URL (base64url of PS_JWT_SECRET)}
+      PS_JWT_AUDIENCE: ${PS_JWT_AUDIENCE:-prisms}
     volumes:
       - ./infra/powersync/powersync.prod.yaml:/config/powersync.yaml:ro
       - ./packages/db/sync-streams.yaml:/sync-rules.yaml:ro
@@ -64,9 +64,11 @@ services:
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?set BETTER_AUTH_SECRET in .env}
       BETTER_AUTH_URL: ${PUBLIC_URL:?set PUBLIC_URL in .env}
       BETTER_AUTH_TRUSTED_ORIGINS: ${PUBLIC_URL}
-      POWERSYNC_JWT_SECRET: ${POWERSYNC_JWT_SECRET:?set POWERSYNC_JWT_SECRET in .env}
-      POWERSYNC_JWT_KID: ${POWERSYNC_JWT_KID:-prisms}
-      POWERSYNC_JWT_AUDIENCE: ${POWERSYNC_JWT_AUDIENCE:-prisms}
+      # api code reads POWERSYNC_JWT_* (env.ts); the operator sets the unified
+      # PS_JWT_* names in .env — kid/audience must match the powersync service.
+      POWERSYNC_JWT_SECRET: ${PS_JWT_SECRET:?set PS_JWT_SECRET in .env}
+      POWERSYNC_JWT_KID: ${PS_JWT_KID:-prisms}
+      POWERSYNC_JWT_AUDIENCE: ${PS_JWT_AUDIENCE:-prisms}
       PRISMS_JOBS_ENABLED: 'true'
       PORT: '3001'
     healthcheck:

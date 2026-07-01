@@ -40,18 +40,19 @@ Generate strong values (`openssl rand -base64 48`) for:
   and a base64 value can contain `/`, which breaks URI parsing and stops the
   `api` and `powersync` services from connecting.
 - `BETTER_AUTH_SECRET` — session/JWT signing for auth.
-- `POWERSYNC_JWT_SECRET` — the API signs short-lived HS256 PowerSync tokens with
-  this (§13).
-- `POWERSYNC_JWT_K_B64URL` — the **same** secret, base64url-encoded, for the
-  PowerSync `jwks` key. They must match:
+- `PS_JWT_SECRET` — the API signs short-lived HS256 PowerSync tokens with this
+  (§13).
+- `PS_JWT_K_B64URL` — the **same** secret, base64url-encoded, for the PowerSync
+  `jwks` key. They must match:
   ```sh
-  printf %s "$POWERSYNC_JWT_SECRET" | basenc --base64url | tr -d '='
+  printf %s "$PS_JWT_SECRET" | basenc --base64url | tr -d '='
   ```
 - `PUBLIC_URL` — the public origin (feeds Better Auth + CSRF trusted origins).
 
-`POWERSYNC_JWT_KID` / `POWERSYNC_JWT_AUDIENCE` default to `prisms` and must be
-identical on the API and in `infra/powersync/powersync.prod.yaml` (they are,
-via the same env vars).
+`PS_JWT_KID` / `PS_JWT_AUDIENCE` default to `prisms` and must be identical on the
+API and in `infra/powersync/powersync.prod.yaml` — the compose file wires all
+four `PS_JWT_*` values to both services (the sync service reads them directly;
+the API reads them as its internal `POWERSYNC_JWT_*` vars).
 
 > Local SQLite persistence on the desktop runs through the web SDK
 > (wa-sqlite/OPFS) inside the Tauri WebView — PowerSync needs its own SQLite

@@ -1,7 +1,7 @@
 # PowerSync service — production config (docker-compose.prod.yml). All secrets
 # come from the environment (see .env.example) via the `!env` tag, so nothing
-# sensitive lives in the repo. The HS256 key here MUST be the base64url of the
-# API's POWERSYNC_JWT_SECRET (the API signs short-lived tokens with that secret;
+# sensitive lives in the repo. The HS256 key here (PS_JWT_K_B64URL) MUST be the
+# base64url of PS_JWT_SECRET (the API signs short-lived tokens with that secret;
 # §13). TODO: rotate to API-served JWKS (RS256) for key rotation without redeploy.
 replication:
   connections:

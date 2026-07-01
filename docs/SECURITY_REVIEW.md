@@ -30,9 +30,9 @@ and deferrals are called out honestly at the end.
   are **no client-widenable parameters** — a client cannot request another user's
   bucket. Tier 2 (`history`) is `auto_subscribe: false` and only ever narrows.
 - The PowerSync token is a short-lived HS256 JWT the API mints from the Better
-  Auth session (`GET /api/powersync/token`), signed with `POWERSYNC_JWT_SECRET`
-  and scoped `sub = user_id`. The sync service validates it against the matching
-  jwks key.
+  Auth session (`GET /api/powersync/token`), signed with the operator-set
+  `PS_JWT_SECRET` and scoped `sub = user_id`. The sync service validates it
+  against the matching jwks key (its base64url form, `PS_JWT_K_B64URL`).
 - Cross-user isolation is asserted in the convergence harness and the server
   integration suite (one user cannot receive another's rows).
 
