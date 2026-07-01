@@ -321,6 +321,16 @@ export function buildOptimisticEffects(name: CommandName, payload: unknown, ctx:
     case 'group.delete':
       return [del('diagram_groups', id)];
 
+    // --- review inbox (§7.13) ----------------------------------------------
+    // Optimistically flip the item's status so it drops out of the open inbox
+    // instantly; the server sets resolved_at + re-applies authoritatively (R17)
+    // and the canonical row reconciles this away. (useReviewInbox re-applies the
+    // status='open' predicate on the MERGED row, so the closed item vanishes.)
+    case 'review.resolve':
+      return [upd('sync_review_items', id, { status: 'resolved' })];
+    case 'review.dismiss':
+      return [upd('sync_review_items', id, { status: 'dismissed' })];
+
     // --- settings -----------------------------------------------------------
     case 'settings.update': {
       const f: Record<string, unknown> = {};

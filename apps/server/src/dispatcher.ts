@@ -1159,6 +1159,27 @@ export function createDispatcher(
         return applied();
       }
 
+      // --- review inbox (§7.13) ---------------------------------------------
+      case 'review.resolve':
+      case 'review.dismiss': {
+        // Close a durable review item. Server-owned trust fields (status is one)
+        // are assigned here, not by the client; the client only names WHICH item
+        // and HOW (resolve vs dismiss) via the verb.
+        const p = payload as Payload<'review.resolve'>;
+        const item = await one(tx.select().from(sync_review_items).where(eq(sync_review_items.id, p.id)).limit(1));
+        const own = ownershipReject('review item', p.id, item, userId);
+        if (own) return own;
+        const status = name === 'review.resolve' ? ('resolved' as const) : ('dismissed' as const);
+        // §7.10 HLC-LWW on the terminal status so a concurrent resolve/dismiss on
+        // two devices converges deterministically (later HLC wins); resolved_at
+        // records the close time.
+        const win = await lwwFields(tx, hlc, userId, 'sync_review_items', p.id, { status });
+        if (Object.keys(win).length > 0) {
+          await tx.update(sync_review_items).set({ status, resolved_at: now, ...sys }).where(eq(sync_review_items.id, p.id));
+        }
+        return applied();
+      }
+
       // --- settings ---------------------------------------------------------
       case 'settings.update': {
         const p = payload as Payload<'settings.update'>;

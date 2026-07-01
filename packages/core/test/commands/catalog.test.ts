@@ -30,10 +30,12 @@ import { buildTreeIndex } from '../../src/graph/tree';
 import { idOf, makeEdge, makeEntry, makeNode } from '../helpers/fixtures';
 
 describe('catalog completeness + strictness (DoD schema test)', () => {
-  it('registers all 50 §8.1 verbs (incl. layout.renormalize_order) + 7 tag verbs and resolves names', () => {
-    expect(COMMAND_NAMES.length).toBe(57);
+  it('registers all 50 §8.1 verbs (incl. layout.renormalize_order) + 7 tag + 2 review verbs and resolves names', () => {
+    expect(COMMAND_NAMES.length).toBe(59);
     expect(isCommandName('node.create')).toBe(true);
     expect(isCommandName('layout.renormalize_order')).toBe(true); // §7.10a, M1
+    expect(isCommandName('review.resolve')).toBe(true); // §7.13 inbox close, M10
+    expect(isCommandName('review.dismiss')).toBe(true);
     expect(isCommandName('node.update')).toBe(false); // no generic update endpoint
   });
 

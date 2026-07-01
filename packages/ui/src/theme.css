@@ -46,6 +46,10 @@ body {
 .px-badge--blocked { background: rgba(255,107,107,0.16); color: var(--px-danger); }
 .px-badge--done { background: rgba(70,192,138,0.16); color: var(--px-ok); }
 .px-badge--unverified { background: rgba(255,196,84,0.16); color: #f4c454; text-transform: none; letter-spacing: 0; }
+/* review-item severity (§7.13 inbox): error/warning/info */
+.px-badge--error { background: rgba(255,107,107,0.16); color: var(--px-danger); }
+.px-badge--warning { background: rgba(255,196,84,0.16); color: #f4c454; }
+.px-badge--info { background: var(--px-surface-2); color: var(--px-text-dim); }
 
 /* "why does this exist?" provenance affordance (§7.8) */
 .px-why { position: relative; display: inline-flex; }

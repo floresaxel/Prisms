@@ -295,6 +295,14 @@ export const groupUpdateSchema = z
   .refine((p) => Object.keys(p).length > 1, 'group.update needs at least one field');
 export const groupDeleteSchema = idOnly;
 
+// --- review inbox (§7.13) ---------------------------------------------------
+// Closing a durable conflict/rejection item. The item row is server-owned and
+// synced down; the client CLOSES it through a command (not a row patch), so the
+// only trusted write path still holds — the server flips `status`+`resolved_at`,
+// re-applies authoritatively, and the canonical row reconciles the overlay away.
+export const reviewResolveSchema = idOnly; // review item id
+export const reviewDismissSchema = idOnly; // review item id
+
 /**
  * The catalog: verb name → payload schema. The dispatcher rejects any name
  * not present here with E_UNKNOWN_COMMAND, and parses with the schema (E_PARSE).
@@ -356,6 +364,8 @@ export const COMMAND_SCHEMAS = {
   'group.create': groupCreateSchema,
   'group.update': groupUpdateSchema,
   'group.delete': groupDeleteSchema,
+  'review.resolve': reviewResolveSchema,
+  'review.dismiss': reviewDismissSchema,
   'settings.update': settingsUpdateSchema,
 } as const;
 

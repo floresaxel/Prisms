@@ -370,7 +370,15 @@ export function useRunningTimer(now: Instant): RunningTimer | null {
 export function useActivityInbox(): Node[] {
   const rows = useRows("SELECT * FROM nodes WHERE node_type = 'activity' AND deleted_at IS NULL");
   return useMemo(
-    () => rows.map(toNode).sort((a, b) => (a.sort_order < b.sort_order ? -1 : a.sort_order > b.sort_order ? 1 : a.id < b.id ? -1 : 1)),
+    () =>
+      rows
+        .map(toNode)
+        // Re-apply the WHERE on the MERGED row: an optimistic activity.promote flips
+        // node_type 'activity'→'task' in the overlay, but useRows evaluates the SQL
+        // predicate only against the replica — so a promoted (or overlay-inserted-
+        // then-retyped) node must be post-filtered out of the inbox here.
+        .filter((n) => n.node_type === 'activity' && n.deleted_at === null)
+        .sort((a, b) => (a.sort_order < b.sort_order ? -1 : a.sort_order > b.sort_order ? 1 : a.id < b.id ? -1 : 1)),
     [rows],
   );
 }
@@ -1070,21 +1078,29 @@ export interface ReviewItemView {
  * newest first. The server (M5) and jobs (M6) create them — command rejections,
  * dependency rejections, HLC conflicts, stale suggestions, automation drift/
  * backstop, schema blocks, import/sync warnings — and they stream down here.
+ *
+ * Read BROADLY (no status filter) and re-apply `status='open'` on the MERGED row:
+ * an optimistic review.resolve/dismiss (M10) flips status in the overlay, but
+ * useRows evaluates the SQL predicate only against the replica — so a just-closed
+ * item (and any server-side soft-deleted one) must be post-filtered out here.
  */
 export function useReviewInbox(): ReviewItemView[] {
-  const rows = useRows("SELECT * FROM sync_review_items WHERE status = 'open' AND deleted_at IS NULL ORDER BY created_at DESC");
+  const rows = useRows('SELECT * FROM sync_review_items');
   return useMemo(
     () =>
-      rows.map((r) => ({
-        id: String(r['id']),
-        itemType: String(r['item_type']),
-        severity: String(r['severity'] ?? 'warning'),
-        title: String(r['title'] ?? ''),
-        detail: typeof r['detail'] === 'string' ? r['detail'] : JSON.stringify(r['detail'] ?? ''),
-        status: String(r['status'] ?? 'open'),
-        commandId: r['command_id'] == null ? null : String(r['command_id']),
-        createdAt: String(r['created_at'] ?? ''),
-      })),
+      rows
+        .filter((r) => String(r['status'] ?? 'open') === 'open' && r['deleted_at'] == null)
+        .map((r) => ({
+          id: String(r['id']),
+          itemType: String(r['item_type']),
+          severity: String(r['severity'] ?? 'warning'),
+          title: String(r['title'] ?? ''),
+          detail: typeof r['detail'] === 'string' ? r['detail'] : JSON.stringify(r['detail'] ?? ''),
+          status: String(r['status'] ?? 'open'),
+          commandId: r['command_id'] == null ? null : String(r['command_id']),
+          createdAt: String(r['created_at'] ?? ''),
+        }))
+        .sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : a.id < b.id ? 1 : -1)),
     [rows],
   );
 }

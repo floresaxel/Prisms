@@ -266,9 +266,11 @@ const user_settings = new Table({
 /**
  * The durable conflict/rejection inbox (§7.13). SERVER-OWNED: the dispatcher (M5)
  * and jobs (M6) create items; they stream down here (M4) for the review inbox.
- * The client never writes these (a rejection just drops the overlay; the item
- * arrives via sync), so it stays out of LOCAL_ONLY_TABLE_NAMES and is never
- * uploaded as a row patch.
+ * The client never CREATES these (a rejection just drops the overlay; the item
+ * arrives via sync). It only CLOSES them — via the `review.resolve`/`review.dismiss`
+ * commands (M10), i.e. an overlay effect + a named envelope, never a row patch —
+ * so it stays out of LOCAL_ONLY_TABLE_NAMES (it is synced, not local-only) and the
+ * only-trusted-write-path invariant holds.
  */
 const sync_review_items = new Table({
   user_id: column.text,
@@ -324,8 +326,9 @@ export const appSchema = new Schema(syncedTables);
 // replica. Both are `localOnly` so PowerSync never enqueues them in the CRUD
 // upload batch — the only trusted upload is the named command envelope read from
 // `client_commands` (see upload-commands.ts). `sync_review_items` is NOT here: it
-// is server-owned and SYNCED down (above), since M5 creates the items and the
-// client only reads them (a rejection drops the overlay; the item arrives via sync).
+// is server-owned and SYNCED down (above). M5 creates the items; the client reads
+// them and closes them through the `review.resolve`/`review.dismiss` commands (M10)
+// — an overlay effect + envelope, never a direct row patch.
 
 /** Pending-command queue. `id` = the client-minted UUIDv7 (V2, §7.2b). */
 export const client_commands = new Table(

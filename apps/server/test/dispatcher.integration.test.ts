@@ -442,6 +442,41 @@ describe.skipIf(!adminUrl)('S11 command dispatcher (§8 pipeline, full catalog)'
     expect(reused).toMatchObject({ result: 'rejected', reject_code: 'E_OWNERSHIP' });
   });
 
+  it('review.resolve / review.dismiss close a synced review item; ownership + replay hold (§7.13, M10)', async () => {
+    const ids = await seedTree();
+    // a rejected command creates a durable command_rejection item (the outcome
+    // carries its id via the frozen response contract).
+    const mkItem = async () => {
+      const [rej] = await results([cmd('node.rename', { id: randomUUID(), title: 'ghost' })], ids.user);
+      expect(rej).toMatchObject({ result: 'rejected', reject_code: 'E_NOT_FOUND' });
+      return rej!.review_item_ids![0]!;
+    };
+    const a = await mkItem();
+    const b = await mkItem();
+
+    // resolve A → status 'resolved' + resolved_at stamped
+    const resolveA = cmd('review.resolve', { id: a });
+    const [ra] = await results([resolveA], ids.user);
+    expect(ra!.result).toBe('applied');
+    const [rowA] = await sql`SELECT status, resolved_at FROM sync_review_items WHERE id = ${a}`;
+    expect(rowA!['status']).toBe('resolved');
+    expect(rowA!['resolved_at']).not.toBeNull();
+
+    // dismiss B → status 'dismissed'
+    const [rb] = await results([cmd('review.dismiss', { id: b })], ids.user);
+    expect(rb!.result).toBe('applied');
+    const [rowB] = await sql`SELECT status FROM sync_review_items WHERE id = ${b}`;
+    expect(rowB!['status']).toBe('dismissed');
+
+    // another user cannot close my item (ownership checked first)
+    const [foreign] = await results([cmd('review.resolve', { id: a })], randomUUID());
+    expect(foreign).toMatchObject({ result: 'rejected', reject_code: 'E_OWNERSHIP' });
+
+    // replay of the resolve is a converged no-op (idempotency by command id)
+    const [replay] = await results([resolveA], ids.user);
+    expect(replay).toEqual({ id: resolveA.id, result: 'noop', original_result: 'applied' });
+  });
+
   it('timer.review can complete the task and enqueue a backstop', async () => {
     const ids = await seedTree();
     const entry = randomUUID();

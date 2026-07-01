@@ -327,6 +327,16 @@ export function createCommands(store: OverlayStore, ctx: CommandContext, deps: E
     async insertSettings(patch: { day_reset_hour: number; timezone: string }): Promise<void> {
       await run('settings.update', { day_reset_hour: patch.day_reset_hour, timezone: patch.timezone });
     },
+
+    // --- review inbox (§7.13, M10) ------------------------------------------
+    /** Close a review item as resolved (the user acted on it). Optimistic. */
+    async resolveReviewItem(id: string): Promise<void> {
+      await run('review.resolve', { id });
+    },
+    /** Close a review item as dismissed (the user judged it not actionable). */
+    async dismissReviewItem(id: string): Promise<void> {
+      await run('review.dismiss', { id });
+    },
   };
 }
 

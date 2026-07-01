@@ -24,6 +24,7 @@ import { Habits } from './screens/Habits';
 import { Inbox } from './screens/Inbox';
 import { Kanban } from './screens/Kanban';
 import { Login } from './screens/Login';
+import { Review } from './screens/Review';
 import { Rules } from './screens/Rules';
 import { Settings } from './screens/Settings';
 import { Worklist } from './screens/Worklist';
@@ -40,6 +41,7 @@ type Route =
   | '/gantt'
   | '/rules'
   | '/blockers'
+  | '/review'
   | '/settings';
 
 function AuthedApp({ user, onSignOut }: { user: SessionUser; onSignOut: () => void }) {
@@ -91,6 +93,7 @@ function AuthedApp({ user, onSignOut }: { user: SessionUser; onSignOut: () => vo
           { label: 'Rules', href: '/rules', active: route === '/rules' },
           { label: 'Blockers', href: '/blockers', active: route === '/blockers' },
           { label: 'Dashboard', href: '/dashboard', active: route === '/dashboard' },
+          { label: 'Review', href: '/review', active: route === '/review' },
           { label: 'Settings', href: '/settings', active: route === '/settings' },
         ]}
         onNavigate={navigate}
@@ -112,7 +115,7 @@ function AuthedApp({ user, onSignOut }: { user: SessionUser; onSignOut: () => vo
           </>
         }
       >
-        <ReviewBanner />
+        <ReviewBanner onOpen={() => navigate('/review')} />
         {rejections.length > 0 && (
           <div className="px-error" data-testid="rejection-toast" onClick={() => setRejections([])}>
             {rejections.map((r) => rejectionMessage(r.reject_code)).join(' ')}
@@ -130,6 +133,7 @@ function AuthedApp({ user, onSignOut }: { user: SessionUser; onSignOut: () => vo
           '/rules': <Rules ctx={ctx} />,
           '/blockers': <Blockers ctx={ctx} />,
           '/dashboard': <Dashboard ctx={ctx} />,
+          '/review': <Review ctx={ctx} />,
           '/settings': <Settings ctx={ctx} />,
         } satisfies Record<Route, ReactNode>)[route] ?? <Worklist ctx={ctx} />}
       </Layout>

@@ -103,6 +103,19 @@ describe('buildOptimisticEffects — special cases', () => {
     expect(eff!.fields).toMatchObject({ id: 's1', criterion_id: 'c1', project_id: 'pr1', score: 3 });
   });
 
+  it('review.resolve / review.dismiss → flip status so the closed item leaves the open inbox (§7.13)', () => {
+    expect(buildOptimisticEffects('review.resolve', { id: 'ri1' }, ctx)).toEqual([
+      { table: 'sync_review_items', row_id: 'ri1', op: 'update', fields: { status: 'resolved' } },
+    ]);
+    expect(buildOptimisticEffects('review.dismiss', { id: 'ri1' }, ctx)).toEqual([
+      { table: 'sync_review_items', row_id: 'ri1', op: 'update', fields: { status: 'dismissed' } },
+    ]);
+    // merged over an open replica item, the status flips → the inbox predicate drops it.
+    const replica = [{ id: 'ri1', user_id: 'u1', item_type: 'command_rejection', status: 'open' }];
+    const merged = mergeTable(replica, stamp(buildOptimisticEffects('review.resolve', { id: 'ri1' }, ctx)));
+    expect(merged[0]).toMatchObject({ id: 'ri1', status: 'resolved' });
+  });
+
   it('block.accept_suggestion (base) → promote + clear ALL suggestion metadata (mirrors §7.5)', () => {
     const effs = buildOptimisticEffects('block.accept_suggestion', { id: 'b1' }, ctx);
     expect(effs).toEqual([
@@ -203,6 +216,19 @@ describe('full catalog coverage', () => {
         expect(['insert', 'update', 'delete']).toContain(e.op);
         expect(typeof e.table).toBe('string');
         expect(e.row_id.length).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it('no command optimistically writes computed_aggregates — no local aggregate upload (§7.4/D.2, M10)', () => {
+    // The dashboard/decision parity DoD: aggregates are server-owned. Since the
+    // only trusted upload is the command envelope built from overlay effects, if
+    // no effect ever targets computed_aggregates, no dashboard path can push a
+    // local aggregate cache upstream (the server static test guards the mirror side).
+    const names = Object.keys(COMMAND_SCHEMAS) as CommandName[];
+    for (const name of names) {
+      for (const e of buildOptimisticEffects(name, anyPayload, ctx)) {
+        expect(e.table, `${name} must not target computed_aggregates`).not.toBe('computed_aggregates');
       }
     }
   });
