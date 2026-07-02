@@ -25,9 +25,9 @@ Baseline: commit `2ab3bf7`, branch `m0-spike`, 2026-07-01.
 | R15 | Two-layer store: read-only replica + disposable overlay; UI reads merge | `overlay-store.ts`, `data-provider.tsx` merged read | 🔎 | S7 |
 | R16 | Synced-row schema versioning separate from command versioning | `schema_version` col, floor check in dispatcher; core primitives (two axes + `isClientTooOld`) ✅ S2 | ⚠️ S4-F1: absent `schema_version` bypasses the floor (latent until floor>1); enforcement otherwise ✅ | S4/S6 |
 | R17 | Trust fields server-assigned; client values ignored | dispatcher trust-strip | ✅ S4 (strip-before-parse; strict schemas reject unlisted trust fields) | S4 |
-| R18 | Idempotency dedup retained ≥ MAX_OFFLINE_HORIZON (90d) | `retention-purge.ts` dedup guard | 🔎 (read side ✅ S4: dedup→noop honored; purge guarantee → S5) | S5 |
-| R19 | External facts advisory only; never gate/diverge | weather badge display-only; engine ignores weather in convergent outcomes | ⚠️ S3-F1 (High): weather can cause `E_BLOCKED_TASK` rejection; jobs side → S5 | S5/S3 |
-| R20 | Import restores data (no replay) + HLC monotonicity | `import-restore.ts` (data-only, FK-ordered), client HLC floor | 🔎 | S5/S8 |
+| R18 | Idempotency dedup retained ≥ MAX_OFFLINE_HORIZON (90d) | `retention-purge.ts` dedup guard | ✅ (read side S4 + write side S5; history side-effect noted S5-F7) | S5 |
+| R19 | External facts advisory only; never gate/diverge | weather badge display-only; engine ignores weather in convergent outcomes | ⚠️ S3-F1 (High): weather can cause `E_BLOCKED_TASK` rejection; jobs side ✅ S5 (weather-poll advisory-only; S5-F10: automations can't see weather at all) | S5/S3 |
+| R20 | Import restores data (no replay) + HLC monotonicity | `import-restore.ts` (data-only, FK-ordered), client HLC floor | ⚠️ server half ✅ S5 (verified incl. allowlist + global-id guard); client HLC floor → S8 | S5/S8 |
 
 ## v1.3 mandatory revisions (§3.2)
 
@@ -43,8 +43,8 @@ Baseline: commit `2ab3bf7`, branch `m0-spike`, 2026-07-01.
 | V8 | Tier 0/1/2 streams before 100k load test | 🔎 | S6 |
 | V9 | LWW default; explicit merges for sort_order + timer intervals | ⚠️ implemented + property-tested; double clock-in survivor rule deviates from §7.10b letter (S2-F1) | S2 |
 | V10 | External-fact state never gates rejection/convergence | ⚠️ **S3-F1 High**: dispatcher `E_BLOCKED_TASK` gate consumes weather-derived blocking; automation-condition tension (S3-F8); unknown-weather→unverified correct | S3/S5 |
-| V11 | Retention purge never deletes dedup inside horizon | 🔎 | S5 |
-| V12 | Import = data restore; encrypted export default on installed targets | 🔎 | S5/S9 |
+| V11 | Retention purge never deletes dedup inside horizon | ✅ S5 (strict-`<` boundary on 90d constants, not env-forgeable) | S5 |
+| V12 | Import = data restore; encrypted export default on installed targets | ⚠️ server half ✅ S5 (data-only, global-id guard, HLC-LWW, non-replayable history); installed-default → S9 | S5/S9 |
 
 ## Definition of Finished (§16) → owning session
 
