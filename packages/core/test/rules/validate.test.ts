@@ -90,4 +90,20 @@ describe('validateAutomationRule (§9.1)', () => {
     expect(badConds.ok).toBe(false);
     if (!badConds.ok) expect(badConds.error.code).toBe('E_PARSE');
   });
+
+  it('rejects a condition that reads an external fact (weather) — it can never fire server-side (§10.3/S5-F10)', () => {
+    const rule: RuleCandidate = {
+      trigger: 'task_created',
+      conditions: {
+        all: [
+          { fact: 'node.type', op: 'eq', value: 'task' },
+          { fact: 'weather.precip_prob', op: 'gt', value: 0.5 },
+        ],
+      },
+      actions: [{ action: 'spawn_task', slot: 0, template: { title: 'x' } }],
+    };
+    const result = validateAutomationRule(rule);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe('E_EXTERNAL_FACT_CONDITION');
+  });
 });

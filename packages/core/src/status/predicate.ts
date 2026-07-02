@@ -84,6 +84,37 @@ export const predicateSchema: z.ZodType<PredicateNode> = z.lazy(() =>
 );
 
 /**
+ * Fact namespaces whose values come from an external provider (weather today;
+ * future providers add their prefix here). External-fact-derived state is
+ * advisory display only (§10.3, R19/V10): it must never gate command acceptance
+ * and must never change a convergent outcome.
+ */
+export const EXTERNAL_FACT_PREFIXES = ['weather.'] as const;
+
+const isExternalFact = (fact: string): boolean =>
+  EXTERNAL_FACT_PREFIXES.some((prefix) => fact.startsWith(prefix));
+
+function walkForExternalFact(node: PredicateNode): boolean {
+  if ('all' in node) return node.all.some(walkForExternalFact);
+  if ('any' in node) return node.any.some(walkForExternalFact);
+  if ('not' in node) return walkForExternalFact(node.not);
+  return isExternalFact(node.fact);
+}
+
+/**
+ * True if any leaf condition in `predicate` reads an external-fact namespace
+ * (§10.3). Used to (a) exclude weather-reading blocker rules from the
+ * acceptance-safe gate (`isBlockedForAcceptance`, status.ts) and (b) reject
+ * automation conditions that reference external facts (they can never fire
+ * server-side — S5-F10 — since jobs never load `external_facts`). A malformed
+ * predicate parses to nothing and returns false (it cannot fire regardless).
+ */
+export function referencesExternalFacts(predicate: unknown): boolean {
+  const parsed = predicateSchema.safeParse(predicate);
+  return parsed.success ? walkForExternalFact(parsed.data) : false;
+}
+
+/**
  * blocker_rules.scope (§6.0): which nodes a rule applies to. All fields
  * optional; omitted node_types defaults to tasks only.
  */
@@ -345,11 +376,18 @@ export function evaluateBlockerRules(
   ctx: FactContext,
   now: Instant,
   interp: PredicateInterpolation = {},
+  opts: { excludeExternalFacts?: boolean } = {},
 ): BlockerEvaluation {
   const blockedBy: BlockerRule[] = [];
   const unverified: BlockerRule[] = [];
   for (const rule of ctx.enabledBlockerRules()) {
     if (!inScope(rule.scope, subject, ctx)) continue;
+    // §10.3/R19: on the acceptance-safe path, a rule that reads any external
+    // fact (weather) is skipped entirely — external state must never gate a
+    // command. The full evaluation (display path) still surfaces it as
+    // blocked/unverified. Skipping the whole rule (not just the weather leaf)
+    // guarantees weather can never contribute to a rejection.
+    if (opts.excludeExternalFacts && referencesExternalFacts(rule.predicate)) continue;
     const result = evalPredicate(rule.predicate, subject, ctx, now, interp);
     if (result === 'true') blockedBy.push(rule);
     else if (result === 'unknown') unverified.push(rule);

@@ -40,6 +40,7 @@ export const ERROR_CODES = [
   // rules engine (§9)
   'E_RULE_SELF_TRIGGER',
   'E_RULE_DEPTH_EXCEEDED',
+  'E_EXTERNAL_FACT_CONDITION', // §10.3/V10: automation conditions may not read external facts (weather)
   // convergence / sync (1.3 §7.2e, §7.6, §7.11, §8) — wired by M5
   'E_DEPENDENCY_REJECTED', // §7.2e: a depends_on command was rejected
   'E_UNKNOWN_TARGET', // §7.2e: references a row in neither replica nor own pending creates

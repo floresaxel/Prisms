@@ -87,6 +87,9 @@ export class StatusIndex {
   private readonly entries = new Map<Uuid, TimeEntry>();
   private readonly openByTask = new Map<Uuid, Map<Uuid, TimeEntry>>();
   private readonly entryCountByTask = new Map<Uuid, number>();
+  // per-task entry starts (entryId → started_at ms) so `earliestEntryStart`
+  // recomputes the SS/SF lag reference (§7.6) after a removal without a scan.
+  private readonly entryStartsByTask = new Map<Uuid, Map<Uuid, Instant>>();
   private readonly blocks = new Map<Uuid, ScheduleBlock>();
   private readonly committedEndsByTask = new Map<Uuid, Map<Uuid, number>>();
   private readonly sprints = new Map<Uuid, Sprint>();
@@ -130,6 +133,7 @@ export class StatusIndex {
       node: (id) => this.nodes.get(id),
       openEntryFor: (taskId) => this.openEntryFor(taskId),
       hasAnyEntry: (nodeId) => (this.entryCountByTask.get(nodeId) ?? 0) > 0,
+      earliestEntryStart: (taskId) => this.earliestEntryStart(taskId),
       hasCommittedBlockAtOrAfter: (taskId, at) => {
         const ends = this.committedEndsByTask.get(taskId);
         if (!ends) return false;
@@ -217,6 +221,9 @@ export class StatusIndex {
   private addEntry(entry: TimeEntry): void {
     this.entries.set(entry.id, entry);
     this.entryCountByTask.set(entry.task_id, (this.entryCountByTask.get(entry.task_id) ?? 0) + 1);
+    const starts = this.entryStartsByTask.get(entry.task_id) ?? new Map<Uuid, Instant>();
+    starts.set(entry.id, isoToEpochMillis(entry.started_at));
+    this.entryStartsByTask.set(entry.task_id, starts);
     if (entry.ended_at === null) {
       const open = this.openByTask.get(entry.task_id) ?? new Map<Uuid, TimeEntry>();
       open.set(entry.id, entry);
@@ -231,8 +238,22 @@ export class StatusIndex {
     const count = (this.entryCountByTask.get(entry.task_id) ?? 1) - 1;
     if (count <= 0) this.entryCountByTask.delete(entry.task_id);
     else this.entryCountByTask.set(entry.task_id, count);
+    const starts = this.entryStartsByTask.get(entry.task_id);
+    if (starts) {
+      starts.delete(id);
+      if (starts.size === 0) this.entryStartsByTask.delete(entry.task_id);
+    }
     this.openByTask.get(entry.task_id)?.delete(id);
     return entry;
+  }
+
+  /** Earliest `started_at` ms across a task's tracked entries (§7.6 SS/SF lag). */
+  private earliestEntryStart(taskId: Uuid): Instant | undefined {
+    const starts = this.entryStartsByTask.get(taskId);
+    if (!starts || starts.size === 0) return undefined;
+    let min: Instant | undefined;
+    for (const ms of starts.values()) if (min === undefined || ms < min) min = ms;
+    return min;
   }
 
   private openEntryFor(taskId: Uuid): TimeEntry | undefined {

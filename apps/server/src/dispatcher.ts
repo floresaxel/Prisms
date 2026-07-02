@@ -33,7 +33,7 @@ import {
   checkNodeRetype,
   checkRule,
   incomingEdges,
-  isBlocked,
+  isBlockedForAcceptance,
   isClientTooOld,
   isCommandName,
   renormalizedOrders,
@@ -694,9 +694,13 @@ export function createDispatcher(
         const own = ownershipReject('task', p.task_id, task, userId);
         if (own) return own;
         if ((task as CoreNode).completed_at !== null) return reject('E_DONE_IMMUTABLE', `task ${p.task_id} is done (I8)`);
-        // §8: clocking into a blocked task is rejected unless force; with force the
-        // resulting open entry makes the task `ongoing`, which wins precedence.
-        if (!p.force && isBlocked(task as CoreNode, await loadFactContext(tx, userId), nowMs)) {
+        // §8/§10.3/R19: clocking into a blocked task is rejected unless force —
+        // but ONLY dependency/non-external blocking gates acceptance.
+        // `isBlockedForAcceptance` excludes weather-reading blocker rules, so an
+        // advisory-weather-only-blocked task clocks in WITHOUT force (external
+        // facts must never cause a rejection or divergence, V10). The display
+        // path (client badges) still shows it weather-blocked/unverified.
+        if (!p.force && isBlockedForAcceptance(task as CoreNode, await loadFactContext(tx, userId), nowMs)) {
           return reject('E_BLOCKED_TASK', `task ${p.task_id} is blocked; clock in with force to override (§8)`);
         }
 

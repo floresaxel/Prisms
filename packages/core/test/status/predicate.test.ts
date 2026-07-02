@@ -10,6 +10,7 @@ import {
   evaluateBlockerRules,
   inScope,
   predicateSchema,
+  referencesExternalFacts,
 } from '../../src/status/predicate';
 import { taskStatus } from '../../src/status/status';
 import { isoToEpochMillis } from '../../src/time/instant';
@@ -48,6 +49,37 @@ function lectureWorld(extra: Parameters<typeof buildFactContext>[0] = { nodes: [
 
 const ev = (predicate: unknown, subject: Node, ctx: FactContext) =>
   evalPredicate(predicate, subject, ctx, NOW);
+
+describe('referencesExternalFacts (§10.3, R19/V10)', () => {
+  it('flags a weather leaf at any depth (all / any / not)', () => {
+    expect(referencesExternalFacts({ fact: 'weather.precip_prob', op: 'gt', value: 0.5 })).toBe(true);
+    expect(
+      referencesExternalFacts({
+        all: [
+          { fact: 'node.title', op: 'eq', value: 'x' },
+          { any: [{ not: { fact: 'weather.high_c', op: 'lt', value: 5 } }] },
+        ],
+      }),
+    ).toBe(true);
+  });
+
+  it('returns false for a purely internal predicate', () => {
+    expect(
+      referencesExternalFacts({
+        all: [
+          { fact: 'node.completed', op: 'eq', value: true },
+          { fact: 'project.phase', op: 'eq', value: 'build' },
+        ],
+      }),
+    ).toBe(false);
+  });
+
+  it('returns false for a malformed predicate (it cannot fire regardless)', () => {
+    expect(referencesExternalFacts({ bogus: true })).toBe(false);
+    expect(referencesExternalFacts(null)).toBe(false);
+    expect(referencesExternalFacts('weather.precip_prob')).toBe(false); // a bare string is not a predicate
+  });
+});
 
 describe('combinators with tri-state logic (§9.2)', () => {
   const T = { fact: 'node.completed', op: 'eq', value: false }; // true here

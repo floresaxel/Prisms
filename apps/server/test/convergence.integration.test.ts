@@ -742,4 +742,57 @@ describe.skipIf(!adminUrl)('S12 convergence harness (two devices, offline edits)
     a.close();
     b.close();
   });
+
+  it('scenario 13b — a weather-blocked task clocks in WITHOUT force; a dependency-blocked one still needs force (R19/V10, S3-F1)', async () => {
+    const p = await project();
+    // A weather blocker rule scoped to tasks, plus two extra tasks (t1 → t2 FS)
+    // for the dependency case. §10.3/R19: external-fact state must never gate a
+    // command — so a task blocked ONLY by weather must clock in without force,
+    // while a dependency-blocked task must still be rejected without force.
+    const t1 = randomUUID(); // incomplete predecessor
+    const t2 = randomUUID(); // FS-blocked by t1
+    await seed(p.user, [
+      seedCmd('settings.update', { weather_location: { lat: 1, lon: 2, label: 'Town' } }),
+      seedCmd('blocker.create', {
+        id: randomUUID(),
+        scope: { node_types: ['task'] },
+        predicate: { all: [{ fact: 'weather.precip_prob', op: 'gt', value: 0.5, key: '{today}' }] },
+        label: 'Rain',
+      }),
+      seedCmd('node.create', { id: t1, node_type: 'task', title: 'T1', sort_order: 'a1', parent_id: p.project }),
+      seedCmd('node.create', { id: t2, node_type: 'task', title: 'T2', sort_order: 'a2', parent_id: p.project }),
+      seedCmd('edge.create', { id: randomUUID(), predecessor_id: t1, successor_id: t2, edge_type: 'FS' }),
+    ]);
+    // a "blocking" weather observation for 2026-06-13 (precip 0.9 > 0.5).
+    await runWeatherPoll(drizzle(sql), { now: () => Date.parse('2026-06-13T09:00:00.000Z') }, async () => [
+      { date: '2026-06-13', high_c: 10, low_c: 5, precip_prob: 0.9, wind_kph: 10 },
+    ]);
+
+    // a dispatcher pinned to 2026-06-13 noon so ctx.today() deterministically
+    // resolves the {today} key against the weather fact keyed town/2026-06-13.
+    const fixed = createDispatcher(drizzle(sql), createRateLimiter({ limit: 100_000, windowMs: 60_000 }), {
+      enqueueBackstop: (job) => {
+        backstops.push(job);
+      },
+      nowIso: () => '2026-06-13T12:00:00.000Z',
+    });
+
+    const dev = new Device('device-a');
+    // p.task is blocked ONLY by weather (no predecessor) → applies without force.
+    const okClock = dev.edit('timer.clock_in', { entry_id: randomUUID(), task_id: p.task, started_at: '2026-06-13T12:05:00.000Z' }, 1000);
+    // t2 is dependency-blocked (t1 incomplete) → rejected without force.
+    const depClock = dev.edit('timer.clock_in', { entry_id: randomUUID(), task_id: t2, started_at: '2026-06-13T12:06:00.000Z' }, 2000);
+    const results = await dev.sync(fixed, p.user);
+    assertContract(results);
+    const byId = Object.fromEntries(results.map((r) => [r.id, r]));
+    // R19/V10 (S3-F1): advisory weather must NOT cause a rejection. (Before R2's
+    // dispatcher fix this was rejected E_BLOCKED_TASK — the regression this pins.)
+    expect(byId[okClock.id], 'weather-only-blocked clock-in').toMatchObject({ result: 'applied' });
+    // dependency blocking is real state and still gates a non-force clock-in.
+    expect(byId[depClock.id], 'dependency-blocked clock-in').toMatchObject({ result: 'rejected', reject_code: 'E_BLOCKED_TASK' });
+
+    const open = await sql`SELECT task_id FROM time_entries WHERE user_id = ${p.user} AND ended_at IS NULL AND deleted_at IS NULL`;
+    expect(open.map((r) => r['task_id'])).toEqual([p.task]); // exactly the weather-blocked task is running
+    dev.close();
+  });
 });

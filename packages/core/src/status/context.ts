@@ -49,6 +49,8 @@ export interface FactContext {
   openEntryFor(taskId: Uuid): TimeEntry | undefined;
   /** Any non-deleted entry, open or closed — the SS gate (§7.1). */
   hasAnyEntry(nodeId: Uuid): boolean;
+  /** Earliest `started_at` across a task's non-deleted entries — the SS/SF lag reference (§7.6). */
+  earliestEntryStart(nodeId: Uuid): Instant | undefined;
   /** A committed (never suggested, §2.6) block still current or upcoming. */
   hasCommittedBlockAtOrAfter(taskId: Uuid, now: Instant): boolean;
   /** Direct or inherited (ancestor) membership in a sprint active today. */
@@ -69,8 +71,14 @@ export function buildFactContext(rows: FactRows): FactContext {
 
   const openEntries = new Map<Uuid, TimeEntry>();
   const nodesWithEntries = new Set<Uuid>();
+  const earliestStartMsByTask = new Map<Uuid, Instant>();
   for (const entry of live(rows.time_entries)) {
     nodesWithEntries.add(entry.task_id);
+    const startMs = isoToEpochMillis(entry.started_at);
+    const earliest = earliestStartMsByTask.get(entry.task_id);
+    if (earliest === undefined || startMs < earliest) {
+      earliestStartMsByTask.set(entry.task_id, startMs);
+    }
     if (entry.ended_at === null) {
       const current = openEntries.get(entry.task_id);
       // §7.4 transient double-open: expose the latest-started one.
@@ -135,6 +143,7 @@ export function buildFactContext(rows: FactRows): FactContext {
     node: (id) => getNode(tree, id),
     openEntryFor: (taskId) => openEntries.get(taskId),
     hasAnyEntry: (nodeId) => nodesWithEntries.has(nodeId),
+    earliestEntryStart: (nodeId) => earliestStartMsByTask.get(nodeId),
     hasCommittedBlockAtOrAfter: (taskId, now) =>
       (committedEndsMs.get(taskId) ?? []).some((ends) => ends > now),
     inActiveSprint: (nodeId, now) => {
