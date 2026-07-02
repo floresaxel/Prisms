@@ -10,7 +10,8 @@
 - Audit sessions are **report-only**: findings + suggested changes, no code edits. Fixes are batched after the user reviews the reports.
 - Every finding gets an ID (`S<n>-F<m>`), a severity, evidence (`file:line`), and a concrete suggested change.
 - Severity: **Critical** (data loss/divergence/security hole), **High** (spec violation with user-visible effect), **Medium** (spec deviation, correctness risk, or real footgun), **Low** (hygiene, efficiency, hardening), **Info** (accepted deviation / observation).
-- Central register: `docs/audit/00-feature-matrix.md` (requirement → evidence → status → owning session). Each session updates the matrix rows it owns.
+- Central register: `docs/audit/00-feature-matrix.md` (requirement → evidence → status → owning session).
+- **Parallel execution:** the full per-session work orders (objectives, scope, checklists, report template) live in `Blueprints/AUDIT_PLAYBOOK.md`, written so sessions 2–10 can run as independent LLMs concurrently. In that mode each session writes **only** its own `session-0N-*.md` (no shared-file edits); a final **Synthesis** run dedups findings across reports, resolves handoffs, updates this tracker + the matrix, and writes `docs/audit/FINAL_REPORT.md`. Sequential runs may update the matrix directly as originally planned.
 
 ## The 10 sessions
 
@@ -29,7 +30,7 @@
 
 ## How to run the next session
 
-Say e.g. *"run audit session 2"*. The session reads its scope files, verifies its spec anchors, writes `docs/audit/session-0N-<name>.md`, and updates `00-feature-matrix.md` rows it owns. Session 10 additionally writes `FINAL_REPORT.md` consolidating all findings ranked by severity.
+Sequential: say e.g. *"run audit session 2"*. Parallel: dispatch each session with the prompt from the cheat-sheet at the bottom of `Blueprints/AUDIT_PLAYBOOK.md`, then run the Synthesis once all reports exist. Either way each session produces `docs/audit/session-0N-<name>.md`; the consolidated conclusion lands in `docs/audit/FINAL_REPORT.md`.
 
 ## Baseline (Session 1, 2026-07-01)
 
