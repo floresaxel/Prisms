@@ -9,7 +9,7 @@ Baseline: commit `2ab3bf7`, branch `m0-spike`, 2026-07-01.
 | ID | Requirement (short) | Evidence (coarse) | Status | Owner |
 |----|--------------------|-------------------|--------|-------|
 | R1 | Platforms: web, Win, macOS, Android, iOS | `apps/web` (Vite/PWA), `apps/desktop` (Tauri v2 = web build), `apps/mobile` (Expo) | 🔎 | S9 |
-| R2 | Local SQLite first; UI never waits on network | wa-sqlite/OPFS (web), quick-sqlite (mobile); PowerSync live queries | 🔎 | S7/S8 |
+| R2 | Local SQLite first; UI never waits on network | wa-sqlite/OPFS (web), quick-sqlite (mobile); PowerSync live queries | ✅ S8 (provider + SWR reads all local; hydration gating prevents network-wait UX); app sweep → S9 | S7/S8 |
 | R3 | Offline operation + multi-device convergence | convergence harness 13 scenarios `apps/server/test/convergence.integration.test.ts` | 🔎 | S5/S10 |
 | R4 | Spawning, unblocking, clock-in/out, agenda edits, suggestion accept/reject offline | optimistic effect builders `packages/ui/src/powersync/effects.ts` | ⚠️ **S7-F1 High: offline spawning does not exist** (no client rules engine); soft-delete closure degraded (S7-F7); other verbs ✅ | S7 |
 | R5 | Vanilla Postgres server / vanilla SQLite client | `docker-compose.yml`, `packages/db` | ✅ S6 (vanilla PG + `wal_level=logical`; PowerSync loose SQLite schema client-side) | S6 |
@@ -20,7 +20,7 @@ Baseline: commit `2ab3bf7`, branch `m0-spike`, 2026-07-01.
 | R10 | Local-first backup/export/import, no managed service | `packages/ui/src/portability/*`, `GET /sync/export`, `POST /sync/import`, `scripts/{backup,restore}.sh` | 🔎 | S5/S8/S10 |
 | R11 | Versioned payloads + exports; old clients fail gracefully | `client_too_old` path, export version gate | 🔎 | S4/S8 |
 | R12 | Conflicts/rejections → durable review inbox | `sync_review_items` + Review screens (web/mobile) | ⚠️ server half ✅ S4 (every rejection → durable linked item, typed mapping); UI → S9 | S4/S9 |
-| R13 | Secure storage + optional DB encryption adapters | `packages/ui/src/adapters/{secure-storage,db-encryption}.ts`, `apps/mobile/src/secure-storage.ts` | 🔎 | S8/S9 |
+| R13 | Secure storage + optional DB encryption adapters | `packages/ui/src/adapters/{secure-storage,db-encryption}.ts`, `apps/mobile/src/secure-storage.ts` | ⚠️ web half ✅ S8 (provider-neutral port, honest degradation docs, test fake); installed impls → S9 | S8/S9 |
 | R14 | Providers behind adapters; nothing leaks into core | core deps = fractional-indexing, rrule, uuid, zod only (`packages/core/package.json:26-31`); zero workspace imports in core src | ✅ (S1, re-check S3) | S1/S3 |
 | R15 | Two-layer store: read-only replica + disposable overlay; UI reads merge | `overlay-store.ts`, `data-provider.tsx` merged read | ✅ S7 (atomic enqueue, local-only overlay tables, loud guard; read-path half → S8) | S7 |
 | R16 | Synced-row schema versioning separate from command versioning | `schema_version` col, floor check in dispatcher; core primitives (two axes + `isClientTooOld`) ✅ S2 | ⚠️ S4-F1: absent `schema_version` bypasses the floor (latent until floor>1); enforcement otherwise ✅ | S4/S6 |
@@ -41,7 +41,7 @@ Baseline: commit `2ab3bf7`, branch `m0-spike`, 2026-07-01.
 | V6 | Automation template versioning; backstop checks content, raises drift review item | ⚠️ content-comparison half verified in core (S3); `template_version` read-but-never-written (S3-F4); backstop behavior → S5 | S5 |
 | V7 | Incremental fact-keyed StatusIndex; no stored status; no full scan | ⚠️ primitive verified + 100k gate (touch<100, ~0.02ms); **unused by any runtime path** (S2-F3, fan-out gaps S2-F4) | S2 |
 | V8 | Tier 0/1/2 streams before 100k load test | ⚠️ S6: security airtight (auth.user_id() everywhere, no client params ✅); tier substance nominal — Tier 0 = whole tree, Tier 2 ≈ empty (S6-F1); command_results = unreadable full 90d log (S6-F2) | S6 |
-| V9 | LWW default; explicit merges for sort_order + timer intervals | ⚠️ implemented + property-tested; double clock-in survivor rule deviates from §7.10b letter (S2-F1); client schema omits `hlc` → (sort_order,hlc) key unimplementable in UI (S6-F3) | S2 |
+| V9 | LWW default; explicit merges for sort_order + timer intervals | ⚠️ implemented + property-tested; double clock-in survivor rule deviates from §7.10b letter (S2-F1); UI sibling order deterministic+convergent via `(sort_order, id)` — spec's hlc tiebreak deviation only (S6-F3 downgraded by S8-F4) | S2 |
 | V10 | External-fact state never gates rejection/convergence | ⚠️ **S3-F1 High**: dispatcher `E_BLOCKED_TASK` gate consumes weather-derived blocking; automation-condition tension (S3-F8); unknown-weather→unverified correct | S3/S5 |
 | V11 | Retention purge never deletes dedup inside horizon | ✅ S5 (strict-`<` boundary on 90d constants, not env-forgeable) | S5 |
 | V12 | Import = data restore; encrypted export default on installed targets | ⚠️ server half ✅ S5 (data-only, global-id guard, HLC-LWW, non-replayable history); installed-default → S9 | S5/S9 |
