@@ -14,7 +14,7 @@ Baseline: commit `2ab3bf7`, branch `m0-spike`, 2026-07-01.
 | R4 | Spawning, unblocking, clock-in/out, agenda edits, suggestion accept/reject offline | optimistic effect builders `packages/ui/src/powersync/effects.ts` | 🔎 | S7 |
 | R5 | Vanilla Postgres server / vanilla SQLite client | `docker-compose.yml`, `packages/db` | 🔎 | S6 |
 | R6 | No arbitrary SQL upload; named commands only | connector loud-guard + envelope upload `packages/ui/src/powersync/{connector,upload-commands}.ts` | 🔎 | S7 |
-| R7 | Server improves, never required offline | client-side status/aggregates in core | 🔎 (S2: status derivation fully client-computable ✅; aggregates → S3) | S2/S3 |
+| R7 | Server improves, never required offline | client-side status/aggregates in core | ✅ (S2+S3: status, aggregates, greedy scheduler all pure/offline-computable; S3-F2 affects correctness of hour values, not offline capability) | S2/S3 |
 | R8 | LLM-friendly: strict TS, contracts, pure fns, high core coverage | `tsconfig.base.json` (strict + noUncheckedIndexedAccess), core-purity lint bans (`eslint.config.mjs:132-179`), CI coverage gate ≥90% | ✅ (S1) | S1 |
 | R9 | Command history is product data (explain "why") | provenance cols + `explainProvenance` + WhyButton | 🔎 | S4/S8 |
 | R10 | Local-first backup/export/import, no managed service | `packages/ui/src/portability/*`, `GET /sync/export`, `POST /sync/import`, `scripts/{backup,restore}.sh` | 🔎 | S5/S8/S10 |
@@ -26,7 +26,7 @@ Baseline: commit `2ab3bf7`, branch `m0-spike`, 2026-07-01.
 | R16 | Synced-row schema versioning separate from command versioning | `schema_version` col, floor check in dispatcher; core primitives (two axes + `isClientTooOld`) ✅ S2 | 🔎 enforcement | S4/S6 |
 | R17 | Trust fields server-assigned; client values ignored | dispatcher trust-strip | 🔎 | S4 |
 | R18 | Idempotency dedup retained ≥ MAX_OFFLINE_HORIZON (90d) | `retention-purge.ts` dedup guard | 🔎 | S5 |
-| R19 | External facts advisory only; never gate/diverge | weather badge display-only; engine ignores weather in convergent outcomes | 🔎 | S5/S3 |
+| R19 | External facts advisory only; never gate/diverge | weather badge display-only; engine ignores weather in convergent outcomes | ⚠️ S3-F1 (High): weather can cause `E_BLOCKED_TASK` rejection; jobs side → S5 | S5/S3 |
 | R20 | Import restores data (no replay) + HLC monotonicity | `import-restore.ts` (data-only, FK-ordered), client HLC floor | 🔎 | S5/S8 |
 
 ## v1.3 mandatory revisions (§3.2)
@@ -38,11 +38,11 @@ Baseline: commit `2ab3bf7`, branch `m0-spike`, 2026-07-01.
 | V3 | HLC-order apply; park/reject on missing precondition, linked review item | 🔎 | S4 |
 | V4 | Trust fields server-assigned | 🔎 | S4 |
 | V5 | Additive-only synced schema; old clients ignore unknown columns | 🔎 (S2-F2: additive guard exists but gates nothing — S6 to enforce) | S6 |
-| V6 | Automation template versioning; backstop checks content, raises drift review item | 🔎 | S5 |
+| V6 | Automation template versioning; backstop checks content, raises drift review item | ⚠️ content-comparison half verified in core (S3); `template_version` read-but-never-written (S3-F4); backstop behavior → S5 | S5 |
 | V7 | Incremental fact-keyed StatusIndex; no stored status; no full scan | ⚠️ primitive verified + 100k gate (touch<100, ~0.02ms); **unused by any runtime path** (S2-F3, fan-out gaps S2-F4) | S2 |
 | V8 | Tier 0/1/2 streams before 100k load test | 🔎 | S6 |
 | V9 | LWW default; explicit merges for sort_order + timer intervals | ⚠️ implemented + property-tested; double clock-in survivor rule deviates from §7.10b letter (S2-F1) | S2 |
-| V10 | External-fact state never gates rejection/convergence | 🔎 | S3/S5 |
+| V10 | External-fact state never gates rejection/convergence | ⚠️ **S3-F1 High**: dispatcher `E_BLOCKED_TASK` gate consumes weather-derived blocking; automation-condition tension (S3-F8); unknown-weather→unverified correct | S3/S5 |
 | V11 | Retention purge never deletes dedup inside horizon | 🔎 | S5 |
 | V12 | Import = data restore; encrypted export default on installed targets | 🔎 | S5/S9 |
 
