@@ -18,7 +18,7 @@
 | # | Session | Scope (files) | Spec anchors | Status |
 |---|---------|--------------|--------------|--------|
 | 1 | **Foundation & tooling** | root configs, all 7 manifests, eslint boundaries/purity, turbo, CI workflows, repo layout, feature-matrix setup | §5, §6, §15, §16, R8, R14 | ✅ done — `session-01-foundation.md` |
-| 2 | **Core primitives** | `packages/core/src/{time,merge,sync,status}` + their tests | §7.9–§7.12, §9.1, V7, V9, R15/R16 contracts | ⬜ pending → `session-02-core-primitives.md` |
+| 2 | **Core primitives** | `packages/core/src/{time,merge,sync,status}` + their tests | §7.9–§7.12, §9.1, V7, V9, R15/R16 contracts | ✅ done — `session-02-core-primitives.md` (F1–F9; 3 Medium) |
 | 3 | **Core engines** | `packages/core/src/{commands,rules,scheduler,aggregates,graph,domain}` + tests | §7.4–§7.6, §8, §9.2, §10 (pure), §11 | ⬜ pending → `session-03-core-engines.md` |
 | 4 | **Server dispatcher & trust** | `apps/server/src/{dispatcher,app,auth,env,rate-limit,request-log,main,index}.ts` | §7.2b–e, §7.5, §7.8, §7.11, §10.1, R6, R17, R18, V2–V4 | ⬜ pending → `session-04-server-dispatcher.md` |
 | 5 | **Server jobs** | `apps/server/src/jobs/*` | §7.4, §7.5, §10.2, §10.3, §12, §13.1, V6, V11, R18, R19 | ⬜ pending → `session-05-server-jobs.md` |
