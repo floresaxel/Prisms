@@ -4,21 +4,23 @@ Central register: intended feature → implementation evidence → audit status.
 
 Baseline: commit `2ab3bf7`, branch `m0-spike`, 2026-07-01.
 
+**FINAL (Synthesis, 2026-07-02):** all 10 sessions complete. R1–R20: **12 ✅ · 8 ⚠️ · 0 ❌** · V1–V12: **6 ✅ · 6 ⚠️** · DoF 1–23: **12 ✅ · 11 ⚠️ · 0 ❌**. Findings: **0 Critical · 6 High** (all re-verified at synthesis) · consolidated register + remediation backlog in [FINAL_REPORT.md](FINAL_REPORT.md).
+
 ## Hard requirements (ARCHITECTURE_1.3 §2)
 
 | ID | Requirement (short) | Evidence (coarse) | Status | Owner |
 |----|--------------------|-------------------|--------|-------|
-| R1 | Platforms: web, Win, macOS, Android, iOS | `apps/web` (Vite/PWA), `apps/desktop` (Tauri v2 = web build), `apps/mobile` (Expo) | ⚠️ S9: all targets exist/build; mobile runtime hazards (React pairing S9-F3, crypto.subtle S9-F2), desktop runtime unverified; DoF 23 → S10 | S9 |
+| R1 | Platforms: web, Win, macOS, Android, iOS | `apps/web` (Vite/PWA), `apps/desktop` (Tauri v2 = web build), `apps/mobile` (Expo) | ⚠️ S9/S10: all targets exist/build; mobile runtime hazards (React pairing S9-F3, crypto.subtle S9-F2); smoke-flow artifacts exist but no runner executes them — DoF 23 exception documented, acceptance pending (S10-F8) | S9/S10 |
 | R2 | Local SQLite first; UI never waits on network | wa-sqlite/OPFS (web), quick-sqlite (mobile); PowerSync live queries | ✅ S8 (provider + SWR reads all local; hydration gating prevents network-wait UX); app sweep → S9 | S7/S8 |
-| R3 | Offline operation + multi-device convergence | convergence harness 13 scenarios `apps/server/test/convergence.integration.test.ts` | 🔎 | S5/S10 |
+| R3 | Offline operation + multi-device convergence | convergence harness 13 scenarios `apps/server/test/convergence.integration.test.ts` | ✅ S10: all 13 scenarios green vs live Postgres (114/114 server integration); every §15-named scenario present; assertion-depth caveats S10-F3 | S5/S10 |
 | R4 | Spawning, unblocking, clock-in/out, agenda edits, suggestion accept/reject offline | optimistic effect builders `packages/ui/src/powersync/effects.ts` | ⚠️ **S7-F1 High: offline spawning does not exist** (no client rules engine); soft-delete closure degraded (S7-F7); other verbs ✅ | S7 |
 | R5 | Vanilla Postgres server / vanilla SQLite client | `docker-compose.yml`, `packages/db` | ✅ S6 (vanilla PG + `wal_level=logical`; PowerSync loose SQLite schema client-side) | S6 |
 | R6 | No arbitrary SQL upload; named commands only | connector loud-guard + envelope upload `packages/ui/src/powersync/{connector,upload-commands}.ts` | ✅ end-to-end (S4 no generic endpoint + S7 loud guard, envelope-only upload) | S7 |
 | R7 | Server improves, never required offline | client-side status/aggregates in core | ✅ (S2+S3: status, aggregates, greedy scheduler all pure/offline-computable; S3-F2 affects correctness of hour values, not offline capability) | S2/S3 |
 | R8 | LLM-friendly: strict TS, contracts, pure fns, high core coverage | `tsconfig.base.json` (strict + noUncheckedIndexedAccess), core-purity lint bans (`eslint.config.mjs:132-179`), CI coverage gate ≥90% | ✅ (S1) | S1 |
 | R9 | Command history is product data (explain "why") | provenance cols + `explainProvenance` + WhyButton | ⚠️ S4: row-level provenance ✅; `command_log.effects`/`parent_command_id`/`triggering_command_id` never written (S4-F3); UI → S8 | S4/S8 |
-| R10 | Local-first backup/export/import, no managed service | `packages/ui/src/portability/*`, `GET /sync/export`, `POST /sync/import`, `scripts/{backup,restore}.sh` | 🔎 | S5/S8/S10 |
-| R11 | Versioned payloads + exports; old clients fail gracefully | `client_too_old` path, export version gate | 🔎 | S4/S8 |
+| R10 | Local-first backup/export/import, no managed service | `packages/ui/src/portability/*`, `GET /sync/export`, `POST /sync/import`, `scripts/{backup,restore}.sh` | ✅ (S5 server data-only import + global-id guard; S8 client crypto/floor; S10 scripts + docs verified against prod compose) | S5/S8/S10 |
+| R11 | Versioned payloads + exports; old clients fail gracefully | `client_too_old` path, export version gate | ⚠️ export side ✅ (S2 strict versioned manifest + S8 envelope errors); command side vacuous end-to-end — clients never send versions and the server skips the floor when absent (S7-F3 + S4-F1, coupled fix) | S4/S8/S10 |
 | R12 | Conflicts/rejections → durable review inbox | `sync_review_items` + Review screens (web/mobile) | ✅ (S4 server + S9 UI present/e2e-covered; lifecycle caveat S5-F1) | S4/S9 |
 | R13 | Secure storage + optional DB encryption adapters | `packages/ui/src/adapters/{secure-storage,db-encryption}.ts`, `apps/mobile/src/secure-storage.ts` | ⚠️ web ✅; mobile impl present, runtime-unverified; shared-device logout gap S9-F1 | S8/S9 |
 | R14 | Providers behind adapters; nothing leaks into core | core deps = fractional-indexing, rrule, uuid, zod only (`packages/core/package.json:26-31`); zero workspace imports in core src | ✅ (S1, re-check S3) | S1/S3 |
@@ -40,44 +42,49 @@ Baseline: commit `2ab3bf7`, branch `m0-spike`, 2026-07-01.
 | V5 | Additive-only synced schema; old clients ignore unknown columns | ✅ S6 (0008 verified additive: all adds nullable/defaulted, live-DB-safe sentinel backfill); mechanical gate still absent (S2-F2/S6-F5) | S6 |
 | V6 | Automation template versioning; backstop checks content, raises drift review item | ⚠️ content-comparison half verified in core (S3); `template_version` read-but-never-written (S3-F4); backstop behavior → S5 | S5 |
 | V7 | Incremental fact-keyed StatusIndex; no stored status; no full scan | ⚠️ primitive verified + 100k gate (touch<100, ~0.02ms); **unused by any runtime path** (S2-F3, fan-out gaps S2-F4) | S2 |
-| V8 | Tier 0/1/2 streams before 100k load test | ⚠️ S6: security airtight (auth.user_id() everywhere, no client params ✅); tier substance nominal — Tier 0 = whole tree, Tier 2 ≈ empty (S6-F1); command_results = unreadable full 90d log (S6-F2) | S6 |
+| V8 | Tier 0/1/2 streams before 100k load test | ⚠️ S6: security airtight (auth.user_id() everywhere, no client params ✅); tier substance nominal — Tier 0 = whole tree, Tier 2 ≈ empty (S6-F1); command_results = unreadable full 90d log (S6-F2); 100k cold-start unmeasured (S10) | S6/S10 |
 | V9 | LWW default; explicit merges for sort_order + timer intervals | ⚠️ implemented + property-tested; double clock-in survivor rule deviates from §7.10b letter (S2-F1); UI sibling order deterministic+convergent via `(sort_order, id)` — spec's hlc tiebreak deviation only (S6-F3 downgraded by S8-F4) | S2 |
 | V10 | External-fact state never gates rejection/convergence | ⚠️ **S3-F1 High**: dispatcher `E_BLOCKED_TASK` gate consumes weather-derived blocking; automation-condition tension (S3-F8); unknown-weather→unverified correct | S3/S5 |
 | V11 | Retention purge never deletes dedup inside horizon | ✅ S5 (strict-`<` boundary on 90d constants, not env-forgeable) | S5 |
 | V12 | Import = data restore; encrypted export default on installed targets | ⚠️ server ✅ S5; web/desktop installed-default ✅ S9; mobile default path likely throws (crypto.subtle absent — S9-F2) | S5/S9 |
 
-## Definition of Finished (§16) → owning session
+## Definition of Finished (§16) — final verdicts (Synthesis)
 
-| DoF | Item (short) | Owner |
-|-----|--------------|-------|
-| 1–3 | all writes via executeCommand; no generic update endpoint; envelopes not row patches | S4, S7 |
-| 4–6 | two-layer store; reconcile-to-identical + rollback-to-review; command id end-to-end | S7 |
-| 7 | HLC order + causal depends_on | S4 |
-| 8–9 | offline feature set; two-device convergence incl. sort_order/double clock-in/mixed schema/external facts | S7, S10 |
-| 10–11 | jobs: consistent snapshots, no clobber; client aggregates local-only, server aggregates synced with provenance | S5 |
-| 12–14 | suggestion batch lifecycle + stale rejection; soft-delete recreate; FS/SS/FF/SF tested | S3, S5, S6 |
-| 15 | command vs schema version enforced at upload + export/import | S4, S8 |
-| 16 | incremental status at 100k budget; no stored status column | S2, S10 |
-| 17–19 | server-assigned provenance; drift surfaced; durable review inbox | S4, S5, S9 |
-| 20 | export/import round-trip guarantees | S5, S8 |
-| 21 | secure storage; encrypted-by-default installed export; documented limits | S9 |
-| 22 | adapters contain vendors; external facts never gate | S3, S5 |
-| 23 | platform smoke tests or documented exception | S9, S10 |
+| DoF | Item (short) | Verdict |
+|-----|--------------|---------|
+| 1–3 | all writes via executeCommand; no generic update endpoint; envelopes not row patches | ✅ (S4 routes + S7 loud guard + S9 screen sweep) |
+| 4–6 | two-layer store; reconcile-to-identical + rollback-to-review; command id end-to-end | ✅ (S7; DoF 5 carries the S7-F6 drop-on-ack timing note) |
+| 7 | HLC order + causal depends_on | ⚠️ server exact (S4); real clients never send `depends_on` (S7-F5) |
+| 8 | offline feature set (spawning, unblocking, timer, agenda, suggestions) | ⚠️ **spawning absent offline (S7-F1 High)**; delete-closure degraded (S7-F7); rest ✅ |
+| 9 | two-device convergence incl. sort_order/double clock-in/mixed schema/external facts | ✅ (13 scenarios green vs live PG; assertion-depth caveats S10-F3) |
+| 10–11 | jobs: consistent snapshots, no clobber; client aggregates local-only, server aggregates synced with provenance | ✅ (S5; snapshot isolation nit S5-F5; hour-value correctness S5-F4) |
+| 12 | suggestion batch lifecycle + stale rejection | ⚠️ batches/supersession/stale ✅; `replaces_block_id` never stamped → accept double-books (S5-F2) |
+| 13 | soft-delete recreate | ✅ (S6 partial uniques + S4 write-site arbiters) |
+| 14 | FS/SS/FF/SF tested | ⚠️ placement gates exact + property-tested; SF completion lag + SS availability lag dropped (S3-F5) |
+| 15 | command vs schema version enforced at upload + export/import | ⚠️ export ✅; envelope side vacuous (S7-F3 + S4-F1) |
+| 16 | incremental status at 100k budget; no stored status column | ⚠️ no stored column ✅; budget met by the primitive only — no runtime path uses the index (S2-F3/S4-F2/S8-F1) |
+| 17 | server-assigned provenance | ✅ (S4) |
+| 18 | automation drift surfaced, never silently overwritten | ✅ decision table (S5); version attribution missing (S3-F4) |
+| 19 | durable review inbox | ✅ (S4 server + S9 UI; lifecycle unwired S5-F1) |
+| 20 | export/import round-trip guarantees | ✅ (S5 + S8 + m13 tests) |
+| 21 | secure storage; encrypted-by-default installed export; documented limits | ⚠️ web/desktop ✅; mobile export statically broken (S9-F2); logout boundary (S9-F1) |
+| 22 | adapters contain vendors; external facts never gate | ⚠️ adapters ✅ (S1/S3/S5); weather gates clock-in acceptance (S3-F1 High) |
+| 23 | platform smoke tests or documented exception | ⚠️ web ✅ in CI; mobile/desktop exception documented but unaccepted; mobile flow would fail today (S10-F8) |
 
 ## Annex A recommendations (A1–A8) — NOT adopted into v1.4
 
 Verified S1: `CHANGE_SPEC_v1.0_to_v1.4.md` contains no reference to Annex A; the migration plan (M0–M15) implemented the change-spec only. These are a candidate backlog, to be prioritized in Session 10:
 
-| ID | Feature | Status |
+| ID | Feature | Status (S10 prioritization) |
 |----|---------|--------|
-| A1 | Device registry | ➖ backlog |
-| A2 | Clock-skew guard | ➖ backlog |
-| A3 | Optimistic mismatch reconciliation (checksum) | ➖ backlog |
-| A4 | Command queue crash recovery | ➖ backlog |
-| A5 | Command-history compaction/redaction | ➖ backlog |
-| A6 | Import modes (merge/replace) | ➖ backlog |
-| A7 | Local-first search & derived indexes | ➖ backlog |
-| A8 | Sync/debug diagnostics screen | ➖ backlog |
+| A1 | Device registry | ➖ defer — post-v1 multi-device value; S4-F7's per-device HLC floor would ride on it |
+| A2 | Clock-skew guard | ➖ **adopt next** — small; closes S7-F8's restart-regression class + a documented residual risk |
+| A3 | Optimistic mismatch reconciliation | ➖ adopt soon — S7-F6's proper fix (reconcile on canonical arrival) builds 80% of it |
+| A4 | Command queue crash recovery | ➖ **adopt next** — the designed umbrella for the S7-F2/S7-F9 upload fixes; enqueue atomicity already done |
+| A5 | Command-history compaction/redaction | ➖ adopt when deciding history retention (the S5-F7 vehicle) |
+| A6 | Import modes (merge/replace) | ➖ defer — current restore+skip is safe, tested, honestly documented |
+| A7 | Local-first search & derived indexes | ➖ defer — product feature; real per-platform FTS cost; no gate depends on it |
+| A8 | Sync/debug diagnostics screen | ➖ adopt soon — cheap; would have made S7-F2's silent wedge user-visible |
 
 ## Structural conformance (§5 stack, §6 layout) — Session 1 verdicts
 
