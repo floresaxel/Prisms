@@ -292,7 +292,7 @@ Prisms is a local-first, multi-device planning app: web (Vite/React/PWA), deskto
 | Session | Wave | Depends on | Status |
 |---|---|---|---|
 | R1 hygiene+spec | 1 | — | ✅ merged `a9a2a5f` (2026-07-02; gate 21/21 w/ PG env, db 23/23 + server 114/114 direct, prod image builds) |
-| R2 status semantics | 1 | — | ⬜ |
+| R2 status semantics | 1 | — | ✅ merged `05a3bc6` (2026-07-02; core 547 + coverage 90.49/93.4/93.58, server 115, convergence 14/14, turbo 21/21; red→green pinned via scenario 13b) |
 | R3 hours correctness | 1 | — | ⬜ |
 | R4 jobs lifecycle | 1 | — | ⬜ |
 | R9 account+mobile | 1 | — | ⬜ |
