@@ -13,19 +13,19 @@ Baseline: commit `2ab3bf7`, branch `m0-spike`, 2026-07-01.
 | R3 | Offline operation + multi-device convergence | convergence harness 13 scenarios `apps/server/test/convergence.integration.test.ts` | 🔎 | S5/S10 |
 | R4 | Spawning, unblocking, clock-in/out, agenda edits, suggestion accept/reject offline | optimistic effect builders `packages/ui/src/powersync/effects.ts` | 🔎 | S7 |
 | R5 | Vanilla Postgres server / vanilla SQLite client | `docker-compose.yml`, `packages/db` | 🔎 | S6 |
-| R6 | No arbitrary SQL upload; named commands only | connector loud-guard + envelope upload `packages/ui/src/powersync/{connector,upload-commands}.ts` | 🔎 | S7 |
+| R6 | No arbitrary SQL upload; named commands only | connector loud-guard + envelope upload `packages/ui/src/powersync/{connector,upload-commands}.ts` | ⚠️ server half ✅ S4 (no generic endpoint; envelope-only routes); client half → S7 | S7 |
 | R7 | Server improves, never required offline | client-side status/aggregates in core | ✅ (S2+S3: status, aggregates, greedy scheduler all pure/offline-computable; S3-F2 affects correctness of hour values, not offline capability) | S2/S3 |
 | R8 | LLM-friendly: strict TS, contracts, pure fns, high core coverage | `tsconfig.base.json` (strict + noUncheckedIndexedAccess), core-purity lint bans (`eslint.config.mjs:132-179`), CI coverage gate ≥90% | ✅ (S1) | S1 |
-| R9 | Command history is product data (explain "why") | provenance cols + `explainProvenance` + WhyButton | 🔎 | S4/S8 |
+| R9 | Command history is product data (explain "why") | provenance cols + `explainProvenance` + WhyButton | ⚠️ S4: row-level provenance ✅; `command_log.effects`/`parent_command_id`/`triggering_command_id` never written (S4-F3); UI → S8 | S4/S8 |
 | R10 | Local-first backup/export/import, no managed service | `packages/ui/src/portability/*`, `GET /sync/export`, `POST /sync/import`, `scripts/{backup,restore}.sh` | 🔎 | S5/S8/S10 |
 | R11 | Versioned payloads + exports; old clients fail gracefully | `client_too_old` path, export version gate | 🔎 | S4/S8 |
-| R12 | Conflicts/rejections → durable review inbox | `sync_review_items` + Review screens (web/mobile) | 🔎 | S4/S9 |
+| R12 | Conflicts/rejections → durable review inbox | `sync_review_items` + Review screens (web/mobile) | ⚠️ server half ✅ S4 (every rejection → durable linked item, typed mapping); UI → S9 | S4/S9 |
 | R13 | Secure storage + optional DB encryption adapters | `packages/ui/src/adapters/{secure-storage,db-encryption}.ts`, `apps/mobile/src/secure-storage.ts` | 🔎 | S8/S9 |
 | R14 | Providers behind adapters; nothing leaks into core | core deps = fractional-indexing, rrule, uuid, zod only (`packages/core/package.json:26-31`); zero workspace imports in core src | ✅ (S1, re-check S3) | S1/S3 |
 | R15 | Two-layer store: read-only replica + disposable overlay; UI reads merge | `overlay-store.ts`, `data-provider.tsx` merged read | 🔎 | S7 |
-| R16 | Synced-row schema versioning separate from command versioning | `schema_version` col, floor check in dispatcher; core primitives (two axes + `isClientTooOld`) ✅ S2 | 🔎 enforcement | S4/S6 |
-| R17 | Trust fields server-assigned; client values ignored | dispatcher trust-strip | 🔎 | S4 |
-| R18 | Idempotency dedup retained ≥ MAX_OFFLINE_HORIZON (90d) | `retention-purge.ts` dedup guard | 🔎 | S5 |
+| R16 | Synced-row schema versioning separate from command versioning | `schema_version` col, floor check in dispatcher; core primitives (two axes + `isClientTooOld`) ✅ S2 | ⚠️ S4-F1: absent `schema_version` bypasses the floor (latent until floor>1); enforcement otherwise ✅ | S4/S6 |
+| R17 | Trust fields server-assigned; client values ignored | dispatcher trust-strip | ✅ S4 (strip-before-parse; strict schemas reject unlisted trust fields) | S4 |
+| R18 | Idempotency dedup retained ≥ MAX_OFFLINE_HORIZON (90d) | `retention-purge.ts` dedup guard | 🔎 (read side ✅ S4: dedup→noop honored; purge guarantee → S5) | S5 |
 | R19 | External facts advisory only; never gate/diverge | weather badge display-only; engine ignores weather in convergent outcomes | ⚠️ S3-F1 (High): weather can cause `E_BLOCKED_TASK` rejection; jobs side → S5 | S5/S3 |
 | R20 | Import restores data (no replay) + HLC monotonicity | `import-restore.ts` (data-only, FK-ordered), client HLC floor | 🔎 | S5/S8 |
 
@@ -34,9 +34,9 @@ Baseline: commit `2ab3bf7`, branch `m0-spike`, 2026-07-01.
 | ID | Revision (short) | Status | Owner |
 |----|------------------|--------|-------|
 | V1 | Split store, rollback drops overlay only | 🔎 | S7 |
-| V2 | `command_log.id` == client command id; optimistic provenance matches server | 🔎 | S4+S7 |
-| V3 | HLC-order apply; park/reject on missing precondition, linked review item | 🔎 | S4 |
-| V4 | Trust fields server-assigned | 🔎 | S4 |
+| V2 | `command_log.id` == client command id; optimistic provenance matches server | ✅ S4 (in-txn insert with client id; response echoes `created_by_command_id`); client prediction → S7 | S4+S7 |
+| V3 | HLC-order apply; park/reject on missing precondition, linked review item | ✅ S4 (in-batch HLC sort + user-scoped causal gate + `dependency_rejected`/`unknown_target` + review item; cross-batch device floor = hardening S4-F7) | S4 |
+| V4 | Trust fields server-assigned | ✅ S4 (strip-before-parse + strict schemas + server `sys`/`born` stamps) | S4 |
 | V5 | Additive-only synced schema; old clients ignore unknown columns | 🔎 (S2-F2: additive guard exists but gates nothing — S6 to enforce) | S6 |
 | V6 | Automation template versioning; backstop checks content, raises drift review item | ⚠️ content-comparison half verified in core (S3); `template_version` read-but-never-written (S3-F4); backstop behavior → S5 | S5 |
 | V7 | Incremental fact-keyed StatusIndex; no stored status; no full scan | ⚠️ primitive verified + 100k gate (touch<100, ~0.02ms); **unused by any runtime path** (S2-F3, fan-out gaps S2-F4) | S2 |
