@@ -1,10 +1,13 @@
 /**
- * Task progress bar (§7.2): Σ raw entry minutes ÷ estimate_minutes — display
- * caps at 100%, overflow shown numerically (the value carries both).
+ * Task progress bar (§7.2, §9.2): UNION of the task's raw entry minutes
+ * (`mergeTimeEntries`, §7.10b) ÷ estimate_minutes — display caps at 100%,
+ * overflow shown numerically (the value carries both). Overlapping entries
+ * count once, never twice (audit S3-F2) — per-entry summation is forbidden
+ * as an aggregation path here.
  */
 import type { Node, TimeEntry } from '../domain/entities';
 
-import { rawMinutes } from './effective';
+import { mergeTimeEntries } from '../merge/time-entries';
 
 export interface ProgressValue {
   consumedMinutes: number;
@@ -29,19 +32,6 @@ function withDerived(consumedMinutes: number, estimateMinutes: number | null): P
 }
 
 export function canonicalProgress(task: Node, entries: readonly TimeEntry[]): ProgressValue {
-  let consumed = 0;
-  for (const entry of entries) {
-    if (entry.deleted_at !== null || entry.task_id !== task.id) continue;
-    consumed += rawMinutes(entry);
-  }
-  return withDerived(consumed, task.estimate_minutes);
+  const own = entries.filter((e) => e.deleted_at === null && e.task_id === task.id);
+  return withDerived(mergeTimeEntries(own).rawMinutes, task.estimate_minutes);
 }
-
-/** Folds one newly closed entry for this task (any order). */
-export function incrementalProgress(prev: ProgressValue, entry: TimeEntry): ProgressValue {
-  if (entry.deleted_at !== null) return prev;
-  return withDerived(prev.consumedMinutes + rawMinutes(entry), prev.estimateMinutes);
-}
-
-export const emptyProgress = (task: Node): ProgressValue =>
-  withDerived(0, task.estimate_minutes);

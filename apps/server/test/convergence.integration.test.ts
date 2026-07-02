@@ -26,6 +26,7 @@ import { randomBytes, randomUUID } from 'node:crypto';
 
 import {
   asEpochMillis,
+  canonicalProgress,
   commandOutcomeSchema,
   hlcEncode,
   hlcTick,
@@ -36,9 +37,11 @@ import {
   type CommandOutcome,
   type Hlc,
   type JsonObject,
+  type Node as CoreNode,
   type OverlayEffect,
   type OverlayOp,
   type OverlayRow,
+  type TimeEntry,
 } from '@prisms/core';
 import { loadRootEnv, runMigrations } from '@prisms/db';
 import Database from 'better-sqlite3';
@@ -620,6 +623,25 @@ describe.skipIf(!adminUrl)('S12 convergence harness (two devices, offline edits)
     );
     expect(union.rawMinutes).toBe(90); // union — NOT 120 (the double-counted sum)
     expect(union.segments).toHaveLength(1); // one merged span, 10:00–11:30
+
+    // Aggregate-level union (audit S10-F3b/S3-F2): the PRODUCTION progress
+    // aggregate consumes the resolver — asserting on the SYNCED rows, the task
+    // consumed 90 minutes (75% of a 120-min estimate), not the 120 a per-entry
+    // sum would report. canonicalPractice shares the same per-task-union path
+    // (pinned by the §9.2 unit goldens in @prisms/core).
+    const progress = canonicalProgress(
+      { id: p.task, estimate_minutes: 120 } as unknown as CoreNode,
+      rows.map((r) => ({
+        id: r['id'] as string,
+        task_id: p.task,
+        deleted_at: null,
+        started_at: new Date(r['started_at'] as string).toISOString(),
+        ended_at: new Date(r['ended_at'] as string).toISOString(),
+        focus_factor: r['focus_factor'] as number | null,
+      })) as unknown as TimeEntry[],
+    );
+    expect(progress.consumedMinutes).toBe(90);
+    expect(progress.percent).toBe(75);
     a.close();
     b.close();
   });

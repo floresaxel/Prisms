@@ -2,9 +2,13 @@
  * Effective time (§7.2): `effectiveHours(entry) = (ended_at − started_at) ×
  * focus_factor (default 1.0)`.
  *
+ * PER-ENTRY DISPLAY HELPERS ONLY — aggregation across entries must go through
+ * `mergeTimeEntries` (§7.10b/§9.2): summing these per entry double-counts
+ * overlapping intervals (audit S3-F2). Do not reintroduce them into practice/
+ * progress/dashboard totals.
+ *
  * Only closed entries are facts; an open (running) entry contributes nothing
  * until clock-out (live elapsed display is a UI concern, not an aggregate).
- * Raw minutes (no focus factor) feed the task progress bar.
  */
 import type { TimeEntry } from '../domain/entities';
 import { minutesBetween } from '../time/duration';

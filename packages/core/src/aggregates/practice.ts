@@ -1,12 +1,15 @@
 /**
- * Practice hours + levels for a skill (§7.2): Σ effectiveHours over entries
- * of tasks with `habit_id = skill`; level = count of level_thresholds_hours
- * passed. Incremental form is order-independent (a commutative sum).
+ * Practice hours + levels for a skill (§7.2, §9.2): entries of tasks with
+ * `habit_id = skill` are unioned PER TASK via `mergeTimeEntries` (§7.10b),
+ * then summed across tasks; level = count of level_thresholds_hours passed.
+ * Overlapping entries on the same task (two devices clocked in AND out
+ * offline) count once, never twice (audit S3-F2/S5-F4) — per-entry summation
+ * is forbidden as an aggregation path here.
  */
 import type { Habit, Node, TimeEntry } from '../domain/entities';
 import type { Uuid } from '../domain/primitives';
 
-import { effectiveMinutes } from './effective';
+import { mergeTimeEntries } from '../merge/time-entries';
 
 export interface PracticeValue {
   minutes: number;
@@ -43,24 +46,15 @@ export function canonicalPractice(
   entries: readonly TimeEntry[],
 ): PracticeValue {
   const tasks = habitTaskIds(habit, nodes);
-  let minutes = 0;
+  const byTask = new Map<Uuid, TimeEntry[]>();
   for (const entry of entries) {
     if (entry.deleted_at !== null) continue;
     if (!tasks.has(entry.task_id)) continue;
-    minutes += effectiveMinutes(entry);
+    const list = byTask.get(entry.task_id);
+    if (list === undefined) byTask.set(entry.task_id, [entry]);
+    else list.push(entry);
   }
+  let minutes = 0;
+  for (const list of byTask.values()) minutes += mergeTimeEntries(list).effectiveMinutes;
   return withDerived(minutes, habit);
 }
-
-/** Folds one newly closed entry into a previous value (any order). */
-export function incrementalPractice(
-  prev: PracticeValue,
-  entry: TimeEntry,
-  habit: Habit,
-  habitTasks: ReadonlySet<Uuid>,
-): PracticeValue {
-  if (entry.deleted_at !== null || !habitTasks.has(entry.task_id)) return prev;
-  return withDerived(prev.minutes + effectiveMinutes(entry), habit);
-}
-
-export const emptyPractice = (habit: Habit): PracticeValue => withDerived(0, habit);

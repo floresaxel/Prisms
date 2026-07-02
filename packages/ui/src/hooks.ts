@@ -21,6 +21,7 @@ import {
   descendantsOf,
   evaluateBlockerRules,
   habitTaskIds,
+  habitTodayMinutes,
   isJustified,
   isoToEpochMillis,
   mergeTable,
@@ -28,7 +29,6 @@ import {
   minutesLeftInTask,
   minutesUntilNextBlock,
   rankProjects,
-  rawMinutes,
   taskStatus,
   topologicalOrder,
   type AutomationRule,
@@ -719,12 +719,9 @@ export function useHabits(now: Instant): HabitView[] {
       );
       const practice = canonicalPractice(habit, nodes, entries);
 
-      let todayMinutes = 0;
-      for (const e of entries) {
-        if (!taskIds.has(e.task_id)) continue;
-        if (bucketDate(e.started_at, settings.day_reset_hour, settings.timezone) !== today) continue;
-        todayMinutes += e.ended_at === null ? Math.max(0, (now - isoToEpochMillis(e.started_at)) / 60_000) : rawMinutes(e);
-      }
+      // Closed entries union PER TASK (§9.2 — two overlapping offline sessions
+      // count once, audit S3-F2); the running entry adds live elapsed on top.
+      const todayMinutes = habitTodayMinutes(entries, taskIds, today, settings.day_reset_hour, settings.timezone, now);
 
       // live tag-confirmation tally across this habit's habit-scoped placements
       const habitTagIds = new Set(tags.filter((t) => t.deleted_at === null && t.habit_id === habit.id).map((t) => t.id));
