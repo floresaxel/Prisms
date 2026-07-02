@@ -51,6 +51,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { createDispatcher, type BackstopJob, type Dispatcher } from '../src/dispatcher';
 import { runAutomationBackstop } from '../src/jobs/automation-backstop';
+import { NIGHTLY_OPTIMIZATION, runScheduleOptimize } from '../src/jobs/schedule-optimize';
 import { runWeatherPoll } from '../src/jobs/weather-poll';
 import { createRateLimiter } from '../src/rate-limit';
 
@@ -815,6 +816,49 @@ describe.skipIf(!adminUrl)('S12 convergence harness (two devices, offline edits)
 
     const open = await sql`SELECT task_id FROM time_entries WHERE user_id = ${p.user} AND ended_at IS NULL AND deleted_at IS NULL`;
     expect(open.map((r) => r['task_id'])).toEqual([p.task]); // exactly the weather-blocked task is running
+    dev.close();
+  });
+
+  it('scenario 14 — accepting an optimize MOVE replaces the old block; no double-book (§7.5, S5-F2)', async () => {
+    // A schedulable task with an existing FLEXIBLE committed block, off-window so
+    // the optimizer proposes moving it. §7.5: the suggestion carries
+    // replaces_block_id, so accepting it (through the two-layer overlay + reconcile)
+    // must converge to ONE committed block, not two.
+    const user = randomUUID();
+    const ids = { vision: randomUUID(), roadmap: randomUUID(), project: randomUUID(), task: randomUUID() };
+    await seed(user, [
+      seedCmd('node.create', { id: ids.vision, node_type: 'vision', title: 'V', sort_order: 'a0' }),
+      seedCmd('node.create', { id: ids.roadmap, node_type: 'roadmap', title: 'R', sort_order: 'a0', parent_id: ids.vision }),
+      seedCmd('node.create', { id: ids.project, node_type: 'project', title: 'P', sort_order: 'a0', parent_id: ids.roadmap }),
+      seedCmd('node.create', { id: ids.task, node_type: 'task', title: 'T', sort_order: 'a0', parent_id: ids.project, estimate_minutes: 60 }),
+    ]);
+    const oldBlock = randomUUID();
+    await sql`INSERT INTO schedule_blocks (id, user_id, task_id, starts_at, ends_at, anchor_type, status, updated_at)
+      VALUES (${oldBlock}, ${user}, ${ids.task}, '2026-06-20T22:00:00Z', '2026-06-20T23:00:00Z', 'none', 'committed', '2026-06-13T16:00:00.000Z')`;
+
+    const res = await runScheduleOptimize(drizzle(sql), user, { now: () => Date.parse('2026-06-13T16:00:00.000Z') });
+    expect(res.suggestions).toBe(1); // the flexible block is replaceable → a move is proposed
+    const [suggested] = await sql`
+      SELECT id, replaces_block_id FROM schedule_blocks
+      WHERE user_id = ${user} AND task_id = ${ids.task} AND status = 'suggested' AND suggestion_reason = ${NIGHTLY_OPTIMIZATION}`;
+    expect(suggested!['replaces_block_id']).toBe(oldBlock); // §7.5 replacement link stamped by the job
+
+    // accept through a real device (overlay effect + envelope + reconcile).
+    const dev = new Device('device-a');
+    const accept = dev.edit('block.accept_suggestion', { id: suggested!['id'] }, Date.parse('2026-06-13T17:00:00.000Z'));
+    const outcomes = await dev.sync(dispatcher, user);
+    assertContract(outcomes);
+    expect(outcomes.find((o) => o.id === accept.id)).toMatchObject({ result: 'applied' });
+
+    // converged server state: exactly one committed block (the promoted one),
+    // and the replaced flexible block is soft-deleted.
+    const committed = await sql`
+      SELECT id FROM schedule_blocks
+      WHERE user_id = ${user} AND task_id = ${ids.task} AND status = 'committed' AND deleted_at IS NULL`;
+    expect(committed).toHaveLength(1);
+    expect(committed[0]!['id']).not.toBe(oldBlock);
+    const [gone] = await sql`SELECT deleted_at FROM schedule_blocks WHERE id = ${oldBlock}`;
+    expect(gone!['deleted_at']).not.toBeNull();
     dev.close();
   });
 });

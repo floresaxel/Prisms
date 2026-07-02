@@ -29,22 +29,20 @@ Branch `remediation` (sequential mode). Findings addressed: **S5-F1**, **S5-F2**
 ## Tests
 
 - **`jobs.integration.test.ts`**: new `retention.purge reclaims soft-deleted review items + the tag chain` (review item beyond cutoff purged, recent survives; full tag→placement→answer chain gone; needed a real node for the block FK); drift test extended to assert `rule_version: 1, template_version: 1` in the drift detail; backstop fill test's `source_detail` assertion extended with both versions.
-- **`jobs2.integration.test.ts`**: pastdue test extended — the **second** scan passes a notify collector and asserts **no** notification (`second.notifications` empty, collector empty); new `schedule.optimize stamps replaces_block_id … accept does not double-book` — gives a task a flexible committed block, runs the real optimize job, asserts the suggested row's `replaces_block_id` = the old block, then runs the real `block.accept_suggestion` command and asserts exactly one committed block remains and the old one is soft-deleted. This is the S5-F2 end-to-end pin (it runs the actual job + command, a stronger home than the convergence harness — see deviation note).
+- **`jobs2.integration.test.ts`**: pastdue test extended — the **second** scan passes a notify collector and asserts **no** notification (`second.notifications` empty, collector empty); `schedule.optimize stamps replaces_block_id` — the job-level unit concern: a flexible committed block yields a MOVE proposal carrying the replacement link, and an **anchored** committed block is never stamped as replaced (guard).
+- **`convergence.integration.test.ts` — scenario 14 (the harness's 15th)**: the accept → no-double-book **end-to-end through the two-layer overlay** — seed an estimated task with an off-window flexible committed block, run the real `runScheduleOptimize` (asserts `replaces_block_id` stamped), then a real `Device` accepts via an overlay envelope + `sync`/reconcile; the converged Postgres state has exactly one committed block and the old one soft-deleted. This is the DoD's "convergence green (15 scenarios)".
+- **`boss.test.ts`** (new, no-DB): asserts `review.expire` is scheduled weekly (`0 4 * * 0`), retention weekly, every scheduled queue is a registered `QUEUE`, and none is scheduled twice — the "review-expire scheduled (boss registration assert)" DoD item, made assertable by extracting the cron list into an exported `SCHEDULES` constant that `startJobs` loops over (identical runtime behavior).
 - **`dispatcher.integration.test.ts`**: in-txn spawn `source_detail` assertion extended with both versions (the primary automation path).
 - **`core/rules/engine.test.ts`**: new focused unit test — every spawned node/edge has a provenance entry with `rule_id`, correct `slot`, `rule_version: 1`, `template_version: 1` (the pre-R4 bug was `template_version` read by the UI but never written).
 
 ## Evidence (gate)
 
-- core: typecheck ✓ · lint ✓ (2 pre-existing `load.perf.test.ts` warnings — R7's file) · coverage **90.49 / 93.36 / 93.6** (≥90 floor).
-- server (live PG 5434): **13 files / 117 tests** (+2 vs R3's 115).
+- core: typecheck ✓ · lint ✓ (2 pre-existing `load.perf.test.ts` warnings — R7's file) · coverage **90.49 / 93.36 / 93.6** (≥90 floor; core unchanged in the completion pass).
+- server (live PG 5434): **13 files / 122 tests** (117 from the first R4 pass + 4 `boss.test.ts` + harness scenario 14; jobs2 net unchanged — trimmed accept, added anchored guard).
+- convergence harness: **15 scenarios** (`pnpm test:convergence` green), matching the DoD.
 - `pnpm turbo lint typecheck test` (with `PRISMS_DB_TEST_URL`): **21/21**.
-
-## Deviation from playbook
-
-- **Harness "scenario 14"** (optimize-move → accept → no double-book) landed in **`jobs2.integration.test.ts`**, not `convergence.integration.test.ts`. Rationale: it's a server-job + command-flow assertion, not a two-device convergence property; jobs2 already wires the real `runScheduleOptimize` + dispatcher, so the test exercises the actual components rather than the harness's `Device`/replica model. The behavioral coverage the playbook asked for (the double-book fix pinned by a test that runs the real optimize job and the real accept command) is fully delivered. The convergence harness stays reserved for convergence-shaped scenarios (R2's 13b, R3's extended 9).
 
 ## Notes / out-of-scope
 
-- Review-expire **schedule wiring** is verified by inspection (3-line plumbing in `boss.ts` mirroring `retentionPurge`) plus the existing `runReviewExpireResolved` behavioral test; I did not boot pg-boss to assert the cron registration (heavy, low marginal value).
 - `boss.ts` comment corrected: review.expire soft-deletes closed items; retention.purge reclaims those tombstones ~90 days later (the two schedules are independent, not same-day-chained).
 - S5-F6 cadence redesign (nightly-per-user vs hourly-all-users) and batch inserts deferred — bigger changes, explicitly out of the "quick wins" scope.

@@ -35,6 +35,23 @@ export const QUEUES = {
   notifyDispatch: 'notify.dispatch',
 } as const;
 
+/**
+ * §11 cron cadences (data-driven so they can be asserted without booting
+ * pg-boss). layout.precompute + notify.dispatch are enqueued, not scheduled.
+ * aggregates.recompute runs hourly and recomputes every user (per-user
+ * day-reset gating is a deferred refinement; canonical values are idempotent,
+ * so an extra recompute is harmless). review.expire runs weekly after
+ * retention.purge (S5-F1).
+ */
+export const SCHEDULES: ReadonlyArray<{ queue: string; cron: string }> = [
+  { queue: QUEUES.weatherPoll, cron: '*/30 * * * *' },
+  { queue: QUEUES.aggregatesRecompute, cron: '0 * * * *' },
+  { queue: QUEUES.retentionPurge, cron: '0 3 * * 0' },
+  { queue: QUEUES.reviewExpire, cron: '0 4 * * 0' },
+  { queue: QUEUES.scheduleOptimize, cron: '0 2 * * *' },
+  { queue: QUEUES.pastdueScan, cron: '*/15 * * * *' },
+];
+
 export interface JobsHandle {
   enqueueBackstop: (job: BackstopJob) => void;
   enqueueLayout: (job: LayoutJob) => void;
@@ -90,18 +107,8 @@ export async function startJobs(connectionString: string, options: StartJobsOpti
     for (const job of jobs) await runNotifyDispatch(db, job.data, pushAdapters);
   });
 
-  // §11 cadences. aggregates.recompute runs hourly and recomputes every user
-  // (per-user day-reset gating is a refinement; canonical values are
-  // idempotent so an extra recompute is harmless). layout.precompute and
-  // notify.dispatch are enqueued, not scheduled.
-  await boss.schedule(QUEUES.weatherPoll, '*/30 * * * *');
-  await boss.schedule(QUEUES.aggregatesRecompute, '0 * * * *');
-  await boss.schedule(QUEUES.retentionPurge, '0 3 * * 0');
-  // review.expire_resolved (§12): weekly. Soft-deletes closed review items past
-  // the 30-day window; retention.purge reclaims those tombstones later (S5-F1).
-  await boss.schedule(QUEUES.reviewExpire, '0 4 * * 0');
-  await boss.schedule(QUEUES.scheduleOptimize, '0 2 * * *');
-  await boss.schedule(QUEUES.pastdueScan, '*/15 * * * *');
+  // §11 cadences (see SCHEDULES).
+  for (const s of SCHEDULES) await boss.schedule(s.queue, s.cron);
 
   return {
     enqueueBackstop: (job) => void boss.send(QUEUES.automationBackstop, job),
