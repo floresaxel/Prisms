@@ -11,9 +11,9 @@ Baseline: commit `2ab3bf7`, branch `m0-spike`, 2026-07-01.
 | R1 | Platforms: web, Win, macOS, Android, iOS | `apps/web` (Vite/PWA), `apps/desktop` (Tauri v2 = web build), `apps/mobile` (Expo) | 🔎 | S9 |
 | R2 | Local SQLite first; UI never waits on network | wa-sqlite/OPFS (web), quick-sqlite (mobile); PowerSync live queries | 🔎 | S7/S8 |
 | R3 | Offline operation + multi-device convergence | convergence harness 13 scenarios `apps/server/test/convergence.integration.test.ts` | 🔎 | S5/S10 |
-| R4 | Spawning, unblocking, clock-in/out, agenda edits, suggestion accept/reject offline | optimistic effect builders `packages/ui/src/powersync/effects.ts` | 🔎 | S7 |
+| R4 | Spawning, unblocking, clock-in/out, agenda edits, suggestion accept/reject offline | optimistic effect builders `packages/ui/src/powersync/effects.ts` | ⚠️ **S7-F1 High: offline spawning does not exist** (no client rules engine); soft-delete closure degraded (S7-F7); other verbs ✅ | S7 |
 | R5 | Vanilla Postgres server / vanilla SQLite client | `docker-compose.yml`, `packages/db` | ✅ S6 (vanilla PG + `wal_level=logical`; PowerSync loose SQLite schema client-side) | S6 |
-| R6 | No arbitrary SQL upload; named commands only | connector loud-guard + envelope upload `packages/ui/src/powersync/{connector,upload-commands}.ts` | ⚠️ server half ✅ S4 (no generic endpoint; envelope-only routes); client half → S7 | S7 |
+| R6 | No arbitrary SQL upload; named commands only | connector loud-guard + envelope upload `packages/ui/src/powersync/{connector,upload-commands}.ts` | ✅ end-to-end (S4 no generic endpoint + S7 loud guard, envelope-only upload) | S7 |
 | R7 | Server improves, never required offline | client-side status/aggregates in core | ✅ (S2+S3: status, aggregates, greedy scheduler all pure/offline-computable; S3-F2 affects correctness of hour values, not offline capability) | S2/S3 |
 | R8 | LLM-friendly: strict TS, contracts, pure fns, high core coverage | `tsconfig.base.json` (strict + noUncheckedIndexedAccess), core-purity lint bans (`eslint.config.mjs:132-179`), CI coverage gate ≥90% | ✅ (S1) | S1 |
 | R9 | Command history is product data (explain "why") | provenance cols + `explainProvenance` + WhyButton | ⚠️ S4: row-level provenance ✅; `command_log.effects`/`parent_command_id`/`triggering_command_id` never written (S4-F3); UI → S8 | S4/S8 |
@@ -22,19 +22,19 @@ Baseline: commit `2ab3bf7`, branch `m0-spike`, 2026-07-01.
 | R12 | Conflicts/rejections → durable review inbox | `sync_review_items` + Review screens (web/mobile) | ⚠️ server half ✅ S4 (every rejection → durable linked item, typed mapping); UI → S9 | S4/S9 |
 | R13 | Secure storage + optional DB encryption adapters | `packages/ui/src/adapters/{secure-storage,db-encryption}.ts`, `apps/mobile/src/secure-storage.ts` | 🔎 | S8/S9 |
 | R14 | Providers behind adapters; nothing leaks into core | core deps = fractional-indexing, rrule, uuid, zod only (`packages/core/package.json:26-31`); zero workspace imports in core src | ✅ (S1, re-check S3) | S1/S3 |
-| R15 | Two-layer store: read-only replica + disposable overlay; UI reads merge | `overlay-store.ts`, `data-provider.tsx` merged read | 🔎 | S7 |
+| R15 | Two-layer store: read-only replica + disposable overlay; UI reads merge | `overlay-store.ts`, `data-provider.tsx` merged read | ✅ S7 (atomic enqueue, local-only overlay tables, loud guard; read-path half → S8) | S7 |
 | R16 | Synced-row schema versioning separate from command versioning | `schema_version` col, floor check in dispatcher; core primitives (two axes + `isClientTooOld`) ✅ S2 | ⚠️ S4-F1: absent `schema_version` bypasses the floor (latent until floor>1); enforcement otherwise ✅ | S4/S6 |
 | R17 | Trust fields server-assigned; client values ignored | dispatcher trust-strip | ✅ S4 (strip-before-parse; strict schemas reject unlisted trust fields) | S4 |
 | R18 | Idempotency dedup retained ≥ MAX_OFFLINE_HORIZON (90d) | `retention-purge.ts` dedup guard | ✅ (read side S4 + write side S5; history side-effect noted S5-F7) | S5 |
 | R19 | External facts advisory only; never gate/diverge | weather badge display-only; engine ignores weather in convergent outcomes | ⚠️ S3-F1 (High): weather can cause `E_BLOCKED_TASK` rejection; jobs side ✅ S5 (weather-poll advisory-only; S5-F10: automations can't see weather at all) | S5/S3 |
-| R20 | Import restores data (no replay) + HLC monotonicity | `import-restore.ts` (data-only, FK-ordered), client HLC floor | ⚠️ server half ✅ S5 (verified incl. allowlist + global-id guard); client HLC floor → S8 | S5/S8 |
+| R20 | Import restores data (no replay) + HLC monotonicity | `import-restore.ts` (data-only, FK-ordered), client HLC floor | ✅ (S5 server + S7 client floor: shared module, persisted, dominates every tick) | S5/S8 |
 
 ## v1.3 mandatory revisions (§3.2)
 
 | ID | Revision (short) | Status | Owner |
 |----|------------------|--------|-------|
-| V1 | Split store, rollback drops overlay only | 🔎 | S7 |
-| V2 | `command_log.id` == client command id; optimistic provenance matches server | ✅ S4 (in-txn insert with client id; response echoes `created_by_command_id`); client prediction → S7 | S4+S7 |
+| V1 | Split store, rollback drops overlay only | ✅ S7 (rollback = drop effects + mark rejected; review item server-owned); reconcile timing deviates — drops on ack not canonical arrival (S7-F6) | S7 |
+| V2 | `command_log.id` == client command id; optimistic provenance matches server | ✅ end-to-end (S4 server + S7 client: write-time UUIDv7+HLC minting, verbatim upload, predicted source_kind='user') | S4+S7 |
 | V3 | HLC-order apply; park/reject on missing precondition, linked review item | ✅ S4 (in-batch HLC sort + user-scoped causal gate + `dependency_rejected`/`unknown_target` + review item; cross-batch device floor = hardening S4-F7) | S4 |
 | V4 | Trust fields server-assigned | ✅ S4 (strip-before-parse + strict schemas + server `sys`/`born` stamps) | S4 |
 | V5 | Additive-only synced schema; old clients ignore unknown columns | ✅ S6 (0008 verified additive: all adds nullable/defaulted, live-DB-safe sentinel backfill); mechanical gate still absent (S2-F2/S6-F5) | S6 |
