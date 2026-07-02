@@ -231,7 +231,8 @@ describe.skipIf(!adminUrl)('S11 command dispatcher (§8 pipeline, full catalog)'
       hlc: checkOff.hlc,
       schema_version: 1,
     });
-    expect(spawned[0]!['source_detail']).toMatchObject({ trigger_command_id: done!.id, trigger_node_id: ids.task, action_slot: 0 });
+    // §10.2 (S3-F4): in-txn spawn provenance names the rule + template versions.
+    expect(spawned[0]!['source_detail']).toMatchObject({ trigger_command_id: done!.id, trigger_node_id: ids.task, action_slot: 0, rule_version: 1, template_version: 1 });
   });
 
   it('applies a multi-wave automation cascade (depth>1) inside the single command txn (§10.1 fixpoint)', async () => {

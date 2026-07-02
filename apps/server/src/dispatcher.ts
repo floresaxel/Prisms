@@ -283,7 +283,15 @@ export function createDispatcher(
         source_id: p?.rule_id ?? null,
         created_by_command_id: commandId,
         last_modified_by_command_id: commandId,
-        source_detail: { trigger_command_id: commandId, trigger_node_id: job.nodeId, action_slot: p?.slot ?? null },
+        // §10.2: attribute the rule + template version that produced the row so a
+        // later drift item can name both generations (S3-F4).
+        source_detail: {
+          trigger_command_id: commandId,
+          trigger_node_id: job.nodeId,
+          action_slot: p?.slot ?? null,
+          rule_version: p?.rule_version ?? null,
+          template_version: p?.template_version ?? null,
+        },
       };
     };
 

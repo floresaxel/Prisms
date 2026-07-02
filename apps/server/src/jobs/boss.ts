@@ -19,6 +19,7 @@ import { runNotifyDispatch, type NotifyJob } from './notify-dispatch';
 import { runPastdueScanAll } from './pastdue-scan';
 import { createPushAdapters, type PushAdapters } from './push';
 import { runRetentionPurge } from './retention-purge';
+import { runReviewExpireResolved } from './review-expire';
 import { runScheduleOptimizeAll } from './schedule-optimize';
 import { runWeatherPoll, type ForecastFetcher } from './weather-poll';
 
@@ -27,6 +28,7 @@ export const QUEUES = {
   aggregatesRecompute: 'aggregates.recompute',
   automationBackstop: 'automation.backstop',
   retentionPurge: 'retention.purge',
+  reviewExpire: 'review.expire',
   scheduleOptimize: 'schedule.optimize',
   pastdueScan: 'pastdue.scan',
   layoutPrecompute: 'layout.precompute',
@@ -70,6 +72,9 @@ export async function startJobs(connectionString: string, options: StartJobsOpti
   await boss.work(QUEUES.retentionPurge, async () => {
     await runRetentionPurge(db, clock);
   });
+  await boss.work(QUEUES.reviewExpire, async () => {
+    await runReviewExpireResolved(db, clock);
+  });
   await boss.work(QUEUES.scheduleOptimize, async () => {
     await runScheduleOptimizeAll(db, clock);
   });
@@ -92,6 +97,9 @@ export async function startJobs(connectionString: string, options: StartJobsOpti
   await boss.schedule(QUEUES.weatherPoll, '*/30 * * * *');
   await boss.schedule(QUEUES.aggregatesRecompute, '0 * * * *');
   await boss.schedule(QUEUES.retentionPurge, '0 3 * * 0');
+  // review.expire_resolved (§12): weekly. Soft-deletes closed review items past
+  // the 30-day window; retention.purge reclaims those tombstones later (S5-F1).
+  await boss.schedule(QUEUES.reviewExpire, '0 4 * * 0');
   await boss.schedule(QUEUES.scheduleOptimize, '0 2 * * *');
   await boss.schedule(QUEUES.pastdueScan, '*/15 * * * *');
 

@@ -83,23 +83,26 @@ export async function runAutomationBackstop(db: PostgresJsDatabase, job: Backsto
     const keepEdges = out.edges.filter((e) => endpointOk(e.predecessor_id) && endpointOk(e.successor_id));
 
     const provById = new Map(out.provenance.map((p) => [p.id, p]));
-    const ruleVersionOf = (rowId: string) => {
-      const ruleId = provById.get(rowId)?.rule_id;
-      return (ruleRows as AutomationRule[]).find((r) => r.id === ruleId)?.rule_version ?? null;
-    };
     const prov = <T extends { id: string }>(row: T) => {
       const p = provById.get(row.id);
       return {
         ...row,
         source_kind: 'automation' as const,
         source_id: p?.rule_id ?? null,
-        source_detail: { trigger_node_id: job.nodeId, action_slot: p?.slot ?? null, backstop: true },
+        // §10.2: carry both versions the engine attributed at spawn time (S3-F4).
+        source_detail: {
+          trigger_node_id: job.nodeId,
+          action_slot: p?.slot ?? null,
+          rule_version: p?.rule_version ?? null,
+          template_version: p?.template_version ?? null,
+          backstop: true,
+        },
       };
     };
 
     const nodeById = new Map((allNodeRows as CoreNode[]).map((n) => [n.id, n]));
     const filled: string[] = [];
-    const drift: Array<{ id: string; kind: 'node' | 'edge'; existingHash: string; spawnedHash: string; ruleVersion: number | null }> = [];
+    const drift: Array<{ id: string; kind: 'node' | 'edge'; existingHash: string; spawnedHash: string; ruleVersion: number | null; templateVersion: number | null }> = [];
 
     // Fill: spawned rows the engine found ABSENT from the live fact set. A
     // soft-deleted row at the same id is respected (onConflictDoNothing keeps it).
@@ -128,7 +131,10 @@ export async function runAutomationBackstop(db: PostgresJsDatabase, job: Backsto
       if (!existing || existing.deleted_at !== null) continue;
       const a = spawnedNodeContent(existing);
       const b = spawnedNodeContent(node);
-      if (a !== b) drift.push({ id: node.id, kind: 'node', existingHash: hash(a), spawnedHash: hash(b), ruleVersion: ruleVersionOf(node.id) });
+      if (a !== b) {
+        const p = provById.get(node.id);
+        drift.push({ id: node.id, kind: 'node', existingHash: hash(a), spawnedHash: hash(b), ruleVersion: p?.rule_version ?? null, templateVersion: p?.template_version ?? null });
+      }
     }
 
     // §7.13 review items (informational, server_job-owned).
@@ -159,6 +165,7 @@ export async function runAutomationBackstop(db: PostgresJsDatabase, job: Backsto
         id: d.id,
         kind: d.kind,
         rule_version: d.ruleVersion,
+        template_version: d.templateVersion,
         existing_content_hash: d.existingHash,
         spawned_content_hash: d.spawnedHash,
       });

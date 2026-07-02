@@ -22,8 +22,18 @@ export const RETENTION_DAYS = 90;
  */
 export const MAX_OFFLINE_HORIZON_DAYS = 90;
 
-/** Soft-delete tables in FK-safe (referencing-first) order; nodes handled separately. */
+/**
+ * Soft-delete tables in FK-safe (referencing-first) order; nodes + tags handled
+ * separately. `sync_review_items` has no dependents (its command_id is a plain
+ * uuid). tag_answers → tag_placements must precede schedule_blocks + tags, since
+ * tag_placements references both (S5-F1: without them, soft-deleted review items
+ * and tag rows were never reclaimed, and a soft-deleted block with a lingering
+ * tag_placement could never purge).
+ */
 const PURGE_ORDER = [
+  'sync_review_items',
+  'tag_answers',
+  'tag_placements',
   'habit_completions',
   'decision_scores',
   'decision_criteria',
@@ -60,6 +70,16 @@ export async function runRetentionPurge(
     );
     deleted[table] = res.count ?? 0;
   }
+
+  // tags after their placements: a soft-deleted tag whose placements are not yet
+  // all reclaimed waits (FK NO ACTION would otherwise throw). Global (habit_id
+  // NULL) and habit-scoped tags alike.
+  const tagsRes = await db.execute(sql`
+    DELETE FROM tags t
+    WHERE t.deleted_at IS NOT NULL AND t.deleted_at < ${cutoff}
+      AND NOT EXISTS (SELECT 1 FROM tag_placements p WHERE p.tag_id = t.id)
+  `);
+  deleted['tags'] = tagsRes.count ?? 0;
 
   // nodes last, only those nothing references any more (live or tombstoned).
   const res = await db.execute(sql`

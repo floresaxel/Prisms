@@ -34,6 +34,22 @@ export async function runScheduleOptimize(db: PostgresJsDatabase, userId: string
   // §10: the scheduler honours FS/SS/FF/SF edge placement; proposals are diffs vs committed.
   const { proposals } = schedule(input);
 
+  // §7.5 replacement link: an optimize proposal for a task that already has a
+  // FLEXIBLE committed block is a MOVE — placement treats such blocks as
+  // replaceable (they aren't obstacles for their own task), so the proposal may
+  // even overlap the old block. Stamp the earliest flexible committed block as
+  // `replaces_block_id` so accept_suggestion soft-deletes it instead of leaving
+  // the task double-booked (S5-F2). Anchored blocks are real obstacles → never
+  // replaced.
+  const replaceableByTask = new Map<string, { id: string; startsAt: number }>();
+  for (const b of input.committed) {
+    if (b.anchored) continue;
+    const prev = replaceableByTask.get(b.taskId);
+    if (prev === undefined || b.startsAt < prev.startsAt) {
+      replaceableByTask.set(b.taskId, { id: b.id, startsAt: b.startsAt });
+    }
+  }
+
   return db.transaction(async (tx) => {
     // §7.5: a newer batch supersedes the prior non-accepted batch of this strategy;
     // mark the prior batch superseded (a syncable signal) and clear its stale
@@ -79,6 +95,9 @@ export async function runScheduleOptimize(db: PostgresJsDatabase, userId: string
         status: 'suggested',
         suggestion_reason: NIGHTLY_OPTIMIZATION,
         suggestion_batch_id: batchId,
+        // §7.5: if this task already has a flexible committed block, accepting the
+        // proposal replaces it (soft-delete) instead of double-booking (S5-F2).
+        replaces_block_id: replaceableByTask.get(proposal.taskId)?.id ?? null,
         computed_at: nowIso,
         updated_at: nowIso,
         // §7.8: scheduler suggestions carry source_kind='scheduler', source_id=batch.

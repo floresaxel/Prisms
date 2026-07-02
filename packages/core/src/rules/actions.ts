@@ -15,6 +15,15 @@ import type { FactContext } from '../status/context';
 import { parseIsoDurationMs } from '../time/duration';
 import { isoToEpochMillis, type EpochMillis } from '../time/instant';
 
+/**
+ * §10.2 (V6): the code-level version of the action-template semantics in this
+ * module. Bumped whenever the meaning of `spawn_task` interpolation, date
+ * resolution, or edge derivation changes — so spawned-row provenance and drift
+ * items can attribute WHICH template generation produced a row (paired with the
+ * data-level `automation_rules.rule_version`). Read-only constant, not a payload.
+ */
+export const TEMPLATE_VERSION = 1;
+
 export const spawnTaskTemplateSchema = z.strictObject({
   /** Supports `{trigger.title}` / `{trigger.description}` / `{trigger.type}` / `{trigger.id}`. */
   title: z.string().min(1),

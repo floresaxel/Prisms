@@ -93,6 +93,25 @@ describe('lecture example (§1.2 DoD)', () => {
     expect(edge.lag_minutes).toBe(0);
   });
 
+  it('attributes each spawned node + edge with rule_id, slot, and both versions (§10.2, S3-F4)', () => {
+    const out = runAutomations(lectureInput());
+    const preBrief = out.nodes.find((n) => n.title.startsWith('Pre-brief'))!;
+    const study = out.nodes.find((n) => n.title.startsWith('Study'))!;
+    const edge = out.edges[0]!;
+
+    // every spawned row has a provenance entry; none carries an undefined version
+    // (the pre-R4 bug: template_version was read by the UI but never written).
+    expect(out.provenance).toHaveLength(3); // 2 nodes + 1 edge
+    for (const p of out.provenance) {
+      expect(p.rule_id).toBe(LECTURE_RULE_ID);
+      expect(p.rule_version).toBe(1); // makeAutomationRule default
+      expect(p.template_version).toBe(1); // TEMPLATE_VERSION
+    }
+    expect(out.provenance.find((p) => p.id === preBrief.id)!.slot).toBe(0);
+    expect(out.provenance.find((p) => p.id === study.id)!.slot).toBe(1);
+    expect(out.provenance.find((p) => p.id === edge.id)!.slot).toBe(1);
+  });
+
   it('uses §9.4 deterministic ids and reads timestamps from the trigger', () => {
     const out = runAutomations(lectureInput());
     expect(out.nodes[0]!.id).toBe(spawnedTaskId(LECTURE_RULE_ID, lectureTask.id, 0));

@@ -148,13 +148,44 @@ describe.skipIf(!adminUrl)('S14 jobs — scheduling & notify', () => {
     const [batch] = await sql`SELECT source FROM schedule_suggestion_batches WHERE id = ${rows[0]!['suggestion_batch_id']}`;
     expect(batch!['source']).toBe('past_due');
 
-    // re-scan: still exactly one suggestion (idempotent)
-    const second = await runPastdueScan(db, ids.user, clock);
+    // re-scan: still exactly one suggestion (idempotent) AND no repeat notification
+    // — the warning fires once, when the suggestion is first created (S5-F3).
+    const notes2: PastDueNotification[] = [];
+    const second = await runPastdueScan(db, ids.user, clock, (n) => notes2.push(n));
     expect(second.suggested).toBe(0);
+    expect(second.notifications).toEqual([]);
+    expect(notes2).toEqual([]); // no push enqueued on the second scan
     const after = await sql`
       SELECT count(*)::int AS n FROM schedule_blocks
       WHERE user_id = ${ids.user} AND task_id = ${task} AND status = 'suggested' AND deleted_at IS NULL`;
     expect(after[0]!['n']).toBe(1);
+  });
+
+  it('schedule.optimize stamps replaces_block_id on a move so accept does not double-book (S5-F2)', async () => {
+    const ids = await projectWithTasks(1);
+    const task = ids.tasks[0]!;
+    // give the task a FLEXIBLE (non-anchored) committed block far from its optimum,
+    // so the optimizer proposes a move rather than a fresh placement.
+    const oldBlock = randomUUID();
+    await sql`INSERT INTO schedule_blocks (id, user_id, task_id, starts_at, ends_at, anchor_type, status, updated_at)
+      VALUES (${oldBlock}, ${ids.user}, ${task}, '2026-06-20T22:00:00Z', '2026-06-20T23:00:00Z', 'none', 'committed', ${new Date(NOW_MS).toISOString()})`;
+
+    const res = await runScheduleOptimize(db, ids.user, clock);
+    expect(res.suggestions).toBe(1); // the flexible block is replaceable → a move is proposed
+    const [suggested] = await sql`
+      SELECT id, replaces_block_id FROM schedule_blocks
+      WHERE user_id = ${ids.user} AND task_id = ${task} AND status = 'suggested' AND suggestion_reason = ${NIGHTLY_OPTIMIZATION}`;
+    expect(suggested!['replaces_block_id']).toBe(oldBlock); // §7.5 replacement link stamped
+
+    // accepting the suggestion soft-deletes the replaced block — no double-book.
+    await apply(ids.user, [cmd('block.accept_suggestion', { id: suggested!['id'] })]);
+    const committed = await sql`
+      SELECT id FROM schedule_blocks
+      WHERE user_id = ${ids.user} AND task_id = ${task} AND status = 'committed' AND deleted_at IS NULL`;
+    expect(committed).toHaveLength(1); // exactly one committed block, not two
+    expect(committed[0]!['id']).not.toBe(oldBlock); // the old flexible block was replaced
+    const [gone] = await sql`SELECT deleted_at FROM schedule_blocks WHERE id = ${oldBlock}`;
+    expect(gone!['deleted_at']).not.toBeNull();
   });
 
   it('layout.precompute fills diagram_layouts for the seed roadmap (DoD)', async () => {
