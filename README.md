@@ -92,6 +92,9 @@ server) via `BETTER_AUTH_TRUSTED_ORIGINS=http://localhost:5173`.
 
 Host ports are overridable in a local `.env` (gitignored) when the defaults
 are taken — e.g. `PRISMS_POSTGRES_PORT=5434`, `PRISMS_POWERSYNC_PORT=8081`.
+The web client's default PowerSync URL is `http://localhost:8080` (matching
+compose); if you remap the container port, point the client at it too, e.g.
+`VITE_POWERSYNC_URL=http://localhost:8081` in `apps/web/.env.local`.
 Note WSL shuts down when idle; re-running any `wsl docker ...` command boots
 it again and the containers auto-start (`restart: unless-stopped`).
 

@@ -12,6 +12,10 @@
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "test:convergence": "pnpm --filter @prisms/server test:convergence",
+    "test:integration": "pnpm --filter @prisms/db --filter @prisms/server test",
+    "test:e2e": "pnpm --filter @prisms/web e2e",
+    "test:perf": "pnpm --filter @prisms/core test -- load.perf",
+    "build": "turbo run build",
     "ci": "turbo run lint typecheck test"
   },
   "devDependencies": {

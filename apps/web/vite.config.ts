@@ -17,12 +17,13 @@ export default defineConfig({
       // (app shell from cache + data from OPFS) is exercisable by the e2e.
       devOptions: { enabled: true, type: 'module' },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,wasm}'],
+        globPatterns: ['**/*.{js,css,html,wasm,png}'],
         maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
         // SPA offline: serve the cached shell for navigations (airplane mode),
-        // but never intercept the proxied API/sync calls.
+        // but never intercept the proxied API/sync calls or the PowerSync
+        // stream path (audit S10-F7).
         navigateFallback: 'index.html',
-        navigateFallbackDenylist: [/^\/api/, /^\/sync/],
+        navigateFallbackDenylist: [/^\/api/, /^\/sync/, /^\/powersync/],
       },
       manifest: {
         name: 'Prisms',
@@ -30,7 +31,13 @@ export default defineConfig({
         theme_color: '#0f1115',
         background_color: '#0f1115',
         display: 'standalone',
-        icons: [],
+        // Installability requires real icons (audit S10-F7); generated under
+        // apps/web/public/ (R1), maskable variant keeps the glyph in the safe zone.
+        icons: [
+          { src: '/icon-192.png', sizes: '192x192', type: 'image/png' },
+          { src: '/icon-512.png', sizes: '512x512', type: 'image/png' },
+          { src: '/icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+        ],
       },
     }),
   ],

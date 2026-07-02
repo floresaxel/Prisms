@@ -15,7 +15,8 @@
     },
     "test": {
       "dependsOn": ["^typecheck"],
-      "outputs": []
+      "outputs": [],
+      "env": ["PRISMS_DB_TEST_URL", "PRISMS_POWERSYNC_URL"]
     }
   }
 }

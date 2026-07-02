@@ -1,0 +1,13 @@
+# Keep image build contexts lean and deterministic (audit S10-F6): dependency
+# installs happen inside the image from the lockfile — never copy host installs.
+node_modules
+**/node_modules
+**/dist
+**/dev-dist
+**/.turbo
+**/coverage
+**/test-results
+**/playwright-report
+**/.expo
+apps/desktop/src-tauri/target
+.git

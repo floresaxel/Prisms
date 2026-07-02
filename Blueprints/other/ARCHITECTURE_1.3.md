@@ -96,6 +96,21 @@ These close the runtime-reconciliation and convergence gaps that 1.2 left implic
 | V11 | Idempotency retention        | Server command-dedup records are retained at least `MAX_OFFLINE_HORIZON`. Retention purge must not delete dedup records inside that horizon.                                                                               | A long-dormant device reconnecting must not re-apply old commands.                                                | §7.2d, §12   |
 | V12 | Import semantics             | Import restores data, does not replay commands, and preserves HLC monotonicity. Encrypted export is default on installed targets.                                                                                          | Replaying commands against an evolved schema is non-deterministic; imported HLCs must not dominate future writes. | §13.1        |
 
+### 3.3 Post-audit accepted deviations (R1, 2026-07)
+
+> Amended post-audit (R1, 2026-07): the 2026-06/07 ten-session audit (`docs/audit/FINAL_REPORT.md`) confirmed the following deliberate deviations from this document's letter. They are **accepted as-built**; treat this table as normative over the older text it qualifies.
+
+| # | Spec text | As built (accepted) | Rationale |
+|---|-----------|--------------------|-----------|
+| AD1 | §6 lists a `packages/adapters` workspace | Provider-neutral ports live in `packages/ui/src/adapters/` (+ per-app concrete impls) | R14's substance holds (core has zero provider deps); a fourth package added indirection without value (audit S1-F8) |
+| AD2 | §7.13 DDL: `command_id uuid REFERENCES command_log(id)` | All cross-entity command links (`command_id`, `created_by_command_id`, …) are plain uuids, **no FK** | Makes the 90-day `command_log` horizon purge mechanically safe; explainability degrades to row-level `source_kind`/`source_detail` ("origin unknown") after purge (audit S5-F7/S6-F6) |
+| AD3 | §13.1 export JSON example includes `app_version`, `checksums`, `attachments` | Export manifest omits them (strict schema: format/version/schema_version/exported_at/device_id/hlc_high_water/tables/command_history) | Attachments are deferred in v1 ("may include"); checksums/app_version add no integrity beyond GCM auth on encrypted exports (audit S5-F9) |
+| AD4 | Command history retained indefinitely (implied by §7.2f "product data") | **User-facing history window = 90 days** (= `MAX_OFFLINE_HORIZON`); the purge deletes `command_log` rows past it | Ratified D4. Row-level provenance survives on the rows themselves; Annex A5 (compaction/redaction) is the post-v1 vehicle for longer retention |
+| AD5 | Uniform not-found responses (implied hardening) | `E_NOT_FOUND` vs `E_OWNERSHIP` stay **distinct** codes | Ratified D8. UUIDs make the existence oracle negligible; the distinction materially aids debugging (audit S4-F10) |
+| AD6 | §7.10b earliest-wins survivor + `superseded` marker | Latest-wins survivor, no marker (see the §7.10b amendment) | Ratified D1 (audit S2-F1) |
+| AD7 | §7.10a `(sort_order, hlc)` as the universal ordering key | Canonical key unchanged; **display** tiebreak is `(sort_order, id)`; renormalize is maintenance-only (see the §7.10a amendment) | Ratified D2 (audit S6-F3/S8-F4) |
+| AD8 | §8 retype cascade-plan escape hatch | Rejection-only (see the §8 amendment) | Ratified D5 (audit S3-F6) |
+
 ## 4. Architecture Principles
 
 1. Local-first. The network is a background concern. Losing the server degrades the product from optimized to good enough, not to broken.
@@ -556,6 +571,8 @@ Per-field last-writer-wins by HLC is the default conflict resolution for scalar 
 - A periodic, deterministic renormalization command (`layout.renormalize_order`, server-issued or batched) may rewrite collided fractions to clean spacing; it must be idempotent and provenance-tagged.
 - Property test: two devices each insert between the same neighbors offline; after convergence both devices show the same total order.
 
+> Amended post-audit (R1, 2026-07): **display tiebreak is `(sort_order, id)`** (ratified D2, audit S6-F3/S8-F4). The canonical server-side ordering key remains `(sort_order, hlc)` (`core/merge/sort-order.ts`); the client schema deliberately omits `hlc`, and the UI breaks ties by row `id` — also total and deterministic, so all devices render the same converged order. The §15 gate's substance (same order everywhere after convergence) holds under either tiebreak. `layout.renormalize_order` stays in the catalog as a **maintenance-only** command (no automatic server or UI trigger); collided fractions are cosmetic under a total display order.
+
 #### 7.10b Timer intervals
 
 Two offline clock-ins on the same task produce two open `time_entries`. The deterministic resolver `mergeTimeEntries(taskId, entries)` is a pure core function applied server-side on convergence and mirrored client-side for display:
@@ -564,6 +581,8 @@ Two offline clock-ins on the same task produce two open `time_entries`. The dete
 - When one has a `clock_out`, the merged interval ends at the latest known `ended_at`; overlapping spans are unioned (not summed) so effective hours never double-count.
 - This rule is the single source of truth for `effective hours`. It has dedicated property tests: union-not-sum, idempotency, and order-independence.
 - The client "hide double timers" rule is a display projection of this resolver, not a second algorithm.
+
+> Amended post-audit (R1, 2026-07): **the row-level survivor rule is latest-wins** (ratified D1, audit S2-F1). `resolveOpenTimeEntries` (`core/commands/timer-merge.ts`, the §7.4 rule the server applies and the harness locks in) keeps the entry with the **latest** `started_at` open and closes every other at that instant (ties by larger id) — "my most recent clock-in is what I'm doing now". The union above still spans `min(started_at)` onward, so effective hours are unchanged by the survivor choice. The `superseded`-marker requirement in the first bullet is **dropped**: the loser's `ended_at` plus the command log provide sufficient provenance; no supersession column or review item is required for this case.
 
 ### 7.11 Synced-row schema versioning and mixed-version devices
 
@@ -718,6 +737,8 @@ Specific command rules clarified in 1.3:
 
 - `timer.clock_in` on a task whose merged status is `blocked` is rejected `blocked_task` unless the user explicitly overrides via a payload flag `force: true`; with `force`, the entry is created and `ongoing` wins the status precedence. Define this consistently so two devices converge identically.
 - `node.retype` must reject if the new type would orphan child types (e.g., retyping a Project to a Task while it has Milestone/Task children), with error `invalid_retype_children`, unless the payload includes an explicit cascade plan. It revalidates hierarchy and justification.
+
+  > Amended post-audit (R1, 2026-07): retype is **rejection-only** (ratified D5, audit S3-F6) — the cascade-plan payload option is dropped from v1. Workaround: move or retype the offending children first, then retype the parent. `E_INVALID_RETYPE_CHILDREN` identifies the blocking child type.
 - `node.move` revalidates hierarchy typing and justification (ancestry reaches a Vision or the node has `habit_id`).
 - `layout.renormalize_order` is the deterministic sort_order cleanup from §7.10a; it is idempotent and provenance-tagged.
 

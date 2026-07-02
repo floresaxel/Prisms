@@ -68,12 +68,8 @@ jobs:
     # read-path: no empty-then-fill flash + warm synchronous tab revisit).
     name: Web Playwright e2e (offline + convergence + graph/rules + read-path + portability) vs live stack
     runs-on: ubuntu-latest
-    # The web client defaults powersyncUrl to :8081 (apps/web/src/config.ts — the
-    # maintainer's dev port). Map the powersync container to 8081 so the browser
-    # reaches it; compose's default is 8080, so without this the client connects
-    # to nothing and every data-dependent e2e times out waiting for sync-down.
-    env:
-      PRISMS_POWERSYNC_PORT: 8081
+    # The web client's default powersyncUrl (:8080) matches compose's default
+    # container mapping — no port remap needed (audit S1-F7/S9-F4).
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
