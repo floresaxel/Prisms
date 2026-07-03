@@ -290,3 +290,84 @@ describe('StatusIndex — locality at scale', () => {
     expect(res.recomputed.length).toBeLessThan(w.tasks.length);
   });
 });
+
+describe('StatusIndex — phase fan-out is scoped to the changed project (S2-F4)', () => {
+  it('a completion under one project does not recompute another project`s tasks', () => {
+    // vision → { P1: [t0,t1], P2: [u0,u1] }, with a GLOBAL project.phase blocker.
+    const vision = makeNode({ id: idOf(1), node_type: 'vision' });
+    const p1 = makeNode({ id: idOf(2), node_type: 'project', parent_id: vision.id });
+    const p2 = makeNode({ id: idOf(3), node_type: 'project', parent_id: vision.id });
+    const t0 = makeNode({ id: idOf(10), node_type: 'task', parent_id: p1.id });
+    const t1 = makeNode({ id: idOf(11), node_type: 'task', parent_id: p1.id });
+    const u0 = makeNode({ id: idOf(20), node_type: 'task', parent_id: p2.id });
+    const u1 = makeNode({ id: idOf(21), node_type: 'task', parent_id: p2.id });
+    const rows: FactRows = {
+      nodes: [vision, p1, p2, t0, t1, u0, u1],
+      blocker_rules: [makeBlockerRule({ id: idOf(950), predicate: { all: [{ fact: 'project.phase', op: 'eq', value: 'idle' }] } })],
+      user_settings: SETTINGS,
+    };
+    const index = new StatusIndex(rows, NOW, SETTINGS);
+    const res = index.apply([{ table: 'nodes', op: 'update', row_id: t0.id, fields: { completed_at: past } }]);
+    // P1's tasks are recomputed (its phase changed); P2's are untouched.
+    expect(res.recomputed).toContain(t1.id);
+    expect(res.recomputed).not.toContain(u0.id);
+    expect(res.recomputed).not.toContain(u1.id);
+    // and every value still equals a fresh rebuild over the POST-completion state
+    // (scoping the fan-out narrowed the touch set without changing any value).
+    const afterNodes = rows.nodes.map((n) => (n.id === t0.id ? { ...n, completed_at: past } : n));
+    const afterCtx = buildFactContext({ ...rows, nodes: afterNodes });
+    for (const n of afterNodes) {
+      if (n.node_type === 'task') expect(index.statusOf(n.id), `task ${n.id}`).toBe(taskStatus(n, afterCtx, NOW));
+    }
+  });
+});
+
+describe('StatusIndex — freshView is a drop-in FactContext (S8-F1 provider seam)', () => {
+  it('exposes sorted children like buildTreeIndex, fresh identity per call, live after apply', () => {
+    const vision = makeNode({ id: idOf(1), node_type: 'vision' });
+    // siblings deliberately out of sort_order insertion order
+    const p = makeNode({ id: idOf(2), node_type: 'project', parent_id: vision.id });
+    const c2 = makeNode({ id: idOf(30), node_type: 'task', parent_id: p.id, sort_order: 'a2', title: 'c2' });
+    const c0 = makeNode({ id: idOf(31), node_type: 'task', parent_id: p.id, sort_order: 'a0', title: 'c0' });
+    const c1 = makeNode({ id: idOf(32), node_type: 'task', parent_id: p.id, sort_order: 'a1', title: 'c1' });
+    const rows: FactRows = { nodes: [vision, p, c2, c0, c1], user_settings: SETTINGS };
+    const index = new StatusIndex(rows, NOW, SETTINGS, { trackStatus: false });
+
+    const v1 = index.freshView();
+    const order1 = (v1.tree.childrenByParent.get(p.id) ?? []).map((n) => n.sort_order);
+    expect(order1).toEqual(['a0', 'a1', 'a2']); // sorted like buildTreeIndex
+    // matches the reference tree exactly
+    const ref = buildFactContext(rows);
+    expect((v1.tree.childrenByParent.get(p.id) ?? []).map((n) => n.id)).toEqual((ref.tree.childrenByParent.get(p.id) ?? []).map((n) => n.id));
+
+    // fresh identity per call (so React consumers memoized on the context re-run)
+    const v2 = index.freshView();
+    expect(v2).not.toBe(v1);
+    expect(v2.tree).not.toBe(v1.tree);
+
+    // live after apply: an inserted sibling lands in sorted position in the NEXT view
+    index.apply([{ table: 'nodes', op: 'insert', row_id: idOf(33), fields: { node_type: 'task', parent_id: p.id, sort_order: 'a0h', title: 'c0h' } }]);
+    const v3 = index.freshView();
+    expect((v3.tree.childrenByParent.get(p.id) ?? []).map((n) => n.sort_order)).toEqual(['a0', 'a0h', 'a1', 'a2']);
+    // trackStatus:false → no status tracked, but the view/tree is fully maintained
+    expect(v3.node(idOf(33))?.title).toBe('c0h');
+  });
+});
+
+describe('StatusIndex — unknown-row update guard (S2-F5)', () => {
+  it('ignores an update effect for a row the index does not hold; inserts still work', () => {
+    const w = world(3);
+    const index = new StatusIndex(factRows(w), NOW, SETTINGS);
+    const ghostId = idOf(9999);
+    // an update (e.g. a stray `{deleted_at: null}` restore) for an unknown row:
+    // no ghost is fabricated, nothing recomputed, and the skip is counted.
+    const res = index.apply([{ table: 'nodes', op: 'update', row_id: ghostId, fields: { deleted_at: null, title: 'ghost' } }]);
+    expect(index.statusOf(ghostId)).toBeUndefined();
+    expect(res.recomputed).toEqual([]);
+    expect(index.skippedUnknownUpdates).toBe(1);
+    // an INSERT for a genuinely new task is the only unknown-row entry path.
+    index.apply([{ table: 'nodes', op: 'insert', row_id: ghostId, fields: { node_type: 'task', parent_id: w.project.id, title: 'real', sort_order: 'z0' } }]);
+    expect(index.statusOf(ghostId)).toBe('available');
+    expect(index.skippedUnknownUpdates).toBe(1); // unchanged by the insert
+  });
+});
