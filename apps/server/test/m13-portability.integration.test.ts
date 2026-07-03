@@ -37,6 +37,7 @@ const cmd = (name: string, payload: unknown, id = randomUUID()) => ({
   name,
   hlc: `${(++seq).toString(16).padStart(12, '0')}-0000-seed`,
   payload,
+  schema_version: 1, // R6: clients emit the §7.11 version (absent = below-floor)
 });
 
 /** Child-before-parent order so a raw wipe never trips a foreign key. */

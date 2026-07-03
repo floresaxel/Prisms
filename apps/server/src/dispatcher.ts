@@ -1225,7 +1225,8 @@ export function createDispatcher(
       device_id: deviceId,
       hlc: cmd.hlc,
       command_version: cmd.command_version ?? 1,
-      schema_version: cmd.schema_version ?? 1,
+      // absent schema_version records as 0 (below-floor), matching the §7.11 gate.
+      schema_version: cmd.schema_version ?? 0,
       client_version: cmd.client_version ?? null,
       depends_on: cmd.depends_on ? [...cmd.depends_on] : [],
       result,
@@ -1301,9 +1302,16 @@ export function createDispatcher(
       return { id: cmd.id, result: 'noop', original_result: prior.result === 'applied' ? 'applied' : 'rejected' };
     }
 
-    // §7.11 schema floor: a client below the floor is rejected, never guessed.
-    if (cmd.schema_version !== undefined && isClientTooOld(cmd.schema_version, MIN_CLIENT_SCHEMA_VERSION)) {
-      const reason = `client schema_version ${cmd.schema_version} is below the floor ${MIN_CLIENT_SCHEMA_VERSION}`;
+    // §7.11 schema floor: a client below the floor is rejected, never guessed. An
+    // ABSENT schema_version is treated as below-floor (0) — a client that omits it
+    // can't be trusted to be at the current row shape (S4-F1). Safe because clients
+    // have emitted schema_version since R6 (D7: client-first, this rejection second).
+    const clientSchemaVersion = cmd.schema_version ?? 0;
+    if (isClientTooOld(clientSchemaVersion, MIN_CLIENT_SCHEMA_VERSION)) {
+      const reason =
+        cmd.schema_version === undefined
+          ? `client sent no schema_version (required; floor is ${MIN_CLIENT_SCHEMA_VERSION})`
+          : `client schema_version ${cmd.schema_version} is below the floor ${MIN_CLIENT_SCHEMA_VERSION}`;
       await logResult(userId, deviceId, cmd, 'rejected', `E_CLIENT_TOO_OLD: ${reason}`);
       return { id: cmd.id, result: 'rejected', reject_code: 'E_CLIENT_TOO_OLD', reject_reason: reason };
     }
@@ -1343,7 +1351,9 @@ export function createDispatcher(
           device_id: deviceId,
           hlc: cmd.hlc,
           command_version: cmd.command_version ?? 1,
-          schema_version: cmd.schema_version ?? 1,
+          // a command that reaches the txn passed the floor, so schema_version is
+          // present; 0 is the below-floor sentinel that never gets here.
+          schema_version: cmd.schema_version ?? 0,
           client_version: cmd.client_version ?? null,
           depends_on: cmd.depends_on ? [...cmd.depends_on] : [],
           result: result.status === 'applied' ? 'applied' : 'rejected',
@@ -1363,7 +1373,17 @@ export function createDispatcher(
         const existing = await one(db.select({ result: command_log.result }).from(command_log).where(eq(command_log.id, cmd.id)).limit(1));
         if (existing) return { id: cmd.id, result: 'noop', original_result: existing.result === 'applied' ? 'applied' : 'rejected' };
       }
-      throw error;
+      // Transient infra (connection / serialization / deadlock) → rethrow so the
+      // upload 500s and the client keeps the command pending for retry.
+      if (isRetryableError(error)) throw error;
+      // S4-F8: a poison command (a data/logic error) must NOT 500 the whole batch
+      // and wedge the device's queue. Its txn already rolled back (no partial
+      // effects); reject it E_INTERNAL + a linked review item (created by the
+      // caller) and let the batch continue. The real cause is logged server-side;
+      // the client sees only a generic reason (no internal-error leak).
+      const detail = error instanceof Error ? error.message : String(error);
+      await logResult(userId, deviceId, cmd, 'rejected', `E_INTERNAL: ${detail}`);
+      return { id: cmd.id, result: 'rejected', reject_code: 'E_INTERNAL', reject_reason: 'internal error applying the command' };
     }
   }
 
@@ -1404,4 +1424,26 @@ export function createDispatcher(
 
 function isUniqueViolation(error: unknown): boolean {
   return typeof error === 'object' && error !== null && 'code' in error && (error as { code?: string }).code === '23505';
+}
+
+/**
+ * Transient errors that should 500 the upload (so the client retries the whole
+ * batch), NOT be converted to a per-command E_INTERNAL rejection (S4-F8): pg
+ * connection-exception (08*), serialization failure / deadlock (40001/40P01),
+ * admin shutdown (57P01), insufficient resources (53*), and node network errors.
+ * Everything else (constraint/data/logic errors) is a poison command.
+ */
+function isRetryableError(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null || !('code' in error)) return false;
+  const code = String((error as { code?: unknown }).code ?? '');
+  return (
+    /^08/.test(code) ||
+    /^53/.test(code) ||
+    code === '40001' ||
+    code === '40P01' ||
+    code === '57P01' ||
+    code === 'ECONNREFUSED' ||
+    code === 'ECONNRESET' ||
+    code === 'ETIMEDOUT'
+  );
 }

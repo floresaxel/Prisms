@@ -32,6 +32,7 @@ import {
   hlcTick,
   mergeRow,
   mergeTimeEntries,
+  ROW_SCHEMA_VERSION,
   uploadRequestSchema,
   uuidV7From,
   type CommandOutcome,
@@ -144,10 +145,12 @@ class Device {
       name: r.name,
       hlc: r.hlc,
       payload: JSON.parse(r.payload) as unknown,
-      // include the version/causal axes ONLY when set — the envelope is a strict
-      // object, so an explicit `undefined`/extra key would fail validation.
+      // R6: every envelope carries schema_version so the server's §7.11 floor
+      // accepts it (absent = below-floor since R6). An explicit value from
+      // edit()'s opts (incl. 0, the below-floor case) is preserved via `??`.
+      schema_version: r.schema_version ?? ROW_SCHEMA_VERSION,
+      // include the remaining axes ONLY when set — the envelope is strict.
       ...(r.depends_on ? { depends_on: JSON.parse(r.depends_on) as string[] } : {}),
-      ...(r.schema_version != null ? { schema_version: r.schema_version } : {}),
       ...(r.command_version != null ? { command_version: r.command_version } : {}),
     }));
   }
@@ -212,6 +215,8 @@ class Device {
       name: r.name,
       hlc: r.hlc,
       payload: JSON.parse(r.payload) as unknown,
+      // R6: overlay-path envelopes carry the version axes too (§7.11 floor).
+      schema_version: ROW_SCHEMA_VERSION,
       ...(r.depends_on ? { depends_on: JSON.parse(r.depends_on) as string[] } : {}),
     }));
   }
@@ -304,6 +309,7 @@ describe.skipIf(!adminUrl)('S12 convergence harness (two devices, offline edits)
     name,
     hlc: `${(++seedSeq).toString(16).padStart(12, '0')}-0000-seed`,
     payload,
+    schema_version: ROW_SCHEMA_VERSION, // R6: seed envelopes carry a version (§7.11 floor)
   });
 
   /** A project with one task under it, for a fresh user. */
@@ -535,7 +541,7 @@ describe.skipIf(!adminUrl)('S12 convergence harness (two devices, offline edits)
     expect(uploadRequestSchema.safeParse(body).success).toBe(true);
     expect(body.commands).toHaveLength(1);
     expect(body.commands[0]).toMatchObject({ id: cmd.id, name: 'node.create' });
-    expect(Object.keys(body.commands[0]!).sort()).toEqual(['hlc', 'id', 'name', 'payload']);
+    expect(Object.keys(body.commands[0]!).sort()).toEqual(['hlc', 'id', 'name', 'payload', 'schema_version']);
 
     const results = await a.push(dispatcher, p.user);
     assertContract(results);
@@ -860,5 +866,33 @@ describe.skipIf(!adminUrl)('S12 convergence harness (two devices, offline edits)
     const [gone] = await sql`SELECT deleted_at FROM schedule_blocks WHERE id = ${oldBlock}`;
     expect(gone!['deleted_at']).not.toBeNull();
     dev.close();
+  });
+
+  it('scenario 15 — a command with NO schema_version is rejected client_too_old (§7.11, S4-F1/S7-F3)', async () => {
+    const p = await project();
+    // A raw envelope that omits schema_version entirely (a pre-R6 client). The
+    // envelope schema accepts it (the field is optional), but the §7.11 floor now
+    // treats absent as below-floor and rejects it — never applies it by guesswork.
+    const versionless = {
+      id: randomUUID(),
+      name: 'node.rename',
+      hlc: '000000010000-0000-noversion',
+      payload: { id: p.task, title: 'ghost' },
+    };
+    const res = await dispatcher.handleUpload(p.user, { device_id: 'noversion', commands: [versionless] });
+    if (res.kind !== 'ok') throw new Error(res.kind);
+    assertContract(res.results);
+    expect(res.results[0]).toMatchObject({ result: 'rejected', reject_code: 'E_CLIENT_TOO_OLD' });
+    expect(res.results[0]!.review_item_ids).toHaveLength(1);
+    const items = await sql`SELECT item_type, severity FROM sync_review_items WHERE command_id = ${versionless.id} AND user_id = ${p.user}`;
+    expect(items[0]).toMatchObject({ item_type: 'schema_version_block', severity: 'error' });
+    const [row] = await sql`SELECT title FROM nodes WHERE id = ${p.task}`;
+    expect(row!['title']).toBe('T'); // untouched — the version-less command never applied
+
+    // sanity: the SAME command WITH a floor-satisfying schema_version applies.
+    const ok = { ...versionless, id: randomUUID(), hlc: '000000020000-0000-noversion', schema_version: 1 };
+    const res2 = await dispatcher.handleUpload(p.user, { device_id: 'noversion', commands: [ok] });
+    if (res2.kind !== 'ok') throw new Error(res2.kind);
+    expect(res2.results[0]).toMatchObject({ result: 'applied' });
   });
 });

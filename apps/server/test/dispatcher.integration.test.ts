@@ -29,6 +29,7 @@ const cmd = (name: string, payload: unknown, id = randomUUID()) => ({
   name,
   hlc: `${(++hlc).toString(16).padStart(12, '0')}-0000-test-device`,
   payload,
+  schema_version: 1, // R6: clients emit the §7.11 version (absent = below-floor)
 });
 
 describe.skipIf(!adminUrl)('S11 command dispatcher (§8 pipeline, full catalog)', () => {

@@ -42,6 +42,7 @@ const command = (payload: unknown, name = 'settings.update') => ({
   name,
   hlc: nextHlc(),
   payload,
+  schema_version: 1, // R6: clients emit the §7.11 version (absent = below-floor)
 });
 
 describe.skipIf(!adminUrl)('S10 API integration (auth, PowerSync JWT, settings.update)', () => {

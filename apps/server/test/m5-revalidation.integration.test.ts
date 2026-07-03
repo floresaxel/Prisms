@@ -16,7 +16,7 @@ import { createRateLimiter } from '../src/rate-limit';
 loadRootEnv();
 const adminUrl = process.env.PRISMS_DB_TEST_URL;
 
-interface Cmd { id: string; name: string; hlc: string; payload: unknown }
+interface Cmd { id: string; name: string; hlc: string; payload: unknown; schema_version?: number }
 
 describe.skipIf(!adminUrl)('M5 — completion gate, force clock-in, retype orphan', () => {
   const dbName = `prisms_m5rv_${Date.now().toString(36)}`;
@@ -29,6 +29,7 @@ describe.skipIf(!adminUrl)('M5 — completion gate, force clock-in, retype orpha
     name,
     hlc: `${(++seq).toString(16).padStart(12, '0')}-0000-seed`,
     payload,
+    schema_version: 1, // R6: clients emit the §7.11 version (absent = below-floor)
   });
   const upload = (userId: string, commands: Cmd[]) => dispatcher.handleUpload(userId, { device_id: 'seed', commands });
   const result = async (userId: string, command: Cmd) => {
