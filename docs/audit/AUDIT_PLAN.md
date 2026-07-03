@@ -49,12 +49,15 @@ The 48-finding register was remediated across sessions R1–R10 (self-contained 
 | R2 status semantics | `05a3bc6` | **S3-F1 (High)** weather out of acceptance; SS/SF lag; weather-conditioned automations rejected |
 | R3 hours correctness | `3a243c9` | **S3-F2 (High)** union-not-sum through `mergeTimeEntries` on every aggregate |
 | R4 jobs lifecycle | `643f223` | review-expire wired; `replaces_block_id` (no double-book); notify-once; template versioning |
+| R5 write-path parity | `5ca01c5` | **S7-F1 (High)** offline automation spawning; invariant pre-flight (S7-F4); soft-delete closure (S7-F7); `depends_on` (S7-F5) |
 | R6 upload+versions | `a7e7a2b` | **S7-F2 (High)** upload chunking; versions end-to-end + server floor; poison-batch isolation |
 | R7 StatusIndex client | `d8eaecc` | **S8-F1 (High)** incremental provider; fan-out scoping (S2-F4/F5) |
 | R8 server scale+effects | `63c284e` | **S4-F2** per-batch context cache (17.6× at 100k); **S4-F3** `command_log.effects` |
 | R9 account+mobile | `ee02580` | **S9-F1 (High)** logout boundary; **S9-F2 (High)** mobile crypto; React pairing (S9-F3); PBKDF2 600k (S8-F3); desktop CSP |
 | R10 topology+docs+sign-off | *this branch* | **S6-F1/F2/F4** tier substance + drop `command_results` + scoped publication; **S4-F4/F5/F6 + S10-F5** boot fail-fast/JWK check, rate + body limits; **S3-F7** `matches` cap; **S2-F2** additive-schema gate; **S10-F3a** two-user isolation test; docs truth-up (S10-F1/F2) |
 
-**High-finding status: 5 of 6 closed.** S3-F1 (R2, server) · S3-F2 (R3) · S7-F2 (R6) · S9-F1 (R9) · S9-F2 (R9, device-verify pending). **Outstanding: S7-F1 (offline automation spawning) — R5 (write-path parity) is NOT yet done.** R5 is disjoint from R6/R7/R8 (which only needed R2/R4), so it was skippable in the wave order but is a hard prerequisite for the final release sign-off.
+**High-finding status: ALL 6 CLOSED.** S3-F1 (R2, server + R5 client mirror) · S3-F2 (R3) · **S7-F1 (R5)** · S7-F2 (R6) · S8-F1 (R7) · S9-F1 (R9) · S9-F2 (R9, device-verify pending). The remediation of the 0-Critical / 6-High register is complete.
 
-**R10 sign-off gate (on the `r10-topology-signoff` head = `remediation` + R6/R7/R8/R9/R10, missing R5):** `pnpm turbo lint typecheck` 14/14 · core **559** tests, coverage **90.44/94.02/93.39** (≥90) · db **49** · server **125** + api **14** (live PG, incl. convergence 15/15 + two-user isolation) · web build ✅. e2e = CI. **The `remediation`→`m0-spike` merge is HELD pending R5 (S7-F1 High) + operator approval.**
+**Sign-off gate (on the R5-inclusive head = `remediation` + R6/R7/R8/R9/R10 + R5):** `pnpm turbo lint typecheck` 14/14 · core **559** tests, coverage **90.44/94.02/93.39** (≥90) · db **49** · server **125** + api **14** (live PG, incl. convergence 15/15 + two-user isolation) · ui **89** · web **12** + build ✅. e2e = CI. R5 is client-only (ui) so the server/db/core results carry from the R10 head unchanged; convergence re-run 16/16 on the R5 head.
+
+**Remaining = release mechanics only (operator's call):** fast-forward the `remediation` label (still at `97038ed`/R6) through R6..R10 + R5, then merge `remediation` → `m0-spike`; push only on explicit operator say-so. No finding blocks the merge — it is a mainline/irreversible action held for approval, not for more work.
