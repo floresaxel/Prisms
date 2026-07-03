@@ -23,10 +23,10 @@
  * overlay rollback are unchanged. A later §7.12 `StatusIndex` would live here as a
  * single session-scoped member (status is still computed live in selectors today).
  */
-import { createContext, useContext, useMemo, type ReactNode } from 'react';
+import { createContext, useContext, useMemo, useRef, type ReactNode } from 'react';
 
 import { useQuery, useStatus } from '@powersync/react';
-import { buildFactContext, mergeTable, type FactContext, type OverlayEffect, type TreeIndex } from '@prisms/core';
+import { asEpochMillis, mergeTable, StatusIndex, type FactContext, type FactRows, type OverlayEffect, type StatusEffect, type TreeIndex } from '@prisms/core';
 
 import {
   toBlockerRule,
@@ -63,6 +63,121 @@ export const toOverlayEffect = (r: Row): OverlayEffect => {
     seq: Number(r['seq'] ?? 0),
   };
 };
+
+// --- incremental FactContext engine (§7.12/§7.14, S8-F1) --------------------
+//
+// v1.0/M11 rebuilt the ENTIRE FactContext (`buildFactContext`, ~65ms at 100k) on
+// every change to the merged rows — and every optimistic write changes the
+// overlay, so it ran per keystroke. This engine seeds a `StatusIndex` ONCE, then
+// feeds it the minimal diff of the merged rows on each change (apply is O(dirty),
+// ~0.02ms) and hands consumers a FRESH FactContext identity over the live maps.
+// The diff is correct-by-construction: it always reconciles the index to the
+// current merged rows, so reconcile/rollback need no special handling.
+
+/** The index needs a `now` for a status pass it does not run in view-only mode. */
+const SEED_NOW = asEpochMillis(0);
+/** A change larger than this reseeds (a big sync-down) rather than applying deltas. */
+const REBUILD_THRESHOLD = 5000;
+
+type Mapped = Record<string, unknown>;
+const asFields = (o: unknown): StatusEffect['fields'] => o as StatusEffect['fields'];
+
+/** The 8 id-keyed shared tables and their raw→core mappers (user_settings is special). */
+const SHARED_TABLES: ReadonlyArray<{ key: keyof SharedRows; table: string; map: (r: Row) => Mapped }> = [
+  { key: 'nodes', table: 'nodes', map: (r) => toNode(r) as unknown as Mapped },
+  { key: 'edges', table: 'edges', map: (r) => toEdge(r) as unknown as Mapped },
+  { key: 'time_entries', table: 'time_entries', map: (r) => toTimeEntry(r) as unknown as Mapped },
+  { key: 'schedule_blocks', table: 'schedule_blocks', map: (r) => toScheduleBlock(r) as unknown as Mapped },
+  { key: 'sprints', table: 'sprints', map: (r) => toSprint(r) as unknown as Mapped },
+  { key: 'sprint_memberships', table: 'sprint_memberships', map: (r) => toMembership(r) as unknown as Mapped },
+  { key: 'blocker_rules', table: 'blocker_rules', map: (r) => toBlockerRule(r) as unknown as Mapped },
+  { key: 'external_facts', table: 'external_facts', map: (r) => toExternalFact(r) as unknown as Mapped },
+];
+
+interface Engine {
+  index: StatusIndex | null;
+  /** Per table: active row id → { raw (for identity diff), mapped (core entity) }. */
+  tables: Map<string, Map<string, { raw: Row; mapped: Mapped }>>;
+  /** Last settings row identity (to detect a settings change). */
+  settingsRaw: Row | undefined;
+}
+
+/** Diff a table's current active rows against the prior state → minimal effects. */
+function diffTable(
+  prev: Map<string, { raw: Row; mapped: Mapped }>,
+  table: string,
+  rows: readonly Row[],
+  map: (r: Row) => Mapped,
+): { effects: StatusEffect[]; next: Map<string, { raw: Row; mapped: Mapped }> } {
+  const effects: StatusEffect[] = [];
+  const next = new Map<string, { raw: Row; mapped: Mapped }>();
+  const seen = new Set<string>();
+  for (const raw of rows) {
+    if (raw['deleted_at'] != null) continue; // tombstone: excluded (like buildFactContext)
+    const id = String(raw['id']);
+    seen.add(id);
+    const p = prev.get(id);
+    if (p && p.raw === raw) {
+      next.set(id, p); // identity-stable row → unchanged, reuse the mapped entity
+      continue;
+    }
+    const mapped = map(raw);
+    next.set(id, { raw, mapped });
+    effects.push({ table, op: p ? 'update' : 'insert', row_id: id, fields: asFields(mapped) });
+  }
+  for (const id of prev.keys()) if (!seen.has(id)) effects.push({ table, op: 'delete', row_id: id, fields: {} });
+  return { effects, next };
+}
+
+/** Full (re)seed of the index + per-table state from the current merged rows. */
+function seed(engine: Engine, rows: SharedRows): void {
+  const factRows: Record<string, unknown> = {};
+  engine.tables = new Map();
+  for (const { key, table, map } of SHARED_TABLES) {
+    const byId = new Map<string, { raw: Row; mapped: Mapped }>();
+    const mapped: Mapped[] = [];
+    for (const raw of rows[key]) {
+      if (raw['deleted_at'] != null) continue;
+      const m = map(raw);
+      byId.set(String(raw['id']), { raw, mapped: m });
+      mapped.push(m);
+    }
+    engine.tables.set(table, byId);
+    factRows[key] = mapped;
+  }
+  const settingsRow = rows.user_settings[0];
+  factRows['user_settings'] = settingsRow ? toUserSettings(settingsRow) : null;
+  engine.index = new StatusIndex(factRows as unknown as FactRows, SEED_NOW, undefined, { trackStatus: false });
+  engine.settingsRaw = settingsRow;
+}
+
+/** Maintain the index for the current merged rows and return a fresh FactContext. */
+function maintain(engine: Engine, rows: SharedRows): FactContext {
+  if (engine.index === null) {
+    seed(engine, rows);
+    return engine.index!.freshView();
+  }
+  const effects: StatusEffect[] = [];
+  const nextTables = new Map<string, Map<string, { raw: Row; mapped: Mapped }>>();
+  for (const { key, table, map } of SHARED_TABLES) {
+    const prev = engine.tables.get(table) ?? new Map();
+    const { effects: e, next } = diffTable(prev, table, rows[key], map);
+    for (const ef of e) effects.push(ef);
+    nextTables.set(table, next);
+  }
+  const settingsRow = rows.user_settings[0];
+  if (settingsRow !== engine.settingsRaw && settingsRow) {
+    effects.push({ table: 'user_settings', op: 'update', row_id: 'settings', fields: asFields(toUserSettings(settingsRow)) });
+  }
+  if (effects.length > REBUILD_THRESHOLD) {
+    seed(engine, rows); // a big change (e.g. first sync-down) → cheaper to rebuild
+  } else {
+    if (effects.length) engine.index.apply(effects);
+    engine.tables = nextTables;
+    engine.settingsRaw = settingsRow;
+  }
+  return engine.index.freshView();
+}
 
 /** The provider-shared merged row sets (Table→Owner Matrix). Raw rows; consumers map. */
 export interface SharedRows {
@@ -149,24 +264,12 @@ export function PrismsDataProvider({ children }: { children: ReactNode }) {
     };
   }, [nodesQ.data, edgesQ.data, entriesQ.data, blocksQ.data, sprintsQ.data, membershipsQ.data, blockersQ.data, factsQ.data, settingsQ.data, overlayByTable]);
 
-  // The single fact/tree derivation — built once, memoized on the shared rows.
-  // Nodes are filtered to the active set here (the tree/status world), while
-  // `rows.nodes` keeps tombstones for Dashboard.
-  const factContext = useMemo(
-    () =>
-      buildFactContext({
-        nodes: rows.nodes.filter((r) => r['deleted_at'] == null).map(toNode),
-        edges: rows.edges.map(toEdge),
-        time_entries: rows.time_entries.map(toTimeEntry),
-        schedule_blocks: rows.schedule_blocks.map(toScheduleBlock),
-        sprints: rows.sprints.map(toSprint),
-        sprint_memberships: rows.sprint_memberships.map(toMembership),
-        blocker_rules: rows.blocker_rules.map(toBlockerRule),
-        external_facts: rows.external_facts.map(toExternalFact),
-        user_settings: rows.user_settings[0] ? toUserSettings(rows.user_settings[0]) : null,
-      }),
-    [rows],
-  );
+  // The single fact/tree derivation — seeded ONCE, then incrementally maintained
+  // (S8-F1). The engine persists across renders in a ref; the memo recomputes
+  // only when the merged `rows` change (not on the screen-local `now` tick), and
+  // returns a fresh FactContext identity over the live, incrementally-patched maps.
+  const engineRef = useRef<Engine>({ index: null, tables: new Map(), settingsRaw: undefined });
+  const factContext = useMemo(() => maintain(engineRef.current, rows), [rows]);
 
   const isFetching =
     overlayQ.isFetching ||

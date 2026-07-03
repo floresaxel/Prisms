@@ -25,13 +25,15 @@ import {
   createExecuteCommand,
   readMergedRows,
   uploadClientCommands,
+  UploadClientError,
   type CommandRejection,
   type OverlayStore,
+  type PendingCommand,
   type ReviewItem,
 } from '../src/index';
 import {
+  defaultCommandMeta,
   mergeTable,
-  type ClientCommand,
   type OverlayEffect,
   type OverlayRow,
 } from '@prisms/core';
@@ -39,13 +41,14 @@ import {
 // --- an in-memory OverlayStore, mirroring the SQL store's invariants ---------
 function memoryStore(seedReplica: Record<string, OverlayRow[]> = {}) {
   const replica = new Map<string, OverlayRow[]>(Object.entries(seedReplica));
-  let commands: ClientCommand[] = [];
+  let commands: PendingCommand[] = [];
   let effects: OverlayEffect[] = [];
   const reviews: ReviewItem[] = [];
 
   const store: OverlayStore = {
-    async enqueue(command, cmdEffects) {
-      commands.push(command);
+    async enqueue(command, cmdEffects, dependsOn = []) {
+      const meta = defaultCommandMeta([...dependsOn]);
+      commands.push({ ...command, command_version: meta.command_version, schema_version: meta.schema_version, client_version: null, depends_on: [...dependsOn] });
       effects.push(...cmdEffects);
     },
     async pendingCommands() {
@@ -57,9 +60,30 @@ function memoryStore(seedReplica: Record<string, OverlayRow[]> = {}) {
     async replicaRows(table) {
       return replica.get(table) ?? [];
     },
-    async reconcileApplied(commandId) {
-      effects = effects.filter((e) => e.command_id !== commandId);
-      commands = commands.filter((c) => c.id !== commandId);
+    async markApplied(commandId) {
+      commands = commands.map((c) => (c.id === commandId ? { ...c, status: 'applied' } : c));
+    },
+    async reconcileConfirmed(nowMs = Date.now()) {
+      const cleared: string[] = [];
+      for (const cmd of commands.filter((c) => c.status === 'applied')) {
+        const arrived = effects
+          .filter((e) => e.command_id === cmd.id)
+          .every((e) => {
+            const canonical = (replica.get(e.table) ?? []).find((r) => String(r['id']) === e.row_id);
+            if (e.op === 'delete') return !canonical || canonical['deleted_at'] != null;
+            if (!canonical || canonical['deleted_at'] != null) return false;
+            const stamp = canonical['last_modified_by_command_id'];
+            return stamp == null || String(stamp) === cmd.id;
+          });
+        if (arrived) {
+          effects = effects.filter((e) => e.command_id !== cmd.id);
+          commands = commands.filter((c) => c.id !== cmd.id);
+          cleared.push(cmd.id);
+        }
+      }
+      const cutoff = new Date(nowMs - 30 * 86_400_000).toISOString();
+      commands = commands.filter((c) => !(c.status === 'rejected' && c.created_at < cutoff));
+      return { cleared };
     },
     async rollbackRejected({ commandId, rejectCode, rejectReason }) {
       effects = effects.filter((e) => e.command_id !== commandId);
@@ -165,14 +189,15 @@ describe('uploadClientCommands: envelope upload + reconciliation (V2, §7.2)', (
     expect(sent.device_id).toBe('web-1');
     expect(sent.commands).toHaveLength(1);
     // V2: the uploaded id is the SAME id minted at write time — not re-minted.
-    expect(sent.commands[0]).toEqual({ id: commandId, name: 'node.rename', hlc: expectedHlc, payload: { id: NODE, title: 'New title' } });
+    // R6: the envelope now carries the version axes (§8/§7.11).
+    expect(sent.commands[0]).toEqual({ id: commandId, name: 'node.rename', hlc: expectedHlc, payload: { id: NODE, title: 'New title' }, command_version: 1, schema_version: 1 });
     expect(summary).toEqual({ uploaded: 1, applied: 1, rejected: 0, noop: 0 });
   });
 
-  it('applied: drops the overlay so the canonical row (synced back) is the source of truth', async () => {
+  it('applied: KEEPS the overlay until the canonical row arrives (no revert-flicker, S7-F6)', async () => {
     const seed = memoryStore({ nodes: [{ id: NODE, title: 'Old', user_id: 'u1' }] });
     const exec = createExecuteCommand(seed.store, { userId: 'u1', deviceId: 'web-1' }, stubDeps());
-    await exec.renameNode(NODE, 'New title');
+    const commandId = await exec.renameNode(NODE, 'New title');
 
     const fetch = vi.fn(async (_url, init) => {
       const sent = JSON.parse((init as RequestInit).body as string);
@@ -180,14 +205,55 @@ describe('uploadClientCommands: envelope upload + reconciliation (V2, §7.2)', (
     });
     await uploadClientCommands({ store: seed.store, apiBaseUrl: 'http://api.test', deviceId: 'web-1', fetch: fetch as never });
 
-    // overlay gone; queue empty
+    // marked applied (not re-uploadable) but the overlay is KEPT, so the merged
+    // read still shows the NEW value between the ack and the down-sync — no flicker.
     expect(await seed.store.pendingCommands()).toHaveLength(0);
-    expect(await seed.store.effectsFor('nodes')).toHaveLength(0);
-    // before the canonical row syncs down the merged read shows the replica…
-    expect(await readMergedRows(seed.store, 'nodes')).toEqual([{ id: NODE, title: 'Old', user_id: 'u1' }]);
-    // …then the down-sync delivers the identical canonical row.
-    seed.setReplica('nodes', [{ id: NODE, title: 'New title', user_id: 'u1' }]);
+    expect(await seed.store.effectsFor('nodes')).toHaveLength(1);
     expect(await readMergedRows(seed.store, 'nodes')).toEqual([{ id: NODE, title: 'New title', user_id: 'u1' }]);
+
+    // a delayed down-sync delivers the identical canonical row carrying our command
+    // id (V2) → reconcileConfirmed drops the now-redundant overlay.
+    seed.setReplica('nodes', [{ id: NODE, title: 'New title', user_id: 'u1', last_modified_by_command_id: commandId }]);
+    expect(await seed.store.reconcileConfirmed()).toEqual({ cleared: [commandId] });
+    expect(await seed.store.effectsFor('nodes')).toHaveLength(0);
+    expect(await readMergedRows(seed.store, 'nodes')).toEqual([{ id: NODE, title: 'New title', user_id: 'u1', last_modified_by_command_id: commandId }]);
+  });
+
+  it('chunks a >100-command queue into sequential ≤100 batches — all applied (S7-F2)', async () => {
+    const seed = memoryStore();
+    const exec = createExecuteCommand(seed.store, { userId: 'u1', deviceId: 'web-1' });
+    // 150 real optimistic creates (unique valid uuids) → 2 batches (100 + 50).
+    // (execute does not run invariants — S7-F4 — so 150 visions queue fine; the
+    // mocked server acks them all.)
+    for (let i = 0; i < 150; i += 1) {
+      const id = `11111111-1111-7111-8111-${i.toString(16).padStart(12, '0')}`;
+      await exec.execute('node.create', { id, node_type: 'vision', title: `V${i}`, sort_order: 'a0' });
+    }
+    expect(await seed.store.pendingCommands()).toHaveLength(150);
+
+    const batchSizes: number[] = [];
+    const fetch = vi.fn(async (_url, init) => {
+      const sent = JSON.parse((init as RequestInit).body as string);
+      batchSizes.push(sent.commands.length);
+      return okResponse({ results: sent.commands.map((c: { id: string }) => ({ id: c.id, result: 'applied' })) });
+    });
+    const summary = await uploadClientCommands({ store: seed.store, apiBaseUrl: 'http://api.test', deviceId: 'web-1', fetch: fetch as never });
+
+    expect(fetch).toHaveBeenCalledTimes(2); // 150 / 100 → two requests
+    expect(batchSizes).toEqual([100, 50]);
+    expect(summary).toEqual({ uploaded: 150, applied: 150, rejected: 0, noop: 0 });
+    expect(await seed.store.pendingCommands()).toHaveLength(0); // none left pending
+  });
+
+  it('a 4xx surfaces as UploadClientError (won\'t self-heal by retrying), not a transient error', async () => {
+    const seed = memoryStore({ nodes: [{ id: NODE, title: 'Old', user_id: 'u1' }] });
+    const exec = createExecuteCommand(seed.store, { userId: 'u1', deviceId: 'web-1' }, stubDeps());
+    await exec.renameNode(NODE, 'New title');
+    const fetch = vi.fn(async () => ({ ok: false, status: 400, text: async () => 'bad envelope' }) as Response);
+    await expect(
+      uploadClientCommands({ store: seed.store, apiBaseUrl: 'http://api.test', deviceId: 'web-1', fetch: fetch as never }),
+    ).rejects.toBeInstanceOf(UploadClientError);
+    expect(await seed.store.pendingCommands()).toHaveLength(1); // still queued
   });
 
   it('rejected: rolls back the overlay (drops it) and surfaces onReject — the durable item is server-synced', async () => {

@@ -5,15 +5,25 @@
 # `auth.user_id()`. No stream reads a client-supplied parameter, so a client
 # cannot widen its scope and one user can never receive another's rows.
 #
-# Tiers (clients auto-subscribe to 0/1; Tier 2 is subscribed lazily, M12):
-#   bootstrap  (Tier 0) — the cold-start working set: settings, the tree, the
-#                         agenda, dependencies, suggestion batches, review inbox.
-#   active     (Tier 1) — the rest of the live working set.
-#   command_results     — a user-scoped command-result stream (NOT the broad
-#                         command_log audit table).
-#   history    (Tier 2) — archival rows, subscribed on demand. Modelled as
-#                         soft-deleted time-entry history: empty for a fresh
-#                         account, so it is genuinely absent until subscribed.
+# Tiers (clients auto-subscribe to 0/1; Tier 2 is subscribed lazily, M12/M14):
+#   bootstrap  (Tier 0) — the cold-start working set: settings, the LIVE tree,
+#                         the agenda, dependencies, suggestion batches, review inbox.
+#   active     (Tier 1) — the rest of the LIVE working set.
+#   history    (Tier 2) — archival rows, subscribed on demand. Carries the
+#                         soft-deleted tombstones of the high-volume tables
+#                         (nodes/edges/blocks/completions/layouts/time entries),
+#                         so a fresh account's auto-subscribed tiers hold only
+#                         live rows and Tier 2 is genuinely non-empty over time.
+#
+# S6-F1 (R10): the auto-subscribed tiers now filter `deleted_at IS NULL` on the
+# high-volume tables and their tombstones move to `history`, so cold-start no
+# longer replicates 90 days of soft-deleted rows. NOTE (deferred to Annex A5):
+# tiering *live* archival data by age (old closed time entries, completed/archived
+# subtrees) is NOT done here — PowerSync sync-rule buckets do not re-evaluate a
+# time predicate as rows age (a `now() - interval` filter only bins a row at write
+# time), so age-based archival needs a materialized `archived` flag maintained by a
+# job (A5 history-compaction) plus client lazy-subscription wiring. Doing it with a
+# raw time predicate would silently keep old rows in Tier 1 forever.
 config:
   edition: 3
 
@@ -22,9 +32,9 @@ streams:
     auto_subscribe: true
     queries:
       - SELECT user_id AS id, day_reset_hour, timezone, weather_location, updated_at FROM user_settings WHERE user_id = auth.user_id()
-      - SELECT * FROM nodes WHERE user_id = auth.user_id()
-      - SELECT * FROM edges WHERE user_id = auth.user_id()
-      - SELECT * FROM schedule_blocks WHERE user_id = auth.user_id()
+      - SELECT * FROM nodes WHERE user_id = auth.user_id() AND deleted_at IS NULL
+      - SELECT * FROM edges WHERE user_id = auth.user_id() AND deleted_at IS NULL
+      - SELECT * FROM schedule_blocks WHERE user_id = auth.user_id() AND deleted_at IS NULL
       - SELECT * FROM schedule_suggestion_batches WHERE user_id = auth.user_id()
       - SELECT * FROM sprints WHERE user_id = auth.user_id()
       - SELECT * FROM sprint_memberships WHERE user_id = auth.user_id()
@@ -35,7 +45,7 @@ streams:
     queries:
       - SELECT * FROM time_entries WHERE user_id = auth.user_id() AND deleted_at IS NULL
       - SELECT * FROM habits WHERE user_id = auth.user_id()
-      - SELECT * FROM habit_completions WHERE user_id = auth.user_id()
+      - SELECT * FROM habit_completions WHERE user_id = auth.user_id() AND deleted_at IS NULL
       - SELECT * FROM tags WHERE user_id = auth.user_id()
       - SELECT * FROM tag_placements WHERE user_id = auth.user_id()
       - SELECT * FROM tag_answers WHERE user_id = auth.user_id()
@@ -47,14 +57,20 @@ streams:
       - SELECT * FROM external_facts WHERE user_id = auth.user_id()
       - SELECT * FROM computed_aggregates WHERE user_id = auth.user_id()
       - SELECT * FROM diagram_groups WHERE user_id = auth.user_id()
-      - SELECT * FROM diagram_layouts WHERE user_id = auth.user_id()
+      - SELECT * FROM diagram_layouts WHERE user_id = auth.user_id() AND deleted_at IS NULL
 
-  # Filtered command-result stream (§7.3): user-scoped, never the global audit.
-  command_results:
-    auto_subscribe: true
-    query: SELECT * FROM command_log WHERE user_id = auth.user_id()
-
-  # Tier 2 — lazily subscribed archival history (M12 wires the client).
+  # Tier 2 — lazily subscribed archival history (M14 `subscribeHistory()` wires
+  # the client). The soft-deleted tombstones of the high-volume tables live here,
+  # so the auto-subscribed tiers above never replicate them on cold-start.
+  # (`command_results` was dropped — S6-F2: it synced the full 90-day command_log
+  # to every device with no client table to read it; the upload response contract
+  # already closes the reconciliation loop.)
   history:
     auto_subscribe: false
-    query: SELECT * FROM time_entries WHERE user_id = auth.user_id() AND deleted_at IS NOT NULL
+    queries:
+      - SELECT * FROM nodes WHERE user_id = auth.user_id() AND deleted_at IS NOT NULL
+      - SELECT * FROM edges WHERE user_id = auth.user_id() AND deleted_at IS NOT NULL
+      - SELECT * FROM schedule_blocks WHERE user_id = auth.user_id() AND deleted_at IS NOT NULL
+      - SELECT * FROM time_entries WHERE user_id = auth.user_id() AND deleted_at IS NOT NULL
+      - SELECT * FROM habit_completions WHERE user_id = auth.user_id() AND deleted_at IS NOT NULL
+      - SELECT * FROM diagram_layouts WHERE user_id = auth.user_id() AND deleted_at IS NOT NULL

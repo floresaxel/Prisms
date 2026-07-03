@@ -25,6 +25,15 @@ export function createAuth(db: PostgresJsDatabase, config: AuthConfig) {
     trustedOrigins: config.trustedOrigins ?? [],
     database: drizzleAdapter(db, { provider: 'pg', schema: authSchema }),
     emailAndPassword: { enabled: true },
+    // S4-F5: rate-limit the auth endpoints (brute-force bound on sign-in/up). Made
+    // explicit rather than relying on better-auth's implicit default; ON in
+    // production, OFF in test so the suite's rapid sign-ins don't hit 429. The
+    // in-memory store is fine for v1's single node (§13).
+    rateLimit: {
+      enabled: process.env.NODE_ENV === 'production',
+      window: 60,
+      max: 100,
+    },
     advanced: {
       database: {
         generateId: () => randomUUID(),

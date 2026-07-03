@@ -29,6 +29,7 @@ const cmd = (name: string, payload: unknown, id = randomUUID()) => ({
   name,
   hlc: `${(++hlc).toString(16).padStart(12, '0')}-0000-test-device`,
   payload,
+  schema_version: 1, // R6: clients emit the §7.11 version (absent = below-floor)
 });
 
 describe.skipIf(!adminUrl)('S11 command dispatcher (§8 pipeline, full catalog)', () => {
@@ -231,7 +232,8 @@ describe.skipIf(!adminUrl)('S11 command dispatcher (§8 pipeline, full catalog)'
       hlc: checkOff.hlc,
       schema_version: 1,
     });
-    expect(spawned[0]!['source_detail']).toMatchObject({ trigger_command_id: done!.id, trigger_node_id: ids.task, action_slot: 0 });
+    // §10.2 (S3-F4): in-txn spawn provenance names the rule + template versions.
+    expect(spawned[0]!['source_detail']).toMatchObject({ trigger_command_id: done!.id, trigger_node_id: ids.task, action_slot: 0, rule_version: 1, template_version: 1 });
   });
 
   it('applies a multi-wave automation cascade (depth>1) inside the single command txn (§10.1 fixpoint)', async () => {
@@ -592,5 +594,40 @@ describe.skipIf(!adminUrl)('S11 command dispatcher (§8 pipeline, full catalog)'
     const rows = await sql`SELECT title FROM nodes WHERE id = ${ids.vision}`;
     expect(rows).toHaveLength(1);
     expect(rows[0]!['title']).toBe('V'); // original content preserved
+  });
+
+  it('command_log.effects records writes + automation spawns w/ triggering_command_id (§7.2f, S4-F3)', async () => {
+    const ids = await seedTree();
+    // an automation that spawns a follow-up when a "lecture" task is completed.
+    await results(
+      [cmd('rule.create', {
+        id: randomUUID(),
+        trigger: 'task_completed',
+        conditions: { all: [{ fact: 'node.title', op: 'matches', value: 'lecture' }] },
+        actions: [{ action: 'spawn_task', slot: 0, template: { title: 'Pre-brief: {trigger.title}', parent: 'same_as_trigger' } }],
+      })],
+      ids.user,
+    );
+    const rename = cmd('node.rename', { id: ids.task, title: 'Lecture' });
+    await results([rename], ids.user);
+    const checkoff = cmd('node.check_off', { id: ids.task, completed_at: '2026-06-13T14:00:00.000Z' });
+    await results([checkoff], ids.user);
+
+    type Eff = { table: string; row_id: string; op: string; fields?: string[]; triggering_command_id?: string };
+
+    // rename → a nodes update naming the `title` field.
+    const [renameLog] = await sql`SELECT effects FROM command_log WHERE id = ${rename.id}`;
+    const renameEff = renameLog!['effects'] as Eff[];
+    expect(renameEff).toContainEqual(expect.objectContaining({ table: 'nodes', row_id: ids.task, op: 'update', fields: ['title'] }));
+
+    // check_off → the completion update (names completed_at) + the spawned node,
+    // attributed to the check_off command via triggering_command_id.
+    const [coLog] = await sql`SELECT effects FROM command_log WHERE id = ${checkoff.id}`;
+    const eff = coLog!['effects'] as Eff[];
+    const completion = eff.find((e) => e.table === 'nodes' && e.row_id === ids.task && e.op === 'update');
+    expect(completion?.fields).toContain('completed_at');
+    const spawn = eff.find((e) => e.op === 'insert' && e.triggering_command_id === checkoff.id);
+    expect(spawn).toBeTruthy();
+    expect(spawn!.table).toBe('nodes');
   });
 });

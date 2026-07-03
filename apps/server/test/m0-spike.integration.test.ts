@@ -36,6 +36,7 @@ interface Envelope {
   name: string;
   hlc: string;
   payload: unknown;
+  schema_version?: number;
 }
 
 /** Mint a client command envelope the way the two-layer store does (id + HLC at write). */
@@ -45,7 +46,7 @@ function clientCommand(name: string, payload: unknown): Envelope {
   clockMs += 1;
   const id = uuidV7From(clockMs, new Uint8Array(16).fill(0x7a));
   hlcState = hlcTick(hlcState, asEpochMillis(clockMs), 'web-1');
-  return { id, name, hlc: hlcEncode(hlcState), payload };
+  return { id, name, hlc: hlcEncode(hlcState), payload, schema_version: 1 };
 }
 
 describe.skipIf(!adminUrl)('M0 spike — client command identity (V2)', () => {
@@ -60,6 +61,7 @@ describe.skipIf(!adminUrl)('M0 spike — client command identity (V2)', () => {
     name,
     hlc: `${(++seedSeq).toString(16).padStart(12, '0')}-0000-seed`,
     payload,
+    schema_version: 1, // R6: clients emit the §7.11 version (absent = below-floor)
   });
 
   const upload = (userId: string, deviceId: string, commands: Envelope[]) =>

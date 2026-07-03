@@ -29,12 +29,13 @@
 import type { BlockerRule, Edge, ExternalFact, Node, ScheduleBlock, Sprint, SprintMembership, TimeEntry } from '../domain/entities';
 import { SYNC_ROW_DEFAULTS } from '../domain/entities';
 import type { Uuid } from '../domain/primitives';
-import { descendantsOf, type TreeIndex } from '../graph/tree';
+import { compareSiblings, descendantsOf, type TreeIndex } from '../graph/tree';
 import { outgoingEdges, type EdgeIndex } from '../graph/dag';
 import { bucketDate } from '../time/bucket';
 import { isoToEpochMillis, type Instant } from '../time/instant';
 
 import { DEFAULT_DAY_RESET_HOUR, DEFAULT_TIMEZONE, type FactContext, type FactRows } from './context';
+import { blockerScopeSchema, referencesExternalFacts } from './predicate';
 import { taskStatus, type TaskStatus } from './status';
 
 /** A row effect the index can apply (the OverlayEffect / server effect shape). */
@@ -54,9 +55,42 @@ export interface StatusApplyResult {
 
 const str = (v: unknown): string | null => (v == null ? null : String(v));
 
+/** Loose jsonb: overlay effects store JSON as TEXT; merged server rows arrive parsed. */
+const looseJson = (v: unknown): Record<string, unknown> => {
+  if (typeof v === 'string') {
+    if (v.length === 0) return {};
+    try {
+      return JSON.parse(v) as Record<string, unknown>;
+    } catch {
+      return {};
+    }
+  }
+  return v == null ? {} : (v as Record<string, unknown>);
+};
+
+/**
+ * §7.8: the convergence/provenance columns carried through the index, so nodes
+ * exposed by `freshView()` still answer "why does this exist?" after a
+ * mid-session apply (a sync-down insert or a provenance re-stamp). Only the
+ * keys PRESENT in the effect are coerced — partial overlay patches leave the
+ * row's existing values (or `SYNC_ROW_DEFAULTS`) intact.
+ */
+function syncNodeFields(f: Readonly<Record<string, unknown>>): Partial<Node> {
+  const out: Record<string, unknown> = {};
+  if (f['hlc'] != null) out['hlc'] = String(f['hlc']);
+  if (f['schema_version'] != null) out['schema_version'] = Number(f['schema_version']);
+  if ('created_by_command_id' in f) out['created_by_command_id'] = str(f['created_by_command_id']);
+  if ('last_modified_by_command_id' in f) out['last_modified_by_command_id'] = str(f['last_modified_by_command_id']);
+  if (f['source_kind'] != null) out['source_kind'] = String(f['source_kind']);
+  if ('source_id' in f) out['source_id'] = str(f['source_id']);
+  if ('source_detail' in f) out['source_detail'] = looseJson(f['source_detail']);
+  return out as Partial<Node>;
+}
+
 function toNode(id: Uuid, f: Readonly<Record<string, unknown>>): Node {
   return {
     ...SYNC_ROW_DEFAULTS,
+    ...syncNodeFields(f),
     id,
     user_id: String(f['user_id'] ?? ''),
     parent_id: str(f['parent_id']),
@@ -81,12 +115,20 @@ function toNode(id: Uuid, f: Readonly<Record<string, unknown>>): Node {
 export class StatusIndex {
   private readonly nodes = new Map<Uuid, Node>();
   private readonly childrenByParent = new Map<Uuid | null, Node[]>();
+  // Sibling lists are maintained in insertion order for status derivation (which
+  // is order-agnostic); `freshView()` lazily re-sorts only the lists changed
+  // since the last view so the exposed tree matches `buildTreeIndex` order
+  // (compareSiblings: sort_order, id) without an O(all) resort per change.
+  private readonly dirtyChildLists = new Set<Uuid | null>();
   private readonly edgesById = new Map<Uuid, Edge>();
   private readonly incoming = new Map<Uuid, Edge[]>();
   private readonly outgoing = new Map<Uuid, Edge[]>();
   private readonly entries = new Map<Uuid, TimeEntry>();
   private readonly openByTask = new Map<Uuid, Map<Uuid, TimeEntry>>();
   private readonly entryCountByTask = new Map<Uuid, number>();
+  // per-task entry starts (entryId → started_at ms) so `earliestEntryStart`
+  // recomputes the SS/SF lag reference (§7.6) after a removal without a scan.
+  private readonly entryStartsByTask = new Map<Uuid, Map<Uuid, Instant>>();
   private readonly blocks = new Map<Uuid, ScheduleBlock>();
   private readonly committedEndsByTask = new Map<Uuid, Map<Uuid, number>>();
   private readonly sprints = new Map<Uuid, Sprint>();
@@ -103,18 +145,33 @@ export class StatusIndex {
   private enabledBlockers: BlockerRule[] = [];
   private usesProjectPhase = false;
   private usesWeather = false;
+  // Instrumentation (S2-F5): `update` effects skipped because the row was not in
+  // the index. Inserts are the ONLY unknown-row entry path — a stray update must
+  // not fabricate a default-stuffed ghost row.
+  private unknownUpdateSkips = 0;
 
   private dayResetHour: number;
   private timezone: string;
   private readonly now: Instant;
+  // When false, the index maintains ONLY the fact/tree maps (the FactContext
+  // view) and skips the per-node status pass — the read layer (§7.14) consumes
+  // the view and derives status live with the screen's `now`, so it never reads
+  // `statusByNode`. Default true keeps the standalone incremental-status behaviour.
+  private readonly trackStatus: boolean;
 
   private readonly statusByNode = new Map<Uuid, TaskStatus>();
   private readonly tree: TreeIndex;
   private readonly edgeIndex: EdgeIndex;
   private readonly view: FactContext;
 
-  constructor(rows: FactRows, now: Instant, settings?: { day_reset_hour?: number; timezone?: string }) {
+  constructor(
+    rows: FactRows,
+    now: Instant,
+    settings?: { day_reset_hour?: number; timezone?: string },
+    options?: { trackStatus?: boolean },
+  ) {
     this.now = now;
+    this.trackStatus = options?.trackStatus ?? true;
     this.dayResetHour = settings?.day_reset_hour ?? rows.user_settings?.day_reset_hour ?? DEFAULT_DAY_RESET_HOUR;
     this.timezone = settings?.timezone ?? rows.user_settings?.timezone ?? DEFAULT_TIMEZONE;
 
@@ -130,6 +187,7 @@ export class StatusIndex {
       node: (id) => this.nodes.get(id),
       openEntryFor: (taskId) => this.openEntryFor(taskId),
       hasAnyEntry: (nodeId) => (this.entryCountByTask.get(nodeId) ?? 0) > 0,
+      earliestEntryStart: (taskId) => this.earliestEntryStart(taskId),
       hasCommittedBlockAtOrAfter: (taskId, at) => {
         const ends = this.committedEndsByTask.get(taskId);
         if (!ends) return false;
@@ -155,6 +213,11 @@ export class StatusIndex {
     return this.statusByNode;
   }
 
+  /** Instrumentation (S2-F5): count of unknown-row `update` effects ignored. */
+  get skippedUnknownUpdates(): number {
+    return this.unknownUpdateSkips;
+  }
+
   // --- initial full build ----------------------------------------------------
 
   private build(rows: FactRows): void {
@@ -168,9 +231,30 @@ export class StatusIndex {
     for (const f of rows.external_facts ?? []) if (f.deleted_at === null) this.externalFacts.set(f.id, f);
     this.refreshBlockers();
     this.refreshWeather();
-    for (const node of this.nodes.values()) {
-      if (node.node_type === 'task') this.statusByNode.set(node.id, taskStatus(node, this.view, this.now));
+    if (this.trackStatus) {
+      for (const node of this.nodes.values()) {
+        if (node.node_type === 'task') this.statusByNode.set(node.id, taskStatus(node, this.view, this.now));
+      }
     }
+  }
+
+  /**
+   * A FRESH FactContext identity wrapping the live, incrementally-maintained
+   * maps (§7.14/S8-F1). The read layer calls this after `apply()` so React
+   * consumers memoized on the context (or its `tree`/`edgeIndex`) re-run — while
+   * the underlying maps were patched incrementally, NOT rebuilt.
+   */
+  freshView(): FactContext {
+    // re-sort only sibling lists changed since the last view (drop-in tree order).
+    for (const parentId of this.dirtyChildLists) {
+      this.childrenByParent.get(parentId)?.sort(compareSiblings);
+    }
+    this.dirtyChildLists.clear();
+    return {
+      ...this.view,
+      tree: { byId: this.nodes, childrenByParent: this.childrenByParent },
+      edgeIndex: { byId: this.edgesById, incoming: this.incoming, outgoing: this.outgoing },
+    };
   }
 
   // --- derived-map maintenance ----------------------------------------------
@@ -181,6 +265,7 @@ export class StatusIndex {
     const list = this.childrenByParent.get(stored.parent_id);
     if (list) list.push(stored);
     else this.childrenByParent.set(stored.parent_id, [stored]);
+    this.dirtyChildLists.add(stored.parent_id); // new sibling → re-sort on next view
   }
 
   private removeChild(parentId: Uuid | null, id: Uuid): void {
@@ -217,6 +302,9 @@ export class StatusIndex {
   private addEntry(entry: TimeEntry): void {
     this.entries.set(entry.id, entry);
     this.entryCountByTask.set(entry.task_id, (this.entryCountByTask.get(entry.task_id) ?? 0) + 1);
+    const starts = this.entryStartsByTask.get(entry.task_id) ?? new Map<Uuid, Instant>();
+    starts.set(entry.id, isoToEpochMillis(entry.started_at));
+    this.entryStartsByTask.set(entry.task_id, starts);
     if (entry.ended_at === null) {
       const open = this.openByTask.get(entry.task_id) ?? new Map<Uuid, TimeEntry>();
       open.set(entry.id, entry);
@@ -231,8 +319,22 @@ export class StatusIndex {
     const count = (this.entryCountByTask.get(entry.task_id) ?? 1) - 1;
     if (count <= 0) this.entryCountByTask.delete(entry.task_id);
     else this.entryCountByTask.set(entry.task_id, count);
+    const starts = this.entryStartsByTask.get(entry.task_id);
+    if (starts) {
+      starts.delete(id);
+      if (starts.size === 0) this.entryStartsByTask.delete(entry.task_id);
+    }
     this.openByTask.get(entry.task_id)?.delete(id);
     return entry;
+  }
+
+  /** Earliest `started_at` ms across a task's tracked entries (§7.6 SS/SF lag). */
+  private earliestEntryStart(taskId: Uuid): Instant | undefined {
+    const starts = this.entryStartsByTask.get(taskId);
+    if (!starts || starts.size === 0) return undefined;
+    let min: Instant | undefined;
+    for (const ms of starts.values()) if (min === undefined || ms < min) min = ms;
+    return min;
   }
 
   private openEntryFor(taskId: Uuid): TimeEntry | undefined {
@@ -349,6 +451,66 @@ export class StatusIndex {
     return descendantsOf(this.tree, nodeId).map((n) => n.id);
   }
 
+  /** Nearest ancestor-or-self project of a node — the source `project.phase`
+   *  resolves to (predicate.ts). null when the node has no ancestor project. */
+  private containingProjectId(node: Node | undefined): Uuid | null {
+    if (!node) return null;
+    if (node.node_type === 'project') return node.id;
+    for (const a of this.ancestorsOf(node.id)) {
+      if (this.nodes.get(a)?.node_type === 'project') return a;
+    }
+    return null;
+  }
+
+  /**
+   * §7.12 fan-out scoping (S2-F4). When a `project.phase` blocker is enabled, an
+   * execution-fact change under a node changes only its containing project's
+   * phase, so only tasks in THAT project's subtree can flip — NOT every task in
+   * the account. Returns a correct superset (all task-descendants of the project),
+   * computed while the tree is intact (safe to call before a delete mutates it).
+   */
+  private phaseImpactTaskIds(node: Node | undefined): Uuid[] {
+    const projectId = this.containingProjectId(node);
+    if (projectId === null) return [];
+    const out: Uuid[] = [];
+    for (const d of this.descendantIds(projectId)) {
+      if (this.nodes.get(d)?.node_type === 'task') out.push(d);
+    }
+    return out;
+  }
+
+  private dirtyPhaseImpact(node: Node | undefined, dirty: Set<Uuid>): void {
+    if (!this.usesProjectPhase) return;
+    for (const t of this.phaseImpactTaskIds(node)) dirty.add(t);
+  }
+
+  /**
+   * §7.12 fan-out scoping (S2-F4). A weather-fact change invalidates only tasks
+   * in the SCOPE of a weather-reading blocker rule — a subtree-scoped rule touches
+   * just its subtree; only a genuinely global rule (no `subtree_of`) fans out to
+   * all tasks. (Weather effects arrive on infrequent sync-down, not per command.)
+   */
+  private dirtyWeatherImpact(dirty: Set<Uuid>): void {
+    if (!this.usesWeather) return;
+    const roots: Uuid[] = [];
+    for (const r of this.enabledBlockers) {
+      if (!referencesExternalFacts(r.predicate)) continue;
+      const scope = blockerScopeSchema.safeParse(r.scope);
+      const root = scope.success ? scope.data.subtree_of : undefined;
+      if (root === undefined) {
+        for (const t of this.allTaskIds()) dirty.add(t); // global rule → every task
+        return;
+      }
+      roots.push(root);
+    }
+    for (const root of roots) {
+      if (this.nodes.get(root)?.node_type === 'task') dirty.add(root);
+      for (const d of this.descendantIds(root)) {
+        if (this.nodes.get(d)?.node_type === 'task') dirty.add(d);
+      }
+    }
+  }
+
   // --- apply -----------------------------------------------------------------
 
   apply(effects: readonly StatusEffect[]): StatusApplyResult {
@@ -396,33 +558,43 @@ export class StatusIndex {
     const id = effect.row_id;
     if (effect.op === 'delete' || effect.fields['deleted_at'] != null) {
       const existed = this.nodes.get(id);
+      // capture the phase impact while the tree is intact (before deletion)
+      const phaseTasks = existed ? this.phaseImpactTaskIds(existed) : [];
       if (existed) {
         this.removeChild(existed.parent_id, id);
         this.nodes.delete(id);
         for (const s of this.successorsOf(id)) dirty.add(s);
       }
       this.statusByNode.delete(id);
-      if (this.usesProjectPhase) for (const t of this.allTaskIds()) dirty.add(t);
+      if (this.usesProjectPhase) for (const t of phaseTasks) dirty.add(t);
       return;
     }
     const existing = this.nodes.get(id);
     if (!existing) {
+      if (effect.op !== 'insert') {
+        this.unknownUpdateSkips += 1; // S2-F5: never fabricate a ghost from an update
+        return;
+      }
       this.addNode(toNode(id, effect.fields));
       dirty.add(id);
     } else {
       const parentChanged = 'parent_id' in effect.fields && str(effect.fields['parent_id']) !== existing.parent_id;
       const completedChanged = 'completed_at' in effect.fields && str(effect.fields['completed_at']) !== existing.completed_at;
+      const sortChanged = 'sort_order' in effect.fields && String(effect.fields['sort_order']) !== existing.sort_order;
       if (parentChanged) this.removeChild(existing.parent_id, id);
       Object.assign(existing, this.coerceNode(effect.fields));
       if (parentChanged) {
         const list = this.childrenByParent.get(existing.parent_id);
         if (list) list.push(existing);
         else this.childrenByParent.set(existing.parent_id, [existing]);
+        this.dirtyChildLists.add(existing.parent_id); // moved-in sibling → re-sort
         for (const d of this.descendantIds(id)) dirty.add(d);
+      } else if (sortChanged) {
+        this.dirtyChildLists.add(existing.parent_id); // reorder → re-sort siblings
       }
       dirty.add(id);
       if (completedChanged) for (const s of this.successorsOf(id)) dirty.add(s);
-      if (this.usesProjectPhase && completedChanged) for (const t of this.allTaskIds()) dirty.add(t);
+      if (completedChanged) this.dirtyPhaseImpact(existing, dirty);
     }
   }
 
@@ -433,6 +605,10 @@ export class StatusIndex {
       if (key in f) out[key] = f[key];
     }
     if ('estimate_minutes' in f) out['estimate_minutes'] = f['estimate_minutes'] == null ? null : Number(f['estimate_minutes']);
+    // §7.8: propagate provenance/convergence columns present in the update
+    // (e.g. a server re-stamp syncing down) — status ignores them, but
+    // `freshView()` consumers (the "why?" affordance) read them off the node.
+    Object.assign(out, syncNodeFields(f));
     return out as Partial<Node>;
   }
 
@@ -442,9 +618,13 @@ export class StatusIndex {
       if (removed) dirty.add(removed.successor_id);
       return;
     }
-    if (this.edgesById.has(effect.row_id)) {
+    const known = this.edgesById.has(effect.row_id);
+    if (known) {
       const old = this.removeEdge(effect.row_id);
       if (old) dirty.add(old.successor_id);
+    } else if (effect.op !== 'insert') {
+      this.unknownUpdateSkips += 1; // S2-F5
+      return;
     }
     const edge = { id: effect.row_id, ...effect.fields } as unknown as Edge;
     this.addEdge(edge);
@@ -455,7 +635,7 @@ export class StatusIndex {
     const markTask = (taskId: Uuid) => {
       dirty.add(taskId);
       for (const s of this.successorsOf(taskId)) dirty.add(s);
-      if (this.usesProjectPhase) for (const t of this.allTaskIds()) dirty.add(t);
+      this.dirtyPhaseImpact(this.nodes.get(taskId), dirty);
     };
     if (effect.op === 'delete' || effect.fields['deleted_at'] != null) {
       const removed = this.removeEntry(effect.row_id);
@@ -463,6 +643,10 @@ export class StatusIndex {
       return;
     }
     const existing = this.entries.get(effect.row_id);
+    if (!existing && effect.op !== 'insert') {
+      this.unknownUpdateSkips += 1; // S2-F5
+      return;
+    }
     if (existing) this.removeEntry(effect.row_id);
     const entry = { id: effect.row_id, ...(existing ?? {}), ...effect.fields } as unknown as TimeEntry;
     this.addEntry(entry);
@@ -472,7 +656,7 @@ export class StatusIndex {
   private applyBlock(effect: StatusEffect, dirty: Set<Uuid>): void {
     const markTask = (taskId: Uuid) => {
       dirty.add(taskId);
-      if (this.usesProjectPhase) for (const t of this.allTaskIds()) dirty.add(t);
+      this.dirtyPhaseImpact(this.nodes.get(taskId), dirty);
     };
     if (effect.op === 'delete' || effect.fields['deleted_at'] != null) {
       const removed = this.removeBlock(effect.row_id);
@@ -480,6 +664,10 @@ export class StatusIndex {
       return;
     }
     const existing = this.blocks.get(effect.row_id);
+    if (!existing && effect.op !== 'insert') {
+      this.unknownUpdateSkips += 1; // S2-F5
+      return;
+    }
     if (existing) this.removeBlock(effect.row_id);
     const block = { id: effect.row_id, ...(existing ?? {}), ...effect.fields } as unknown as ScheduleBlock;
     this.addBlock(block);
@@ -497,6 +685,10 @@ export class StatusIndex {
       return;
     }
     const existing = this.memberships.get(effect.row_id);
+    if (!existing && effect.op !== 'insert') {
+      this.unknownUpdateSkips += 1; // S2-F5
+      return;
+    }
     if (existing) this.removeMembership(effect.row_id);
     const m = { id: effect.row_id, ...(existing ?? {}), ...effect.fields } as unknown as SprintMembership;
     this.addMembership(m);
@@ -516,6 +708,10 @@ export class StatusIndex {
       return;
     }
     const existing = this.sprints.get(effect.row_id);
+    if (!existing && effect.op !== 'insert') {
+      this.unknownUpdateSkips += 1; // S2-F5
+      return;
+    }
     this.sprints.set(effect.row_id, { id: effect.row_id, ...(existing ?? {}), ...effect.fields } as unknown as Sprint);
     markMembers(effect.row_id);
   }
@@ -539,7 +735,7 @@ export class StatusIndex {
       this.externalFacts.set(effect.row_id, { id: effect.row_id, ...(existing ?? {}), ...effect.fields } as unknown as ExternalFact);
     }
     this.refreshWeather();
-    if (this.usesWeather) for (const t of this.allTaskIds()) dirty.add(t);
+    this.dirtyWeatherImpact(dirty);
   }
 
   private recompute(dirty: Set<Uuid>): StatusApplyResult {
@@ -548,10 +744,13 @@ export class StatusIndex {
     for (const id of dirty) {
       const node = this.nodes.get(id);
       if (!node || node.node_type !== 'task') {
-        if (this.statusByNode.delete(id)) changed.push(id);
+        if (this.trackStatus && this.statusByNode.delete(id)) changed.push(id);
         continue;
       }
-      recomputed.push(id);
+      recomputed.push(id); // the touch set — reported in both modes (S2-F4 gate)
+      // view-only mode maintains the maps but derives no status (the read layer
+      // computes status live with the screen's `now`), so skip the taskStatus call.
+      if (!this.trackStatus) continue;
       const next = taskStatus(node, this.view, this.now);
       if (this.statusByNode.get(id) !== next) {
         this.statusByNode.set(id, next);

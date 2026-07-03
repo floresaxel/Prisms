@@ -10,6 +10,7 @@ import {
   evaluateBlockerRules,
   inScope,
   predicateSchema,
+  referencesExternalFacts,
 } from '../../src/status/predicate';
 import { taskStatus } from '../../src/status/status';
 import { isoToEpochMillis } from '../../src/time/instant';
@@ -48,6 +49,47 @@ function lectureWorld(extra: Parameters<typeof buildFactContext>[0] = { nodes: [
 
 const ev = (predicate: unknown, subject: Node, ctx: FactContext) =>
   evalPredicate(predicate, subject, ctx, NOW);
+
+describe('referencesExternalFacts (§10.3, R19/V10)', () => {
+  it('flags a weather leaf at any depth (all / any / not)', () => {
+    expect(referencesExternalFacts({ fact: 'weather.precip_prob', op: 'gt', value: 0.5 })).toBe(true);
+    expect(
+      referencesExternalFacts({
+        all: [
+          { fact: 'node.title', op: 'eq', value: 'x' },
+          { any: [{ not: { fact: 'weather.high_c', op: 'lt', value: 5 } }] },
+        ],
+      }),
+    ).toBe(true);
+  });
+
+  it('returns false for a purely internal predicate', () => {
+    expect(
+      referencesExternalFacts({
+        all: [
+          { fact: 'node.completed', op: 'eq', value: true },
+          { fact: 'project.phase', op: 'eq', value: 'build' },
+        ],
+      }),
+    ).toBe(false);
+  });
+
+  it('returns false for a malformed predicate (it cannot fire regardless)', () => {
+    expect(referencesExternalFacts({ bogus: true })).toBe(false);
+    expect(referencesExternalFacts(null)).toBe(false);
+    expect(referencesExternalFacts('weather.precip_prob')).toBe(false); // a bare string is not a predicate
+  });
+});
+
+describe('matches pattern-length cap (§9.2 ReDoS guard, S3-F7)', () => {
+  it('evaluates a within-cap pattern normally but fails safe (unknown) above the cap', () => {
+    const { ctx, task } = lectureWorld(); // task title "Lecture 4: dynamics"
+    // a normal pattern matches
+    expect(ev({ fact: 'node.title', op: 'matches', value: 'Lecture' }, task, ctx)).toBe('true');
+    // a 201-char pattern is refused at eval time → unknown (never compiled)
+    expect(ev({ fact: 'node.title', op: 'matches', value: 'L'.repeat(201) }, task, ctx)).toBe('unknown');
+  });
+});
 
 describe('combinators with tri-state logic (§9.2)', () => {
   const T = { fact: 'node.completed', op: 'eq', value: false }; // true here

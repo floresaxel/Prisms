@@ -340,6 +340,13 @@ export const client_commands = new Table(
     created_at: column.text,
     reject_code: column.text,
     reject_reason: column.text,
+    // §8/§7.11 command-envelope version axes + §7.2e causal deps, stamped at
+    // enqueue (captures the minting version) and sent verbatim in the envelope
+    // (R6). Local-only, so this is NOT a synced-schema change.
+    command_version: column.integer,
+    schema_version: column.integer,
+    client_version: column.text,
+    depends_on: column.text, // JSON array of prior client_commands ids (§7.2e)
   },
   { localOnly: true },
 );

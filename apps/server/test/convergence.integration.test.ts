@@ -26,19 +26,23 @@ import { randomBytes, randomUUID } from 'node:crypto';
 
 import {
   asEpochMillis,
+  canonicalProgress,
   commandOutcomeSchema,
   hlcEncode,
   hlcTick,
   mergeRow,
   mergeTimeEntries,
+  ROW_SCHEMA_VERSION,
   uploadRequestSchema,
   uuidV7From,
   type CommandOutcome,
   type Hlc,
   type JsonObject,
+  type Node as CoreNode,
   type OverlayEffect,
   type OverlayOp,
   type OverlayRow,
+  type TimeEntry,
 } from '@prisms/core';
 import { loadRootEnv, runMigrations } from '@prisms/db';
 import Database from 'better-sqlite3';
@@ -48,6 +52,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { createDispatcher, type BackstopJob, type Dispatcher } from '../src/dispatcher';
 import { runAutomationBackstop } from '../src/jobs/automation-backstop';
+import { NIGHTLY_OPTIMIZATION, runScheduleOptimize } from '../src/jobs/schedule-optimize';
 import { runWeatherPoll } from '../src/jobs/weather-poll';
 import { createRateLimiter } from '../src/rate-limit';
 
@@ -140,10 +145,12 @@ class Device {
       name: r.name,
       hlc: r.hlc,
       payload: JSON.parse(r.payload) as unknown,
-      // include the version/causal axes ONLY when set — the envelope is a strict
-      // object, so an explicit `undefined`/extra key would fail validation.
+      // R6: every envelope carries schema_version so the server's §7.11 floor
+      // accepts it (absent = below-floor since R6). An explicit value from
+      // edit()'s opts (incl. 0, the below-floor case) is preserved via `??`.
+      schema_version: r.schema_version ?? ROW_SCHEMA_VERSION,
+      // include the remaining axes ONLY when set — the envelope is strict.
       ...(r.depends_on ? { depends_on: JSON.parse(r.depends_on) as string[] } : {}),
-      ...(r.schema_version != null ? { schema_version: r.schema_version } : {}),
       ...(r.command_version != null ? { command_version: r.command_version } : {}),
     }));
   }
@@ -208,6 +215,8 @@ class Device {
       name: r.name,
       hlc: r.hlc,
       payload: JSON.parse(r.payload) as unknown,
+      // R6: overlay-path envelopes carry the version axes too (§7.11 floor).
+      schema_version: ROW_SCHEMA_VERSION,
       ...(r.depends_on ? { depends_on: JSON.parse(r.depends_on) as string[] } : {}),
     }));
   }
@@ -300,6 +309,7 @@ describe.skipIf(!adminUrl)('S12 convergence harness (two devices, offline edits)
     name,
     hlc: `${(++seedSeq).toString(16).padStart(12, '0')}-0000-seed`,
     payload,
+    schema_version: ROW_SCHEMA_VERSION, // R6: seed envelopes carry a version (§7.11 floor)
   });
 
   /** A project with one task under it, for a fresh user. */
@@ -531,7 +541,7 @@ describe.skipIf(!adminUrl)('S12 convergence harness (two devices, offline edits)
     expect(uploadRequestSchema.safeParse(body).success).toBe(true);
     expect(body.commands).toHaveLength(1);
     expect(body.commands[0]).toMatchObject({ id: cmd.id, name: 'node.create' });
-    expect(Object.keys(body.commands[0]!).sort()).toEqual(['hlc', 'id', 'name', 'payload']);
+    expect(Object.keys(body.commands[0]!).sort()).toEqual(['hlc', 'id', 'name', 'payload', 'schema_version']);
 
     const results = await a.push(dispatcher, p.user);
     assertContract(results);
@@ -620,6 +630,25 @@ describe.skipIf(!adminUrl)('S12 convergence harness (two devices, offline edits)
     );
     expect(union.rawMinutes).toBe(90); // union — NOT 120 (the double-counted sum)
     expect(union.segments).toHaveLength(1); // one merged span, 10:00–11:30
+
+    // Aggregate-level union (audit S10-F3b/S3-F2): the PRODUCTION progress
+    // aggregate consumes the resolver — asserting on the SYNCED rows, the task
+    // consumed 90 minutes (75% of a 120-min estimate), not the 120 a per-entry
+    // sum would report. canonicalPractice shares the same per-task-union path
+    // (pinned by the §9.2 unit goldens in @prisms/core).
+    const progress = canonicalProgress(
+      { id: p.task, estimate_minutes: 120 } as unknown as CoreNode,
+      rows.map((r) => ({
+        id: r['id'] as string,
+        task_id: p.task,
+        deleted_at: null,
+        started_at: new Date(r['started_at'] as string).toISOString(),
+        ended_at: new Date(r['ended_at'] as string).toISOString(),
+        focus_factor: r['focus_factor'] as number | null,
+      })) as unknown as TimeEntry[],
+    );
+    expect(progress.consumedMinutes).toBe(90);
+    expect(progress.percent).toBe(75);
     a.close();
     b.close();
   });
@@ -741,5 +770,129 @@ describe.skipIf(!adminUrl)('S12 convergence harness (two devices, offline edits)
     expect(log!['command_version']).toBe(1); // the envelope's command_version is recorded
     a.close();
     b.close();
+  });
+
+  it('scenario 13b — a weather-blocked task clocks in WITHOUT force; a dependency-blocked one still needs force (R19/V10, S3-F1)', async () => {
+    const p = await project();
+    // A weather blocker rule scoped to tasks, plus two extra tasks (t1 → t2 FS)
+    // for the dependency case. §10.3/R19: external-fact state must never gate a
+    // command — so a task blocked ONLY by weather must clock in without force,
+    // while a dependency-blocked task must still be rejected without force.
+    const t1 = randomUUID(); // incomplete predecessor
+    const t2 = randomUUID(); // FS-blocked by t1
+    await seed(p.user, [
+      seedCmd('settings.update', { weather_location: { lat: 1, lon: 2, label: 'Town' } }),
+      seedCmd('blocker.create', {
+        id: randomUUID(),
+        scope: { node_types: ['task'] },
+        predicate: { all: [{ fact: 'weather.precip_prob', op: 'gt', value: 0.5, key: '{today}' }] },
+        label: 'Rain',
+      }),
+      seedCmd('node.create', { id: t1, node_type: 'task', title: 'T1', sort_order: 'a1', parent_id: p.project }),
+      seedCmd('node.create', { id: t2, node_type: 'task', title: 'T2', sort_order: 'a2', parent_id: p.project }),
+      seedCmd('edge.create', { id: randomUUID(), predecessor_id: t1, successor_id: t2, edge_type: 'FS' }),
+    ]);
+    // a "blocking" weather observation for 2026-06-13 (precip 0.9 > 0.5).
+    await runWeatherPoll(drizzle(sql), { now: () => Date.parse('2026-06-13T09:00:00.000Z') }, async () => [
+      { date: '2026-06-13', high_c: 10, low_c: 5, precip_prob: 0.9, wind_kph: 10 },
+    ]);
+
+    // a dispatcher pinned to 2026-06-13 noon so ctx.today() deterministically
+    // resolves the {today} key against the weather fact keyed town/2026-06-13.
+    const fixed = createDispatcher(drizzle(sql), createRateLimiter({ limit: 100_000, windowMs: 60_000 }), {
+      enqueueBackstop: (job) => {
+        backstops.push(job);
+      },
+      nowIso: () => '2026-06-13T12:00:00.000Z',
+    });
+
+    const dev = new Device('device-a');
+    // p.task is blocked ONLY by weather (no predecessor) → applies without force.
+    const okClock = dev.edit('timer.clock_in', { entry_id: randomUUID(), task_id: p.task, started_at: '2026-06-13T12:05:00.000Z' }, 1000);
+    // t2 is dependency-blocked (t1 incomplete) → rejected without force.
+    const depClock = dev.edit('timer.clock_in', { entry_id: randomUUID(), task_id: t2, started_at: '2026-06-13T12:06:00.000Z' }, 2000);
+    const results = await dev.sync(fixed, p.user);
+    assertContract(results);
+    const byId = Object.fromEntries(results.map((r) => [r.id, r]));
+    // R19/V10 (S3-F1): advisory weather must NOT cause a rejection. (Before R2's
+    // dispatcher fix this was rejected E_BLOCKED_TASK — the regression this pins.)
+    expect(byId[okClock.id], 'weather-only-blocked clock-in').toMatchObject({ result: 'applied' });
+    // dependency blocking is real state and still gates a non-force clock-in.
+    expect(byId[depClock.id], 'dependency-blocked clock-in').toMatchObject({ result: 'rejected', reject_code: 'E_BLOCKED_TASK' });
+
+    const open = await sql`SELECT task_id FROM time_entries WHERE user_id = ${p.user} AND ended_at IS NULL AND deleted_at IS NULL`;
+    expect(open.map((r) => r['task_id'])).toEqual([p.task]); // exactly the weather-blocked task is running
+    dev.close();
+  });
+
+  it('scenario 14 — accepting an optimize MOVE replaces the old block; no double-book (§7.5, S5-F2)', async () => {
+    // A schedulable task with an existing FLEXIBLE committed block, off-window so
+    // the optimizer proposes moving it. §7.5: the suggestion carries
+    // replaces_block_id, so accepting it (through the two-layer overlay + reconcile)
+    // must converge to ONE committed block, not two.
+    const user = randomUUID();
+    const ids = { vision: randomUUID(), roadmap: randomUUID(), project: randomUUID(), task: randomUUID() };
+    await seed(user, [
+      seedCmd('node.create', { id: ids.vision, node_type: 'vision', title: 'V', sort_order: 'a0' }),
+      seedCmd('node.create', { id: ids.roadmap, node_type: 'roadmap', title: 'R', sort_order: 'a0', parent_id: ids.vision }),
+      seedCmd('node.create', { id: ids.project, node_type: 'project', title: 'P', sort_order: 'a0', parent_id: ids.roadmap }),
+      seedCmd('node.create', { id: ids.task, node_type: 'task', title: 'T', sort_order: 'a0', parent_id: ids.project, estimate_minutes: 60 }),
+    ]);
+    const oldBlock = randomUUID();
+    await sql`INSERT INTO schedule_blocks (id, user_id, task_id, starts_at, ends_at, anchor_type, status, updated_at)
+      VALUES (${oldBlock}, ${user}, ${ids.task}, '2026-06-20T22:00:00Z', '2026-06-20T23:00:00Z', 'none', 'committed', '2026-06-13T16:00:00.000Z')`;
+
+    const res = await runScheduleOptimize(drizzle(sql), user, { now: () => Date.parse('2026-06-13T16:00:00.000Z') });
+    expect(res.suggestions).toBe(1); // the flexible block is replaceable → a move is proposed
+    const [suggested] = await sql`
+      SELECT id, replaces_block_id FROM schedule_blocks
+      WHERE user_id = ${user} AND task_id = ${ids.task} AND status = 'suggested' AND suggestion_reason = ${NIGHTLY_OPTIMIZATION}`;
+    expect(suggested!['replaces_block_id']).toBe(oldBlock); // §7.5 replacement link stamped by the job
+
+    // accept through a real device (overlay effect + envelope + reconcile).
+    const dev = new Device('device-a');
+    const accept = dev.edit('block.accept_suggestion', { id: suggested!['id'] }, Date.parse('2026-06-13T17:00:00.000Z'));
+    const outcomes = await dev.sync(dispatcher, user);
+    assertContract(outcomes);
+    expect(outcomes.find((o) => o.id === accept.id)).toMatchObject({ result: 'applied' });
+
+    // converged server state: exactly one committed block (the promoted one),
+    // and the replaced flexible block is soft-deleted.
+    const committed = await sql`
+      SELECT id FROM schedule_blocks
+      WHERE user_id = ${user} AND task_id = ${ids.task} AND status = 'committed' AND deleted_at IS NULL`;
+    expect(committed).toHaveLength(1);
+    expect(committed[0]!['id']).not.toBe(oldBlock);
+    const [gone] = await sql`SELECT deleted_at FROM schedule_blocks WHERE id = ${oldBlock}`;
+    expect(gone!['deleted_at']).not.toBeNull();
+    dev.close();
+  });
+
+  it('scenario 15 — a command with NO schema_version is rejected client_too_old (§7.11, S4-F1/S7-F3)', async () => {
+    const p = await project();
+    // A raw envelope that omits schema_version entirely (a pre-R6 client). The
+    // envelope schema accepts it (the field is optional), but the §7.11 floor now
+    // treats absent as below-floor and rejects it — never applies it by guesswork.
+    const versionless = {
+      id: randomUUID(),
+      name: 'node.rename',
+      hlc: '000000010000-0000-noversion',
+      payload: { id: p.task, title: 'ghost' },
+    };
+    const res = await dispatcher.handleUpload(p.user, { device_id: 'noversion', commands: [versionless] });
+    if (res.kind !== 'ok') throw new Error(res.kind);
+    assertContract(res.results);
+    expect(res.results[0]).toMatchObject({ result: 'rejected', reject_code: 'E_CLIENT_TOO_OLD' });
+    expect(res.results[0]!.review_item_ids).toHaveLength(1);
+    const items = await sql`SELECT item_type, severity FROM sync_review_items WHERE command_id = ${versionless.id} AND user_id = ${p.user}`;
+    expect(items[0]).toMatchObject({ item_type: 'schema_version_block', severity: 'error' });
+    const [row] = await sql`SELECT title FROM nodes WHERE id = ${p.task}`;
+    expect(row!['title']).toBe('T'); // untouched — the version-less command never applied
+
+    // sanity: the SAME command WITH a floor-satisfying schema_version applies.
+    const ok = { ...versionless, id: randomUUID(), hlc: '000000020000-0000-noversion', schema_version: 1 };
+    const res2 = await dispatcher.handleUpload(p.user, { device_id: 'noversion', commands: [ok] });
+    if (res2.kind !== 'ok') throw new Error(res2.kind);
+    expect(res2.results[0]).toMatchObject({ result: 'applied' });
   });
 });

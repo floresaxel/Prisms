@@ -42,10 +42,34 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
 
   const betterAuthSecret = env.BETTER_AUTH_SECRET ?? DEV_AUTH_SECRET;
   const powersyncSecret = env.POWERSYNC_JWT_SECRET ?? DEV_POWERSYNC_SECRET;
-  if (betterAuthSecret === DEV_AUTH_SECRET || powersyncSecret === DEV_POWERSYNC_SECRET) {
+  const usingDevSecret = betterAuthSecret === DEV_AUTH_SECRET || powersyncSecret === DEV_POWERSYNC_SECRET;
+  if (usingDevSecret) {
+    // S4-F4: in production, dev-default secrets are FATAL, not a warning — a
+    // deploy that forgot to set them would sign forgeable sessions/tokens. The
+    // escape hatch is for intentional non-prod-mode runs (a local smoke test).
+    if (env.NODE_ENV === 'production' && env.PRISMS_ALLOW_DEV_SECRETS !== '1') {
+      throw new Error(
+        '[prisms-api] FATAL: dev-default secrets active in production — set BETTER_AUTH_SECRET and ' +
+          'POWERSYNC_JWT_SECRET (or PRISMS_ALLOW_DEV_SECRETS=1 to override intentionally) (§13).',
+      );
+    }
     console.warn(
       '[prisms-api] WARNING: dev secrets active (BETTER_AUTH_SECRET / POWERSYNC_JWT_SECRET unset) — never use in production (§13)',
     );
+  }
+  // S10-F5: the PowerSync jwks `k` (PS_JWT_K_B64URL) must equal base64url(secret).
+  // A mismatch (typo, rotating one but not the other) boots every service healthy
+  // yet every PowerSync token fails validation — the app renders but never syncs,
+  // with nothing pointing at the cause. Verify at boot when the var is present.
+  const jwkB64 = env.PS_JWT_K_B64URL;
+  if (jwkB64 !== undefined && jwkB64.length > 0) {
+    const derived = Buffer.from(powersyncSecret, 'utf8').toString('base64url');
+    if (derived !== jwkB64) {
+      throw new Error(
+        '[prisms-api] FATAL: PS_JWT_K_B64URL does not match base64url(POWERSYNC_JWT_SECRET); every PowerSync ' +
+          "token would fail validation (S10-F5). Re-derive: printf %s \"$PS_JWT_SECRET\" | basenc --base64url | tr -d '='.",
+      );
+    }
   }
 
   return {

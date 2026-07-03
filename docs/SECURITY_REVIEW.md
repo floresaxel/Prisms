@@ -33,8 +33,14 @@ and deferrals are called out honestly at the end.
   Auth session (`GET /api/powersync/token`), signed with the operator-set
   `PS_JWT_SECRET` and scoped `sub = user_id`. The sync service validates it
   against the matching jwks key (its base64url form, `PS_JWT_K_B64URL`).
-- Cross-user isolation is asserted in the convergence harness and the server
-  integration suite (one user cannot receive another's rows).
+- Cross-user isolation is verified at two layers: **statically**, every stream
+  query filters `auth.user_id()` with no client-widenable parameter
+  (`packages/db/test/sync-streams.test.ts`); and **dynamically**, two accounts mint
+  PowerSync tokens whose `sub` claims are disjoint and which the running PowerSync
+  service accepts, so their buckets are disjoint by construction
+  (`apps/server/test/api.integration.test.ts` → "disjoint sync buckets"). A full
+  bucket-content download-diff against the booted service remains a staging-soak
+  item (the sync-protocol download is not asserted row-by-row).
 
 ## 3. The server owns trust (R17)
 
@@ -72,9 +78,27 @@ and deferrals are called out honestly at the end.
   provider-neutral `SecureStorage` port (`packages/ui/src/adapters/`):
   localStorage on web, **expo-secure-store (OS keystore) on mobile**
   (`apps/mobile/src/secure-storage.ts`).
+- **Boot secret hygiene (R10).** In production the API refuses to start on
+  dev-default `BETTER_AUTH_SECRET`/`POWERSYNC_JWT_SECRET` (escape hatch
+  `PRISMS_ALLOW_DEV_SECRETS=1`), and when `PS_JWT_K_B64URL` is present it must equal
+  `base64url(POWERSYNC_JWT_SECRET)` or boot fails — otherwise every PowerSync token
+  would silently fail validation (`apps/server/src/env.ts`).
 - Cookie-authenticated POSTs require a trusted `Origin` (CSRF); the API's own
   origin is always trusted and cross-origin clients are an explicit allow-list
-  (`BETTER_AUTH_TRUSTED_ORIGINS`). `/sync/upload` is rate-limited per verb.
+  (`BETTER_AUTH_TRUSTED_ORIGINS`).
+- **Rate + body limits (R10).** `/sync/upload` is rate-limited per user+verb; the
+  auth endpoints are rate-limited (better-auth, production); the heavy per-user
+  endpoints (`/api/powersync/token`, `/sync/export`, `/sync/import`) share a
+  dedicated per-user limiter. Request bodies are bounded — **2 MB** on
+  `/sync/upload`, **32 MB** on `/sync/import` — so an oversized body is rejected
+  (413) before it is buffered/parsed.
+- **Account boundary on shared devices (S9-F1, R9).** Sign-out ends the account's
+  LOCAL presence: the client warns if unsynced commands would be lost, then
+  `disconnectAndClear()`s the synced replica + local command queue and clears the
+  in-memory read cache. Databases are per-account files
+  (`prisms-${userId}.db`/`.sqlite`), so a second account on the same device never
+  opens the first's replica or cross-posts its queued commands under the new JWT
+  (web + mobile; `apps/web/test/logout-boundary.test.ts`).
 
 ## 6. Local encryption + export behavior (§13.1/§13.2, R20)
 
@@ -82,11 +106,15 @@ and deferrals are called out honestly at the end.
   which does not include the auth (`user`/`session`/`account`/`verification`) or
   push-subscription tables — so no auth token or provider secret can leave in an
   export (asserted in the integration test).
-- **Export encryption:** optional passphrase encryption on web (AES-256-GCM with
-  a PBKDF2-SHA256-derived key, 210k iterations; `packages/ui/src/portability/
-  crypto.ts`); **encrypted by default on installed targets** (mobile requires a
-  passphrase; desktop defaults the toggle on and requires an explicit opt-out with
-  a warning). A wrong passphrase fails GCM authentication (never returns garbage).
+- **Export encryption:** optional passphrase encryption on web (AES-256-GCM with a
+  PBKDF2-SHA256-derived key, **600k iterations** — the OWASP 2023 SHA-256 floor,
+  R9/S8-F3; decrypt honors 1..10M and rejects an out-of-range count as a DoS guard;
+  `packages/ui/src/portability/crypto.ts`); **encrypted by default on installed
+  targets** (mobile requires a passphrase; desktop defaults the toggle on and
+  requires an explicit opt-out with a warning). Mobile now provides native WebCrypto
+  via `react-native-quick-crypto` (R9/S9-F2) so the encrypted-export path functions
+  on Hermes — **device-verification pending (DoF 23)**. A wrong passphrase fails GCM
+  authentication (never returns garbage).
 - **Import is non-replayable:** it restores rows as data and marks
   `command_history` non-replayable; it never re-executes historical commands
   against an evolved schema.
@@ -120,10 +148,14 @@ These are known and deliberately bounded, not undiscovered:
 | §13 control | Status |
 |---|---|
 | Command upload is the only trusted write path | ✅ enforced (loud guard + coverage test; CRUD path deleted) |
-| Sync Streams auth + no client-widenable params | ✅ `auth.user_id()`-scoped; cross-user isolation tested |
+| Sync Streams auth + no client-widenable params | ✅ `auth.user_id()`-scoped; static rule test + two-user token-scope test (full download-diff = staging) |
 | Trust fields server-assigned | ✅ stripped-then-stamped; import forces ownership + global-id guard |
 | Secrets in secure storage | ✅ cookie / OS keystore; port-backed device secrets |
+| Boot secret hygiene (R10) | ✅ prod fail-fast on dev-default secrets; `PS_JWT_K_B64URL` = base64url(secret) checked at boot |
+| Rate + body limits (R10) | ✅ upload/auth/token/export/import rate-limited; 2 MB upload / 32 MB import body caps |
+| Account boundary on shared devices (R9) | ✅ per-account db file + sign-out `disconnectAndClear` + read-cache clear (web+mobile) |
 | Local DB encryption | ⚠ adapter port only (web/desktop plaintext at rest — documented) |
-| Encrypted export | ✅ AES-256-GCM; default on installed targets |
+| Encrypted export | ✅ AES-256-GCM, 600k PBKDF2; default on installed targets (mobile crypto wired R9, device-verify pending) |
 | Export excludes secrets | ✅ registry excludes auth/push tables (tested) |
 | Import non-replayable + HLC monotonic | ✅ restore-as-data + device HLC floor (tested) |
+| Publication scope (R10) | ✅ scoped to synced tables (auth/queue/log tables no longer replicated) |

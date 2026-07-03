@@ -36,6 +36,7 @@ const cmd = (name: string, payload: unknown, id = randomUUID()) => ({
   name,
   hlc: `${(++hlc).toString(16).padStart(12, '0')}-0000-seed`,
   payload,
+  schema_version: 1, // R6: clients emit the §7.11 version (absent = below-floor)
 });
 
 describe.skipIf(!adminUrl)('S13 jobs — facts & truth', () => {
@@ -209,7 +210,7 @@ describe.skipIf(!adminUrl)('S13 jobs — facts & truth', () => {
     const spawned = await sql_`SELECT parent_id, source_kind, source_id, source_detail FROM nodes WHERE user_id = ${user} AND title = 'Pre-brief: Lecture'`;
     expect(spawned).toHaveLength(1);
     expect(spawned[0]).toMatchObject({ parent_id: ids.project, source_kind: 'automation', source_id: ids.rule });
-    expect(spawned[0]!['source_detail']).toMatchObject({ backstop: true, trigger_node_id: ids.task });
+    expect(spawned[0]!['source_detail']).toMatchObject({ backstop: true, trigger_node_id: ids.task, rule_version: 1, template_version: 1 });
     const items = await sql_`SELECT severity, detail FROM sync_review_items WHERE user_id = ${user} AND item_type = 'automation_backstop'`;
     expect(items).toHaveLength(1);
     expect(items[0]!['severity']).toBe('info');
@@ -246,9 +247,12 @@ describe.skipIf(!adminUrl)('S13 jobs — facts & truth', () => {
     const items = await sql_`SELECT severity, detail FROM sync_review_items WHERE user_id = ${user} AND item_type = 'automation_drift'`;
     expect(items).toHaveLength(1);
     expect(items[0]!['severity']).toBe('info');
-    const d = items[0]!['detail'] as { id: string; existing_content_hash: string; spawned_content_hash: string };
+    const d = items[0]!['detail'] as { id: string; existing_content_hash: string; spawned_content_hash: string; rule_version: number | null; template_version: number | null };
     expect(d.id).toBe(spawnId);
     expect(d.existing_content_hash).not.toBe(d.spawned_content_hash); // content genuinely diverged
+    // §10.2 (S3-F4): the drift item names BOTH generations that produced the row.
+    expect(d.rule_version).toBe(1);
+    expect(d.template_version).toBe(1);
   });
 
   it('retention.purge hard-deletes only rows past the 90-day cutoff (clock-injected)', async () => {
@@ -290,6 +294,45 @@ describe.skipIf(!adminUrl)('S13 jobs — facts & truth', () => {
     expect(res.deleted['command_log']).toBeGreaterThanOrEqual(1);
     const left = await sql_`SELECT id FROM command_log WHERE id IN (${oldCmd}, ${recentCmd})`;
     expect(left.map((r) => r['id'])).toEqual([recentCmd]); // beyond-horizon purged; in-horizon dedup survives
+  });
+
+  it('retention.purge reclaims soft-deleted review items + the tag chain past the cutoff (S5-F1)', async () => {
+    const user = randomUUID();
+    const oldDeleted = new Date(NOW_MS - (RETENTION_DAYS + 5) * 86_400_000).toISOString();
+    const recentDeleted = new Date(NOW_MS - 5 * 86_400_000).toISOString();
+    const oldItem = randomUUID();
+    const recentItem = randomUUID();
+    await sql_`
+      INSERT INTO sync_review_items (id, user_id, command_id, item_type, severity, title, detail, status, resolved_at, updated_at, deleted_at, source_kind) VALUES
+        (${oldItem}, ${user}, NULL, 'command_rejection', 'warning', 'old', '{}'::jsonb, 'dismissed', ${oldDeleted}, ${oldDeleted}, ${oldDeleted}, 'server_job'),
+        (${recentItem}, ${user}, NULL, 'command_rejection', 'warning', 'recent', '{}'::jsonb, 'dismissed', ${recentDeleted}, ${recentDeleted}, ${recentDeleted}, 'server_job')`;
+
+    // a fully soft-deleted tag → placement → answer chain (block + tag both old)
+    const taskNode = randomUUID();
+    const block = randomUUID();
+    const tag = randomUUID();
+    const placement = randomUUID();
+    const answer = randomUUID();
+    await sql_`INSERT INTO nodes (id, user_id, node_type, title, sort_order, updated_at, deleted_at)
+      VALUES (${taskNode}, ${user}, 'task', 'tagged', 'a0', ${oldDeleted}, ${oldDeleted})`;
+    await sql_`INSERT INTO schedule_blocks (id, user_id, task_id, starts_at, ends_at, anchor_type, status, updated_at, deleted_at)
+      VALUES (${block}, ${user}, ${taskNode}, '2026-01-01T10:00:00Z', '2026-01-01T11:00:00Z', 'none', 'committed', ${oldDeleted}, ${oldDeleted})`;
+    await sql_`INSERT INTO tags (id, user_id, label, updated_at, deleted_at) VALUES (${tag}, ${user}, 'on time?', ${oldDeleted}, ${oldDeleted})`;
+    await sql_`INSERT INTO tag_placements (id, user_id, block_id, tag_id, updated_at, deleted_at) VALUES (${placement}, ${user}, ${block}, ${tag}, ${oldDeleted}, ${oldDeleted})`;
+    await sql_`INSERT INTO tag_answers (id, user_id, placement_id, value, answered_at, updated_at, deleted_at) VALUES (${answer}, ${user}, ${placement}, 'yes', ${oldDeleted}, ${oldDeleted}, ${oldDeleted})`;
+
+    const res = await runRetentionPurge(db, clock);
+    expect(res.deleted['sync_review_items']).toBeGreaterThanOrEqual(1);
+    expect(res.deleted['tag_answers']).toBeGreaterThanOrEqual(1);
+    expect(res.deleted['tag_placements']).toBeGreaterThanOrEqual(1);
+    expect(res.deleted['tags']).toBeGreaterThanOrEqual(1);
+
+    const itemsLeft = await sql_`SELECT id FROM sync_review_items WHERE user_id = ${user}`;
+    expect(itemsLeft.map((r) => r['id'])).toEqual([recentItem]); // beyond-cutoff item reclaimed, recent survives
+    const tagGone = await sql_`SELECT count(*)::int AS n FROM tags WHERE id = ${tag}`;
+    expect(tagGone[0]!['n']).toBe(0);
+    const answerGone = await sql_`SELECT count(*)::int AS n FROM tag_answers WHERE id = ${answer}`;
+    expect(answerGone[0]!['n']).toBe(0);
   });
 
   it('review.expire_resolved soft-deletes old closed items, keeps open + in-horizon ones (§12)', async () => {

@@ -19,7 +19,13 @@ import { SYNC_ROW_DEFAULTS } from '../domain/entities';
 import { domainError } from '../domain/errors';
 import { err, ok, type Result } from '../domain/result';
 import { buildFactContext } from '../status/context';
-import { evalPredicate, predicateSchema } from '../status/predicate';
+import {
+  evalPredicate,
+  hasOverlongMatchesPattern,
+  MAX_MATCHES_PATTERN_LENGTH,
+  predicateSchema,
+  referencesExternalFacts,
+} from '../status/predicate';
 import { isoToEpochMillis } from '../time/instant';
 
 import {
@@ -114,6 +120,29 @@ export function validateAutomationRule(
   const conditions = predicateSchema.safeParse(candidate.conditions);
   if (!conditions.success) {
     return err(domainError('E_PARSE', 'invalid conditions: not a §9.2 predicate'));
+  }
+  // §10.3/V10 (S5-F10): automation conditions may not read external facts. The
+  // server's automation path never loads `external_facts`, so a weather-
+  // conditioned rule can NEVER fire — reject it at authoring time rather than
+  // let the user create a rule that silently does nothing.
+  if (referencesExternalFacts(candidate.conditions)) {
+    return err(
+      domainError(
+        'E_EXTERNAL_FACT_CONDITION',
+        'automation conditions cannot reference external facts (e.g. weather); they never fire server-side (§10.3). Use a blocker rule for advisory weather display.',
+      ),
+    );
+  }
+  // S3-F7: cap `matches` pattern length at authoring time (ReDoS guard). The
+  // evaluator also fails safe above the cap, so blocker rules are covered at eval
+  // time even though blocker.create has no core validator to reject them here.
+  if (hasOverlongMatchesPattern(candidate.conditions)) {
+    return err(
+      domainError(
+        'E_PATTERN_TOO_LONG',
+        `a "matches" pattern exceeds ${MAX_MATCHES_PATTERN_LENGTH} characters (§9.2 pattern-complexity cap).`,
+      ),
+    );
   }
 
   const candidateNode: RuleNode = {

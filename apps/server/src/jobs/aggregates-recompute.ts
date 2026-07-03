@@ -51,6 +51,10 @@ export async function runAggregatesRecompute(
   const now = asEpochMillis(clock.now());
   const nowIso = new Date(clock.now()).toISOString();
 
+  // §12: recompute reads nine tables and must see ONE consistent snapshot —
+  // REPEATABLE READ pins every statement to the txn-start snapshot, so a command
+  // committing mid-flight can't tear the cross-table read (S5-F5). The existing
+  // `updated_at <= snapshot` no-clobber guard still protects the writes.
   return db.transaction(async (tx) => {
     const [nodeRows, entryRows, habitRows, completionRows, blockRows, tagRows, placementRows, answerRows, settingsRow] = await Promise.all([
       tx.select().from(nodes).where(eq(nodes.user_id, userId)),
@@ -157,7 +161,7 @@ export async function runAggregatesRecompute(
     }
 
     return { habits: habitRows.filter((h) => h.deleted_at === null).length, projects, aggregates };
-  });
+  }, { isolationLevel: 'repeatable read' });
 }
 
 /** Cron entry point: recompute every user that has settings. */

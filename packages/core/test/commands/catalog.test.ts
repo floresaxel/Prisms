@@ -294,6 +294,15 @@ describe('checkCompletion — §7.6 completion gates', () => {
     expect(checkCompletion(succ, ctx([proj, pred, succ], [edge('SF')], [started]), NOW).ok).toBe(true);
   });
 
+  it('SF lag: a started predecessor still blocks completion until start + lag (§7.6, S3-F5)', () => {
+    // started 11:00 + 120-min lag = 13:00 > NOW(12:00) ⇒ still blocked
+    const recent = makeEntry({ id: idOf(21), task_id: pred.id, started_at: '2026-06-13T11:00:00.000Z' });
+    expect(checkCompletion(succ, ctx([proj, pred, succ], [edge('SF', 120)], [recent]), NOW).ok).toBe(false);
+    // started 08:00 + 120-min lag = 10:00 < NOW ⇒ released
+    const early = makeEntry({ id: idOf(22), task_id: pred.id, started_at: '2026-06-13T08:00:00.000Z' });
+    expect(checkCompletion(succ, ctx([proj, pred, succ], [edge('SF', 120)], [early]), NOW).ok).toBe(true);
+  });
+
   it('SS does not gate completion, and a task with no predecessors completes freely', () => {
     expect(checkCompletion(succ, ctx([proj, pred, succ], [edge('SS')]), NOW).ok).toBe(true);
     expect(checkCompletion(succ, ctx([proj, succ], []), NOW).ok).toBe(true);

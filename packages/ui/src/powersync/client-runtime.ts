@@ -55,18 +55,43 @@ export function newId(): string {
   return uuidV7(browserClock, browserRng);
 }
 
+/** The persisted last-tick high-water — seeds a fresh clock so a restart can't regress (S7-F8). */
+const HLC_LAST_KEY = 'prisms.hlc_last';
+
+/** localStorage when present (browser/desktop), else null (React Native has none). */
+function defaultHlcStorage(): Pick<Storage, 'getItem' | 'setItem'> | null {
+  return typeof localStorage !== 'undefined' ? localStorage : null;
+}
+
 /**
  * A monotonic per-device HLC; call `next()` once per uploaded command. Each tick
  * also dominates any observed import floor (§13.1), so a command minted after an
  * import always orders after the imported rows.
+ *
+ * The clock is seeded from the persisted last tick (and any caller-supplied
+ * high-water, e.g. `max(client_commands.hlc)`) and persists every tick, so a
+ * wall-clock regression across a restart cannot mint an HLC below an
+ * already-queued/applied one (§7.9a monotonicity, S7-F8). On React Native
+ * (no localStorage) persistence is a no-op unless a storage is passed.
  */
-export function createHlc(deviceId: string): () => string {
+export function createHlc(
+  deviceId: string,
+  storage: Pick<Storage, 'getItem' | 'setItem'> | null = defaultHlcStorage(),
+  seedHlc?: string | null,
+): () => string {
   let prev: Hlc | null = null;
+  for (const enc of [storage?.getItem(HLC_LAST_KEY) ?? null, seedHlc ?? null]) {
+    if (enc === null) continue;
+    const parsed = hlcParse(enc);
+    if (parsed.ok && (prev === null || hlcCompare(parsed.value, prev) > 0)) prev = parsed.value;
+  }
   return () => {
-    // base = the more-recent of the previous tick and the import floor.
+    // base = the most-recent of the previous tick, the seed, and the import floor.
     const base = hlcFloor !== null && (prev === null || hlcCompare(hlcFloor, prev) > 0) ? hlcFloor : prev;
     prev = hlcTick(base, asEpochMillis(Date.now()), deviceId);
-    return hlcEncode(prev);
+    const enc = hlcEncode(prev);
+    storage?.setItem(HLC_LAST_KEY, enc);
+    return enc;
   };
 }
 

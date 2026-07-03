@@ -36,9 +36,14 @@ convergence + read-path contracts. The load-bearing pieces:
   13-scenario two-device harness (`pnpm test:convergence`) is the gate.
 - **Sync Streams tiers (§7.3).** `bootstrap`/`active` auto-sync; `history` (Tier 2)
   is subscribed lazily. All streams are JWT-scoped with no client-widenable params.
-- **Incremental `StatusIndex` (§7.12).** Per-command status recompute touches only
-  the affected node + its dependency neighbours — O(neighbourhood), not O(table)
-  (measured: 1 node / ~0.02ms on a 100k-node account).
+- **Incremental `StatusIndex` (§7.12), wired.** The client read layer seeds the
+  index once per session and feeds it row-diffs (R7), so an optimistic write updates
+  the merged status view incrementally instead of rebuilding `FactContext`; the
+  index's per-command `apply` is O(neighbourhood), not O(table) (measured: 1 node /
+  ~0.02 ms, touch-set < 100, on a 100k-node account). The server write path caches
+  the per-batch context (tree / edge index / `FactContext`) across a command batch
+  and parallelises its context load (R8), so it is no longer an O(table) rebuild per
+  command.
 - **Persistent, loading-aware read layer (§7.14/7.15).** `PrismsDataProvider`
   above the router owns the shared subscriptions + `FactContext` once per session;
   reads are stale-while-revalidate with a remount-surviving cache, so navigation
@@ -92,6 +97,9 @@ server) via `BETTER_AUTH_TRUSTED_ORIGINS=http://localhost:5173`.
 
 Host ports are overridable in a local `.env` (gitignored) when the defaults
 are taken — e.g. `PRISMS_POSTGRES_PORT=5434`, `PRISMS_POWERSYNC_PORT=8081`.
+The web client's default PowerSync URL is `http://localhost:8080` (matching
+compose); if you remap the container port, point the client at it too, e.g.
+`VITE_POWERSYNC_URL=http://localhost:8081` in `apps/web/.env.local`.
 Note WSL shuts down when idle; re-running any `wsl docker ...` command boots
 it again and the containers auto-start (`restart: unless-stopped`).
 

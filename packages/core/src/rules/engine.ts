@@ -29,6 +29,7 @@ import {
   automationActionsSchema,
   interpolate,
   resolveTriggerDate,
+  TEMPLATE_VERSION,
   type AutomationAction,
 } from './actions';
 
@@ -52,6 +53,10 @@ export interface SpawnProvenance {
   id: Uuid;
   rule_id: Uuid;
   slot: number;
+  /** §10.2: the rule's data-version at spawn time (`automation_rules.rule_version`). */
+  rule_version: number;
+  /** §10.2: the code-level action-template version (`TEMPLATE_VERSION`). */
+  template_version: number;
 }
 
 export interface RulesEngineOutput {
@@ -200,7 +205,7 @@ export function runAutomations(input: RulesEngineInput): RulesEngineOutput {
               parentMode === 'same_as_trigger' ? trigger.node.habit_id : null,
             attributes: {},
           };
-          spawnedProvenance.push({ id, rule_id: rule.id, slot: action.slot });
+          spawnedProvenance.push({ id, rule_id: rule.id, slot: action.slot, rule_version: rule.rule_version, template_version: TEMPLATE_VERSION });
 
           const existing = ctx.node(id) ?? spawnedNodes.find((n) => n.id === id);
           if (existing !== undefined) {
@@ -239,7 +244,7 @@ export function runAutomations(input: RulesEngineInput): RulesEngineOutput {
                 edge_type: action.template.edge_type ?? 'FS',
                 lag_minutes: action.template.lag_minutes ?? 0,
               });
-              spawnedProvenance.push({ id: edgeId, rule_id: rule.id, slot: action.slot });
+              spawnedProvenance.push({ id: edgeId, rule_id: rule.id, slot: action.slot, rule_version: rule.rule_version, template_version: TEMPLATE_VERSION });
               fired = true;
             }
           }

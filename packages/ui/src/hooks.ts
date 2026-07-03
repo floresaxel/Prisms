@@ -21,6 +21,7 @@ import {
   descendantsOf,
   evaluateBlockerRules,
   habitTaskIds,
+  habitTodayMinutes,
   isJustified,
   isoToEpochMillis,
   mergeTable,
@@ -28,7 +29,6 @@ import {
   minutesLeftInTask,
   minutesUntilNextBlock,
   rankProjects,
-  rawMinutes,
   taskStatus,
   topologicalOrder,
   type AutomationRule,
@@ -149,6 +149,20 @@ const keyOf = (sql: string, params: readonly unknown[]): string =>
  * fresh test. No-op contract for production (never called by app code).
  */
 export function __resetReadCacheForTests(): void {
+  ROWS_CACHE.clear();
+  PRODUCED.clear();
+  producedVersion += 1;
+  for (const l of producedListeners) l();
+}
+
+/**
+ * Clear the module-scoped SWR read cache + hydration registry on sign-out /
+ * account switch (S9-F1/S8-F2). These caches are keyed only by sql+params, so
+ * without this a warm read on a shared device could momentarily serve the
+ * previous account's rows before the fresh replica loads. Call alongside the
+ * PowerSync `disconnectAndClear()` in the app's sign-out path.
+ */
+export function clearReadCaches(): void {
   ROWS_CACHE.clear();
   PRODUCED.clear();
   producedVersion += 1;
@@ -719,12 +733,9 @@ export function useHabits(now: Instant): HabitView[] {
       );
       const practice = canonicalPractice(habit, nodes, entries);
 
-      let todayMinutes = 0;
-      for (const e of entries) {
-        if (!taskIds.has(e.task_id)) continue;
-        if (bucketDate(e.started_at, settings.day_reset_hour, settings.timezone) !== today) continue;
-        todayMinutes += e.ended_at === null ? Math.max(0, (now - isoToEpochMillis(e.started_at)) / 60_000) : rawMinutes(e);
-      }
+      // Closed entries union PER TASK (§9.2 — two overlapping offline sessions
+      // count once, audit S3-F2); the running entry adds live elapsed on top.
+      const todayMinutes = habitTodayMinutes(entries, taskIds, today, settings.day_reset_hour, settings.timezone, now);
 
       // live tag-confirmation tally across this habit's habit-scoped placements
       const habitTagIds = new Set(tags.filter((t) => t.deleted_at === null && t.habit_id === habit.id).map((t) => t.id));

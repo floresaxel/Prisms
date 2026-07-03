@@ -1,3 +1,13 @@
 -- PowerSync replicates via logical replication and requires this publication
 -- on the source database (PSYNC_S1141 otherwise).
-CREATE PUBLICATION powersync FOR ALL TABLES;
+--
+-- Created EMPTY on purpose: initdb scripts run once on a FRESH database,
+-- before any migration, so the app tables do not exist yet — a
+-- `FOR TABLE ...` list here aborts postgres' first boot (initdb fails, the
+-- container never becomes healthy). Migration
+-- packages/db/migrations/0009_powersync_publication.sql scopes the publication
+-- to exactly the tables the sync streams reference (S6-F4, R10) once those
+-- tables exist; it also converts databases from the FOR ALL TABLES era.
+-- Boot order stays: postgres → migrations → powersync (the service snapshots
+-- the schema at boot — see .github/workflows/ci.yml and docs/SELF_HOSTING.md).
+CREATE PUBLICATION powersync;

@@ -38,6 +38,7 @@ const cmd = (name: string, payload: unknown, id = randomUUID()) => ({
   name,
   hlc: `${(++hlc).toString(16).padStart(12, '0')}-0000-seed`,
   payload,
+  schema_version: 1, // R6: clients emit the §7.11 version (absent = below-floor)
 });
 
 describe.skipIf(!adminUrl)('S14 jobs — scheduling & notify', () => {
@@ -148,13 +149,47 @@ describe.skipIf(!adminUrl)('S14 jobs — scheduling & notify', () => {
     const [batch] = await sql`SELECT source FROM schedule_suggestion_batches WHERE id = ${rows[0]!['suggestion_batch_id']}`;
     expect(batch!['source']).toBe('past_due');
 
-    // re-scan: still exactly one suggestion (idempotent)
-    const second = await runPastdueScan(db, ids.user, clock);
+    // re-scan: still exactly one suggestion (idempotent) AND no repeat notification
+    // — the warning fires once, when the suggestion is first created (S5-F3).
+    const notes2: PastDueNotification[] = [];
+    const second = await runPastdueScan(db, ids.user, clock, (n) => notes2.push(n));
     expect(second.suggested).toBe(0);
+    expect(second.notifications).toEqual([]);
+    expect(notes2).toEqual([]); // no push enqueued on the second scan
     const after = await sql`
       SELECT count(*)::int AS n FROM schedule_blocks
       WHERE user_id = ${ids.user} AND task_id = ${task} AND status = 'suggested' AND deleted_at IS NULL`;
     expect(after[0]!['n']).toBe(1);
+  });
+
+  it('schedule.optimize stamps replaces_block_id on a move (S5-F2)', async () => {
+    // The job-level concern: a task with a FLEXIBLE (non-anchored) committed block
+    // off its optimum gets a MOVE proposal carrying the replacement link. The
+    // accept → no-double-book end-to-end (through the overlay) lives in the
+    // convergence harness scenario 14.
+    const ids = await projectWithTasks(1);
+    const task = ids.tasks[0]!;
+    const oldBlock = randomUUID();
+    await sql`INSERT INTO schedule_blocks (id, user_id, task_id, starts_at, ends_at, anchor_type, status, updated_at)
+      VALUES (${oldBlock}, ${ids.user}, ${task}, '2026-06-20T22:00:00Z', '2026-06-20T23:00:00Z', 'none', 'committed', ${new Date(NOW_MS).toISOString()})`;
+
+    const res = await runScheduleOptimize(db, ids.user, clock);
+    expect(res.suggestions).toBe(1); // the flexible block is replaceable → a move is proposed
+    const [suggested] = await sql`
+      SELECT replaces_block_id FROM schedule_blocks
+      WHERE user_id = ${ids.user} AND task_id = ${task} AND status = 'suggested' AND suggestion_reason = ${NIGHTLY_OPTIMIZATION}`;
+    expect(suggested!['replaces_block_id']).toBe(oldBlock); // §7.5 replacement link stamped
+
+    // an anchored committed block is a real obstacle → never replaced.
+    const ids2 = await projectWithTasks(1);
+    const anchored = randomUUID();
+    await sql`INSERT INTO schedule_blocks (id, user_id, task_id, starts_at, ends_at, anchor_type, status, updated_at)
+      VALUES (${anchored}, ${ids2.user}, ${ids2.tasks[0]!}, '2026-06-20T22:00:00Z', '2026-06-20T23:00:00Z', 'start', 'committed', ${new Date(NOW_MS).toISOString()})`;
+    await runScheduleOptimize(db, ids2.user, clock);
+    const anchoredSuggested = await sql`
+      SELECT replaces_block_id FROM schedule_blocks
+      WHERE user_id = ${ids2.user} AND status = 'suggested' AND suggestion_reason = ${NIGHTLY_OPTIMIZATION}`;
+    for (const s of anchoredSuggested) expect(s['replaces_block_id']).toBeNull();
   });
 
   it('layout.precompute fills diagram_layouts for the seed roadmap (DoD)', async () => {

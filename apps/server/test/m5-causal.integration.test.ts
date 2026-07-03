@@ -36,7 +36,9 @@ let hlcState: Hlc | null = null;
 function mk(name: string, payload: unknown, extra: { depends_on?: string[]; schema_version?: number } = {}): Envelope {
   clockMs += 1;
   hlcState = hlcTick(hlcState, asEpochMillis(clockMs), 'web-1');
-  return { id: randomUUID(), name, hlc: hlcEncode(hlcState), payload, ...extra };
+  // R6: default the §7.11 version (absent = below-floor); `extra` can override
+  // it (e.g. a below-floor client_too_old test passes schema_version: 0).
+  return { id: randomUUID(), name, hlc: hlcEncode(hlcState), payload, schema_version: 1, ...extra };
 }
 
 describe.skipIf(!adminUrl)('M5 — causal ordering + schema floor + review inbox', () => {
@@ -46,7 +48,7 @@ describe.skipIf(!adminUrl)('M5 — causal ordering + schema floor + review inbox
   const upload = (userId: string, commands: Envelope[]) => dispatcher.handleUpload(userId, { device_id: 'web-1', commands });
 
   let seedSeq = 0;
-  const seedCmd = (name: string, payload: unknown): Envelope => ({ id: randomUUID(), name, hlc: `${(++seedSeq).toString(16).padStart(12, '0')}-0000-seed`, payload });
+  const seedCmd = (name: string, payload: unknown): Envelope => ({ id: randomUUID(), name, hlc: `${(++seedSeq).toString(16).padStart(12, '0')}-0000-seed`, payload, schema_version: 1 });
 
   async function project(userId: string) {
     const ids = { vision: randomUUID(), roadmap: randomUUID(), project: randomUUID(), task: randomUUID() };
@@ -205,13 +207,13 @@ describe.skipIf(!adminUrl)('M5 — causal ordering + schema floor + review inbox
     const user = randomUUID();
     const p = await project(user);
     // winner: a high-HLC rename applies first and records the field version.
-    const high = { id: randomUUID(), name: 'node.rename', hlc: 'ffffffffffff-0000-web-9', payload: { id: p.task, title: 'New' } };
+    const high = { id: randomUUID(), name: 'node.rename', hlc: 'ffffffffffff-0000-web-9', payload: { id: p.task, title: 'New' }, schema_version: 1 };
     const r1 = await upload(user, [high]);
     expect(r1.kind === 'ok' && r1.results[0]!.result).toBe('applied');
 
     // loser: an older-HLC rename with a DIFFERENT value loses LWW (separate upload,
     // so it is not reordered ahead of the winner).
-    const low = { id: randomUUID(), name: 'node.rename', hlc: '000000000001-0000-web-9', payload: { id: p.task, title: 'Old' } };
+    const low = { id: randomUUID(), name: 'node.rename', hlc: '000000000001-0000-web-9', payload: { id: p.task, title: 'Old' }, schema_version: 1 };
     const r2 = await upload(user, [low]);
     if (r2.kind !== 'ok') throw new Error(r2.kind);
     expect(r2.results[0]!.result).toBe('applied'); // the command is logged; the field just loses

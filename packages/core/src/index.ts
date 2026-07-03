@@ -69,6 +69,7 @@ export * from './aggregates/completion';
 export * from './aggregates/streaks';
 export * from './aggregates/burndown';
 export * from './aggregates/timeleft';
+export * from './aggregates/today';
 export * from './aggregates/decision';
 export * from './rules/actions';
 export * from './rules/engine';

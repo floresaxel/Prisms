@@ -120,7 +120,8 @@ export function buildOptimisticEffects(name: CommandName, payload: unknown, ctx:
     case 'node.uncheck':
       return [upd('nodes', id, { completed_at: null, completion_disposition: null, completed_in_block_id: null })];
     case 'node.soft_delete':
-      // primary effect only; the live writer adds the §I10 descendant closure.
+      // primary effect only; execute() appends the §I10 descendant closure computed
+      // over the merged tree (softDeleteEffects, S7-F7) so the whole subtree hides.
       return [del('nodes', id)];
     case 'activity.promote': {
       const f: Record<string, unknown> = { node_type: 'task' };

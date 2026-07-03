@@ -7,10 +7,10 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import type { ClientCommand, OverlayEffect } from '@prisms/core';
+import { defaultCommandMeta, type OverlayEffect } from '@prisms/core';
 
 import { createCommands, type CommandContext } from '../src/powersync/commands';
-import type { OverlayStore } from '../src/powersync/overlay-store';
+import type { OverlayStore, PendingCommand } from '../src/powersync/overlay-store';
 
 // real UUIDs — the catalog validates `uuidSchema`, so payload ids must be valid.
 const NODE = '11111111-1111-7111-8111-111111111111';
@@ -27,11 +27,12 @@ const REPLACED = 'bbbbbbbb-bbbb-7bbb-8bbb-bbbbbbbbbbbb';
 const SIBLING = 'cccccccc-cccc-7ccc-8ccc-cccccccccccc';
 
 function captureStore() {
-  const commands: ClientCommand[] = [];
+  const commands: PendingCommand[] = [];
   const effects: OverlayEffect[] = [];
   const store: OverlayStore = {
-    async enqueue(command, cmdEffects) {
-      commands.push(command);
+    async enqueue(command, cmdEffects, dependsOn = []) {
+      const meta = defaultCommandMeta([...dependsOn]);
+      commands.push({ ...command, command_version: meta.command_version, schema_version: meta.schema_version, client_version: null, depends_on: [...dependsOn] });
       effects.push(...cmdEffects);
     },
     async pendingCommands() {
@@ -43,7 +44,10 @@ function captureStore() {
     async replicaRows() {
       return [];
     },
-    async reconcileApplied() {},
+    async markApplied() {},
+    async reconcileConfirmed() {
+      return { cleared: [] };
+    },
     async rollbackRejected() {},
     async reviewItems() {
       return [];

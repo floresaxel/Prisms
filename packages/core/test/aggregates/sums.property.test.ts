@@ -1,7 +1,10 @@
 /**
- * S6 DoD: `incremental ∘ facts === canonical(facts)` for the sum-style
- * metrics (effective/practice hours, task progress, project completion) over
- * randomized fact streams — including shuffled order, since sums commute.
+ * Hours/progress aggregates (§9.2): canonical values consume the §7.10b
+ * union resolver PER TASK — overlapping entries count once, never twice
+ * (audit S3-F2/S5-F4). Properties: order-independence, duplication-
+ * idempotence (a union invariant per-entry sums violate), union ≤ naive sum;
+ * plus overlap goldens. Completion keeps its incremental-fold property
+ * (completion is a toggle sum, not an interval aggregate).
  */
 import * as fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
@@ -13,17 +16,9 @@ import {
   taskWeight,
   type CompletionToggle,
 } from '../../src/aggregates/completion';
-import {
-  canonicalPractice,
-  emptyPractice,
-  habitTaskIds,
-  incrementalPractice,
-} from '../../src/aggregates/practice';
-import {
-  canonicalProgress,
-  emptyProgress,
-  incrementalProgress,
-} from '../../src/aggregates/progress';
+import { canonicalPractice, habitTaskIds } from '../../src/aggregates/practice';
+import { canonicalProgress } from '../../src/aggregates/progress';
+import { habitTodayMinutes } from '../../src/aggregates/today';
 import { buildTreeIndex } from '../../src/graph/tree';
 import { idOf, makeEntry, makeHabit, makeNode } from '../helpers/fixtures';
 import type { Node, TimeEntry } from '../../src/domain/entities';
@@ -35,33 +30,56 @@ const HABIT = makeHabit({
   level_thresholds_hours: [1, 5, 50],
 });
 
-/** Entry arb: minutes ∈ [0, 600], focus ∈ {null, 0.5..1.0}, on one of 4 tasks. */
-const entryArb = (seq: number) =>
-  fc
-    .record({
-      task: fc.integer({ min: 0, max: 3 }),
-      minutes: fc.integer({ min: 0, max: 600 }),
+/**
+ * Overlap-capable arb: entries land inside ONE day window on 2 tasks, so
+ * union ≠ sum cases are actually generated (a per-day arb can never overlap
+ * — which is exactly how the pre-union per-entry sums looked correct).
+ */
+const overlappingEntriesArb = fc
+  .array(
+    fc.record({
+      task: fc.integer({ min: 0, max: 1 }),
+      startMin: fc.integer({ min: 0, max: 600 }),
+      durMin: fc.integer({ min: 1, max: 240 }),
       focus: fc.option(
         fc.float({ min: Math.fround(0.5), max: 1, noNaN: true }),
         { nil: null },
       ),
       deleted: fc.boolean(),
-    })
-    .map(({ task, minutes, focus, deleted }, ) => {
-      const startMs = Date.UTC(2026, 5, 1, 8) + seq * 86_400_000;
+    }),
+    { minLength: 0, maxLength: 12 },
+  )
+  .map((rows) =>
+    rows.map((r, i) => {
+      const startMs = Date.UTC(2026, 5, 1, 8) + r.startMin * 60_000;
       return makeEntry({
-        id: idOf(1000 + seq),
-        task_id: idOf(10 + task),
+        id: idOf(3000 + i),
+        task_id: idOf(10 + r.task),
         started_at: new Date(startMs).toISOString(),
-        ended_at: new Date(startMs + minutes * 60_000).toISOString(),
-        focus_factor: focus,
-        deleted_at: deleted ? '2026-06-30T00:00:00.000Z' : null,
+        ended_at: new Date(startMs + r.durMin * 60_000).toISOString(),
+        focus_factor: r.focus,
+        deleted_at: r.deleted ? '2026-06-30T00:00:00.000Z' : null,
       });
-    });
+    }),
+  );
 
-const entriesArb = fc
-  .integer({ min: 0, max: 25 })
-  .chain((n) => fc.tuple(...Array.from({ length: n }, (_, i) => entryArb(i))));
+/** The audit's overlap pair on one habit task: 09:00–11:00 ∪ 09:30–10:30. */
+const overlapPair = (focusLong: number | null = null, focusShort: number | null = null) => [
+  makeEntry({
+    id: idOf(3100),
+    task_id: idOf(10),
+    started_at: '2026-06-12T09:00:00.000Z',
+    ended_at: '2026-06-12T11:00:00.000Z',
+    focus_factor: focusLong,
+  }),
+  makeEntry({
+    id: idOf(3101),
+    task_id: idOf(10),
+    started_at: '2026-06-12T09:30:00.000Z',
+    ended_at: '2026-06-12T10:30:00.000Z',
+    focus_factor: focusShort,
+  }),
+];
 
 describe('effective time (§7.2)', () => {
   it('goldens: focus default 1.0, ×0.5 halves, open entries contribute 0', () => {
@@ -88,33 +106,66 @@ describe('practice hours + levels (§7.2)', () => {
     makeNode({ id: idOf(13), node_type: 'task', habit_id: idOf(901) }),
   ];
 
-  it('property: shuffled incremental fold === canonical', () => {
+  it('golden: overlapping same-task entries union, not sum (audit S3-F2)', () => {
+    // 09:00–11:00 ∪ 09:30–10:30 = 120 min; the per-entry sum would be 180.
+    const value = canonicalPractice(HABIT, nodes, overlapPair() as TimeEntry[]);
+    expect(value.minutes).toBe(120);
+    expect(value.hours).toBe(2);
+    expect(value.level).toBe(1); // past the 1h threshold only
+  });
+
+  it('golden: focus integrates as max-per-instant over the union (§7.10b)', () => {
+    // long@0.5, short@1.0 → 30·0.5 + 60·1.0 + 30·0.5 = 90 effective minutes.
+    const value = canonicalPractice(HABIT, nodes, overlapPair(0.5, 1.0) as TimeEntry[]);
+    expect(value.minutes).toBeCloseTo(90, 6);
+  });
+
+  it('golden: unions are per task — concurrent entries on two tasks both count', () => {
+    const sameWallTime = (task: number, seq: number) =>
+      makeEntry({
+        id: idOf(3200 + seq),
+        task_id: idOf(10 + task), // tasks 10 and 11 both belong to HABIT
+        started_at: '2026-06-12T09:00:00.000Z',
+        ended_at: '2026-06-12T10:00:00.000Z',
+      });
+    const value = canonicalPractice(HABIT, nodes, [sameWallTime(0, 0), sameWallTime(1, 1)] as TimeEntry[]);
+    expect(value.minutes).toBe(120);
+  });
+
+  it('property: order-independent, duplication-idempotent, union ≤ naive sum', () => {
     fc.assert(
-      fc.property(entriesArb, fc.infiniteStream(fc.nat()), (entries, shuffle) => {
-        const shuffled = [...entries].sort(() => (shuffle.next().value % 3) - 1);
-        const tasks = habitTaskIds(HABIT, nodes);
-        const folded = shuffled.reduce(
-          (acc, entry) => incrementalPractice(acc, entry, HABIT, tasks),
-          emptyPractice(HABIT),
-        );
+      fc.property(overlappingEntriesArb, fc.infiniteStream(fc.nat()), (entries, shuffle) => {
         const canonical = canonicalPractice(HABIT, nodes, entries as TimeEntry[]);
-        expect(folded.minutes).toBeCloseTo(canonical.minutes, 6);
-        expect(folded.level).toBe(canonical.level);
-        expect(folded.nextThresholdHours).toBe(canonical.nextThresholdHours);
+        // order-independence
+        const shuffled = [...entries].sort(() => (shuffle.next().value % 3) - 1);
+        expect(canonicalPractice(HABIT, nodes, shuffled as TimeEntry[]).minutes).toBeCloseTo(canonical.minutes, 6);
+        // duplication-idempotence — a union invariant a per-entry sum violates
+        const doubled = [...entries, ...entries];
+        expect(canonicalPractice(HABIT, nodes, doubled as TimeEntry[]).minutes).toBeCloseTo(canonical.minutes, 6);
+        // never more than the naive per-entry sum
+        const tasks = habitTaskIds(HABIT, nodes);
+        const naive = entries.reduce(
+          (acc, e) => acc + (e.deleted_at === null && tasks.has(e.task_id) ? effectiveMinutes(e) : 0),
+          0,
+        );
+        expect(canonical.minutes).toBeLessThanOrEqual(naive + 1e-6);
       }),
     );
   });
 
   it('levels pass thresholds in hours', () => {
-    const entry = (minutes: number, seq: number) =>
+    // NB: the pre-union fixture started BOTH entries at 00:00 (the 1h session
+    // contained in the 5h one) and still expected 6h — passing only because
+    // per-entry sums double-counted (audit S3-F2). Disjoint sessions now.
+    const entry = (startHour: number, minutes: number, seq: number) =>
       makeEntry({
         id: idOf(2000 + seq),
         task_id: idOf(10),
-        started_at: '2026-06-12T00:00:00.000Z',
-        ended_at: new Date(Date.UTC(2026, 5, 12, 0, minutes)).toISOString(),
+        started_at: new Date(Date.UTC(2026, 5, 12, startHour)).toISOString(),
+        ended_at: new Date(Date.UTC(2026, 5, 12, startHour, minutes)).toISOString(),
       });
-    // 6 hours total → past thresholds 1 and 5, next is 50
-    const value = canonicalPractice(HABIT, nodes, [entry(300, 0), entry(60, 1)]);
+    // 5h + 1h, sequential → 6 hours → past thresholds 1 and 5, next is 50
+    const value = canonicalPractice(HABIT, nodes, [entry(0, 300, 0), entry(6, 60, 1)]);
     expect(value.hours).toBe(6);
     expect(value.level).toBe(2);
     expect(value.nextThresholdHours).toBe(50);
@@ -124,17 +175,27 @@ describe('practice hours + levels (§7.2)', () => {
 describe('task progress (§7.2)', () => {
   const task = makeNode({ id: idOf(10), node_type: 'task', estimate_minutes: 120 });
 
-  it('property: shuffled incremental fold === canonical', () => {
+  it('golden: overlapping entries union — 120 consumed of 120, not 180 (audit S3-F2)', () => {
+    const value = canonicalProgress(task, overlapPair() as TimeEntry[]);
+    expect(value.consumedMinutes).toBe(120);
+    expect(value.percent).toBe(100);
+    expect(value.ratio).toBeCloseTo(1.0, 6);
+  });
+
+  it('property: duplication-idempotent and union ≤ naive sum', () => {
     fc.assert(
-      fc.property(entriesArb, (entries) => {
-        const own = entries.filter((e) => e.task_id === task.id);
-        const folded = own.reduce(
-          (acc, entry) => incrementalProgress(acc, entry),
-          emptyProgress(task),
-        );
+      fc.property(overlappingEntriesArb, (entries) => {
         const canonical = canonicalProgress(task, entries as TimeEntry[]);
-        expect(folded.consumedMinutes).toBeCloseTo(canonical.consumedMinutes, 6);
-        expect(folded.percent).toBeCloseTo(canonical.percent, 6);
+        const doubled = [...entries, ...entries];
+        expect(canonicalProgress(task, doubled as TimeEntry[]).consumedMinutes).toBeCloseTo(
+          canonical.consumedMinutes,
+          6,
+        );
+        const naive = entries.reduce(
+          (acc, e) => acc + (e.deleted_at === null && e.task_id === task.id ? rawMinutes(e) : 0),
+          0,
+        );
+        expect(canonical.consumedMinutes).toBeLessThanOrEqual(naive + 1e-6);
       }),
     );
   });
@@ -152,6 +213,29 @@ describe('task progress (§7.2)', () => {
     expect(value.percent).toBe(100);
     expect(value.ratio).toBeCloseTo(1.5, 6);
     expect(canonicalProgress({ ...task, estimate_minutes: null }, entries).percent).toBe(0);
+  });
+});
+
+describe('habit today-minutes (§7.2 ring, §9.2)', () => {
+  const taskIds = new Set([idOf(10)]);
+  const NOW = Date.UTC(2026, 5, 12, 12); // 2026-06-12T12:00Z
+
+  it('golden: closed union per task + live elapsed for the open entry; other buckets/tasks excluded', () => {
+    const entries = [
+      // overlapping closed pair on task 10 → 90 min union (10:00–11:30), not 120
+      makeEntry({ id: idOf(4000), task_id: idOf(10), started_at: '2026-06-12T10:00:00.000Z', ended_at: '2026-06-12T11:00:00.000Z' }),
+      makeEntry({ id: idOf(4001), task_id: idOf(10), started_at: '2026-06-12T10:30:00.000Z', ended_at: '2026-06-12T11:30:00.000Z' }),
+      // running entry started 11:30, now 12:00 → +30 live
+      makeEntry({ id: idOf(4002), task_id: idOf(10), started_at: '2026-06-12T11:30:00.000Z', ended_at: null }),
+      // yesterday's bucket — excluded
+      makeEntry({ id: idOf(4003), task_id: idOf(10), started_at: '2026-06-11T10:00:00.000Z', ended_at: '2026-06-11T11:00:00.000Z' }),
+      // not this habit's task — excluded
+      makeEntry({ id: idOf(4004), task_id: idOf(99), started_at: '2026-06-12T10:00:00.000Z', ended_at: '2026-06-12T11:00:00.000Z' }),
+      // deleted — excluded
+      makeEntry({ id: idOf(4005), task_id: idOf(10), started_at: '2026-06-12T09:00:00.000Z', ended_at: '2026-06-12T09:30:00.000Z', deleted_at: '2026-06-30T00:00:00.000Z' }),
+    ];
+    const minutes = habitTodayMinutes(entries as TimeEntry[], taskIds, '2026-06-12', 0, 'UTC', NOW);
+    expect(minutes).toBeCloseTo(90 + 30, 6);
   });
 });
 

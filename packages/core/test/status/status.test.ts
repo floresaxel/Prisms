@@ -5,7 +5,13 @@
 import { describe, expect, it } from 'vitest';
 
 import { buildFactContext, type FactRows } from '../../src/status/context';
-import { dependencyBlocked, taskStatus, type TaskStatus } from '../../src/status/status';
+import {
+  dependencyBlocked,
+  isBlocked,
+  isBlockedForAcceptance,
+  taskStatus,
+  type TaskStatus,
+} from '../../src/status/status';
 import { isoToEpochMillis } from '../../src/time/instant';
 import {
   idOf,
@@ -286,6 +292,19 @@ describe('edge-type gates (§7.1 isBlocked part a)', () => {
     expect(taskStatus(task, ctx, NOW)).toBe('blocked');
   });
 
+  it('SS lag: a STARTED (not completed) predecessor blocks the successor until start + lag (§7.6, S3-F5)', () => {
+    const { task, build } = gateRows('SS', 60);
+    // predecessor started 30 min before NOW with an open entry, lag 60 ⇒ start+lag
+    // = 16:30 > NOW(16:00) ⇒ still blocked (was NOT enforced before this fix).
+    const ctx = build({}, [
+      makeEntry({ id: idOf(100), task_id: PRED, started_at: '2026-06-12T15:30:00.000Z' }),
+    ]);
+    expect(taskStatus(task, ctx, NOW)).toBe('blocked');
+    // 61 min after the start ⇒ released.
+    const later = isoToEpochMillis('2026-06-12T16:31:00.000Z');
+    expect(taskStatus(task, ctx, later)).toBe('available');
+  });
+
   it('zero and negative lag never block a completed dependency', () => {
     for (const lag of [0, -30]) {
       const { task, build } = gateRows('FS', lag);
@@ -335,5 +354,70 @@ describe('obsolete disposition (Phase 2)', () => {
     });
     expect(dependencyBlocked(task, ctx, NOW)).toBe(false);
     expect(taskStatus(task, ctx, NOW)).toBe('available');
+  });
+});
+
+describe('isBlockedForAcceptance (§10.3, R19/V10): external facts never gate acceptance', () => {
+  const weatherBlockedCtx = () =>
+    buildFactContext({
+      nodes: [makeNode({ id: TASK, node_type: 'task' })],
+      blocker_rules: [
+        makeBlockerRule({
+          id: idOf(200),
+          predicate: { all: [{ fact: 'weather.precip_prob', op: 'gt', value: 0.5, key: '{today}' }] },
+        }),
+      ],
+      external_facts: [
+        makeWeatherFact({ id: idOf(201), key: `town/${TODAY}`, payload: { precip_prob: 0.9 } }),
+      ],
+    });
+
+  it('a weather-blocked task is blocked for DISPLAY but NOT for acceptance (clock-in needs no force)', () => {
+    const ctx = weatherBlockedCtx();
+    const task = makeNode({ id: TASK, node_type: 'task' });
+    expect(isBlocked(task, ctx, NOW)).toBe(true); // §7.1 display path: weather blocks
+    expect(taskStatus(task, ctx, NOW)).toBe('blocked');
+    expect(isBlockedForAcceptance(task, ctx, NOW)).toBe(false); // acceptance excludes weather
+  });
+
+  it('a dependency-blocked task is blocked for acceptance too (force still required)', () => {
+    const ctx = buildFactContext({
+      nodes: [makeNode({ id: TASK, node_type: 'task' }), makeNode({ id: PRED, node_type: 'task' })],
+      edges: [makeEdge({ id: idOf(202), predecessor_id: PRED, successor_id: TASK })], // FS, pred not done
+    });
+    const task = makeNode({ id: TASK, node_type: 'task' });
+    expect(isBlockedForAcceptance(task, ctx, NOW)).toBe(true);
+  });
+
+  it('a non-external blocker rule still gates acceptance', () => {
+    const ctx = buildFactContext({
+      nodes: [makeNode({ id: TASK, node_type: 'task', title: 'blockme' })],
+      blocker_rules: [
+        makeBlockerRule({ id: idOf(203), predicate: { all: [{ fact: 'node.title', op: 'eq', value: 'blockme' }] } }),
+      ],
+    });
+    const task = makeNode({ id: TASK, node_type: 'task', title: 'blockme' });
+    expect(isBlockedForAcceptance(task, ctx, NOW)).toBe(true);
+  });
+
+  it('a rule MIXING weather with a non-weather leaf is fully excluded from acceptance', () => {
+    const ctx = buildFactContext({
+      nodes: [makeNode({ id: TASK, node_type: 'task', title: 'outdoor' })],
+      blocker_rules: [
+        makeBlockerRule({
+          id: idOf(204),
+          predicate: {
+            all: [
+              { fact: 'node.title', op: 'eq', value: 'outdoor' },
+              { fact: 'weather.precip_prob', op: 'gt', value: 0.5, key: '{today}' },
+            ],
+          },
+        }),
+      ],
+      external_facts: [makeWeatherFact({ id: idOf(205), key: `town/${TODAY}`, payload: { precip_prob: 0.9 } })],
+    });
+    const task = makeNode({ id: TASK, node_type: 'task', title: 'outdoor' });
+    expect(isBlocked(task, ctx, NOW)).toBe(true); // display: both leaves true → blocked
+    expect(isBlockedForAcceptance(task, ctx, NOW)).toBe(false); // weather-tainted rule skipped whole
   });
 });

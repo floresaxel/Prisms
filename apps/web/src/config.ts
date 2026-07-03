@@ -6,5 +6,8 @@
 export const config = {
   /** Same-origin in dev (Vite proxy); set VITE_API_URL for a split deploy. */
   apiBaseUrl: import.meta.env.VITE_API_URL ?? '',
-  powersyncUrl: import.meta.env.VITE_POWERSYNC_URL ?? 'http://localhost:8081',
+  // Default matches compose's container port mapping (8080). Machines whose
+  // 8080 is taken override BOTH sides: PRISMS_POWERSYNC_PORT for compose and
+  // VITE_POWERSYNC_URL here (audit S1-F7/S9-F4).
+  powersyncUrl: import.meta.env.VITE_POWERSYNC_URL ?? 'http://localhost:8080',
 };

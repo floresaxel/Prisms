@@ -57,13 +57,14 @@ export {
   createSqlOverlayStore,
   readMergedRows,
   type OverlayStore,
+  type PendingCommand,
   type SqlExecutor,
   type SqlTx,
   type ReviewItem,
 } from './powersync/overlay-store';
 export { createExecuteCommand, type ExecuteCommand, type ExecuteContext, type ExecuteDeps, type ExecuteOptions } from './powersync/execute';
 export { buildOptimisticEffects, buildAcceptSuggestionEffects, type EffectSpec, type OptimisticEffectCtx, type AcceptSuggestionBlock } from './powersync/effects';
-export { uploadClientCommands, type UploadCommandsOptions, type UploadSummary } from './powersync/upload-commands';
+export { uploadClientCommands, UploadClientError, MAX_UPLOAD_BATCH, type UploadCommandsOptions, type UploadSummary } from './powersync/upload-commands';
 
 // persistent client read layer (1.4 §7.14, Fix A) — M11
 export { PrismsDataProvider, usePrismsData, toOverlayEffect, type PrismsData, type SharedRows } from './powersync/data-provider';
@@ -110,6 +111,7 @@ export {
   useRulesHydrated,
   useReviewInboxHydrated,
   __resetReadCacheForTests,
+  clearReadCaches,
   type RowsRead,
   type WorklistItem,
   type BlockedTask,

@@ -208,10 +208,18 @@ export function checkCompletion(
         if (pred.completed_at === null) return blocked(edge.edge_type, pred.id);
         if (now < isoToEpochMillis(pred.completed_at) + lagMs) return blocked(edge.edge_type, pred.id);
         break;
-      case 'SF':
+      case 'SF': {
         // "started" = any time entry exists, or the predecessor is complete (§7.6).
         if (!ctx.hasAnyEntry(pred.id) && pred.completed_at === null) return blocked(edge.edge_type, pred.id);
+        // §7.6: SF blocks completion until the predecessor's START + lag. Gate on
+        // the earliest recorded start when an entry exists; a lag-less SF is
+        // satisfied by any start (above).
+        if (edge.lag_minutes > 0) {
+          const startedAt = ctx.earliestEntryStart(pred.id);
+          if (startedAt !== undefined && now < startedAt + lagMs) return blocked(edge.edge_type, pred.id);
+        }
         break;
+      }
       case 'SS':
         break;
     }

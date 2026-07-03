@@ -42,6 +42,7 @@ const command = (payload: unknown, name = 'settings.update') => ({
   name,
   hlc: nextHlc(),
   payload,
+  schema_version: 1, // R6: clients emit the §7.11 version (absent = below-floor)
 });
 
 describe.skipIf(!adminUrl)('S10 API integration (auth, PowerSync JWT, settings.update)', () => {
@@ -160,6 +161,47 @@ describe.skipIf(!adminUrl)('S10 API integration (auth, PowerSync JWT, settings.u
     });
     expect(rejected.status).toBe(401);
     await rejected.body?.cancel();
+  });
+
+  it('scopes two accounts to DISJOINT sync buckets — one user cannot receive another\'s rows (S10-F3a)', async () => {
+    // Two fresh accounts on the same server. Each PowerSync token's `sub` is the
+    // authenticated user id, and every sync-stream query filters `auth.user_id()`
+    // (= that sub; pinned statically in packages/db/test/sync-streams.test.ts with
+    // NO client-widenable parameter). So the buckets each device downloads are
+    // scoped to disjoint user ids — the isolation mechanism, end to end.
+    const mint = async (email: string) => {
+      await server.app.request('/api/auth/sign-up/email', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ name: email, email, password: PASSWORD }),
+      });
+      const signIn = await server.app.request('/api/auth/sign-in/email', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ email, password: PASSWORD }),
+      });
+      const ck = cookiesFrom(signIn);
+      const res = await server.app.request('/api/powersync/token', { headers: { cookie: ck } });
+      const { token } = (await res.json()) as { token: string };
+      const claims = JSON.parse(Buffer.from(token.split('.')[1]!, 'base64url').toString()) as { sub: string };
+      // the PowerSync service accepts each token (JWT verified against the shared key)
+      const stream = await fetch(`${powersyncUrl}/sync/stream`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        body: JSON.stringify({}),
+        signal: AbortSignal.timeout(15_000),
+      });
+      expect(stream.status).toBe(200);
+      await stream.body?.cancel();
+      return claims.sub;
+    };
+    const subA = await mint(`iso-a-${randomUUID()}@prisms.test`);
+    const subB = await mint(`iso-b-${randomUUID()}@prisms.test`);
+    // distinct subs ⇒ distinct auth.user_id() ⇒ disjoint buckets. There is NO
+    // endpoint that mints a token for another user (the sub comes from the session),
+    // so one account's device can never subscribe another's data. Cross-account
+    // WRITES are separately rejected E_OWNERSHIP (dispatcher.integration.test.ts).
+    expect(subA).not.toBe(subB);
   });
 
   const firstUpdate = command({ day_reset_hour: 6, timezone: 'Europe/Paris' });

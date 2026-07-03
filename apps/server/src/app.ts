@@ -9,7 +9,8 @@
  * against a throwaway database.
  */
 import { drizzle } from 'drizzle-orm/postgres-js';
-import { Hono, type MiddlewareHandler } from 'hono';
+import { Hono, type Context, type MiddlewareHandler } from 'hono';
+import { bodyLimit } from 'hono/body-limit';
 import { cors } from 'hono/cors';
 import { SignJWT } from 'jose';
 import postgres from 'postgres';
@@ -60,6 +61,17 @@ export function createApp(options: AppOptions): PrismsServer {
   const dispatcher = createDispatcher(db, limiter, { enqueueBackstop: options.enqueueBackstop });
   const powersyncKey = new TextEncoder().encode(options.powersync.secret);
 
+  // S4-F5: a dedicated limiter for the heavy/sensitive per-user endpoints (token
+  // mint, export snapshot, import restore), separate from the command limiter. A
+  // modest per-user-per-minute ceiling — abuse-bounding, not a UX limit.
+  const endpointLimiter = createRateLimiter({ limit: 30, windowMs: 60_000 });
+  const rateGate = (c: Context<AppEnv>, key: string): Response | null => {
+    const r = endpointLimiter.consume(key);
+    if (r.allowed) return null;
+    c.header('Retry-After', String(r.retryAfterSeconds));
+    return c.json({ error: 'E_RATE_LIMITED', retry_after_seconds: r.retryAfterSeconds }, 429);
+  };
+
   const requireSession: MiddlewareHandler<AppEnv> = async (c, next) => {
     const session = await auth.api.getSession({ headers: c.req.raw.headers });
     if (!session) {
@@ -92,6 +104,8 @@ export function createApp(options: AppOptions): PrismsServer {
   // HS256 with the shared key from infra/powersync/powersync.yaml; sub is the
   // user id that sync rules scope buckets to (request.user_id(), §7.3).
   app.get('/api/powersync/token', requireSession, async (c) => {
+    const limited = rateGate(c, `${c.get('userId')}:ps-token`);
+    if (limited) return limited;
     const expiresAtSeconds =
       Math.floor(Date.now() / 1000) + options.powersync.ttlSeconds;
     const token = await new SignJWT({})
@@ -107,7 +121,14 @@ export function createApp(options: AppOptions): PrismsServer {
     });
   });
 
-  app.post('/sync/upload', requireSession, async (c) => {
+  // S4-F6: bound the upload body (a batch of command envelopes) at 2 MB — larger
+  // than any legitimate chunked upload (R6 caps batches at 100 commands), small
+  // enough to reject a memory-exhaustion attempt before parsing.
+  const uploadBodyLimit = bodyLimit({
+    maxSize: 2 * 1024 * 1024,
+    onError: (c) => c.json({ error: 'E_TOO_LARGE', message: 'upload body exceeds 2 MB' }, 413),
+  });
+  app.post('/sync/upload', requireSession, uploadBodyLimit, async (c) => {
     let body: unknown;
     try {
       body = await c.req.json();
@@ -132,6 +153,8 @@ export function createApp(options: AppOptions): PrismsServer {
   // Portable export (§13.1): a versioned prisms-export of the user's rows-as-data
   // (secrets excluded). The client optionally passphrase-encrypts it before saving.
   app.get('/sync/export', requireSession, async (c) => {
+    const limited = rateGate(c, `${c.get('userId')}:export`);
+    if (limited) return limited;
     const manifest = await runBackupSnapshot(db, c.get('userId'), systemClock);
     return c.json(manifest);
   });
@@ -139,7 +162,15 @@ export function createApp(options: AppOptions): PrismsServer {
   // Import (§13.1): `?dry_run=1` returns the validation report and writes only
   // import_warning items; otherwise the explicit import transaction RESTORES the
   // rows as data (never replays commands) and returns what it restored.
-  app.post('/sync/import', requireSession, async (c) => {
+  // S4-F6: imports carry a full portable export (all of a user's rows-as-data),
+  // so the ceiling is larger — 32 MB — but still bounded against exhaustion.
+  const importBodyLimit = bodyLimit({
+    maxSize: 32 * 1024 * 1024,
+    onError: (c) => c.json({ error: 'E_TOO_LARGE', message: 'import body exceeds 32 MB' }, 413),
+  });
+  app.post('/sync/import', requireSession, importBodyLimit, async (c) => {
+    const limited = rateGate(c, `${c.get('userId')}:import`);
+    if (limited) return limited;
     let body: unknown;
     try {
       body = await c.req.json();
