@@ -62,6 +62,20 @@ describe('export crypto (§13.1)', () => {
     const env = await encryptExport('x', 'p');
     await expect(decryptExport({ ...env, version: env.version + 1 }, 'p')).rejects.toThrow(/newer/i);
   });
+
+  it('new exports use the 600k OWASP SHA-256 iteration floor (S8-F3)', async () => {
+    const env = await encryptExport('x', 'p');
+    expect(env.iterations).toBe(600_000);
+  });
+
+  it('decrypt rejects an out-of-range iteration count (DoS guard, S8-F3)', async () => {
+    const env = await encryptExport('x', 'p');
+    await expect(decryptExport({ ...env, iterations: 1_000_000_000 }, 'p')).rejects.toThrow(/out of the accepted range/i);
+    await expect(decryptExport({ ...env, iterations: 0 }, 'p')).rejects.toThrow(/out of the accepted range/i);
+    // a fresh envelope still round-trips (the self-described `iterations` is honored
+    // within 1..10M, so old 210k files keep decrypting — backward compatible).
+    expect(await decryptExport(env, 'p')).toBe('x');
+  });
 });
 
 describe('serialize / parse import file (§13.1)', () => {

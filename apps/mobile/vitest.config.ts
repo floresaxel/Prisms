@@ -3,8 +3,8 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   test: {
     environment: 'node',
-    // Intentionally vacuous: mobile has no vitest files yet (runtime coverage is
-    // the Maestro flow in .maestro/). Flip to false with the first real test.
-    passWithNoTests: true,
+    // S9-F2 added the first real mobile vitest file (crypto-polyfill registration).
+    // Broader runtime coverage is still the Maestro flow in .maestro/.
+    passWithNoTests: false,
   },
 });

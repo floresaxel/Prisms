@@ -5,7 +5,7 @@
  * rolls back via sync). Local-notification + push registration is best-effort.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Text, View } from 'react-native';
+import { Alert, Text, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 
@@ -13,13 +13,13 @@ import { NavigationContainer, DarkTheme } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { PowerSyncContext } from '@powersync/react';
 import type { PowerSyncDatabase } from '@powersync/react-native';
-import { PrismsDataProvider, type CommandContext, type CommandRejection } from '@prisms/ui';
+import { clearReadCaches, PrismsDataProvider, type CommandContext, type CommandRejection } from '@prisms/ui';
 
 import { getSession, signOut, type SessionUser } from './src/auth';
 import { getDeviceId, loadDeviceId } from './src/device';
 import { registerForPush, scheduleReminder } from './src/notifications';
 import { exportAndShare } from './src/portability';
-import { connectDb, getDb } from './src/powersync';
+import { clearDb, connectDb, getDb } from './src/powersync';
 import { Btn, Field, Muted, theme } from './src/ui';
 import { Agenda } from './src/screens/Agenda';
 import { Dashboard } from './src/screens/Dashboard';
@@ -39,8 +39,9 @@ const navTheme = {
 
 function AuthedApp({ user, onSignOut }: { user: SessionUser; onSignOut: () => void }) {
   const dbRef = useRef<PowerSyncDatabase | null>(null);
-  if (dbRef.current === null) dbRef.current = getDb();
+  if (dbRef.current === null) dbRef.current = getDb(user.id);
   const db = dbRef.current;
+  const clearedRef = useRef(false);
 
   const [rejections, setRejections] = useState<CommandRejection[]>([]);
   const ctx: CommandContext = useMemo(() => ({ userId: user.id, deviceId: getDeviceId() }), [user.id]);
@@ -55,9 +56,32 @@ function AuthedApp({ user, onSignOut }: { user: SessionUser; onSignOut: () => vo
     void registerForPush();
     return () => {
       stopUpload?.();
-      void db.disconnect();
+      if (!clearedRef.current) void db.disconnect();
     };
   }, [db]);
+
+  // §13.2/S9-F1: end this account's local presence on sign-out (warn on unsynced
+  // commands, then wipe the replica + queue + read caches).
+  const handleSignOut = useCallback(async () => {
+    try {
+      const pending = (await db.getAll<{ n: number }>("SELECT count(*) AS n FROM client_commands WHERE status = 'pending'"))[0]?.n ?? 0;
+      const proceed =
+        pending === 0 ||
+        (await new Promise<boolean>((resolve) => {
+          Alert.alert('Sign out', `${pending} unsynced change(s) will be lost.`, [
+            { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+            { text: 'Sign out', style: 'destructive', onPress: () => resolve(true) },
+          ]);
+        }));
+      if (!proceed) return;
+      clearedRef.current = true;
+      await clearDb();
+      clearReadCaches();
+    } catch {
+      // best-effort cleanup; still sign out below.
+    }
+    onSignOut();
+  }, [db, onSignOut]);
 
   return (
     <PowerSyncContext.Provider value={db}>
@@ -80,7 +104,7 @@ function AuthedApp({ user, onSignOut }: { user: SessionUser; onSignOut: () => vo
             <Tab.Screen name="Graph">{() => <Graph />}</Tab.Screen>
             <Tab.Screen name="Dashboard">{() => <Dashboard />}</Tab.Screen>
             <Tab.Screen name="Review">{() => <Review ctx={ctx} />}</Tab.Screen>
-            <Tab.Screen name="Account">{() => <Account user={user} onSignOut={onSignOut} />}</Tab.Screen>
+            <Tab.Screen name="Account">{() => <Account user={user} onSignOut={() => void handleSignOut()} />}</Tab.Screen>
           </Tab.Navigator>
         </NavigationContainer>
       </PrismsDataProvider>

@@ -155,6 +155,20 @@ export function __resetReadCacheForTests(): void {
   for (const l of producedListeners) l();
 }
 
+/**
+ * Clear the module-scoped SWR read cache + hydration registry on sign-out /
+ * account switch (S9-F1/S8-F2). These caches are keyed only by sql+params, so
+ * without this a warm read on a shared device could momentarily serve the
+ * previous account's rows before the fresh replica loads. Call alongside the
+ * PowerSync `disconnectAndClear()` in the app's sign-out path.
+ */
+export function clearReadCaches(): void {
+  ROWS_CACHE.clear();
+  PRODUCED.clear();
+  producedVersion += 1;
+  for (const l of producedListeners) l();
+}
+
 export interface RowsRead {
   /** The merged (replica + overlay) rows, or the last-known cached rows while (re)loading. */
   data: Row[];

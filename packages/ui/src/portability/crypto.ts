@@ -13,7 +13,13 @@
 
 export const ENCRYPTED_EXPORT_FORMAT = 'prisms-export-enc';
 export const ENCRYPTED_EXPORT_VERSION = 1;
-const PBKDF2_ITERATIONS = 210_000; // OWASP 2023 PBKDF2-SHA256 floor
+// OWASP 2023 PBKDF2-SHA256 floor is 600k iterations (S8-F3; the old 210k figure
+// is the SHA-512 floor, mis-cited). New exports use 600k; old files keep
+// decrypting via their self-described `iterations`.
+const PBKDF2_ITERATIONS = 600_000;
+// Cap the iteration count a decrypt will honor so a crafted envelope can't hang
+// the UI (a pure DoS nuisance; no confidentiality impact) — S8-F3.
+const MAX_DECRYPT_ITERATIONS = 10_000_000;
 const SALT_BYTES = 16;
 const IV_BYTES = 12;
 
@@ -102,6 +108,9 @@ export async function decryptExport(env: EncryptedExport, passphrase: string): P
   if (!isEncryptedExport(env)) throw new Error('not a prisms encrypted export');
   if (env.version > ENCRYPTED_EXPORT_VERSION) {
     throw new Error(`encrypted export version ${env.version} is newer than this app supports (${ENCRYPTED_EXPORT_VERSION})`);
+  }
+  if (!Number.isInteger(env.iterations) || env.iterations < 1 || env.iterations > MAX_DECRYPT_ITERATIONS) {
+    throw new Error(`encrypted export iteration count ${env.iterations} is out of the accepted range (1..${MAX_DECRYPT_ITERATIONS})`);
   }
   const key = await deriveKey(passphrase, fromBase64(env.salt), env.iterations);
   let plain: ArrayBuffer;

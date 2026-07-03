@@ -10,7 +10,7 @@
     "beforeBuildCommand": "pnpm --filter @prisms/web build"
   },
   "app": {
-    "withGlobalTauri": true,
+    "withGlobalTauri": false,
     "windows": [
       {
         "label": "main",
@@ -22,7 +22,7 @@
       }
     ],
     "security": {
-      "csp": null
+      "csp": "default-src 'self'; connect-src 'self' https: wss: http://localhost:* ws://localhost:*; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:"
     }
   },
   "bundle": {

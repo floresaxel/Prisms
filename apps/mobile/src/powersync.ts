@@ -13,12 +13,27 @@ import { config } from './config';
 import { getDeviceId } from './device';
 
 let db: PowerSyncDatabase | null = null;
+let dbUserId: string | null = null;
 
-export function getDb(): PowerSyncDatabase {
-  if (db === null) {
-    db = new PowerSyncDatabase({ schema: clientSchema, database: { dbFilename: 'prisms.sqlite' } });
+export function getDb(userId: string): PowerSyncDatabase {
+  // §13.2/S9-F1: the SQLite filename is PER ACCOUNT, so a different user on a
+  // shared device never opens the previous account's replica/queue.
+  if (db === null || dbUserId !== userId) {
+    db = new PowerSyncDatabase({ schema: clientSchema, database: { dbFilename: `prisms-${userId}.sqlite` } });
+    dbUserId = userId;
   }
   return db;
+}
+
+/** Sign-out: wipe this account's local replica + command queue and drop the singleton (S9-F1). */
+export async function clearDb(): Promise<void> {
+  if (db === null) return;
+  try {
+    await db.disconnectAndClear();
+  } finally {
+    db = null;
+    dbUserId = null;
+  }
 }
 
 export async function connectDb(database: PowerSyncDatabase, onReject: (rejections: CommandRejection[]) => void): Promise<() => void> {

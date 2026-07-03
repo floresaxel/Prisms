@@ -111,6 +111,7 @@ export {
   useRulesHydrated,
   useReviewInboxHydrated,
   __resetReadCacheForTests,
+  clearReadCaches,
   type RowsRead,
   type WorklistItem,
   type BlockedTask,

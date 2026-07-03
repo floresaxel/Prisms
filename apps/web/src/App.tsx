@@ -13,7 +13,7 @@ import { getSession, signOut, type SessionUser } from './auth';
 import { ReviewBanner } from './components/ReviewBanner';
 import { isDesktop, osNotify } from './desktop';
 import { rejectionMessage } from './format';
-import { connectDb, createDb } from './powersync';
+import { clearLocalAccount, connectDb, createDb } from './powersync';
 import { Agenda } from './screens/Agenda';
 import { Blockers } from './screens/Blockers';
 import { Dashboard } from './screens/Dashboard';
@@ -46,8 +46,25 @@ type Route =
 
 function AuthedApp({ user, onSignOut }: { user: SessionUser; onSignOut: () => void }) {
   const dbRef = useRef<PowerSyncDatabase | null>(null);
-  if (dbRef.current === null) dbRef.current = createDb();
+  if (dbRef.current === null) dbRef.current = createDb(user.id);
   const db = dbRef.current;
+  const clearedRef = useRef(false);
+
+  // §13.2/S9-F1: end this account's LOCAL presence on sign-out — warn if there
+  // are unsynced commands (they'd be lost), then wipe the replica + queue and the
+  // in-memory read caches so nothing of this account survives for the next login.
+  const handleSignOut = useCallback(async () => {
+    try {
+      const cleared = await clearLocalAccount(db, (pending) =>
+        window.confirm(`${pending} unsynced change(s) will be lost. Sign out anyway?`),
+      );
+      if (!cleared) return; // user cancelled at the unsynced-changes warning
+      clearedRef.current = true; // signal the unmount cleanup not to double-disconnect
+    } catch (e) {
+      console.error('sign-out cleanup failed', e);
+    }
+    onSignOut();
+  }, [db, onSignOut]);
 
   // §13.1/R20: re-observe the persisted import HLC floor before any command is
   // minted, so a post-import reload still orders new edits after imported state.
@@ -74,7 +91,8 @@ function AuthedApp({ user, onSignOut }: { user: SessionUser; onSignOut: () => vo
     return () => {
       cancelled = true;
       stopUpload?.();
-      void db.disconnect();
+      // sign-out already ran disconnectAndClear; don't double-disconnect.
+      if (!clearedRef.current) void db.disconnect();
     };
   }, [db]);
 
@@ -123,7 +141,7 @@ function AuthedApp({ user, onSignOut }: { user: SessionUser; onSignOut: () => vo
                 Test notification
               </button>
             )}
-            <button className="px-btn" style={{ marginTop: 8 }} onClick={onSignOut}>Sign out</button>
+            <button className="px-btn" style={{ marginTop: 8 }} data-testid="sign-out" onClick={() => void handleSignOut()}>Sign out</button>
           </>
         }
       >
