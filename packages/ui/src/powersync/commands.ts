@@ -47,8 +47,9 @@ export function createCommands(store: OverlayStore, ctx: CommandContext, deps: E
       await run('node.rename', { id: taskId, title });
     },
     async softDelete(taskId: string): Promise<void> {
-      // parity with v1.0: optimistically remove the named node; the server
-      // cascades the §I10 closure and the descendants sync back tombstoned.
+      // execute() computes the §I10 descendant closure over the merged tree and
+      // hides the whole subtree optimistically (S7-F7); the server re-cascades
+      // authoritatively and the descendants reconcile tombstoned.
       await run('node.soft_delete', { id: taskId });
     },
     async createVision(title: string): Promise<string> {
