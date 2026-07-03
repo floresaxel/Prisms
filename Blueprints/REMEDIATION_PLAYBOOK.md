@@ -298,6 +298,6 @@ Prisms is a local-first, multi-device planning app: web (Vite/React/PWA), deskto
 | R9 account+mobile | 1 | — | ⬜ |
 | R5 write-path parity | 2 | R2 (hard), R4 (soft) | ⬜ |
 | R6 upload+versions | 2 | R2 merged (harness Device) | ✅ merged `a7e7a2b` (2026-07-02; 3 commits, D7 order client→server; ui 82, server 123 / convergence 16, turbo 21/21; R5 handshake: enqueue(…, dependsOn?) wired, R5 derives+passes) |
-| R7 StatusIndex client | 2 | R2 (status-index.ts order) | ⬜ |
+| R7 StatusIndex client | 2 | R2 (status-index.ts order) | ✅ `d8eaecc` (2026-07-02; S8-F1 incremental provider + S2-F4/F5; core 557 cov 90.34/93.99/93.26, ui 82, web 7 + build, turbo 21/21) |
 | R8 server scale+effects | 3 | R2, R4, R6 | ⬜ |
 | R10 topology+docs+sign-off | 4 | all | ⬜ |
