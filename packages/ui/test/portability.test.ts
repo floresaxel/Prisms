@@ -9,7 +9,7 @@ import {
   hlcCompareEncoded,
   type ExportManifest,
 } from '@prisms/core';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   createHlc,
@@ -119,6 +119,25 @@ describe('import HLC floor — monotonicity (§13.1, R20)', () => {
     __resetHlcFloorForTests();
     loadImportedHlcFloor(storage);
     expect(hlcCompareEncoded(createHlc('web-importer')(), HIGH_WATER)).toBe(1);
+  });
+
+  it('seeds a fresh clock from the persisted last tick so a restart cannot regress (§7.9a, S7-F8)', () => {
+    const store = new Map<string, string>();
+    const storage = {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => void store.set(k, v),
+    };
+    // session 1: tick at a HIGH wall time; the tick persists to storage.
+    vi.setSystemTime(new Date('2030-01-01T00:00:00.000Z'));
+    const first = createHlc('web-1', storage)();
+    expect(store.get('prisms.hlc_last')).toBe(first);
+
+    // session 2 (restart) with the wall clock REGRESSED to 2020: a fresh clock
+    // seeds from the persisted 2030 tick, so the new HLC still dominates.
+    vi.setSystemTime(new Date('2020-01-01T00:00:00.000Z'));
+    const second = createHlc('web-1', storage)();
+    expect(hlcCompareEncoded(second, first)).toBe(1);
+    vi.useRealTimers();
   });
 });
 

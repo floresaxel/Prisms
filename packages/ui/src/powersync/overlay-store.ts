@@ -67,8 +67,20 @@ export interface OverlayStore {
   effectsFor(table: string): Promise<OverlayEffect[]>;
   /** Canonical replica rows for one table. */
   replicaRows(table: string): Promise<OverlayRow[]>;
-  /** Applied/noop: drop the overlay; the identical canonical row carries it. */
-  reconcileApplied(commandId: string): Promise<void>;
+  /**
+   * Applied/noop ack (§7.2d): mark the command `applied` but KEEP its overlay
+   * effects — they stay applied in the merged read until the identical canonical
+   * row syncs down, so there is NO revert-flicker between ack and download
+   * (S7-F6). `reconcileConfirmed` drops them once the canonical row arrives.
+   */
+  markApplied(commandId: string): Promise<void>;
+  /**
+   * Drop the overlay of every `applied` command whose canonical rows have now
+   * arrived (present + carrying `last_modified_by_command_id === id`, or gone/
+   * tombstoned for a delete), and prune `rejected` command rows older than 30
+   * days (S7-F9). Returns the cleared command ids. Idempotent.
+   */
+  reconcileConfirmed(nowMs?: number): Promise<{ cleared: string[] }>;
   /**
    * Rejected: drop the overlay (rollback) + mark the command. The durable review
    * item is SERVER-created (M5) and syncs down (§7.13) — the client writes none
@@ -167,11 +179,47 @@ export function createSqlOverlayStore(sql: SqlExecutor): OverlayStore {
       // `table` is an internal constant (never user input); no injection surface.
       return sql.getAll(`SELECT * FROM ${table}`);
     },
-    async reconcileApplied(commandId) {
-      await sql.writeTransaction(async (tx) => {
-        await tx.execute('DELETE FROM overlay_effects WHERE command_id = ?', [commandId]);
-        await tx.execute('DELETE FROM client_commands WHERE id = ?', [commandId]);
-      });
+    async markApplied(commandId) {
+      // Keep the overlay effects; only flip status so pendingCommands() stops
+      // re-uploading it. reconcileConfirmed drops the effects on canonical arrival.
+      await sql.execute("UPDATE client_commands SET status = 'applied' WHERE id = ?", [commandId]);
+    },
+    async reconcileConfirmed(nowMs = Date.now()) {
+      const cleared: string[] = [];
+      const applied = await sql.getAll<{ id: string }>("SELECT id FROM client_commands WHERE status = 'applied'");
+      for (const { id: commandId } of applied) {
+        const effects = await sql.getAll<{ table_name: string; row_id: string; op: string }>(
+          'SELECT table_name, row_id, op FROM overlay_effects WHERE command_id = ?',
+          [commandId],
+        );
+        let allArrived = true;
+        for (const e of effects) {
+          // `table_name` is a catalog constant (never user input) — no injection.
+          const [canonical] = await sql.getAll(`SELECT * FROM ${e.table_name} WHERE id = ? LIMIT 1`, [e.row_id]);
+          if (e.op === 'delete') {
+            // confirmed once the row is gone or tombstoned.
+            if (canonical && canonical['deleted_at'] == null) { allArrived = false; break; }
+          } else {
+            // insert/update: confirmed once the row is present, not tombstoned, and
+            // (when the table carries provenance) stamped by THIS command (V2). A
+            // table without last_modified_by_command_id falls back to presence.
+            if (!canonical || canonical['deleted_at'] != null) { allArrived = false; break; }
+            const stamp = canonical['last_modified_by_command_id'];
+            if (stamp != null && String(stamp) !== commandId) { allArrived = false; break; }
+          }
+        }
+        if (allArrived) {
+          await sql.writeTransaction(async (tx) => {
+            await tx.execute('DELETE FROM overlay_effects WHERE command_id = ?', [commandId]);
+            await tx.execute('DELETE FROM client_commands WHERE id = ?', [commandId]);
+          });
+          cleared.push(commandId);
+        }
+      }
+      // S7-F9: prune long-dead rejected rows (their effects were dropped on reject).
+      const cutoff = new Date(nowMs - 30 * 86_400_000).toISOString();
+      await sql.execute("DELETE FROM client_commands WHERE status = 'rejected' AND created_at < ?", [cutoff]);
+      return { cleared };
     },
     async rollbackRejected({ commandId, rejectCode, rejectReason }) {
       // only the local overlay tables — the server-owned review item syncs down.

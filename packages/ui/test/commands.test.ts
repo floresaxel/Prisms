@@ -44,7 +44,10 @@ function captureStore() {
     async replicaRows() {
       return [];
     },
-    async reconcileApplied() {},
+    async markApplied() {},
+    async reconcileConfirmed() {
+      return { cleared: [] };
+    },
     async rollbackRejected() {},
     async reviewItems() {
       return [];

@@ -16,7 +16,7 @@
 import type { AbstractPowerSyncDatabase, PowerSyncBackendConnector, PowerSyncCredentials } from '@powersync/common';
 
 import { createSqlOverlayStore, type SqlExecutor } from './overlay-store';
-import { uploadClientCommands } from './upload-commands';
+import { uploadClientCommands, UploadClientError } from './upload-commands';
 
 export interface CommandRejection {
   id: string;
@@ -71,7 +71,12 @@ export function createConnector(options: ConnectorOptions): PowerSyncBackendConn
 
 /** A PowerSync db that can watch a local query — the minimal surface the driver needs. */
 export interface WatchableDb extends SqlExecutor {
-  watch(sql: string, parameters: unknown[] | undefined, handler: { onResult: () => void; onError?: (e: Error) => void }): void;
+  watch(
+    sql: string,
+    parameters: unknown[] | undefined,
+    handler: { onResult: () => void; onError?: (e: Error) => void },
+    options?: { signal?: AbortSignal },
+  ): void;
 }
 
 export interface CommandUploadOptions {
@@ -96,19 +101,41 @@ export interface CommandUploadOptions {
 export function startCommandUpload(db: WatchableDb, options: CommandUploadOptions): () => void {
   const store = createSqlOverlayStore(db);
   let inFlight = false;
-  const drain = async (): Promise<void> => {
-    if (inFlight) return;
+  // A persistent 4xx (malformed request) can never self-heal by retrying, so the
+  // timer stops driving it — it would just spin. A fresh optimistic write (the
+  // watch below) clears the block and re-attempts (the queue may now differ).
+  let blockedByClientError = false;
+  const drain = async (fromWatch = false): Promise<void> => {
+    if (fromWatch) blockedByClientError = false;
+    if (inFlight || blockedByClientError) return;
     inFlight = true;
     try {
       await uploadClientCommands({ store, apiBaseUrl: options.apiBaseUrl, deviceId: options.deviceId, onReject: options.onReject, fetch: options.fetch });
-    } catch {
-      // network / 429: commands stay pending; the watch or the retry timer re-tries.
+    } catch (error) {
+      if (error instanceof UploadClientError) {
+        // 4xx: surface loudly (a future diagnostics screen can read this) and stop
+        // the timer-driven retry so it doesn't spin (S7-F2).
+        blockedByClientError = true;
+        console.error(`[prisms] command upload rejected by the server (HTTP ${error.status}) — commands stay pending; not retrying until the next local write.`, error.bodyText);
+      }
+      // else network / 429 / 5xx: commands stay pending; the watch or timer re-tries.
     } finally {
       inFlight = false;
     }
   };
   void drain();
-  db.watch('SELECT count(*) AS n FROM client_commands WHERE status = ?', ['pending'], { onResult: () => void drain() });
+  // Dispose the watch subscription on stop() via an AbortSignal (S7-F9) so the
+  // driver stops firing after logout instead of outliving the session.
+  const watchAbort = new AbortController();
+  db.watch(
+    'SELECT count(*) AS n FROM client_commands WHERE status = ?',
+    ['pending'],
+    { onResult: () => void drain(true) },
+    { signal: watchAbort.signal },
+  );
   const timer = (options.setInterval ?? setInterval)(() => void drain(), options.retryMs ?? 15_000);
-  return () => clearInterval(timer);
+  return () => {
+    clearInterval(timer);
+    watchAbort.abort();
+  };
 }

@@ -46,10 +46,12 @@ describe('connector.uploadData — loud guard (R15)', () => {
 
 /** A fake SqlExecutor + watch backing `createSqlOverlayStore`, for the driver. */
 function fakeWatchableDb(pendingRows: Record<string, unknown>[]) {
-  const tx = { execute: vi.fn(async () => undefined), getAll: vi.fn(async () => []) };
+  const tx = { execute: vi.fn<(sql?: string, params?: unknown[]) => Promise<undefined>>(async () => undefined), getAll: vi.fn(async () => []) };
   const db = {
-    execute: vi.fn(async () => undefined),
-    getAll: vi.fn(async (sql: string) => (sql.includes('client_commands') ? pendingRows : [])),
+    execute: vi.fn<(sql?: string, params?: unknown[]) => Promise<undefined>>(async () => undefined),
+    // only the pending SELECT returns rows; the reconcileConfirmed 'applied' scan
+    // + overlay/replica reads return empty (nothing to reconcile in this fake).
+    getAll: vi.fn(async (sql: string) => (sql.includes('client_commands') && sql.includes("'pending'") ? pendingRows : [])),
     writeTransaction: vi.fn(async (fn: (t: typeof tx) => Promise<unknown>) => fn(tx)),
     watch: vi.fn(),
   };
@@ -60,7 +62,7 @@ describe('startCommandUpload — envelope upload driven by client_commands', () 
   const pending = [{ id: 'c1', name: 'node.rename', hlc: '000000000001-0000-web-1', payload: '{"id":"n1","title":"x"}', status: 'pending', created_at: 't' }];
 
   it('drains the pending queue: uploads one named envelope (stored id+HLC, V2) and reconciles applied', async () => {
-    const { db, tx, raw } = fakeWatchableDb(pending);
+    const { db, raw } = fakeWatchableDb(pending);
     const fetch = vi.fn(async (_url, init) => {
       const sent = JSON.parse((init as RequestInit).body as string);
       return okResponse({ results: sent.commands.map((c: { id: string }) => ({ id: c.id, result: 'applied' })) });
@@ -73,11 +75,39 @@ describe('startCommandUpload — envelope upload driven by client_commands', () 
     // R6: legacy client_commands rows (no version columns) default to the current
     // axes via toPendingCommand, so the envelope still carries them.
     expect(sent.commands[0]).toEqual({ id: 'c1', name: 'node.rename', hlc: '000000000001-0000-web-1', payload: { id: 'n1', title: 'x' }, command_version: 1, schema_version: 1 });
-    // reconcile dropped the applied command's overlay + queue rows
-    await vi.waitFor(() => expect(tx.execute).toHaveBeenCalled());
+    // marked the applied command (status update) — the overlay drops later, once
+    // the canonical row arrives (S7-F6), not immediately on ack.
+    await vi.waitFor(() =>
+      expect(raw.execute.mock.calls.some((c) => String(c[0]).includes("status = 'applied'"))).toBe(true),
+    );
     // registered a watch on the pending queue so a fresh write triggers an upload
     expect(raw.watch).toHaveBeenCalledTimes(1);
     expect((raw.watch.mock.calls[0]![0] as string)).toMatch(/client_commands/);
+    stop();
+  });
+
+  it('a persistent 4xx is logged loudly and does not spin the retry timer (S7-F2)', async () => {
+    const { db } = fakeWatchableDb(pending);
+    const fetch = vi.fn(async () => ({ ok: false, status: 400, text: async () => 'bad envelope' }) as Response);
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    let timerFn: () => void = () => undefined;
+    const stop = startCommandUpload(db, {
+      apiBaseUrl: 'http://api.test',
+      deviceId: 'web-1',
+      fetch: fetch as never,
+      setInterval: ((fn: () => void) => {
+        timerFn = fn;
+        return 0 as never;
+      }) as never,
+    });
+
+    await vi.waitFor(() => expect(errorSpy).toHaveBeenCalled()); // surfaced loudly
+    expect(fetch).toHaveBeenCalledTimes(1);
+    // the retry timer firing again must NOT re-upload (blocked by the 4xx).
+    timerFn();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(fetch).toHaveBeenCalledTimes(1);
+    errorSpy.mockRestore();
     stop();
   });
 
