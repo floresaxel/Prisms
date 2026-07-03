@@ -55,10 +55,22 @@ export async function uploadClientCommands(options: UploadCommandsOptions): Prom
     method: 'POST',
     credentials: 'include',
     headers: { 'content-type': 'application/json', origin: apiBaseUrl },
-    // preserve the stored id + hlc verbatim — no upload-time minting (V2).
+    // preserve the stored id + hlc + version axes verbatim — no upload-time
+    // minting (V2). command_version/schema_version are always sent so the server
+    // can enforce the §7.11 floor; depends_on/client_version only when set (the
+    // envelope is a strict object).
     body: JSON.stringify({
       device_id: deviceId,
-      commands: commands.map((c) => ({ id: c.id, name: c.name, hlc: c.hlc, payload: c.payload })),
+      commands: commands.map((c) => ({
+        id: c.id,
+        name: c.name,
+        hlc: c.hlc,
+        payload: c.payload,
+        command_version: c.command_version,
+        schema_version: c.schema_version,
+        ...(c.client_version ? { client_version: c.client_version } : {}),
+        ...(c.depends_on.length ? { depends_on: [...c.depends_on] } : {}),
+      })),
     }),
   });
   // network / 429: throw so the queue survives and retries.

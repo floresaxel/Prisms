@@ -57,6 +57,7 @@ export {
   createSqlOverlayStore,
   readMergedRows,
   type OverlayStore,
+  type PendingCommand,
   type SqlExecutor,
   type SqlTx,
   type ReviewItem,

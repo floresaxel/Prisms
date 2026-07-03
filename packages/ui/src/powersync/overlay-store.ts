@@ -13,11 +13,25 @@
  * read-merge never double-applies.
  */
 import {
+  defaultCommandMeta,
   mergeTable,
   type OverlayEffect,
   type OverlayRow,
   type ClientCommand,
 } from '@prisms/core';
+
+/**
+ * A queued command enriched with the §8/§7.11 version axes + §7.2e causal deps
+ * stamped at enqueue. `pendingCommands()` returns these so `upload-commands`
+ * sends a complete envelope (`command_version`/`schema_version`/`depends_on`);
+ * the server enforces the schema-version floor against it (§7.11).
+ */
+export interface PendingCommand extends ClientCommand {
+  readonly command_version: number;
+  readonly schema_version: number;
+  readonly client_version: string | null;
+  readonly depends_on: readonly string[];
+}
 
 /** The slice of a SQLite handle the overlay store needs (PowerSync satisfies it). */
 export interface SqlTx {
@@ -41,10 +55,14 @@ export interface ReviewItem {
 
 /** The repository the writer (execute.ts) and uploader (upload-commands.ts) use. */
 export interface OverlayStore {
-  /** One txn (R15): append the pending command + its optimistic effects. */
-  enqueue(command: ClientCommand, effects: readonly OverlayEffect[]): Promise<void>;
-  /** Pending commands in HLC (causal) order — the upload set. */
-  pendingCommands(): Promise<ClientCommand[]>;
+  /**
+   * One txn (R15): append the pending command + its optimistic effects. Stamps
+   * the §8/§7.11 version axes (via `defaultCommandMeta`) and the §7.2e
+   * `dependsOn` causal deps R5's write path derives (default none).
+   */
+  enqueue(command: ClientCommand, effects: readonly OverlayEffect[], dependsOn?: readonly string[]): Promise<void>;
+  /** Pending commands in HLC (causal) order — the upload set (with versions). */
+  pendingCommands(): Promise<PendingCommand[]>;
   /** Pending overlay effects for one table — the read-merge input. */
   effectsFor(table: string): Promise<OverlayEffect[]>;
   /** Canonical replica rows for one table. */
@@ -70,13 +88,18 @@ const parseJson = (value: unknown, fallback: unknown): unknown => {
   }
 };
 
-const toClientCommand = (r: OverlayRow): ClientCommand => ({
+const toPendingCommand = (r: OverlayRow): PendingCommand => ({
   id: String(r['id']),
   name: String(r['name']),
   hlc: String(r['hlc']),
   payload: parseJson(r['payload'], null) as ClientCommand['payload'],
   status: r['status'] as ClientCommand['status'],
   created_at: String(r['created_at'] ?? ''),
+  // Legacy rows (pre-R6) lack the version columns → default to the current axes.
+  command_version: r['command_version'] == null ? defaultCommandMeta().command_version : Number(r['command_version']),
+  schema_version: r['schema_version'] == null ? defaultCommandMeta().schema_version : Number(r['schema_version']),
+  client_version: r['client_version'] == null ? null : String(r['client_version']),
+  depends_on: (parseJson(r['depends_on'], []) as string[]) ?? [],
 });
 
 const toEffect = (r: OverlayRow): OverlayEffect => ({
@@ -103,11 +126,26 @@ const toReviewItem = (r: OverlayRow): ReviewItem => ({
 /** The production overlay store: real SQL over the local-only tables. */
 export function createSqlOverlayStore(sql: SqlExecutor): OverlayStore {
   return {
-    async enqueue(command, effects) {
+    async enqueue(command, effects, dependsOn = []) {
+      // §8/§7.11: stamp the version axes at enqueue (the minting version) + the
+      // §7.2e causal deps R5's write path derives. Persisted so the upload sends
+      // a complete envelope and a reload survives with versions intact.
+      const meta = defaultCommandMeta([...dependsOn]);
       await sql.writeTransaction(async (tx) => {
         await tx.execute(
-          'INSERT INTO client_commands (id, name, hlc, payload, status, created_at) VALUES (?, ?, ?, ?, ?, ?)',
-          [command.id, command.name, command.hlc, JSON.stringify(command.payload), command.status, command.created_at],
+          'INSERT INTO client_commands (id, name, hlc, payload, status, created_at, command_version, schema_version, client_version, depends_on) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          [
+            command.id,
+            command.name,
+            command.hlc,
+            JSON.stringify(command.payload),
+            command.status,
+            command.created_at,
+            meta.command_version,
+            meta.schema_version,
+            null,
+            JSON.stringify([...dependsOn]),
+          ],
         );
         for (const e of effects) {
           await tx.execute(
@@ -119,7 +157,7 @@ export function createSqlOverlayStore(sql: SqlExecutor): OverlayStore {
     },
     async pendingCommands() {
       const rows = await sql.getAll("SELECT * FROM client_commands WHERE status = 'pending' ORDER BY hlc");
-      return rows.map(toClientCommand);
+      return rows.map(toPendingCommand);
     },
     async effectsFor(table) {
       const rows = await sql.getAll('SELECT * FROM overlay_effects WHERE table_name = ?', [table]);

@@ -27,11 +27,12 @@ import {
   uploadClientCommands,
   type CommandRejection,
   type OverlayStore,
+  type PendingCommand,
   type ReviewItem,
 } from '../src/index';
 import {
+  defaultCommandMeta,
   mergeTable,
-  type ClientCommand,
   type OverlayEffect,
   type OverlayRow,
 } from '@prisms/core';
@@ -39,13 +40,14 @@ import {
 // --- an in-memory OverlayStore, mirroring the SQL store's invariants ---------
 function memoryStore(seedReplica: Record<string, OverlayRow[]> = {}) {
   const replica = new Map<string, OverlayRow[]>(Object.entries(seedReplica));
-  let commands: ClientCommand[] = [];
+  let commands: PendingCommand[] = [];
   let effects: OverlayEffect[] = [];
   const reviews: ReviewItem[] = [];
 
   const store: OverlayStore = {
-    async enqueue(command, cmdEffects) {
-      commands.push(command);
+    async enqueue(command, cmdEffects, dependsOn = []) {
+      const meta = defaultCommandMeta([...dependsOn]);
+      commands.push({ ...command, command_version: meta.command_version, schema_version: meta.schema_version, client_version: null, depends_on: [...dependsOn] });
       effects.push(...cmdEffects);
     },
     async pendingCommands() {
@@ -165,7 +167,8 @@ describe('uploadClientCommands: envelope upload + reconciliation (V2, §7.2)', (
     expect(sent.device_id).toBe('web-1');
     expect(sent.commands).toHaveLength(1);
     // V2: the uploaded id is the SAME id minted at write time — not re-minted.
-    expect(sent.commands[0]).toEqual({ id: commandId, name: 'node.rename', hlc: expectedHlc, payload: { id: NODE, title: 'New title' } });
+    // R6: the envelope now carries the version axes (§8/§7.11).
+    expect(sent.commands[0]).toEqual({ id: commandId, name: 'node.rename', hlc: expectedHlc, payload: { id: NODE, title: 'New title' }, command_version: 1, schema_version: 1 });
     expect(summary).toEqual({ uploaded: 1, applied: 1, rejected: 0, noop: 0 });
   });
 

@@ -70,7 +70,9 @@ describe('startCommandUpload — envelope upload driven by client_commands', () 
     await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
     const sent = JSON.parse((fetch.mock.calls[0]![1] as RequestInit).body as string);
     expect(sent.device_id).toBe('web-1');
-    expect(sent.commands[0]).toEqual({ id: 'c1', name: 'node.rename', hlc: '000000000001-0000-web-1', payload: { id: 'n1', title: 'x' } });
+    // R6: legacy client_commands rows (no version columns) default to the current
+    // axes via toPendingCommand, so the envelope still carries them.
+    expect(sent.commands[0]).toEqual({ id: 'c1', name: 'node.rename', hlc: '000000000001-0000-web-1', payload: { id: 'n1', title: 'x' }, command_version: 1, schema_version: 1 });
     // reconcile dropped the applied command's overlay + queue rows
     await vi.waitFor(() => expect(tx.execute).toHaveBeenCalled());
     // registered a watch on the pending queue so a fresh write triggers an upload
