@@ -371,3 +371,39 @@ describe('StatusIndex — unknown-row update guard (S2-F5)', () => {
     expect(index.skippedUnknownUpdates).toBe(1); // unchanged by the insert
   });
 });
+
+describe('StatusIndex — provenance carries through apply (§7.8, WhyButton seam)', () => {
+  it('a mid-session insert keeps its provenance; a re-stamp update propagates; a partial patch leaves it intact', () => {
+    const w = world(1);
+    const index = new StatusIndex(factRows(w), NOW, SETTINGS);
+    const id = idOf(500);
+    const cmdId = '11111111-1111-4111-8111-111111111111';
+    // a synced-down insert (full mapped row) — e.g. created on another device
+    index.apply([{ table: 'nodes', op: 'insert', row_id: id, fields: {
+      node_type: 'task', parent_id: w.project.id, title: 'from elsewhere', sort_order: 'q0',
+      hlc: '000000000005-0000-dev2', schema_version: 1,
+      created_by_command_id: cmdId, last_modified_by_command_id: cmdId,
+      source_kind: 'user', source_id: null, source_detail: {},
+    } }]);
+    const inserted = index.freshView().tree.byId.get(id)!;
+    expect(inserted.source_kind).toBe('user');
+    expect(inserted.created_by_command_id).toBe(cmdId);
+    expect(inserted.hlc).toBe('000000000005-0000-dev2');
+
+    // a provenance re-stamp syncing down as an update (source_detail as loose TEXT)
+    index.apply([{ table: 'nodes', op: 'update', row_id: id, fields: {
+      source_kind: 'automation', source_id: '22222222-2222-4222-8222-222222222222',
+      source_detail: '{"trigger_node_id":"33333333-3333-4333-8333-333333333333"}',
+    } }]);
+    const restamped = index.freshView().tree.byId.get(id)!;
+    expect(restamped.source_kind).toBe('automation');
+    expect(restamped.source_detail).toEqual({ trigger_node_id: '33333333-3333-4333-8333-333333333333' });
+
+    // a partial optimistic patch (title only) must NOT reset provenance to legacy
+    index.apply([{ table: 'nodes', op: 'update', row_id: id, fields: { title: 'renamed' } }]);
+    const patched = index.freshView().tree.byId.get(id)!;
+    expect(patched.title).toBe('renamed');
+    expect(patched.source_kind).toBe('automation');
+    expect(patched.created_by_command_id).toBe(cmdId);
+  });
+});

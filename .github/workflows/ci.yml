@@ -127,6 +127,11 @@ jobs:
 
       - name: Run Playwright e2e
         run: pnpm --filter @prisms/web e2e
+        env:
+          # m9/m10/s17 seed server-generated rows (suggestions, review items)
+          # straight into postgres; their fallback is the local dev port 5434,
+          # compose here maps 5432.
+          PRISMS_DB_TEST_URL: postgresql://prisms:prisms_dev_password@localhost:5432/prisms
 
       - name: Upload traces on failure
         if: failure()

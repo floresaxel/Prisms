@@ -55,9 +55,42 @@ export interface StatusApplyResult {
 
 const str = (v: unknown): string | null => (v == null ? null : String(v));
 
+/** Loose jsonb: overlay effects store JSON as TEXT; merged server rows arrive parsed. */
+const looseJson = (v: unknown): Record<string, unknown> => {
+  if (typeof v === 'string') {
+    if (v.length === 0) return {};
+    try {
+      return JSON.parse(v) as Record<string, unknown>;
+    } catch {
+      return {};
+    }
+  }
+  return v == null ? {} : (v as Record<string, unknown>);
+};
+
+/**
+ * §7.8: the convergence/provenance columns carried through the index, so nodes
+ * exposed by `freshView()` still answer "why does this exist?" after a
+ * mid-session apply (a sync-down insert or a provenance re-stamp). Only the
+ * keys PRESENT in the effect are coerced — partial overlay patches leave the
+ * row's existing values (or `SYNC_ROW_DEFAULTS`) intact.
+ */
+function syncNodeFields(f: Readonly<Record<string, unknown>>): Partial<Node> {
+  const out: Record<string, unknown> = {};
+  if (f['hlc'] != null) out['hlc'] = String(f['hlc']);
+  if (f['schema_version'] != null) out['schema_version'] = Number(f['schema_version']);
+  if ('created_by_command_id' in f) out['created_by_command_id'] = str(f['created_by_command_id']);
+  if ('last_modified_by_command_id' in f) out['last_modified_by_command_id'] = str(f['last_modified_by_command_id']);
+  if (f['source_kind'] != null) out['source_kind'] = String(f['source_kind']);
+  if ('source_id' in f) out['source_id'] = str(f['source_id']);
+  if ('source_detail' in f) out['source_detail'] = looseJson(f['source_detail']);
+  return out as Partial<Node>;
+}
+
 function toNode(id: Uuid, f: Readonly<Record<string, unknown>>): Node {
   return {
     ...SYNC_ROW_DEFAULTS,
+    ...syncNodeFields(f),
     id,
     user_id: String(f['user_id'] ?? ''),
     parent_id: str(f['parent_id']),
@@ -572,6 +605,10 @@ export class StatusIndex {
       if (key in f) out[key] = f[key];
     }
     if ('estimate_minutes' in f) out['estimate_minutes'] = f['estimate_minutes'] == null ? null : Number(f['estimate_minutes']);
+    // §7.8: propagate provenance/convergence columns present in the update
+    // (e.g. a server re-stamp syncing down) — status ignores them, but
+    // `freshView()` consumers (the "why?" affordance) read them off the node.
+    Object.assign(out, syncNodeFields(f));
     return out as Partial<Node>;
   }
 
