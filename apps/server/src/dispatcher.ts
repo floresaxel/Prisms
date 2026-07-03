@@ -48,6 +48,7 @@ import {
   type CommandOutcome,
   type DomainError,
   type Edge as CoreEdge,
+  type EdgeIndex,
   type FactContext,
   type Node as CoreNode,
   type Result,
@@ -95,6 +96,20 @@ export interface BackstopJob {
   nodeId: string;
 }
 
+/**
+ * A compact §7.2f effect summary written to `command_log.effects` (S4-F3/D3):
+ * which rows a command created/updated/deleted (+ the field names it wrote),
+ * and — for automation-spawned rows — the user command that triggered them.
+ * User-facing recoverability + undo groundwork; not a replacement for the facts.
+ */
+interface EffectSummary {
+  table: string;
+  row_id: string;
+  op: 'insert' | 'update' | 'delete';
+  fields?: readonly string[];
+  triggering_command_id?: string;
+}
+
 type HandlerRejected = { status: 'rejected'; code: string; reason: string };
 type HandlerOut = { status: 'applied'; backstop?: BackstopJob } | HandlerRejected;
 
@@ -112,6 +127,47 @@ interface Cmd {
 
 /** The lowest client row schema_version the server still accepts (§7.11). */
 const MIN_CLIENT_SCHEMA_VERSION = ROW_SCHEMA_VERSION;
+
+/** The FactContext-backing tables the per-batch context cache tracks (S4-F2). */
+const CONTEXT_TABLES = ['nodes', 'edges', 'time_entries', 'schedule_blocks', 'sprints', 'sprint_memberships', 'blocker_rules', 'external_facts', 'user_settings'] as const;
+type ContextTable = (typeof CONTEXT_TABLES)[number];
+
+/**
+ * Which context tables a command may write — the per-batch cache invalidates
+ * these after the command applies (S4-F2). MUST be a SUPERSET of the command's
+ * actual context writes; a command ABSENT here invalidates ALL context tables
+ * (the safe default). Over-invalidation only costs a reload, never correctness.
+ * Verbs writing only non-context tables (habit_*, decision, automation_rules,
+ * diagram, tags, review) are absent → they invalidate all (safe; they don't
+ * read the heavy context anyway). node.create/check_off/activity.promote include
+ * `edges` because their task_created/completed automation may spawn edges.
+ */
+const CONTEXT_WRITES: Partial<Record<CommandName, readonly ContextTable[]>> = {
+  'node.create': ['nodes', 'edges'],
+  'node.check_off': ['nodes', 'edges'],
+  'activity.promote': ['nodes', 'edges'],
+  'node.rename': ['nodes'],
+  'node.set_description': ['nodes'],
+  'node.move': ['nodes'],
+  'node.retype': ['nodes'],
+  'node.set_dates': ['nodes'],
+  'node.set_estimate': ['nodes'],
+  'node.reorder': ['nodes'],
+  'node.uncheck': ['nodes'],
+  'node.soft_delete': ['nodes'],
+  'edge.create': ['edges'],
+  'edge.delete': ['edges'],
+  'block.create': ['schedule_blocks'],
+  'block.move': ['schedule_blocks'],
+  'block.set_anchor': ['schedule_blocks'],
+  'block.delete': ['schedule_blocks'],
+  'block.accept_suggestion': ['schedule_blocks'],
+  'block.reject_suggestion': ['schedule_blocks'],
+  'timer.clock_in': ['time_entries'],
+  'timer.clock_out': ['time_entries'],
+  'timer.review': ['time_entries'],
+  'settings.update': ['user_settings'],
+};
 
 /** Map a rejection code to the review-item it produces (§7.13). */
 function reviewItemFor(code: string) {
@@ -142,7 +198,12 @@ const fromCheck = (result: Result<void, DomainError>): HandlerRejected | null =>
 export function createDispatcher(
   db: Db,
   limiter: RateLimiter,
-  options: { enqueueBackstop?: (job: BackstopJob) => void | Promise<void>; nowIso?: () => string } = {},
+  options: {
+    enqueueBackstop?: (job: BackstopJob) => void | Promise<void>;
+    nowIso?: () => string;
+    /** S4-F2 kill-switch / perf-test baseline: a fresh context per command (no cross-command reuse). */
+    disableBatchCache?: boolean;
+  } = {},
 ): Dispatcher {
   const nowIso = options.nowIso ?? (() => new Date().toISOString());
 
@@ -182,22 +243,25 @@ export function createDispatcher(
         .where(and(eq(tag_answers.placement_id, placementId), isNull(tag_answers.deleted_at)))
         .limit(1),
     );
-  const loadTree = async (tx: Tx, userId: string): Promise<TreeIndex> =>
+  const loadTreeRaw = async (tx: Tx, userId: string): Promise<TreeIndex> =>
     buildTreeIndex(await tx.select().from(nodes).where(eq(nodes.user_id, userId)));
-  const loadEdgeIndex = async (tx: Tx, userId: string) =>
+  const loadEdgeIndexRaw = async (tx: Tx, userId: string) =>
     buildEdgeIndex(await tx.select().from(edges).where(and(eq(edges.user_id, userId), isNull(edges.deleted_at))));
   // The full FactContext for server-side status checks (completion gate §7.6,
-  // blocked-task clock-in §8). Loaded only when a command actually needs it.
-  const loadFactContext = async (tx: Tx, userId: string): Promise<FactContext> => {
-    const nodeRows = await tx.select().from(nodes).where(eq(nodes.user_id, userId));
-    const edgeRows = await tx.select().from(edges).where(eq(edges.user_id, userId));
-    const entryRows = await tx.select().from(time_entries).where(eq(time_entries.user_id, userId));
-    const blockRows = await tx.select().from(schedule_blocks).where(eq(schedule_blocks.user_id, userId));
-    const sprintRows = await tx.select().from(sprints).where(eq(sprints.user_id, userId));
-    const membershipRows = await tx.select().from(sprint_memberships).where(eq(sprint_memberships.user_id, userId));
-    const blockerRows = await tx.select().from(blocker_rules).where(eq(blocker_rules.user_id, userId));
-    const factRows = await tx.select().from(external_facts).where(eq(external_facts.user_id, userId));
-    const settings = await one(tx.select().from(user_settings).where(eq(user_settings.user_id, userId)).limit(1));
+  // blocked-task clock-in §8). The 9 table reads run CONCURRENTLY (S4-F2: was 9
+  // sequential round-trips per gated command).
+  const loadFactContextRaw = async (tx: Tx, userId: string): Promise<FactContext> => {
+    const [nodeRows, edgeRows, entryRows, blockRows, sprintRows, membershipRows, blockerRows, factRows, settings] = await Promise.all([
+      tx.select().from(nodes).where(eq(nodes.user_id, userId)),
+      tx.select().from(edges).where(eq(edges.user_id, userId)),
+      tx.select().from(time_entries).where(eq(time_entries.user_id, userId)),
+      tx.select().from(schedule_blocks).where(eq(schedule_blocks.user_id, userId)),
+      tx.select().from(sprints).where(eq(sprints.user_id, userId)),
+      tx.select().from(sprint_memberships).where(eq(sprint_memberships.user_id, userId)),
+      tx.select().from(blocker_rules).where(eq(blocker_rules.user_id, userId)),
+      tx.select().from(external_facts).where(eq(external_facts.user_id, userId)),
+      one(tx.select().from(user_settings).where(eq(user_settings.user_id, userId)).limit(1)),
+    ]);
     return buildFactContext({
       nodes: nodeRows,
       edges: edgeRows,
@@ -212,6 +276,42 @@ export function createDispatcher(
   };
 
   /**
+   * §7.2/§7.5: each command applies in its own transaction, but a whole upload
+   * BATCH is one user's sequential commands — so the heavy per-command context
+   * loads (`loadTree`/`loadFactContext`, each an O(all-rows) read at 100k) can be
+   * memoized ACROSS the batch and reloaded only when a prior command wrote the
+   * underlying table (S4-F2). The built artifacts (tree/edgeIndex/factContext) are
+   * cached lazily; `invalidate(tables)` clears the ones depending on a written
+   * table. Commands read the context BEFORE they write (invariant checks), so the
+   * cache always reflects the latest COMMITTED state per table; the in-txn
+   * automation reads fresh (uncached) because it must see the handler's own write.
+   */
+  class BatchContext {
+    private treeP?: Promise<TreeIndex>;
+    private edgeIndexP?: Promise<EdgeIndex>;
+    private factP?: Promise<FactContext>;
+    tree(tx: Tx, userId: string): Promise<TreeIndex> {
+      return (this.treeP ??= loadTreeRaw(tx, userId));
+    }
+    edgeIndex(tx: Tx, userId: string): Promise<EdgeIndex> {
+      return (this.edgeIndexP ??= loadEdgeIndexRaw(tx, userId));
+    }
+    factContext(tx: Tx, userId: string): Promise<FactContext> {
+      return (this.factP ??= loadFactContextRaw(tx, userId));
+    }
+    /** Clear cached artifacts that depend on any of the written context tables. */
+    invalidate(tables: readonly ContextTable[]): void {
+      if (tables.length === 0) return;
+      if (tables.includes('nodes')) this.treeP = undefined;
+      if (tables.includes('edges')) this.edgeIndexP = undefined;
+      this.factP = undefined; // FactContext aggregates all 9 tables
+    }
+    invalidateAll(): void {
+      this.treeP = this.edgeIndexP = this.factP = undefined;
+    }
+  }
+
+  /**
    * §10.1 automation, run SYNCHRONOUSLY inside the command transaction and
    * re-applied authoritatively by the server. The pure rules engine computes
    * the full fixpoint (MAX_DEPTH=5) over the live fact set; spawned rows are
@@ -221,7 +321,7 @@ export function createDispatcher(
    * Provenance is server-assigned: source_kind='automation', the triggering
    * command id, and the trigger in source_detail.
    */
-  async function runAutomationInTx(tx: Tx, job: BackstopJob, commandId: string, hlc: string): Promise<void> {
+  async function runAutomationInTx(tx: Tx, job: BackstopJob, commandId: string, hlc: string, effects: EffectSummary[]): Promise<void> {
     const triggerNode = (await loadNodeRow(tx, job.nodeId)) as CoreNode | undefined;
     if (!triggerNode || triggerNode.deleted_at !== null) return;
     const [nodeRows, edgeRows, ruleRows] = await Promise.all([
@@ -300,15 +400,21 @@ export function createDispatcher(
     // so any failure rolls back only the automation; the enqueued backstop (M6)
     // retries. Bare onConflictDoNothing() skips on ANY unique index (the id PK and
     // the §7.7 partial endpoint index on edges), not just the id.
+    const spawned: EffectSummary[] = [];
     try {
       await tx.transaction(async (sp) => {
         for (const node of keepNodes) {
-          await sp.insert(nodes).values(stampProv(node) as typeof nodes.$inferInsert).onConflictDoNothing();
+          const r = await sp.insert(nodes).values(stampProv(node) as typeof nodes.$inferInsert).onConflictDoNothing();
+          if ((r.count ?? 0) > 0) spawned.push({ table: 'nodes', row_id: node.id, op: 'insert', triggering_command_id: commandId });
         }
         for (const edge of keepEdges) {
-          await sp.insert(edges).values(stampProv(edge) as typeof edges.$inferInsert).onConflictDoNothing();
+          const r = await sp.insert(edges).values(stampProv(edge) as typeof edges.$inferInsert).onConflictDoNothing();
+          if ((r.count ?? 0) > 0) spawned.push({ table: 'edges', row_id: edge.id, op: 'insert', triggering_command_id: commandId });
         }
       });
+      // §7.2f: record the actually-inserted spawns (a replay's no-op skips) only
+      // after the SAVEPOINT committed, attributed to the triggering command (S4-F3).
+      effects.push(...spawned);
     } catch {
       // automation rolled back atomically; the command + command_log still commit.
     }
@@ -396,8 +502,12 @@ export function createDispatcher(
     return winning;
   }
 
-  async function runHandler(name: CommandName, tx: Tx, userId: string, deviceId: string, commandId: string, hlc: string, payload: unknown): Promise<HandlerOut> {
+  async function runHandler(name: CommandName, tx: Tx, userId: string, deviceId: string, commandId: string, hlc: string, payload: unknown, batchCtx: BatchContext, effects: EffectSummary[]): Promise<HandlerOut> {
     const now = nowIso();
+    /** Record a §7.2f effect summary entry (S4-F3). */
+    const rec = (table: string, rowId: string, op: 'insert' | 'update' | 'delete', fields?: readonly string[]): void => {
+      effects.push(fields && fields.length ? { table, row_id: rowId, op, fields } : { table, row_id: rowId, op });
+    };
     const nowMs = asEpochMillis(Date.parse(now));
     // §7.2c server-assigned trust fields. `sys` stamps every update (the row's
     // last writer + hlc); `born` adds create-time provenance for inserts. The
@@ -408,8 +518,8 @@ export function createDispatcher(
     const applied = (backstop?: BackstopJob): HandlerOut => ({ status: 'applied', backstop });
     /** §7.6 completion gate — load the context only when the task has predecessors. */
     const completionGate = async (task: CoreNode): Promise<HandlerOut | null> => {
-      if (incomingEdges(await loadEdgeIndex(tx, userId), task.id).length === 0) return null;
-      return fromCheck(checkCompletion(task, await loadFactContext(tx, userId), nowMs));
+      if (incomingEdges(await batchCtx.edgeIndex(tx, userId), task.id).length === 0) return null;
+      return fromCheck(checkCompletion(task, await batchCtx.factContext(tx, userId), nowMs));
     };
     // §9.4 idempotent create: an existing row (same user) is a converged no-op.
     const convergeOrOwn = (existing: { user_id: string } | undefined, kind: string, id: string): HandlerOut | null =>
@@ -419,7 +529,11 @@ export function createDispatcher(
       const own = ownershipReject('node', id, await loadNodeRow(tx, id), userId);
       if (own) return own;
       const win = await lwwFields(tx, hlc, userId, 'nodes', id, fields);
-      if (Object.keys(win).length > 0) await tx.update(nodes).set({ ...win, ...sys }).where(eq(nodes.id, id));
+      const changed = Object.keys(win);
+      if (changed.length > 0) {
+        await tx.update(nodes).set({ ...win, ...sys }).where(eq(nodes.id, id));
+        rec('nodes', id, 'update', changed);
+      }
       return applied();
     };
 
@@ -429,7 +543,7 @@ export function createDispatcher(
         const p = payload as Payload<'node.create'>;
         const conv = convergeOrOwn(await loadNodeRow(tx, p.id), 'node', p.id);
         if (conv) return conv;
-        const bad = fromCheck(checkNodeCreate(await loadTree(tx, userId), p));
+        const bad = fromCheck(checkNodeCreate(await batchCtx.tree(tx, userId), p));
         if (bad) return bad;
         await tx.insert(nodes).values({
           id: p.id,
@@ -446,6 +560,7 @@ export function createDispatcher(
           attributes: p.attributes ?? {},
           ...born,
         });
+        rec('nodes', p.id, 'insert');
         return applied(p.node_type === 'task' ? { userId, trigger: 'task_created', nodeId: p.id } : undefined);
       }
       case 'node.rename': {
@@ -460,20 +575,26 @@ export function createDispatcher(
         const p = payload as Payload<'node.move'>;
         const own = ownershipReject('node', p.id, await loadNodeRow(tx, p.id), userId);
         if (own) return own;
-        const bad = fromCheck(checkNodeMove(await loadTree(tx, userId), p));
+        const bad = fromCheck(checkNodeMove(await batchCtx.tree(tx, userId), p));
         if (bad) return bad;
         const win = await lwwFields(tx, hlc, userId, 'nodes', p.id, { parent_id: p.new_parent_id, sort_order: p.sort_order });
-        if (Object.keys(win).length > 0) await tx.update(nodes).set({ ...win, ...sys }).where(eq(nodes.id, p.id));
+        if (Object.keys(win).length > 0) {
+          await tx.update(nodes).set({ ...win, ...sys }).where(eq(nodes.id, p.id));
+          rec('nodes', p.id, 'update', Object.keys(win));
+        }
         return applied();
       }
       case 'node.retype': {
         const p = payload as Payload<'node.retype'>;
         const own = ownershipReject('node', p.id, await loadNodeRow(tx, p.id), userId);
         if (own) return own;
-        const bad = fromCheck(checkNodeRetype(await loadTree(tx, userId), p));
+        const bad = fromCheck(checkNodeRetype(await batchCtx.tree(tx, userId), p));
         if (bad) return bad;
         const win = await lwwFields(tx, hlc, userId, 'nodes', p.id, { node_type: p.node_type });
-        if (Object.keys(win).length > 0) await tx.update(nodes).set({ ...win, ...sys }).where(eq(nodes.id, p.id));
+        if (Object.keys(win).length > 0) {
+          await tx.update(nodes).set({ ...win, ...sys }).where(eq(nodes.id, p.id));
+          rec('nodes', p.id, 'update', Object.keys(win));
+        }
         return applied();
       }
       case 'node.set_dates': {
@@ -512,7 +633,10 @@ export function createDispatcher(
           completion_disposition: p.disposition ?? 'completed',
           completed_in_block_id: p.completed_in_block_id ?? null,
         });
-        if (Object.keys(win).length > 0) await tx.update(nodes).set({ ...win, ...sys }).where(eq(nodes.id, p.id));
+        if (Object.keys(win).length > 0) {
+          await tx.update(nodes).set({ ...win, ...sys }).where(eq(nodes.id, p.id));
+          rec('nodes', p.id, 'update', Object.keys(win));
+        }
         return applied(row!.node_type === 'task' ? { userId, trigger: 'task_completed', nodeId: p.id } : undefined);
       }
       case 'node.uncheck': {
@@ -523,9 +647,10 @@ export function createDispatcher(
         const p = payload as Payload<'node.soft_delete'>;
         const own = ownershipReject('node', p.id, await loadNodeRow(tx, p.id), userId);
         if (own) return own;
-        const ids = softDeleteClosure(await loadTree(tx, userId), p.id); // I10
+        const ids = softDeleteClosure(await batchCtx.tree(tx, userId), p.id); // I10
         if (ids.length > 0) {
           await tx.update(nodes).set({ deleted_at: now, ...sys }).where(and(eq(nodes.user_id, userId), inArray(nodes.id, ids)));
+          for (const id of ids) rec('nodes', id, 'delete');
         }
         return applied();
       }
@@ -533,10 +658,13 @@ export function createDispatcher(
         const p = payload as Payload<'activity.promote'>;
         const own = ownershipReject('activity', p.id, await loadNodeRow(tx, p.id), userId);
         if (own) return own;
-        const bad = fromCheck(checkActivityPromote(await loadTree(tx, userId), p));
+        const bad = fromCheck(checkActivityPromote(await batchCtx.tree(tx, userId), p));
         if (bad) return bad;
         const win = await lwwFields(tx, hlc, userId, 'nodes', p.id, { node_type: 'task' as const, parent_id: p.parent_id ?? null, habit_id: p.habit_id ?? null });
-        if (Object.keys(win).length > 0) await tx.update(nodes).set({ ...win, ...sys }).where(eq(nodes.id, p.id));
+        if (Object.keys(win).length > 0) {
+          await tx.update(nodes).set({ ...win, ...sys }).where(eq(nodes.id, p.id));
+          rec('nodes', p.id, 'update', Object.keys(win));
+        }
         return applied({ userId, trigger: 'task_created', nodeId: p.id });
       }
 
@@ -545,7 +673,7 @@ export function createDispatcher(
         const p = payload as Payload<'edge.create'>;
         const conv = convergeOrOwn(await one(tx.select().from(edges).where(eq(edges.id, p.id)).limit(1)), 'edge', p.id);
         if (conv) return conv;
-        const bad = fromCheck(checkEdgeCreate(await loadTree(tx, userId), await loadEdgeIndex(tx, userId), p));
+        const bad = fromCheck(checkEdgeCreate(await batchCtx.tree(tx, userId), await batchCtx.edgeIndex(tx, userId), p));
         if (bad) return bad;
         await tx.insert(edges).values({
           id: p.id,
@@ -556,6 +684,7 @@ export function createDispatcher(
           lag_minutes: p.lag_minutes ?? 0,
           ...born,
         });
+        rec('edges', p.id, 'insert');
         return applied();
       }
       case 'edge.delete': {
@@ -564,6 +693,7 @@ export function createDispatcher(
         const own = ownershipReject('edge', p.id, row, userId);
         if (own) return own;
         await tx.update(edges).set({ deleted_at: now, ...sys }).where(eq(edges.id, p.id));
+        rec('edges', p.id, 'delete');
         return applied();
       }
 
@@ -587,6 +717,7 @@ export function createDispatcher(
           status: 'committed',
           ...born,
         });
+        rec('schedule_blocks', p.id, 'insert');
         return applied();
       }
       case 'block.move': {
@@ -708,15 +839,15 @@ export function createDispatcher(
         // advisory-weather-only-blocked task clocks in WITHOUT force (external
         // facts must never cause a rejection or divergence, V10). The display
         // path (client badges) still shows it weather-blocked/unverified.
-        if (!p.force && isBlockedForAcceptance(task as CoreNode, await loadFactContext(tx, userId), nowMs)) {
+        if (!p.force && isBlockedForAcceptance(task as CoreNode, await batchCtx.factContext(tx, userId), nowMs)) {
           return reject('E_BLOCKED_TASK', `task ${p.task_id} is blocked; clock in with force to override (§8)`);
         }
 
         const openEntry = await one(
           tx.select().from(time_entries).where(and(eq(time_entries.user_id, userId), isNull(time_entries.ended_at), isNull(time_entries.deleted_at))).limit(1),
         );
-        const insertEntry = (endedAt: string | null) =>
-          tx.insert(time_entries).values({
+        const insertEntry = async (endedAt: string | null): Promise<void> => {
+          await tx.insert(time_entries).values({
             id: p.entry_id,
             user_id: userId,
             task_id: p.task_id,
@@ -727,6 +858,8 @@ export function createDispatcher(
             device_id: deviceId,
             ...born,
           });
+          rec('time_entries', p.entry_id, 'insert');
+        };
 
         if (!openEntry) {
           await insertEntry(null);
@@ -787,7 +920,7 @@ export function createDispatcher(
         const p = payload as Payload<'habit.create'>;
         const conv = convergeOrOwn(await one(tx.select().from(habits).where(eq(habits.id, p.id)).limit(1)), 'habit', p.id);
         if (conv) return conv;
-        const bad = fromCheck(checkHabitVision(await loadTree(tx, userId), p.vision_id));
+        const bad = fromCheck(checkHabitVision(await batchCtx.tree(tx, userId), p.vision_id));
         if (bad) return bad;
         await tx.insert(habits).values({
           id: p.id,
@@ -1291,6 +1424,7 @@ export function createDispatcher(
     cmd: Cmd,
     rejectedInBatch: ReadonlySet<string>,
     appliedInBatch: ReadonlySet<string>,
+    batchCtx: BatchContext,
   ): Promise<CommandOutcome> {
     const prior = await one(
       db.select({ user_id: command_log.user_id, result: command_log.result }).from(command_log).where(eq(command_log.id, cmd.id)).limit(1),
@@ -1340,9 +1474,11 @@ export function createDispatcher(
 
     try {
       const { out } = await db.transaction(async (tx) => {
-        const result = await runHandler(cmd.name as CommandName, tx, userId, deviceId, cmd.id, cmd.hlc, parsed.data);
+        // §7.2f effect summary the handler + automation accumulate (S4-F3).
+        const effects: EffectSummary[] = [];
+        const result = await runHandler(cmd.name as CommandName, tx, userId, deviceId, cmd.id, cmd.hlc, parsed.data, batchCtx, effects);
         // §10.1: run automation to fixpoint in the SAME txn (authoritative).
-        if (result.status === 'applied' && result.backstop) await runAutomationInTx(tx, result.backstop, cmd.id, cmd.hlc);
+        if (result.status === 'applied' && result.backstop) await runAutomationInTx(tx, result.backstop, cmd.id, cmd.hlc, effects);
         await tx.insert(command_log).values({
           id: cmd.id,
           user_id: userId,
@@ -1356,12 +1492,19 @@ export function createDispatcher(
           schema_version: cmd.schema_version ?? 0,
           client_version: cmd.client_version ?? null,
           depends_on: cmd.depends_on ? [...cmd.depends_on] : [],
+          // §7.2f (S4-F3): the compact per-command effect summary. Empty on a
+          // rejection (the handler returned before writing).
+          effects: (result.status === 'applied' ? effects : []) as never,
           result: result.status === 'applied' ? 'applied' : 'rejected',
           reject_reason: result.status === 'rejected' ? `${result.code}: ${result.reason}` : null,
         });
         return { out: result };
       });
       if (out.status === 'applied') {
+        // S4-F2: this command committed — drop the cached context artifacts that
+        // depend on the tables it wrote so the next command in the batch reloads
+        // fresh (unlisted command → invalidate all, the safe default).
+        batchCtx.invalidate(CONTEXT_WRITES[cmd.name as CommandName] ?? CONTEXT_TABLES);
         if (out.backstop && options.enqueueBackstop) await options.enqueueBackstop(out.backstop);
         // §7.2b: the provenance id stamped on every created/updated row == the
         // command id, so the optimistic overlay reconciles without identity churn.
@@ -1405,8 +1548,11 @@ export function createDispatcher(
       const rejectedInBatch = new Set<string>();
       const appliedInBatch = new Set<string>();
       const byId = new Map<string, CommandOutcome>();
+      // One context cache for the whole batch (S4-F2); the baseline uses a fresh
+      // one per command (no cross-command reuse).
+      const batchCtx = new BatchContext();
       for (const cmd of ordered) {
-        const outcome = await handleCommand(userId, device_id, cmd, rejectedInBatch, appliedInBatch);
+        const outcome = await handleCommand(userId, device_id, cmd, rejectedInBatch, appliedInBatch, options.disableBatchCache ? new BatchContext() : batchCtx);
         if (outcome.result === 'rejected') {
           rejectedInBatch.add(cmd.id);
           // §7.13: every server rejection produces a durable review item.
