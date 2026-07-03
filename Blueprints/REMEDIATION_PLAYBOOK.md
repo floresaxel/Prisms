@@ -297,7 +297,7 @@ Prisms is a local-first, multi-device planning app: web (Vite/React/PWA), deskto
 | R4 jobs lifecycle | 1 | — | ✅ `643f223` |
 | R9 account+mobile | 1 | — | ⬜ |
 | R5 write-path parity | 2 | R2 (hard), R4 (soft) | ⬜ |
-| R6 upload+versions | 2 | R2 merged (harness Device) | ⬜ |
+| R6 upload+versions | 2 | R2 merged (harness Device) | ✅ merged `a7e7a2b` (2026-07-02; 3 commits, D7 order client→server; ui 82, server 123 / convergence 16, turbo 21/21; R5 handshake: enqueue(…, dependsOn?) wired, R5 derives+passes) |
 | R7 StatusIndex client | 2 | R2 (status-index.ts order) | ⬜ |
 | R8 server scale+effects | 3 | R2, R4, R6 | ⬜ |
 | R10 topology+docs+sign-off | 4 | all | ⬜ |
