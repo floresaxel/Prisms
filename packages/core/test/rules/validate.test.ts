@@ -106,4 +106,22 @@ describe('validateAutomationRule (§9.1)', () => {
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.code).toBe('E_EXTERNAL_FACT_CONDITION');
   });
+
+  it('rejects a matches pattern longer than the complexity cap (E_PATTERN_TOO_LONG, S3-F7)', () => {
+    const rule: RuleCandidate = {
+      trigger: 'task_completed',
+      conditions: { all: [{ fact: 'node.title', op: 'matches', value: 'a'.repeat(201) }] },
+      actions: [{ action: 'spawn_task', slot: 0, template: { title: 'x' } }],
+    };
+    const result = validateAutomationRule(rule);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe('E_PATTERN_TOO_LONG');
+    // exactly 200 chars is accepted (boundary)
+    const at200: RuleCandidate = {
+      trigger: 'task_completed',
+      conditions: { all: [{ fact: 'node.title', op: 'matches', value: 'a'.repeat(200) }] },
+      actions: [{ action: 'spawn_task', slot: 0, template: { title: 'x' } }],
+    };
+    expect(validateAutomationRule(at200).ok).toBe(true);
+  });
 });

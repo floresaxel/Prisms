@@ -6,11 +6,13 @@ Baseline: commit `2ab3bf7`, branch `m0-spike`, 2026-07-01.
 
 **FINAL (Synthesis, 2026-07-02):** all 10 sessions complete. R1–R20: **12 ✅ · 8 ⚠️ · 0 ❌** · V1–V12: **6 ✅ · 6 ⚠️** · DoF 1–23: **12 ✅ · 11 ⚠️ · 0 ❌**. Findings: **0 Critical · 6 High** (all re-verified at synthesis) · consolidated register + remediation backlog in [FINAL_REPORT.md](FINAL_REPORT.md).
 
+**REMEDIATION (R1–R10, 2026-07-03; see [AUDIT_PLAN.md](AUDIT_PLAN.md) → Remediation).** 5 of 6 High findings closed with commits: S3-F1 `05a3bc6` (R2) · S3-F2 `3a243c9` (R3) · S7-F2 `a7e7a2b` (R6) · S8-F1 `d8eaecc` (R7) · S9-F1 + S9-F2 `ee02580` (R9). **Outstanding: S7-F1 offline spawning (R5 not done).** R10 `r10-topology-signoff`: V8 tier substance + `command_results` dropped + scoped publication, server hardening (S4-F4/F5/F6, S3-F7, S10-F5), the additive-schema gate (S2-F2) and two-user isolation test (S10-F3a), docs truth-up. Rows below re-verdicted where a fix flipped them.
+
 ## Hard requirements (ARCHITECTURE_1.3 §2)
 
 | ID | Requirement (short) | Evidence (coarse) | Status | Owner |
 |----|--------------------|-------------------|--------|-------|
-| R1 | Platforms: web, Win, macOS, Android, iOS | `apps/web` (Vite/PWA), `apps/desktop` (Tauri v2 = web build), `apps/mobile` (Expo) | ⚠️ S9/S10: all targets exist/build; mobile runtime hazards (React pairing S9-F3, crypto.subtle S9-F2); smoke-flow artifacts exist but no runner executes them — DoF 23 exception documented, acceptance pending (S10-F8) | S9/S10 |
+| R1 | Platforms: web, Win, macOS, Android, iOS | `apps/web` (Vite/PWA), `apps/desktop` (Tauri v2 = web build), `apps/mobile` (Expo) | ⚠️→ **R9 `ee02580`**: React pairing fixed (mobile pinned to Expo 53's 19.0.0 + metro dedup, S9-F3), mobile crypto wired (S9-F2); expo-doctor accepts react@19.0.0. Runtime device run still BLOCKED (no emulator) — DoF 23 exception stands, acceptance = operator (D6/S10-F8) | S9/S10 → R9 |
 | R2 | Local SQLite first; UI never waits on network | wa-sqlite/OPFS (web), quick-sqlite (mobile); PowerSync live queries | ✅ S8 (provider + SWR reads all local; hydration gating prevents network-wait UX); app sweep → S9 | S7/S8 |
 | R3 | Offline operation + multi-device convergence | convergence harness 13 scenarios `apps/server/test/convergence.integration.test.ts` | ✅ S10: all 13 scenarios green vs live Postgres (114/114 server integration); every §15-named scenario present; assertion-depth caveats S10-F3 | S5/S10 |
 | R4 | Spawning, unblocking, clock-in/out, agenda edits, suggestion accept/reject offline | optimistic effect builders `packages/ui/src/powersync/effects.ts` | ⚠️ **S7-F1 High: offline spawning does not exist** (no client rules engine); soft-delete closure degraded (S7-F7); other verbs ✅ | S7 |
@@ -28,7 +30,7 @@ Baseline: commit `2ab3bf7`, branch `m0-spike`, 2026-07-01.
 | R16 | Synced-row schema versioning separate from command versioning | `schema_version` col, floor check in dispatcher; core primitives (two axes + `isClientTooOld`) ✅ S2 | ⚠️ S4-F1: absent `schema_version` bypasses the floor (latent until floor>1); enforcement otherwise ✅ | S4/S6 |
 | R17 | Trust fields server-assigned; client values ignored | dispatcher trust-strip | ✅ S4 (strip-before-parse; strict schemas reject unlisted trust fields) | S4 |
 | R18 | Idempotency dedup retained ≥ MAX_OFFLINE_HORIZON (90d) | `retention-purge.ts` dedup guard | ✅ (read side S4 + write side S5; history side-effect noted S5-F7) | S5 |
-| R19 | External facts advisory only; never gate/diverge | weather badge display-only; engine ignores weather in convergent outcomes | ⚠️ S3-F1 (High): weather can cause `E_BLOCKED_TASK` rejection; jobs side ✅ S5 (weather-poll advisory-only; S5-F10: automations can't see weather at all) | S5/S3 |
+| R19 | External facts advisory only; never gate/diverge | weather badge display-only; engine ignores weather in convergent outcomes | ✅ **S3-F1 fixed (R2 `05a3bc6`)**: weather no longer causes `E_BLOCKED_TASK`; jobs side ✅ S5 (automations reject weather conditions, S5-F10). ⚠️ client pre-flight mirror = R5 (not done) | S5/S3 → R2 |
 | R20 | Import restores data (no replay) + HLC monotonicity | `import-restore.ts` (data-only, FK-ordered), client HLC floor | ✅ (S5 server + S7 client floor: shared module, persisted, dominates every tick) | S5/S8 |
 
 ## v1.3 mandatory revisions (§3.2)
@@ -41,12 +43,12 @@ Baseline: commit `2ab3bf7`, branch `m0-spike`, 2026-07-01.
 | V4 | Trust fields server-assigned | ✅ S4 (strip-before-parse + strict schemas + server `sys`/`born` stamps) | S4 |
 | V5 | Additive-only synced schema; old clients ignore unknown columns | ✅ S6 (0008 verified additive: all adds nullable/defaulted, live-DB-safe sentinel backfill); mechanical gate still absent (S2-F2/S6-F5) | S6 |
 | V6 | Automation template versioning; backstop checks content, raises drift review item | ⚠️ content-comparison half verified in core (S3); `template_version` read-but-never-written (S3-F4); backstop behavior → S5 | S5 |
-| V7 | Incremental fact-keyed StatusIndex; no stored status; no full scan | ⚠️ primitive verified + 100k gate (touch<100, ~0.02ms); **unused by any runtime path** (S2-F3, fan-out gaps S2-F4) | S2 |
+| V7 | Incremental fact-keyed StatusIndex; no stored status; no full scan | ✅ **wired (R7 `d8eaecc`)**: client provider seeds once + applies row-diffs; fan-out scoped (S2-F4/F5). Server write path uses a per-batch context cache, not O(table)-per-command (R8 `63c284e`). Primitive 100k gate unchanged (touch<100, ~0.02ms) | S2 → R7/R8 |
 | V8 | Tier 0/1/2 streams before 100k load test | ⚠️ S6: security airtight (auth.user_id() everywhere, no client params ✅); tier substance nominal — Tier 0 = whole tree, Tier 2 ≈ empty (S6-F1); command_results = unreadable full 90d log (S6-F2); 100k cold-start unmeasured (S10) | S6/S10 |
 | V9 | LWW default; explicit merges for sort_order + timer intervals | ⚠️ implemented + property-tested; double clock-in survivor rule deviates from §7.10b letter (S2-F1); UI sibling order deterministic+convergent via `(sort_order, id)` — spec's hlc tiebreak deviation only (S6-F3 downgraded by S8-F4) | S2 |
-| V10 | External-fact state never gates rejection/convergence | ⚠️ **S3-F1 High**: dispatcher `E_BLOCKED_TASK` gate consumes weather-derived blocking; automation-condition tension (S3-F8); unknown-weather→unverified correct | S3/S5 |
+| V10 | External-fact state never gates rejection/convergence | ✅ **server (R2 `05a3bc6`)**: `isBlockedForAcceptance` excludes weather-reading rules so the clock-in gate no longer rejects on weather; weather-conditioned automations rejected at authoring (S3-F8). ⚠️ client pre-flight mirror = **R5 (not done)** | S3/S5 → R2 |
 | V11 | Retention purge never deletes dedup inside horizon | ✅ S5 (strict-`<` boundary on 90d constants, not env-forgeable) | S5 |
-| V12 | Import = data restore; encrypted export default on installed targets | ⚠️ server ✅ S5; web/desktop installed-default ✅ S9; mobile default path likely throws (crypto.subtle absent — S9-F2) | S5/S9 |
+| V12 | Import = data restore; encrypted export default on installed targets | ✅ server S5; web/desktop installed-default S9; **mobile crypto wired (R9 `ee02580`)** via react-native-quick-crypto (S9-F2) — device runtime verify pending (DoF 23) | S5/S9 → R9 |
 
 ## Definition of Finished (§16) — final verdicts (Synthesis)
 

@@ -81,6 +81,16 @@ describe('referencesExternalFacts (§10.3, R19/V10)', () => {
   });
 });
 
+describe('matches pattern-length cap (§9.2 ReDoS guard, S3-F7)', () => {
+  it('evaluates a within-cap pattern normally but fails safe (unknown) above the cap', () => {
+    const { ctx, task } = lectureWorld(); // task title "Lecture 4: dynamics"
+    // a normal pattern matches
+    expect(ev({ fact: 'node.title', op: 'matches', value: 'Lecture' }, task, ctx)).toBe('true');
+    // a 201-char pattern is refused at eval time → unknown (never compiled)
+    expect(ev({ fact: 'node.title', op: 'matches', value: 'L'.repeat(201) }, task, ctx)).toBe('unknown');
+  });
+});
+
 describe('combinators with tri-state logic (§9.2)', () => {
   const T = { fact: 'node.completed', op: 'eq', value: false }; // true here
   const F = { fact: 'node.completed', op: 'eq', value: true };

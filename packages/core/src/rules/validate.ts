@@ -19,7 +19,13 @@ import { SYNC_ROW_DEFAULTS } from '../domain/entities';
 import { domainError } from '../domain/errors';
 import { err, ok, type Result } from '../domain/result';
 import { buildFactContext } from '../status/context';
-import { evalPredicate, predicateSchema, referencesExternalFacts } from '../status/predicate';
+import {
+  evalPredicate,
+  hasOverlongMatchesPattern,
+  MAX_MATCHES_PATTERN_LENGTH,
+  predicateSchema,
+  referencesExternalFacts,
+} from '../status/predicate';
 import { isoToEpochMillis } from '../time/instant';
 
 import {
@@ -124,6 +130,17 @@ export function validateAutomationRule(
       domainError(
         'E_EXTERNAL_FACT_CONDITION',
         'automation conditions cannot reference external facts (e.g. weather); they never fire server-side (§10.3). Use a blocker rule for advisory weather display.',
+      ),
+    );
+  }
+  // S3-F7: cap `matches` pattern length at authoring time (ReDoS guard). The
+  // evaluator also fails safe above the cap, so blocker rules are covered at eval
+  // time even though blocker.create has no core validator to reject them here.
+  if (hasOverlongMatchesPattern(candidate.conditions)) {
+    return err(
+      domainError(
+        'E_PATTERN_TOO_LONG',
+        `a "matches" pattern exceeds ${MAX_MATCHES_PATTERN_LENGTH} characters (§9.2 pattern-complexity cap).`,
       ),
     );
   }

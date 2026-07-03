@@ -1,0 +1,2005 @@
+{
+  "nodes": {
+    "id": {
+      "type": "uuid",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "user_id": {
+      "type": "uuid",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "created_at": {
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "updated_at": {
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "deleted_at": {
+      "type": "timestamp with time zone",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "hlc": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "schema_version": {
+      "type": "integer",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "created_by_command_id": {
+      "type": "uuid",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "last_modified_by_command_id": {
+      "type": "uuid",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "source_kind": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "source_id": {
+      "type": "uuid",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "source_detail": {
+      "type": "jsonb",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "parent_id": {
+      "type": "uuid",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "node_type": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "title": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "description": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "sort_order": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "start_date": {
+      "type": "date",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "due_date": {
+      "type": "date",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "estimate_minutes": {
+      "type": "integer",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "completed_at": {
+      "type": "timestamp with time zone",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "completion_disposition": {
+      "type": "text",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "completed_in_block_id": {
+      "type": "uuid",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "habit_id": {
+      "type": "uuid",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "attributes": {
+      "type": "jsonb",
+      "nullable": false,
+      "hasDefault": true
+    }
+  },
+  "edges": {
+    "id": {
+      "type": "uuid",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "user_id": {
+      "type": "uuid",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "created_at": {
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "updated_at": {
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "deleted_at": {
+      "type": "timestamp with time zone",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "hlc": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "schema_version": {
+      "type": "integer",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "created_by_command_id": {
+      "type": "uuid",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "last_modified_by_command_id": {
+      "type": "uuid",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "source_kind": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "source_id": {
+      "type": "uuid",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "source_detail": {
+      "type": "jsonb",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "predecessor_id": {
+      "type": "uuid",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "successor_id": {
+      "type": "uuid",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "edge_type": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "lag_minutes": {
+      "type": "integer",
+      "nullable": false,
+      "hasDefault": true
+    }
+  },
+  "schedule_blocks": {
+    "id": {
+      "type": "uuid",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "user_id": {
+      "type": "uuid",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "created_at": {
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "updated_at": {
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "deleted_at": {
+      "type": "timestamp with time zone",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "hlc": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "schema_version": {
+      "type": "integer",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "created_by_command_id": {
+      "type": "uuid",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "last_modified_by_command_id": {
+      "type": "uuid",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "source_kind": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "source_id": {
+      "type": "uuid",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "source_detail": {
+      "type": "jsonb",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "task_id": {
+      "type": "uuid",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "starts_at": {
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "ends_at": {
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "anchor_type": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "rrule": {
+      "type": "text",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "status": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "suggestion_reason": {
+      "type": "text",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "computed_at": {
+      "type": "timestamp with time zone",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "external_event_id": {
+      "type": "text",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "suggestion_batch_id": {
+      "type": "uuid",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "replaces_block_id": {
+      "type": "uuid",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "superseded_at": {
+      "type": "timestamp with time zone",
+      "nullable": true,
+      "hasDefault": false
+    }
+  },
+  "time_entries": {
+    "id": {
+      "type": "uuid",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "user_id": {
+      "type": "uuid",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "created_at": {
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "updated_at": {
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "deleted_at": {
+      "type": "timestamp with time zone",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "hlc": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "schema_version": {
+      "type": "integer",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "created_by_command_id": {
+      "type": "uuid",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "last_modified_by_command_id": {
+      "type": "uuid",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "source_kind": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "source_id": {
+      "type": "uuid",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "source_detail": {
+      "type": "jsonb",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "task_id": {
+      "type": "uuid",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "started_at": {
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "ended_at": {
+      "type": "timestamp with time zone",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "focus_factor": {
+      "type": "real",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "completed_session": {
+      "type": "boolean",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "planned": {
+      "type": "boolean",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "device_id": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": false
+    }
+  },
+  "habits": {
+    "id": {
+      "type": "uuid",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "user_id": {
+      "type": "uuid",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "created_at": {
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "updated_at": {
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "deleted_at": {
+      "type": "timestamp with time zone",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "hlc": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "schema_version": {
+      "type": "integer",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "created_by_command_id": {
+      "type": "uuid",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "last_modified_by_command_id": {
+      "type": "uuid",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "source_kind": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "source_id": {
+      "type": "uuid",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "source_detail": {
+      "type": "jsonb",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "vision_id": {
+      "type": "uuid",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "title": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "rrule": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "streak_mode": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "daily_target_minutes": {
+      "type": "integer",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "mastery_target_hours": {
+      "type": "integer",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "level_thresholds_hours": {
+      "type": "integer[]",
+      "nullable": false,
+      "hasDefault": true
+    }
+  },
+  "habit_completions": {
+    "id": {
+      "type": "uuid",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "user_id": {
+      "type": "uuid",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "created_at": {
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "updated_at": {
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "deleted_at": {
+      "type": "timestamp with time zone",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "hlc": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "schema_version": {
+      "type": "integer",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "created_by_command_id": {
+      "type": "uuid",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "last_modified_by_command_id": {
+      "type": "uuid",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "source_kind": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "source_id": {
+      "type": "uuid",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "source_detail": {
+      "type": "jsonb",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "habit_id": {
+      "type": "uuid",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "occurrence_date": {
+      "type": "date",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "completed_at": {
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "hasDefault": false
+    }
+  },
+  "tags": {
+    "id": {
+      "type": "uuid",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "user_id": {
+      "type": "uuid",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "created_at": {
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "updated_at": {
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "deleted_at": {
+      "type": "timestamp with time zone",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "hlc": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "schema_version": {
+      "type": "integer",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "created_by_command_id": {
+      "type": "uuid",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "last_modified_by_command_id": {
+      "type": "uuid",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "source_kind": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "source_id": {
+      "type": "uuid",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "source_detail": {
+      "type": "jsonb",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "label": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "habit_id": {
+      "type": "uuid",
+      "nullable": true,
+      "hasDefault": false
+    }
+  },
+  "tag_placements": {
+    "id": {
+      "type": "uuid",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "user_id": {
+      "type": "uuid",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "created_at": {
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "updated_at": {
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "deleted_at": {
+      "type": "timestamp with time zone",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "hlc": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "schema_version": {
+      "type": "integer",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "created_by_command_id": {
+      "type": "uuid",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "last_modified_by_command_id": {
+      "type": "uuid",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "source_kind": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "source_id": {
+      "type": "uuid",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "source_detail": {
+      "type": "jsonb",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "block_id": {
+      "type": "uuid",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "tag_id": {
+      "type": "uuid",
+      "nullable": false,
+      "hasDefault": false
+    }
+  },
+  "tag_answers": {
+    "id": {
+      "type": "uuid",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "user_id": {
+      "type": "uuid",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "created_at": {
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "updated_at": {
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "deleted_at": {
+      "type": "timestamp with time zone",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "hlc": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "schema_version": {
+      "type": "integer",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "created_by_command_id": {
+      "type": "uuid",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "last_modified_by_command_id": {
+      "type": "uuid",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "source_kind": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "source_id": {
+      "type": "uuid",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "source_detail": {
+      "type": "jsonb",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "placement_id": {
+      "type": "uuid",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "value": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "answered_at": {
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "hasDefault": false
+    }
+  },
+  "decision_boards": {
+    "id": {
+      "type": "uuid",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "user_id": {
+      "type": "uuid",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "created_at": {
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "updated_at": {
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "deleted_at": {
+      "type": "timestamp with time zone",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "hlc": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "schema_version": {
+      "type": "integer",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "created_by_command_id": {
+      "type": "uuid",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "last_modified_by_command_id": {
+      "type": "uuid",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "source_kind": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "source_id": {
+      "type": "uuid",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "source_detail": {
+      "type": "jsonb",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "title": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": false
+    }
+  },
+  "decision_criteria": {
+    "id": {
+      "type": "uuid",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "user_id": {
+      "type": "uuid",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "created_at": {
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "updated_at": {
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "deleted_at": {
+      "type": "timestamp with time zone",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "hlc": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "schema_version": {
+      "type": "integer",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "created_by_command_id": {
+      "type": "uuid",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "last_modified_by_command_id": {
+      "type": "uuid",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "source_kind": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "source_id": {
+      "type": "uuid",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "source_detail": {
+      "type": "jsonb",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "board_id": {
+      "type": "uuid",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "label": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "weight": {
+      "type": "real",
+      "nullable": false,
+      "hasDefault": false
+    }
+  },
+  "decision_scores": {
+    "id": {
+      "type": "uuid",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "user_id": {
+      "type": "uuid",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "created_at": {
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "updated_at": {
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "deleted_at": {
+      "type": "timestamp with time zone",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "hlc": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "schema_version": {
+      "type": "integer",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "created_by_command_id": {
+      "type": "uuid",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "last_modified_by_command_id": {
+      "type": "uuid",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "source_kind": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "source_id": {
+      "type": "uuid",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "source_detail": {
+      "type": "jsonb",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "criterion_id": {
+      "type": "uuid",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "project_id": {
+      "type": "uuid",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "score": {
+      "type": "real",
+      "nullable": false,
+      "hasDefault": false
+    }
+  },
+  "sprints": {
+    "id": {
+      "type": "uuid",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "user_id": {
+      "type": "uuid",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "created_at": {
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "updated_at": {
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "deleted_at": {
+      "type": "timestamp with time zone",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "hlc": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "schema_version": {
+      "type": "integer",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "created_by_command_id": {
+      "type": "uuid",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "last_modified_by_command_id": {
+      "type": "uuid",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "source_kind": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "source_id": {
+      "type": "uuid",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "source_detail": {
+      "type": "jsonb",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "title": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "starts_on": {
+      "type": "date",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "ends_on": {
+      "type": "date",
+      "nullable": false,
+      "hasDefault": false
+    }
+  },
+  "sprint_memberships": {
+    "id": {
+      "type": "uuid",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "user_id": {
+      "type": "uuid",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "created_at": {
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "updated_at": {
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "deleted_at": {
+      "type": "timestamp with time zone",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "hlc": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "schema_version": {
+      "type": "integer",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "created_by_command_id": {
+      "type": "uuid",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "last_modified_by_command_id": {
+      "type": "uuid",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "source_kind": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "source_id": {
+      "type": "uuid",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "source_detail": {
+      "type": "jsonb",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "sprint_id": {
+      "type": "uuid",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "node_id": {
+      "type": "uuid",
+      "nullable": false,
+      "hasDefault": false
+    }
+  },
+  "automation_rules": {
+    "id": {
+      "type": "uuid",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "user_id": {
+      "type": "uuid",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "created_at": {
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "updated_at": {
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "deleted_at": {
+      "type": "timestamp with time zone",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "hlc": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "schema_version": {
+      "type": "integer",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "created_by_command_id": {
+      "type": "uuid",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "last_modified_by_command_id": {
+      "type": "uuid",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "source_kind": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "source_id": {
+      "type": "uuid",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "source_detail": {
+      "type": "jsonb",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "trigger": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "conditions": {
+      "type": "jsonb",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "actions": {
+      "type": "jsonb",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "enabled": {
+      "type": "boolean",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "rule_version": {
+      "type": "integer",
+      "nullable": false,
+      "hasDefault": true
+    }
+  },
+  "blocker_rules": {
+    "id": {
+      "type": "uuid",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "user_id": {
+      "type": "uuid",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "created_at": {
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "updated_at": {
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "deleted_at": {
+      "type": "timestamp with time zone",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "hlc": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "schema_version": {
+      "type": "integer",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "created_by_command_id": {
+      "type": "uuid",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "last_modified_by_command_id": {
+      "type": "uuid",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "source_kind": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "source_id": {
+      "type": "uuid",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "source_detail": {
+      "type": "jsonb",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "scope": {
+      "type": "jsonb",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "predicate": {
+      "type": "jsonb",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "label": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "enabled": {
+      "type": "boolean",
+      "nullable": false,
+      "hasDefault": true
+    }
+  },
+  "external_facts": {
+    "id": {
+      "type": "uuid",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "user_id": {
+      "type": "uuid",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "created_at": {
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "updated_at": {
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "deleted_at": {
+      "type": "timestamp with time zone",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "hlc": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "schema_version": {
+      "type": "integer",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "created_by_command_id": {
+      "type": "uuid",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "last_modified_by_command_id": {
+      "type": "uuid",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "source_kind": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "source_id": {
+      "type": "uuid",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "source_detail": {
+      "type": "jsonb",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "kind": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "key": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "payload": {
+      "type": "jsonb",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "computed_at": {
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "hasDefault": false
+    }
+  },
+  "computed_aggregates": {
+    "id": {
+      "type": "uuid",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "user_id": {
+      "type": "uuid",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "created_at": {
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "updated_at": {
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "deleted_at": {
+      "type": "timestamp with time zone",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "hlc": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "schema_version": {
+      "type": "integer",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "created_by_command_id": {
+      "type": "uuid",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "last_modified_by_command_id": {
+      "type": "uuid",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "source_kind": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "source_id": {
+      "type": "uuid",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "source_detail": {
+      "type": "jsonb",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "subject_kind": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "subject_id": {
+      "type": "uuid",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "metric": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "value": {
+      "type": "jsonb",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "computed_at": {
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "computed_by": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": false
+    }
+  },
+  "diagram_layouts": {
+    "id": {
+      "type": "uuid",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "user_id": {
+      "type": "uuid",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "created_at": {
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "updated_at": {
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "deleted_at": {
+      "type": "timestamp with time zone",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "hlc": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "schema_version": {
+      "type": "integer",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "created_by_command_id": {
+      "type": "uuid",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "last_modified_by_command_id": {
+      "type": "uuid",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "source_kind": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "source_id": {
+      "type": "uuid",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "source_detail": {
+      "type": "jsonb",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "diagram_id": {
+      "type": "uuid",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "node_id": {
+      "type": "uuid",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "x": {
+      "type": "real",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "y": {
+      "type": "real",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "group_id": {
+      "type": "uuid",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "collapsed": {
+      "type": "boolean",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "computed_at": {
+      "type": "timestamp with time zone",
+      "nullable": true,
+      "hasDefault": false
+    }
+  },
+  "diagram_groups": {
+    "id": {
+      "type": "uuid",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "user_id": {
+      "type": "uuid",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "created_at": {
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "updated_at": {
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "deleted_at": {
+      "type": "timestamp with time zone",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "hlc": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "schema_version": {
+      "type": "integer",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "created_by_command_id": {
+      "type": "uuid",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "last_modified_by_command_id": {
+      "type": "uuid",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "source_kind": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "source_id": {
+      "type": "uuid",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "source_detail": {
+      "type": "jsonb",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "diagram_id": {
+      "type": "uuid",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "label": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "color": {
+      "type": "text",
+      "nullable": true,
+      "hasDefault": false
+    }
+  },
+  "schedule_suggestion_batches": {
+    "id": {
+      "type": "uuid",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "user_id": {
+      "type": "uuid",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "created_at": {
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "updated_at": {
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "deleted_at": {
+      "type": "timestamp with time zone",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "hlc": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "schema_version": {
+      "type": "integer",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "created_by_command_id": {
+      "type": "uuid",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "last_modified_by_command_id": {
+      "type": "uuid",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "source_kind": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "source_id": {
+      "type": "uuid",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "source_detail": {
+      "type": "jsonb",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "source": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "horizon_start": {
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "horizon_end": {
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "computed_at": {
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "superseded_at": {
+      "type": "timestamp with time zone",
+      "nullable": true,
+      "hasDefault": false
+    }
+  },
+  "sync_review_items": {
+    "id": {
+      "type": "uuid",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "user_id": {
+      "type": "uuid",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "created_at": {
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "updated_at": {
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "deleted_at": {
+      "type": "timestamp with time zone",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "hlc": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "schema_version": {
+      "type": "integer",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "created_by_command_id": {
+      "type": "uuid",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "last_modified_by_command_id": {
+      "type": "uuid",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "source_kind": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "source_id": {
+      "type": "uuid",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "source_detail": {
+      "type": "jsonb",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "command_id": {
+      "type": "uuid",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "item_type": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "severity": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "title": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "detail": {
+      "type": "jsonb",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "status": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "resolved_at": {
+      "type": "timestamp with time zone",
+      "nullable": true,
+      "hasDefault": false
+    }
+  },
+  "command_log": {
+    "id": {
+      "type": "uuid",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "user_id": {
+      "type": "uuid",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "name": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "payload": {
+      "type": "jsonb",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "device_id": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "hlc": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "command_version": {
+      "type": "integer",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "schema_version": {
+      "type": "integer",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "client_version": {
+      "type": "text",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "effects": {
+      "type": "jsonb",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "parent_command_id": {
+      "type": "uuid",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "triggering_command_id": {
+      "type": "uuid",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "depends_on": {
+      "type": "uuid[]",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "applied_at": {
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "result": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "reject_reason": {
+      "type": "text",
+      "nullable": true,
+      "hasDefault": false
+    }
+  },
+  "user_settings": {
+    "user_id": {
+      "type": "uuid",
+      "nullable": false,
+      "hasDefault": false
+    },
+    "day_reset_hour": {
+      "type": "smallint",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "timezone": {
+      "type": "text",
+      "nullable": false,
+      "hasDefault": true
+    },
+    "weather_location": {
+      "type": "jsonb",
+      "nullable": true,
+      "hasDefault": false
+    },
+    "updated_at": {
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "hasDefault": false
+    }
+  }
+}

@@ -115,6 +115,32 @@ export function referencesExternalFacts(predicate: unknown): boolean {
 }
 
 /**
+ * Max length of a `matches` regex pattern (§9.2, S3-F7). The `matches` op compiles
+ * `new RegExp(value)` over untrusted, user-authored input, so an overlong pattern
+ * is a ReDoS surface. The cap is enforced in two places: at authoring time
+ * (`hasOverlongMatchesPattern`, used by validate.ts to REJECT automation rules) and
+ * at evaluation time (the `matches` case fails safe to `unknown` above the cap),
+ * so blocker rules and any already-stored pattern are covered without recompiling.
+ */
+export const MAX_MATCHES_PATTERN_LENGTH = 200;
+
+function walkForLongMatch(node: PredicateNode): boolean {
+  if ('all' in node) return node.all.some(walkForLongMatch);
+  if ('any' in node) return node.any.some(walkForLongMatch);
+  if ('not' in node) return walkForLongMatch(node.not);
+  return node.op === 'matches' && typeof node.value === 'string' && node.value.length > MAX_MATCHES_PATTERN_LENGTH;
+}
+
+/**
+ * True if any `matches` leaf carries a pattern longer than the cap (S3-F7). A
+ * malformed predicate parses to nothing → false (it can't evaluate regardless).
+ */
+export function hasOverlongMatchesPattern(predicate: unknown): boolean {
+  const parsed = predicateSchema.safeParse(predicate);
+  return parsed.success ? walkForLongMatch(parsed.data) : false;
+}
+
+/**
  * blocker_rules.scope (§6.0): which nodes a rule applies to. All fields
  * optional; omitted node_types defaults to tasks only.
  */
@@ -264,6 +290,8 @@ function compareSingle(op: PredicateOp, fact: FactValue, expected: JsonValue | u
     }
     case 'matches': {
       if (typeof fact !== 'string' || typeof expected !== 'string') return 'unknown';
+      // S3-F7: refuse to compile an overlong (ReDoS-surface) pattern; fail safe.
+      if (expected.length > MAX_MATCHES_PATTERN_LENGTH) return 'unknown';
       try {
         return new RegExp(expected, 'i').test(fact) ? 'true' : 'false';
       } catch {

@@ -10,7 +10,7 @@ up the whole stack.
 | Service | Image / build | Role |
 |---|---|---|
 | `postgres` | `postgres:16` | Source of truth (logical replication on) |
-| `powersync` | `journeyapps/powersync-service` | Sync Streams (edition-3, `packages/db/sync-streams.yaml`): `bootstrap`/`active` tiers auto-sync, `history` (Tier 2) lazily; every stream JWT-scoped by `user_id`, no client-widenable params |
+| `powersync` | `journeyapps/powersync-service` | Sync Streams (edition-3, `packages/db/sync-streams.yaml`): `bootstrap`/`active` tiers auto-sync live rows, `history` (Tier 2, soft-deleted tombstones) lazily; every stream JWT-scoped by `user_id`, no client-widenable params |
 | `api` | `apps/server/Dockerfile` | Hono + Better Auth + command dispatcher + pg-boss jobs; runs migrations on start |
 | `web` | `apps/web/Dockerfile` → nginx | Static SPA; reverse-proxies `/api`, `/sync` → api and `/powersync` → powersync (single-origin) |
 
@@ -30,6 +30,13 @@ docker compose -f docker-compose.prod.yml up -d --build
 The web app is then served on `http://<host>:${WEB_PORT:-8088}`. The `api`
 container applies forward-only migrations before serving, so a fresh database
 is initialized automatically.
+
+> **Terminate TLS in front.** The `web` container serves plain HTTP; put a reverse
+> proxy (nginx/Caddy/Traefik) or a Tailscale HTTPS front in front of it. The bundled
+> `infra/nginx/web.conf` already sets `X-Content-Type-Options`, `Referrer-Policy`,
+> and a SPA/PowerSync-compatible CSP; its `Strict-Transport-Security` header is
+> commented out — enable it once TLS is terminated. Auth cookies are `Secure`, so
+> sign-in only works over HTTPS (or `localhost`).
 
 ## Secrets (`.env`)
 
@@ -73,8 +80,8 @@ docker compose -f docker-compose.prod.yml restart powersync   # re-replicate
 **Per-user portable export/import (§13.1, in-app).** Each user can export their
 own data from **Settings → Backup & restore** to a versioned `prisms-export`
 file (facts, settings, command history, review items, provenance — never auth or
-provider secrets), optionally passphrase-encrypted (AES-256-GCM; the default on
-desktop/mobile). Import **restores rows as data** — it never replays historical
+provider secrets), optionally passphrase-encrypted (AES-256-GCM with 600k-iteration
+PBKDF2-SHA256; the default on desktop/mobile). Import **restores rows as data** — it never replays historical
 commands — through the server `POST /sync/import` transaction (`?dry_run=1`
 previews conflicts first) and advances the device HLC past the imported
 high-water so later edits always order after the imported state (monotonicity).
@@ -91,15 +98,48 @@ Migrations are forward-only and sync rules are versioned alongside the schema
 (§16); mutation payloads only ever gain optional fields, so older clients keep
 working during a rolling upgrade.
 
+**Update clients before/with the server (D7).** The server rejects command
+envelopes below its row-schema floor (`client_too_old`, with a Review-inbox
+pointer). Envelope-version enforcement lands client-first: ship the updated
+installed clients (they mint the version fields) before or with the server that
+enforces the floor, so a rolling upgrade never locks out a not-yet-updated client.
+
+**Scoped replication publication (R10/S6-F4).** Fresh databases create the
+PowerSync publication over only the synced tables
+(`infra/postgres/init/02-powersync-publication.sql`). A database created under the
+old `FOR ALL TABLES` publication keeps working, but to stop replicating the
+internal tables (auth/sessions, job queue, command log) run once, then restart
+PowerSync so it reprocesses:
+
+```sh
+docker compose -f docker-compose.prod.yml exec postgres \
+  psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c \
+  "ALTER PUBLICATION powersync SET TABLE nodes, edges, schedule_blocks, schedule_suggestion_batches, sprints, sprint_memberships, sync_review_items, user_settings, time_entries, habits, habit_completions, tags, tag_placements, tag_answers, decision_boards, decision_criteria, decision_scores, automation_rules, blocker_rules, external_facts, computed_aggregates, diagram_groups, diagram_layouts;"
+docker compose -f docker-compose.prod.yml restart powersync
+```
+
+**History window (D4).** Soft-deleted rows and the `command_log` dedup history are
+purged after **90 days** by the retention job — this is the v1 dedup/undo horizon,
+not a user-facing archival guarantee. Longer retention is a post-v1 feature (the
+history-compaction annex, A5).
+
 ## Verification status (this build environment)
 
 The repo gate `pnpm turbo lint typecheck test` (21 tasks) is green, core
-coverage is ≥ 90% (§16 floor), and the 100k-node load test meets the §15
-budgets — including the v1.4 **per-command** path: an incremental
-`StatusIndex.apply` recomputes only the affected node + neighbours (~1 node /
-0.02ms on 100k), not a full table scan. The two-device convergence harness
-(`pnpm test:convergence`, 13 scenarios) and the server integration suites (incl.
-the import/export round-trip) pass against local Postgres.
+coverage is ≥ 90% (§16 floor), and the 100k-node load test meets the §15 budgets.
+The incremental `StatusIndex` is **wired on both ends**: the client read layer
+seeds it once per session and applies row-diffs (its per-command `apply` recomputes
+only the affected node + neighbours, ~1 node / 0.02 ms on 100k), and the server
+write path caches the per-batch context across a command batch rather than
+rebuilding it per command. The two-device convergence harness
+(`pnpm test:convergence`, 15 scenarios) and the server integration suites (incl.
+the import/export round-trip and the two-user token-isolation check) pass against
+local Postgres.
+
+> **Not yet measured:** the 100k **cold-start sync-down** volume/time (bytes + wall
+> clock a fresh device pulls from PowerSync). It needs a seeded-100k account against
+> a booted stack; the topology now keeps soft-deleted tombstones out of the
+> auto-subscribed tiers (Tier 2), but the number should be recorded on staging.
 
 Not exercised in this environment (no toolchain/hardware): the clean-VM
 one-command deploy was config-validated (`docker compose config`) but not run

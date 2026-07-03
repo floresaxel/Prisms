@@ -41,6 +41,7 @@ export const ERROR_CODES = [
   'E_RULE_SELF_TRIGGER',
   'E_RULE_DEPTH_EXCEEDED',
   'E_EXTERNAL_FACT_CONDITION', // §10.3/V10: automation conditions may not read external facts (weather)
+  'E_PATTERN_TOO_LONG', // §9.2/S3-F7: a `matches` regex pattern exceeds the complexity cap
   // convergence / sync (1.3 §7.2e, §7.6, §7.11, §8) — wired by M5
   'E_DEPENDENCY_REJECTED', // §7.2e: a depends_on command was rejected
   'E_UNKNOWN_TARGET', // §7.2e: references a row in neither replica nor own pending creates

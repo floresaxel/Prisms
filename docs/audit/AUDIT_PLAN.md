@@ -38,3 +38,23 @@ Dynamic evidence at close: repo gate 21/21 · server integration **114/114 vs li
 
 - Audited at commit `2ab3bf7` on branch `m0-spike` (clean tree).
 - Gate `pnpm turbo lint typecheck test`: 21/21 tasks green — **via full turbo cache replay** (253 ms). Cached logs show mobile/desktop test tasks pass with zero test files and all 11 server integration suites (109 tests) skipped locally without Postgres; CI's `stack`/`e2e` jobs run them for real against compose Postgres + PowerSync.
+
+## Remediation (2026-07-03, `Blueprints/REMEDIATION_PLAYBOOK.md`)
+
+The 48-finding register was remediated across sessions R1–R10 (self-contained work orders in the playbook). Per-session logs: `docs/audit/remediation/session-rN.md`.
+
+| Session | Commit | What landed |
+|---|---|---|
+| R1 hygiene+spec | `a9a2a5f` | turbo env keys, §15 aliases, eslint boundaries, nginx headers, 3-stage Dockerfile, PWA icons, spec amendments (D1/D2/D5) |
+| R2 status semantics | `05a3bc6` | **S3-F1 (High)** weather out of acceptance; SS/SF lag; weather-conditioned automations rejected |
+| R3 hours correctness | `3a243c9` | **S3-F2 (High)** union-not-sum through `mergeTimeEntries` on every aggregate |
+| R4 jobs lifecycle | `643f223` | review-expire wired; `replaces_block_id` (no double-book); notify-once; template versioning |
+| R6 upload+versions | `a7e7a2b` | **S7-F2 (High)** upload chunking; versions end-to-end + server floor; poison-batch isolation |
+| R7 StatusIndex client | `d8eaecc` | **S8-F1 (High)** incremental provider; fan-out scoping (S2-F4/F5) |
+| R8 server scale+effects | `63c284e` | **S4-F2** per-batch context cache (17.6× at 100k); **S4-F3** `command_log.effects` |
+| R9 account+mobile | `ee02580` | **S9-F1 (High)** logout boundary; **S9-F2 (High)** mobile crypto; React pairing (S9-F3); PBKDF2 600k (S8-F3); desktop CSP |
+| R10 topology+docs+sign-off | *this branch* | **S6-F1/F2/F4** tier substance + drop `command_results` + scoped publication; **S4-F4/F5/F6 + S10-F5** boot fail-fast/JWK check, rate + body limits; **S3-F7** `matches` cap; **S2-F2** additive-schema gate; **S10-F3a** two-user isolation test; docs truth-up (S10-F1/F2) |
+
+**High-finding status: 5 of 6 closed.** S3-F1 (R2, server) · S3-F2 (R3) · S7-F2 (R6) · S9-F1 (R9) · S9-F2 (R9, device-verify pending). **Outstanding: S7-F1 (offline automation spawning) — R5 (write-path parity) is NOT yet done.** R5 is disjoint from R6/R7/R8 (which only needed R2/R4), so it was skippable in the wave order but is a hard prerequisite for the final release sign-off.
+
+**R10 sign-off gate (on the `r10-topology-signoff` head = `remediation` + R6/R7/R8/R9/R10, missing R5):** `pnpm turbo lint typecheck` 14/14 · core **559** tests, coverage **90.44/94.02/93.39** (≥90) · db **49** · server **125** + api **14** (live PG, incl. convergence 15/15 + two-user isolation) · web build ✅. e2e = CI. **The `remediation`→`m0-spike` merge is HELD pending R5 (S7-F1 High) + operator approval.**
