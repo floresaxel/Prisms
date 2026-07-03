@@ -104,17 +104,19 @@ pointer). Envelope-version enforcement lands client-first: ship the updated
 installed clients (they mint the version fields) before or with the server that
 enforces the floor, so a rolling upgrade never locks out a not-yet-updated client.
 
-**Scoped replication publication (R10/S6-F4).** Fresh databases create the
-PowerSync publication over only the synced tables
-(`infra/postgres/init/02-powersync-publication.sql`). A database created under the
-old `FOR ALL TABLES` publication keeps working, but to stop replicating the
-internal tables (auth/sessions, job queue, command log) run once, then restart
-PowerSync so it reprocesses:
+**Scoped replication publication (R10/S6-F4).** The PowerSync publication covers
+only the synced tables. The initdb script
+(`infra/postgres/init/02-powersync-publication.sql`) creates the publication
+*empty* — on a fresh database the app tables don't exist yet, so a table list
+there would abort postgres' first boot — and migration
+`packages/db/migrations/0009_powersync_publication.sql` scopes it to the synced
+set once the tables exist. The same migration converts databases created under
+the old `FOR ALL TABLES` publication (it drops and recreates the publication —
+postgres rejects `SET TABLE` on `FOR ALL TABLES` publications), so upgrading is
+just running migrations as usual. After upgrading a live deployment, restart
+PowerSync so it reprocesses against the narrowed publication:
 
 ```sh
-docker compose -f docker-compose.prod.yml exec postgres \
-  psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c \
-  "ALTER PUBLICATION powersync SET TABLE nodes, edges, schedule_blocks, schedule_suggestion_batches, sprints, sprint_memberships, sync_review_items, user_settings, time_entries, habits, habit_completions, tags, tag_placements, tag_answers, decision_boards, decision_criteria, decision_scores, automation_rules, blocker_rules, external_facts, computed_aggregates, diagram_groups, diagram_layouts;"
 docker compose -f docker-compose.prod.yml restart powersync
 ```
 
