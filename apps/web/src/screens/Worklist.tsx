@@ -15,8 +15,11 @@ import {
   List,
   ListItem,
   Modal,
+  Skeleton,
+  useBlockedTasks,
   useCommands,
   useDayTimeLeft,
+  useIsHydrated,
   useNextBlockMinutes,
   useGroupedWorklist,
   useRunningTimer,
@@ -25,6 +28,7 @@ import {
   type WorklistItem,
 } from '@prisms/ui';
 
+import { WhyButton } from '../components/Why';
 import { formatElapsed, formatMinutes } from '../format';
 
 interface ReviewTarget {
@@ -59,10 +63,12 @@ export function Worklist({ ctx }: { ctx: CommandContext }) {
   }, []);
 
   const groups = useGroupedWorklist(now);
+  const blocked = useBlockedTasks(now);
   const running = useRunningTimer(now);
   const dayLeft = useDayTimeLeft(now);
   const nextBlock = useNextBlockMinutes(now);
   const commands = useCommands(ctx);
+  const hydrated = useIsHydrated();
 
   const [review, setReview] = useState<ReviewTarget | null>(null);
   const [focus, setFocus] = useState(1.0);
@@ -123,9 +129,12 @@ export function Worklist({ ctx }: { ctx: CommandContext }) {
       )}
 
       <div data-testid="worklist">
-        {groups.length === 0 && (
-          <div className="px-list-empty">No available tasks — everything is done or blocked.</div>
-        )}
+        {groups.length === 0 &&
+          (hydrated ? (
+            <div className="px-list-empty">No available tasks — everything is done or blocked.</div>
+          ) : (
+            <Skeleton testId="worklist-skeleton" />
+          ))}
         {groups.map((group) => (
           <div key={group.key} data-testid={`worklist-group-${group.key}`}>
             <h3 className="px-muted" style={{ margin: '10px 0 4px' }}>{group.title}</h3>
@@ -133,7 +142,20 @@ export function Worklist({ ctx }: { ctx: CommandContext }) {
               {group.items.map((item) => (
                 <ListItem
                   key={item.task.id}
-              leading={<span className={`px-badge px-badge--${item.status}`}>{item.status}</span>}
+              leading={
+                <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span className={`px-badge px-badge--${item.status}`}>{item.status}</span>
+                  {item.unverified.length > 0 && (
+                    <span
+                      className="px-badge px-badge--unverified"
+                      data-testid={`weather-unverified-${item.task.id}`}
+                      title={`Advisory only — not blocking: ${item.unverified.join(', ')}`}
+                    >
+                      weather unverified
+                    </span>
+                  )}
+                </span>
+              }
               trailing={
                 <>
                   {item.minutesLeftInTask !== null && (
@@ -141,6 +163,7 @@ export function Worklist({ ctx }: { ctx: CommandContext }) {
                       {formatMinutes(item.minutesLeftInTask)} left
                     </span>
                   )}
+                  <WhyButton row={item.task} testId={`why-task-${item.task.id}`} />
                   {item.openEntryId ? (
                     <button className="px-btn" onClick={() => void clockOut(item.openEntryId!, item.task.id, item.task.title)}>
                       Clock out
@@ -173,6 +196,49 @@ export function Worklist({ ctx }: { ctx: CommandContext }) {
           </div>
         ))}
       </div>
+
+      {blocked.length > 0 && (
+        <div data-testid="blocked-list" style={{ marginTop: 18 }}>
+          <h3 className="px-muted" style={{ margin: '10px 0 4px' }}>Blocked</h3>
+          <p className="px-muted" style={{ marginTop: 0, fontSize: 13 }}>
+            Held by a blocker rule. Clocking in with force overrides it — the task then becomes <em>ongoing</em>.
+          </p>
+          <List>
+            {blocked.map((b) => (
+              <ListItem
+                key={b.task.id}
+                leading={<span className="px-badge px-badge--blocked">blocked</span>}
+                trailing={
+                  <>
+                    <WhyButton row={b.task} testId={`why-task-${b.task.id}`} />
+                    <button
+                      className="px-btn px-btn--danger"
+                      disabled={running !== null}
+                      title={running !== null ? 'A timer is already running' : 'Override the blocker and start the timer'}
+                      data-testid={`force-clock-in-${b.task.id}`}
+                      onClick={() => void commands.clockIn(b.task.id, { force: true })}
+                    >
+                      Force clock in
+                    </button>
+                  </>
+                }
+              >
+                {b.task.title}
+                {b.blockedBy.length > 0 && (
+                  <div className="px-muted" data-testid={`blocked-by-${b.task.id}`} style={{ marginTop: 4, fontSize: 12 }}>
+                    Blocked by: {b.blockedBy.join(', ')}
+                  </div>
+                )}
+                {b.unverified.length > 0 && (
+                  <div className="px-muted" style={{ marginTop: 2, fontSize: 12 }}>
+                    Weather unverified (advisory): {b.unverified.join(', ')}
+                  </div>
+                )}
+              </ListItem>
+            ))}
+          </List>
+        </div>
+      )}
 
       <Modal
         open={review !== null}

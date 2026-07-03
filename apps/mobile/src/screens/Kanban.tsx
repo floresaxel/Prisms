@@ -6,9 +6,9 @@ import { useEffect, useState } from 'react';
 import { Pressable } from 'react-native';
 
 import { asEpochMillis, type Instant } from '@prisms/core';
-import { useCommands, useKanban, type CommandContext } from '@prisms/ui';
+import { useCommands, useIsHydrated, useKanban, type CommandContext } from '@prisms/ui';
 
-import { Badge, Card, H1, Muted, Row, Screen, theme, Txt } from '../ui';
+import { Badge, Card, H1, Muted, Row, Screen, Skeleton, theme, Txt } from '../ui';
 
 export function Kanban({ ctx }: { ctx: CommandContext }) {
   const [now, setNow] = useState<Instant>(asEpochMillis(Date.now()));
@@ -19,6 +19,7 @@ export function Kanban({ ctx }: { ctx: CommandContext }) {
 
   const columns = useKanban(now);
   const commands = useCommands(ctx);
+  const hydrated = useIsHydrated();
   const [selected, setSelected] = useState<string | null>(null);
 
   async function moveTo(date: string | null) {
@@ -33,7 +34,8 @@ export function Kanban({ ctx }: { ctx: CommandContext }) {
       <H1>Kanban</H1>
       <Muted>{selected !== null ? 'Tap a column to move the selected task.' : 'Tap a task to select it.'}</Muted>
 
-      {columns.map((col) => (
+      {!hydrated && <Skeleton testID="kanban-skeleton" rows={4} />}
+      {hydrated && columns.map((col) => (
         <Card key={col.key} testID={`kanban-col-${col.key}`}>
           <Pressable onPress={() => void moveTo(col.date)} disabled={selected === null}>
             <Row>

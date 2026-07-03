@@ -6,11 +6,74 @@
 export const UI_PACKAGE = '@prisms/ui' as const;
 
 // data layer
-export { appSchema } from './powersync/schema';
-export { createConnector, type ConnectorOptions, type CommandRejection } from './powersync/connector';
-export { crudToCommand, type CrudLike, type CrudOp, type TranslatedCommand } from './powersync/crud-to-command';
-export { createCommands, type Commands, type CommandContext, type WritableDb } from './powersync/commands';
-export { newId, createHlc, getDeviceId, browserClock, browserRng } from './powersync/client-runtime';
+export { appSchema, clientSchema, client_commands, overlay_effects, sync_review_items, LOCAL_ONLY_TABLE_NAMES } from './powersync/schema';
+export {
+  createConnector,
+  startCommandUpload,
+  type ConnectorOptions,
+  type CommandRejection,
+  type CommandUploadOptions,
+  type WatchableDb,
+} from './powersync/connector';
+export { createCommands, type Commands, type CommandContext } from './powersync/commands';
+export {
+  newId,
+  createHlc,
+  getDeviceId,
+  browserClock,
+  browserRng,
+  observeImportedHlc,
+  persistImportedHlc,
+  loadImportedHlcFloor,
+  __resetHlcFloorForTests,
+} from './powersync/client-runtime';
+
+// portability + privacy adapters (1.3 §13.1/§13.2, R13/R20) — M13
+export {
+  type SecureStorage,
+  createWebSecureStorage,
+  createMemorySecureStorage,
+} from './adapters/secure-storage';
+export { type DbEncryptionAdapter, noopDbEncryption, createStaticDbEncryption } from './adapters/db-encryption';
+export {
+  encryptExport,
+  decryptExport,
+  isEncryptedExport,
+  ENCRYPTED_EXPORT_FORMAT,
+  ENCRYPTED_EXPORT_VERSION,
+  type EncryptedExport,
+} from './portability/crypto';
+export {
+  serializeExport,
+  parseImportFile,
+  exportFilename,
+  ImportFormatError,
+  type SerializeOptions,
+  type ParseOptions,
+} from './portability/export-import';
+
+// two-layer client store (1.3 §7.2, R15) — M0 spike
+export {
+  createSqlOverlayStore,
+  readMergedRows,
+  type OverlayStore,
+  type PendingCommand,
+  type SqlExecutor,
+  type SqlTx,
+  type ReviewItem,
+} from './powersync/overlay-store';
+export { createExecuteCommand, type ExecuteCommand, type ExecuteContext, type ExecuteDeps, type ExecuteOptions } from './powersync/execute';
+export { buildOptimisticEffects, buildAcceptSuggestionEffects, type EffectSpec, type OptimisticEffectCtx, type AcceptSuggestionBlock } from './powersync/effects';
+export { uploadClientCommands, UploadClientError, MAX_UPLOAD_BATCH, type UploadCommandsOptions, type UploadSummary } from './powersync/upload-commands';
+
+// persistent client read layer (1.4 §7.14, Fix A) — M11
+export { PrismsDataProvider, usePrismsData, toOverlayEffect, type PrismsData, type SharedRows } from './powersync/data-provider';
+
+// sync-stream tiers — lazy Tier 2 (1.3 §7.3) — M14
+export { subscribeHistory, HISTORY_STREAM, type StreamSubscriber, type StreamSubscription, type HistorySubscribeOptions } from './powersync/streams';
+
+// provenance ("why does this exist?", §7.8) — M9
+export { explainProvenance, type ProvenanceFields, type ProvenanceExplanation } from './provenance';
 
 // hooks
 export {
@@ -34,12 +97,24 @@ export {
   useUserSettings,
   useAggregates,
   useCommands,
+  useReviewInbox,
   useTagCatalog,
   useBlockTags,
   useTimeBlocksForDay,
   useGroupedWorklist,
+  useBlockedTasks,
   useHabitTasks,
+  // loading-aware read layer (1.4 §7.15, Fix C) — M12
+  useIsHydrated,
+  useHabitsHydrated,
+  useDecisionsHydrated,
+  useRulesHydrated,
+  useReviewInboxHydrated,
+  __resetReadCacheForTests,
+  clearReadCaches,
+  type RowsRead,
   type WorklistItem,
+  type BlockedTask,
   type RunningTimer,
   type PromoteTarget,
   type Agenda,
@@ -61,10 +136,11 @@ export {
   type BlockTagView,
   type TimeBlockOption,
   type HabitTasksView,
+  type ReviewItemView,
 } from './hooks';
 export { groupWorklistBySchedule, type WorklistGroup } from './worklist-grouping';
 
 // design system
 export { Layout, type LayoutProps, type NavLinkSpec } from './components/Layout';
-export { List, ListItem, type ListProps, type ListItemProps } from './components/List';
+export { List, ListItem, Skeleton, ListSkeleton, type ListProps, type ListItemProps, type SkeletonProps } from './components/List';
 export { Modal, type ModalProps } from './components/Modal';

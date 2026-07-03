@@ -8,13 +8,14 @@
 import { useState } from 'react';
 
 import { validateAutomationRule } from '@prisms/core';
-import { List, ListItem, useCommands, useRules, type CommandContext } from '@prisms/ui';
+import { List, ListItem, useCommands, useRules, useRulesHydrated, type CommandContext } from '@prisms/ui';
 
 type Trigger = 'task_completed' | 'task_created';
 
 export function Rules({ ctx }: { ctx: CommandContext }) {
   const rules = useRules();
   const commands = useCommands(ctx);
+  const hydrated = useRulesHydrated();
 
   const [trigger, setTrigger] = useState<Trigger>('task_completed');
   const [match, setMatch] = useState('');
@@ -78,7 +79,7 @@ export function Rules({ ctx }: { ctx: CommandContext }) {
       </div>
 
       <div data-testid="rules" style={{ marginTop: 18 }}>
-        <List empty="No automation rules yet.">
+        <List empty="No automation rules yet." loading={!hydrated}>
           {rules.map((r) => (
             <ListItem
               key={r.id}

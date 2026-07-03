@@ -55,11 +55,24 @@ export function dependencyBlocked(
       case 'FS':
         if (predecessor.completed_at === null) return true;
         break;
-      case 'SS':
-        if (!ctx.hasAnyEntry(predecessor.id) && predecessor.completed_at === null) {
-          return true;
+      case 'SS': {
+        const started = ctx.hasAnyEntry(predecessor.id) || predecessor.completed_at !== null;
+        if (!started) return true;
+        // §7.6: SS blocks availability until the predecessor's START + lag. When
+        // it has started but not completed, gate on the earliest start; a
+        // completed predecessor is handled by the uniform completed_at + lag
+        // clause below (which the spec applies uniformly — status.test).
+        if (
+          edge.lag_minutes > 0 &&
+          predecessor.completed_at === null
+        ) {
+          const startedAt = ctx.earliestEntryStart(predecessor.id);
+          if (startedAt !== undefined && now < addMinutes(startedAt, edge.lag_minutes)) {
+            return true;
+          }
         }
         break;
+      }
       case 'FF':
       case 'SF':
         break;
@@ -84,6 +97,29 @@ export function isBlocked(
 ): boolean {
   if (dependencyBlocked(task, ctx, now)) return true;
   return evaluateBlockerRules(task, ctx, now, interp).blocked;
+}
+
+/**
+ * Acceptance-safe blocked check (§10.3, R19/V10) — the variant a command
+ * applier (server dispatcher, client pre-flight) MUST use to decide whether to
+ * reject `timer.clock_in` on a blocked task. Identical to `isBlocked` EXCEPT it
+ * excludes blocker rules that read an external fact (weather): external-fact
+ * state is advisory and must never cause a command to be rejected or diverge.
+ *
+ * Consequence (define consistently so two devices converge, §8): a task blocked
+ * ONLY by weather clocks in WITHOUT `force`; a task blocked by a dependency or a
+ * non-external blocker rule still requires `force`. The display path
+ * (`taskStatus`, badges) keeps the full evaluation, so weather still shows the
+ * task blocked / "unverified".
+ */
+export function isBlockedForAcceptance(
+  task: Node,
+  ctx: FactContext,
+  now: Instant,
+  interp: PredicateInterpolation = {},
+): boolean {
+  if (dependencyBlocked(task, ctx, now)) return true;
+  return evaluateBlockerRules(task, ctx, now, interp, { excludeExternalFacts: true }).blocked;
 }
 
 /** §7.1 taskStatus — the exact normative sequence. */

@@ -113,15 +113,15 @@ export default tseslint.config(
             },
             {
               from: { type: 'web' },
-              allow: { to: { type: ['web', 'core', 'ui', 'db'] } },
+              allow: { to: { type: ['web', 'core', 'ui'] } },
             },
             {
               from: { type: 'mobile' },
-              allow: { to: { type: ['mobile', 'core', 'ui', 'db'] } },
+              allow: { to: { type: ['mobile', 'core', 'ui'] } },
             },
             {
               from: { type: 'desktop' },
-              allow: { to: { type: ['desktop', 'core', 'ui', 'db'] } },
+              allow: { to: { type: ['desktop', 'core', 'ui'] } },
             },
           ],
         },

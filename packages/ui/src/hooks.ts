@@ -2,7 +2,7 @@
  * Reactive hooks (§12.2): PowerSync reactive queries → core selectors → React.
  * No view caches derived status; it recomputes on data change (microseconds).
  */
-import { useMemo } from 'react';
+import { useEffect, useMemo, useSyncExternalStore } from 'react';
 
 import { usePowerSync, useQuery } from '@powersync/react';
 import {
@@ -10,8 +10,6 @@ import {
   asEpochMillis,
   bucketDate,
   buildEdgeIndex,
-  buildFactContext,
-  buildTreeIndex,
   canonicalBurndown,
   canonicalCompletion,
   canonicalPractice,
@@ -21,14 +19,16 @@ import {
   criticalPath,
   DEFAULT_WINDOWS,
   descendantsOf,
+  evaluateBlockerRules,
   habitTaskIds,
+  habitTodayMinutes,
   isJustified,
   isoToEpochMillis,
+  mergeTable,
   minutesLeftInDay,
   minutesLeftInTask,
   minutesUntilNextBlock,
   rankProjects,
-  rawMinutes,
   taskStatus,
   topologicalOrder,
   type AutomationRule,
@@ -60,6 +60,9 @@ import {
 } from '@prisms/core';
 
 import { createCommands, type CommandContext } from './powersync/commands';
+import { usePrismsData, toOverlayEffect } from './powersync/data-provider';
+import { createSqlOverlayStore, type SqlExecutor } from './powersync/overlay-store';
+import { type ProvenanceFields } from './provenance';
 import { groupWorklistBySchedule, type WorklistGroup } from './worklist-grouping';
 import {
   toAutomationRule,
@@ -71,7 +74,6 @@ import {
   toDiagramGroup,
   toDiagramLayout,
   toEdge,
-  toExternalFact,
   toHabit,
   toHabitCompletion,
   toMembership,
@@ -86,41 +88,196 @@ import {
 } from './powersync/rows';
 
 type Row = Record<string, unknown>;
-const useRows = (sql: string) => useQuery<Row>(sql).data ?? [];
 
-/** Live tree of non-deleted nodes. */
-export function useNodeTree(): TreeIndex {
-  const rows = useRows('SELECT * FROM nodes WHERE deleted_at IS NULL');
-  return useMemo(() => buildTreeIndex(rows.map(toNode)), [rows]);
+const EMPTY_ROWS: readonly Row[] = Object.freeze([]);
+
+/** The table a simple `SELECT … FROM <table> …` reads (each hook queries one table). */
+function tableFromSql(sql: string): string | null {
+  const m = /\bfrom\s+([a-z_][a-z0-9_]*)/i.exec(sql);
+  return m ? m[1]!.toLowerCase() : null;
 }
 
-/** The full FactContext used by status + blocker evaluation. */
-export function useFactContext(): FactContext {
-  const nodes = useRows('SELECT * FROM nodes WHERE deleted_at IS NULL');
-  const edges = useRows('SELECT * FROM edges WHERE deleted_at IS NULL');
-  const entries = useRows('SELECT * FROM time_entries WHERE deleted_at IS NULL');
-  const blocks = useRows('SELECT * FROM schedule_blocks WHERE deleted_at IS NULL');
-  const sprints = useRows('SELECT * FROM sprints WHERE deleted_at IS NULL');
-  const memberships = useRows('SELECT * FROM sprint_memberships WHERE deleted_at IS NULL');
-  const blockers = useRows('SELECT * FROM blocker_rules WHERE deleted_at IS NULL');
-  const facts = useRows('SELECT * FROM external_facts WHERE deleted_at IS NULL');
-  const settings = useRows('SELECT * FROM user_settings LIMIT 1');
+// ── Loading-aware, stale-while-revalidate read layer (1.4 §7.15, Fix C; M12) ──
+//
+// v1.0's `useRows = useQuery(sql).data ?? []` discarded the loading signal, so a
+// fresh login (empty replica, sync in flight) and every screen remount resolved
+// empty-before-data and flashed the empty branch. M12 fixes both:
+//
+//   • ROWS_CACHE — the last-known MERGED rows per (sql+params), module-scoped so
+//     it SURVIVES a screen unmount/remount. On a warm revisit the read returns the
+//     prior rows synchronously (no cold empty frame); a full reload clears it and
+//     the read re-hydrates from local SQLite.
+//   • PRODUCED — the set of read-keys that have yielded ≥1 replica result this
+//     session. A reactive external store (bump `producedVersion` + notify) so the
+//     `isHydrated` companions re-render exactly when their table first produces —
+//     without opening a second subscription per table.
+//
+// `isHydrated` (skeleton gating) is grounded at the SESSION level in the provider
+// (hasSynced ∨ a base row already exists, §7.14) and combined here with per-read
+// "produced" so a screen-local table shows a skeleton until its first result, the
+// empty branch only once it is confirmed empty, and cached rows on remount.
 
-  return useMemo(
-    () =>
-      buildFactContext({
-        nodes: nodes.map(toNode),
-        edges: edges.map(toEdge),
-        time_entries: entries.map(toTimeEntry),
-        schedule_blocks: blocks.map(toScheduleBlock),
-        sprints: sprints.map(toSprint),
-        sprint_memberships: memberships.map(toMembership),
-        blocker_rules: blockers.map(toBlockerRule),
-        external_facts: facts.map(toExternalFact),
-        user_settings: settings[0] ? toUserSettings(settings[0]) : null,
-      }),
-    [nodes, edges, entries, blocks, sprints, memberships, blockers, facts, settings],
+const ROWS_CACHE = new Map<string, Row[]>();
+const PRODUCED = new Set<string>();
+const producedListeners = new Set<() => void>();
+let producedVersion = 0;
+
+/** Record that `key` has produced a result and wake the hydration subscribers. */
+function markProduced(key: string): void {
+  if (PRODUCED.has(key)) return;
+  PRODUCED.add(key);
+  producedVersion += 1;
+  for (const l of producedListeners) l();
+}
+function subscribeProduced(cb: () => void): () => void {
+  producedListeners.add(cb);
+  return () => {
+    producedListeners.delete(cb);
+  };
+}
+const getProducedVersion = (): number => producedVersion;
+/** Re-render when ANY read first produces (so `isHydrated` flips reactively). */
+function useProducedVersion(): void {
+  useSyncExternalStore(subscribeProduced, getProducedVersion, getProducedVersion);
+}
+
+const keyOf = (sql: string, params: readonly unknown[]): string =>
+  params.length ? `${sql} :: ${JSON.stringify(params)}` : sql;
+
+/**
+ * Test-only: reset the module SWR cache + hydration registry between renders in a
+ * fresh test. No-op contract for production (never called by app code).
+ */
+export function __resetReadCacheForTests(): void {
+  ROWS_CACHE.clear();
+  PRODUCED.clear();
+  producedVersion += 1;
+  for (const l of producedListeners) l();
+}
+
+/**
+ * Clear the module-scoped SWR read cache + hydration registry on sign-out /
+ * account switch (S9-F1/S8-F2). These caches are keyed only by sql+params, so
+ * without this a warm read on a shared device could momentarily serve the
+ * previous account's rows before the fresh replica loads. Call alongside the
+ * PowerSync `disconnectAndClear()` in the app's sign-out path.
+ */
+export function clearReadCaches(): void {
+  ROWS_CACHE.clear();
+  PRODUCED.clear();
+  producedVersion += 1;
+  for (const l of producedListeners) l();
+}
+
+export interface RowsRead {
+  /** The merged (replica + overlay) rows, or the last-known cached rows while (re)loading. */
+  data: Row[];
+  /** No result this mount AND nothing cached — the true cold-load window. */
+  isLoading: boolean;
+  /** A refetch is in flight (data may be stale-but-shown). */
+  isFetching: boolean;
+}
+
+/**
+ * The merged read (1.3 §7.2) for SCREEN-LOCAL tables, made loading-aware and
+ * remount-surviving (§7.15). The replica query is patched by the pending overlay
+ * for its table; optimistic writes (`overlay_effects`) show instantly and a
+ * rollback (overlay dropped) reverts. While the replica is first loading, the
+ * last-known merged rows from `ROWS_CACHE` are returned so a remount does not
+ * flash empty.
+ *
+ * M11 (Fix A): the 9 provider-shared tables never come through here — they are
+ * subscribed once in `PrismsDataProvider` and read warm. This primitive serves
+ * only screen-local tables (decision_*, diagram_*, automation_rules,
+ * habits/habit_completions, tags*, computed_aggregates, sync_review_items).
+ */
+function useRowsRead(sql: string, params: readonly unknown[] = EMPTY_ROWS as readonly unknown[]): RowsRead {
+  const key = keyOf(sql, params);
+  const table = tableFromSql(sql);
+  const replicaQ = useQuery<Row>(sql, params as unknown[]);
+  const overlayQ = useQuery<Row>(
+    'SELECT command_id, hlc, table_name, row_id, op, fields, seq FROM overlay_effects WHERE table_name = ?',
+    [table ?? ''],
   );
+  const replica = replicaQ.data; // undefined while first-loading (distinct from an empty result)
+  const effectRows = overlayQ.data ?? (EMPTY_ROWS as Row[]);
+  const produced = replica !== undefined;
+
+  const data = useMemo(() => {
+    if (!produced || replica === undefined) return ROWS_CACHE.get(key) ?? (EMPTY_ROWS as Row[]);
+    const merged =
+      effectRows.length === 0 ? replica : (mergeTable(replica, effectRows.map(toOverlayEffect)) as Row[]);
+    ROWS_CACHE.set(key, merged);
+    return merged;
+  }, [produced, replica, effectRows, key]);
+
+  // Flip the reactive hydration signal AFTER commit (never setState-during-render).
+  useEffect(() => {
+    if (produced) markProduced(key);
+  }, [produced, key]);
+
+  return {
+    data,
+    isLoading: !produced && !ROWS_CACHE.has(key),
+    isFetching: replicaQ.isFetching || overlayQ.isFetching,
+  };
+}
+
+/** Data-only screen-local read (existing call sites), now remount-surviving. */
+const useRows = (sql: string, params?: readonly unknown[]): Row[] => useRowsRead(sql, params).data;
+
+/**
+ * Session-level hydration (§7.14/§7.15): the provider has produced a first base
+ * result AND either PowerSync's first sync completed OR a base row already exists
+ * locally. Screens gate provider-backed empty branches on this — empty renders
+ * only when `isHydrated && length === 0`, a skeleton otherwise.
+ */
+export function useIsHydrated(): boolean {
+  return usePrismsData().isHydrated;
+}
+
+/**
+ * Screen-local hydration: session-hydrated AND the given screen-local read has
+ * produced ≥1 result this session. A table that has never loaded (first visit,
+ * still loading) is NOT hydrated → skeleton; once it produces (even empty) the
+ * screen may show its confirmed-empty branch. Survives remount (PRODUCED is
+ * module-scoped), so a tab-away-and-back is instantly hydrated.
+ */
+function useScreenLocalHydrated(sql: string, params?: readonly unknown[]): boolean {
+  const session = usePrismsData().isHydrated;
+  useProducedVersion();
+  return session && PRODUCED.has(keyOf(sql, params ?? (EMPTY_ROWS as readonly unknown[])));
+}
+
+// Primary screen-local reads whose hydration a screen gates its empty branch on.
+// Extracted so the data hook and its `…Hydrated` companion key on the SAME sql
+// string (a drift between the two would leave the screen stuck on a skeleton).
+const Q_HABITS = 'SELECT * FROM habits WHERE deleted_at IS NULL';
+const Q_DECISION_BOARDS = 'SELECT * FROM decision_boards WHERE deleted_at IS NULL';
+const Q_RULES = 'SELECT * FROM automation_rules WHERE deleted_at IS NULL';
+const Q_REVIEW = 'SELECT * FROM sync_review_items';
+
+/** Habits list hydration (§7.15) — gate the "No habits yet" empty branch + vision `<select>`. */
+export const useHabitsHydrated = (): boolean => useScreenLocalHydrated(Q_HABITS);
+/** Decision-board list hydration — gate the "No boards yet" empty branch. */
+export const useDecisionsHydrated = (): boolean => useScreenLocalHydrated(Q_DECISION_BOARDS);
+/** Automation-rule list hydration — gate the "No automation rules yet" empty branch. */
+export const useRulesHydrated = (): boolean => useScreenLocalHydrated(Q_RULES);
+/** Review-inbox hydration — gate the "Nothing to review" empty branch. */
+export const useReviewInboxHydrated = (): boolean => useScreenLocalHydrated(Q_REVIEW);
+
+/** Live tree of non-deleted nodes — served warm from the session read layer (§7.14). */
+export function useNodeTree(): TreeIndex {
+  return usePrismsData().tree;
+}
+
+/**
+ * The full FactContext used by status + blocker evaluation. Served warm from the
+ * `PrismsDataProvider` (§7.14, Fix A): built once per session over the 9 shared
+ * subscriptions, not re-derived on navigation or the 1s `now` tick.
+ */
+export function useFactContext(): FactContext {
+  return usePrismsData().factContext;
 }
 
 export interface WorklistItem {
@@ -136,6 +293,12 @@ export interface WorklistItem {
   scheduled: boolean;
   /** The committed block to auto-associate a completion with (null = none/unscheduled). */
   committedBlockId: string | null;
+  /**
+   * Labels of in-scope blocker rules that evaluated `unknown` (e.g. weather
+   * unverified, §10.3) — advisory only: the task is still actionable, the UI
+   * just surfaces a "weather unverified" badge. Never gates a command.
+   */
+  unverified: string[];
 }
 
 /** The committed block to default a completion to: covering now, else most recent, else earliest. */
@@ -157,9 +320,9 @@ function pickCommittedBlock(blocks: readonly ScheduleBlock[], now: Instant): str
  * progress (§7.2) and time-left-in-task indicator.
  */
 export function useWorklist(now: Instant): WorklistItem[] {
-  const ctx = useFactContext();
-  const entryRows = useRows('SELECT * FROM time_entries WHERE deleted_at IS NULL');
-  const blockRows = useRows("SELECT * FROM schedule_blocks WHERE status = 'committed' AND deleted_at IS NULL");
+  const { factContext: ctx, rows } = usePrismsData();
+  const entryRows = rows.time_entries;
+  const blockRows = useMemo(() => rows.schedule_blocks.filter((r) => r['status'] === 'committed'), [rows.schedule_blocks]);
   return useMemo(() => {
     const entries = entryRows.map(toTimeEntry);
     const blocksByTask = new Map<string, ScheduleBlock[]>();
@@ -175,6 +338,9 @@ export function useWorklist(now: Instant): WorklistItem[] {
       if (status === 'done' || status === 'blocked') continue;
       const open = ctx.openEntryFor(node.id);
       const taskBlocks = blocksByTask.get(node.id) ?? [];
+      // advisory: in-scope blocker rules that returned `unknown` (e.g. weather
+      // unverified, §10.3). The task is not blocked — this only drives a badge.
+      const unverified = evaluateBlockerRules(node, ctx, now).unverified.map((r) => r.label);
       items.push({
         task: node,
         status,
@@ -183,6 +349,7 @@ export function useWorklist(now: Instant): WorklistItem[] {
         minutesLeftInTask: minutesLeftInTask(node, entries),
         scheduled: taskBlocks.length > 0,
         committedBlockId: pickCommittedBlock(taskBlocks, now),
+        unverified,
       });
     }
     const rank: Record<TaskStatus, number> = { ongoing: 0, scheduled: 1, prioritized: 2, available: 3, blocked: 4, done: 5 };
@@ -199,8 +366,8 @@ export interface TimeBlockOption {
 
 /** Committed blocks bucketed to the current day — options for the "which block?" picker (Phase 3). */
 export function useTimeBlocksForDay(now: Instant): TimeBlockOption[] {
-  const ctx = useFactContext();
-  const blockRows = useRows("SELECT * FROM schedule_blocks WHERE status = 'committed' AND deleted_at IS NULL");
+  const { factContext: ctx, rows } = usePrismsData();
+  const blockRows = useMemo(() => rows.schedule_blocks.filter((r) => r['status'] === 'committed'), [rows.schedule_blocks]);
   return useMemo(() => {
     const today = bucketDate(now, ctx.dayResetHour, ctx.timezone);
     return blockRows
@@ -222,6 +389,35 @@ export function useGroupedWorklist(now: Instant): WorklistGroup[] {
   return useMemo(() => groupWorklistBySchedule(items), [items]);
 }
 
+export interface BlockedTask {
+  task: Node;
+  /** Labels of blocker rules that evaluated `true` — why it is blocked. */
+  blockedBy: string[];
+  /** Labels of in-scope rules that evaluated `unknown` (weather unverified, §10.3). */
+  unverified: string[];
+}
+
+/**
+ * Blocked tasks (§8, §10.3) — kept OUT of `useWorklist` (which only lists
+ * actionable items) so the UI can surface them separately with a `force`
+ * clock-in affordance. Forcing a clock-in opens a time entry, which makes the
+ * task `ongoing` (ongoing wins precedence over blocked), so it then leaves this
+ * list and appears as the running timer.
+ */
+export function useBlockedTasks(now: Instant): BlockedTask[] {
+  const ctx = useFactContext();
+  return useMemo(() => {
+    const out: BlockedTask[] = [];
+    for (const node of ctx.tree.byId.values()) {
+      if (node.node_type !== 'task' || node.completed_at !== null) continue;
+      if (taskStatus(node, ctx, now) !== 'blocked') continue;
+      const ev = evaluateBlockerRules(node, ctx, now);
+      out.push({ task: node, blockedBy: ev.blockedBy.map((r) => r.label), unverified: ev.unverified.map((r) => r.label) });
+    }
+    return out.sort((a, b) => (a.task.title < b.task.title ? -1 : a.task.title > b.task.title ? 1 : a.task.id < b.task.id ? -1 : 1));
+  }, [ctx, now]);
+}
+
 export interface HabitTasksView {
   habit: Habit;
   /** The habit's actionable (not done/blocked) recurring task instances. */
@@ -231,7 +427,7 @@ export interface HabitTasksView {
 /** Each habit's recurring task instances (nodes.habit_id) as actionable items (Phase 4a). */
 export function useHabitTasks(now: Instant): HabitTasksView[] {
   const items = useWorklist(now);
-  const habitRows = useRows('SELECT * FROM habits WHERE deleted_at IS NULL');
+  const habitRows = useRows(Q_HABITS);
   return useMemo(() => {
     const byHabit = new Map<string, WorklistItem[]>();
     for (const item of items) {
@@ -262,10 +458,10 @@ export interface RunningTimer {
  * the same winner the server's merge keeps — so the UI never shows two.
  */
 export function useRunningTimer(now: Instant): RunningTimer | null {
-  const rows = useRows('SELECT * FROM time_entries WHERE ended_at IS NULL AND deleted_at IS NULL');
-  const tree = useNodeTree();
+  const { rows, tree } = usePrismsData();
+  const openRows = useMemo(() => rows.time_entries.filter((r) => r['ended_at'] == null), [rows.time_entries]);
   return useMemo(() => {
-    const open = rows.map(toTimeEntry);
+    const open = openRows.map(toTimeEntry);
     if (open.length === 0) return null;
     const winner = open.reduce((a, b) =>
       b.started_at > a.started_at || (b.started_at === a.started_at && b.id > a.id) ? b : a,
@@ -275,15 +471,22 @@ export function useRunningTimer(now: Instant): RunningTimer | null {
       task: tree.byId.get(winner.task_id),
       elapsedMs: Math.max(0, now - isoToEpochMillis(winner.started_at)),
     };
-  }, [rows, tree, now]);
+  }, [openRows, tree, now]);
 }
 
 /** Activity inbox (§1.2): parentless `activity` items awaiting promotion. */
 export function useActivityInbox(): Node[] {
-  const rows = useRows("SELECT * FROM nodes WHERE node_type = 'activity' AND deleted_at IS NULL");
+  const { rows } = usePrismsData();
   return useMemo(
-    () => rows.map(toNode).sort((a, b) => (a.sort_order < b.sort_order ? -1 : a.sort_order > b.sort_order ? 1 : a.id < b.id ? -1 : 1)),
-    [rows],
+    () =>
+      rows.nodes
+        .map(toNode)
+        // Filter the shared (unfiltered) node set down to live activities: an
+        // optimistic activity.promote flips node_type 'activity'→'task' in the
+        // overlay, so re-apply the predicate on the MERGED row here.
+        .filter((n) => n.node_type === 'activity' && n.deleted_at === null)
+        .sort((a, b) => (a.sort_order < b.sort_order ? -1 : a.sort_order > b.sort_order ? 1 : a.id < b.id ? -1 : 1)),
+    [rows.nodes],
   );
 }
 
@@ -313,8 +516,8 @@ export function useDayTimeLeft(now: Instant): number {
 
 /** Minutes until the next committed block starts (§7.2 time-left trio); null when none ahead. */
 export function useNextBlockMinutes(now: Instant, taskId?: string): number | null {
-  const rows = useRows('SELECT * FROM schedule_blocks WHERE deleted_at IS NULL');
-  return useMemo(() => minutesUntilNextBlock(rows.map(toScheduleBlock), now, taskId), [rows, now, taskId]);
+  const { rows } = usePrismsData();
+  return useMemo(() => minutesUntilNextBlock(rows.schedule_blocks.map(toScheduleBlock), now, taskId), [rows.schedule_blocks, now, taskId]);
 }
 
 export interface AgendaBlock {
@@ -329,6 +532,10 @@ export interface AgendaBlock {
   /** §12.2: ancestry reaches no vision/habit → render dark grey. */
   justified: boolean;
   suggestionReason: string | null;
+  /** §7.5: a newer batch superseded this suggestion — stale, reflected in the UI. */
+  superseded: boolean;
+  /** §7.8 provenance for the "why is this here?" affordance (scheduler/user/…). */
+  provenance: ProvenanceFields;
 }
 
 export interface AgendaEntry {
@@ -362,12 +569,12 @@ export interface Agenda {
  * (unjustified) rule, and the time-entry history layer all work offline.
  */
 export function useAgenda(now: Instant, horizonDays = 7): Agenda {
-  const ctx = useFactContext();
-  const edgeRows = useRows('SELECT * FROM edges WHERE deleted_at IS NULL');
-  const blockRows = useRows('SELECT * FROM schedule_blocks WHERE deleted_at IS NULL');
-  const entryRows = useRows('SELECT * FROM time_entries WHERE deleted_at IS NULL');
-  const sprintRows = useRows('SELECT * FROM sprints WHERE deleted_at IS NULL');
-  const membershipRows = useRows('SELECT * FROM sprint_memberships WHERE deleted_at IS NULL');
+  const { factContext: ctx, rows } = usePrismsData();
+  const edgeRows = rows.edges;
+  const blockRows = rows.schedule_blocks;
+  const entryRows = rows.time_entries;
+  const sprintRows = rows.sprints;
+  const membershipRows = rows.sprint_memberships;
 
   return useMemo(() => {
     const tree = ctx.tree;
@@ -432,6 +639,14 @@ export function useAgenda(now: Instant, horizonDays = 7): Agenda {
       anchored: b.anchor_type !== 'none',
       justified: isJustified(tree, b.task_id),
       suggestionReason: b.suggestion_reason,
+      superseded: b.superseded_at !== null,
+      provenance: {
+        source_kind: b.source_kind,
+        source_id: b.source_id,
+        source_detail: b.source_detail,
+        created_by_command_id: b.created_by_command_id,
+        last_modified_by_command_id: b.last_modified_by_command_id,
+      },
     }));
 
     const entries: AgendaEntry[] = entryRows
@@ -480,11 +695,11 @@ export interface HabitView {
  * server aggregate's `computed_at` is surfaced for the freshness label.
  */
 export function useHabits(now: Instant): HabitView[] {
-  const ctx = useFactContext();
-  const habitRows = useRows('SELECT * FROM habits WHERE deleted_at IS NULL');
+  const { factContext: ctx, rows } = usePrismsData();
+  const habitRows = useRows(Q_HABITS);
   const completionRows = useRows('SELECT * FROM habit_completions WHERE deleted_at IS NULL');
-  const entryRows = useRows('SELECT * FROM time_entries WHERE deleted_at IS NULL');
-  const blockRows = useRows('SELECT * FROM schedule_blocks WHERE deleted_at IS NULL');
+  const entryRows = rows.time_entries;
+  const blockRows = rows.schedule_blocks;
   const tagRows = useRows('SELECT * FROM tags WHERE deleted_at IS NULL');
   const placementRows = useRows('SELECT * FROM tag_placements WHERE deleted_at IS NULL');
   const answerRows = useRows('SELECT * FROM tag_answers WHERE deleted_at IS NULL');
@@ -518,12 +733,9 @@ export function useHabits(now: Instant): HabitView[] {
       );
       const practice = canonicalPractice(habit, nodes, entries);
 
-      let todayMinutes = 0;
-      for (const e of entries) {
-        if (!taskIds.has(e.task_id)) continue;
-        if (bucketDate(e.started_at, settings.day_reset_hour, settings.timezone) !== today) continue;
-        todayMinutes += e.ended_at === null ? Math.max(0, (now - isoToEpochMillis(e.started_at)) / 60_000) : rawMinutes(e);
-      }
+      // Closed entries union PER TASK (§9.2 — two overlapping offline sessions
+      // count once, audit S3-F2); the running entry adds live elapsed on top.
+      const todayMinutes = habitTodayMinutes(entries, taskIds, today, settings.day_reset_hour, settings.timezone, now);
 
       // live tag-confirmation tally across this habit's habit-scoped placements
       const habitTagIds = new Set(tags.filter((t) => t.deleted_at === null && t.habit_id === habit.id).map((t) => t.id));
@@ -607,7 +819,7 @@ export interface DecisionBoardView {
 /** Decision boards with their criteria, score grid, and live ranking (§6.0). */
 export function useDecisionBoards(): DecisionBoardView[] {
   const tree = useNodeTree();
-  const boardRows = useRows('SELECT * FROM decision_boards WHERE deleted_at IS NULL');
+  const boardRows = useRows(Q_DECISION_BOARDS);
   const criterionRows = useRows('SELECT * FROM decision_criteria WHERE deleted_at IS NULL');
   const scoreRows = useRows('SELECT * FROM decision_scores WHERE deleted_at IS NULL');
 
@@ -659,11 +871,11 @@ export interface DashboardData {
  * the dashboard renders fully offline.
  */
 export function useDashboard(now: Instant, days = 14): DashboardData {
-  const ctx = useFactContext();
+  const { factContext: ctx, rows } = usePrismsData();
   // include soft-deleted tasks so the burndown scope-out (a deleted task
-  // leaving the series) is reflected.
-  const taskRows = useRows("SELECT * FROM nodes WHERE node_type = 'task'");
-  const blockRows = useRows('SELECT * FROM schedule_blocks WHERE deleted_at IS NULL');
+  // leaving the series) is reflected — the shared `nodes` set is unfiltered.
+  const taskRows = useMemo(() => rows.nodes.filter((r) => r['node_type'] === 'task'), [rows.nodes]);
+  const blockRows = rows.schedule_blocks;
   const aggRows = useRows("SELECT * FROM computed_aggregates WHERE deleted_at IS NULL AND subject_kind = 'user'");
 
   return useMemo(() => {
@@ -734,8 +946,8 @@ const ROW_H = 110;
  * local rows, so it renders + validates offline.
  */
 export function useFlowchart(diagramId: string | null, mode: 'dates' | 'nodates' = 'nodates'): FlowchartView {
-  const tree = useNodeTree();
-  const edgeRows = useRows('SELECT * FROM edges WHERE deleted_at IS NULL');
+  const { tree, rows } = usePrismsData();
+  const edgeRows = rows.edges;
   const layoutRows = useRows('SELECT * FROM diagram_layouts WHERE deleted_at IS NULL');
   const groupRows = useRows('SELECT * FROM diagram_groups WHERE deleted_at IS NULL');
 
@@ -822,9 +1034,9 @@ export interface GanttView {
  * item so the screen can lay out a simple time axis.
  */
 export function useGantt(projectId: string | null, now: Instant): GanttView {
-  const ctx = useFactContext();
-  const edgeRows = useRows('SELECT * FROM edges WHERE deleted_at IS NULL');
-  const blockRows = useRows('SELECT * FROM schedule_blocks WHERE deleted_at IS NULL');
+  const { factContext: ctx, rows } = usePrismsData();
+  const edgeRows = rows.edges;
+  const blockRows = rows.schedule_blocks;
 
   return useMemo(() => {
     if (projectId === null) return { bars: [], edges: [], fromDate: null, days: 0, criticalPathIds: [] };
@@ -890,14 +1102,14 @@ export function useGantt(projectId: string | null, now: Instant): GanttView {
 
 /** Automation rules (§9) for the rule editor. */
 export function useRules(): AutomationRule[] {
-  const rows = useRows('SELECT * FROM automation_rules WHERE deleted_at IS NULL');
+  const rows = useRows(Q_RULES);
   return useMemo(() => rows.map(toAutomationRule).sort((a, b) => (a.created_at < b.created_at ? -1 : 1)), [rows]);
 }
 
-/** Blocker rules (§9) for the blocker editor. */
+/** Blocker rules (§9) for the blocker editor — served warm (§7.14). */
 export function useBlockers(): BlockerRule[] {
-  const rows = useRows('SELECT * FROM blocker_rules WHERE deleted_at IS NULL');
-  return useMemo(() => rows.map(toBlockerRule).sort((a, b) => (a.created_at < b.created_at ? -1 : 1)), [rows]);
+  const { rows } = usePrismsData();
+  return useMemo(() => rows.blocker_rules.map(toBlockerRule).sort((a, b) => (a.created_at < b.created_at ? -1 : 1)), [rows.blocker_rules]);
 }
 
 export interface AggregateRow {
@@ -918,16 +1130,16 @@ export interface UserSettingsView {
 
 /** User settings row, with architecture defaults when a fresh account has not synced one yet. */
 export function useUserSettings(): UserSettingsView {
-  const rows = useRows('SELECT * FROM user_settings LIMIT 1');
+  const { rows } = usePrismsData();
   return useMemo(() => {
-    const row = rows[0] ? toUserSettings(rows[0]) : null;
+    const row = rows.user_settings[0] ? toUserSettings(rows.user_settings[0]) : null;
     return {
       hasRow: row !== null,
       dayResetHour: row?.day_reset_hour ?? 4,
       timezone: row?.timezone ?? 'America/New_York',
       weatherLocation: row?.weather_location ?? null,
     };
-  }, [rows]);
+  }, [rows.user_settings]);
 }
 
 /** Server-computed aggregates (burndown, streaks, …) with their freshness. */
@@ -950,7 +1162,51 @@ export function useAggregates(): AggregateRow[] {
 /** Optimistic command writers bound to the live PowerSync database. */
 export function useCommands(ctx: CommandContext) {
   const db = usePowerSync();
-  return useMemo(() => createCommands(db, ctx), [db, ctx]);
+  // The two-layer overlay store over PowerSync's SQLite (execute/getAll/writeTransaction).
+  return useMemo(() => createCommands(createSqlOverlayStore(db as unknown as SqlExecutor), ctx), [db, ctx]);
+}
+
+export interface ReviewItemView {
+  id: string;
+  itemType: string;
+  severity: string;
+  title: string;
+  detail: string;
+  status: string;
+  commandId: string | null;
+  createdAt: string;
+}
+
+/**
+ * The conflict/rejection inbox (§7.13): open, server-synced `sync_review_items`,
+ * newest first. The server (M5) and jobs (M6) create them — command rejections,
+ * dependency rejections, HLC conflicts, stale suggestions, automation drift/
+ * backstop, schema blocks, import/sync warnings — and they stream down here.
+ *
+ * Read BROADLY (no status filter) and re-apply `status='open'` on the MERGED row:
+ * an optimistic review.resolve/dismiss (M10) flips status in the overlay, but
+ * useRows evaluates the SQL predicate only against the replica — so a just-closed
+ * item (and any server-side soft-deleted one) must be post-filtered out here.
+ */
+export function useReviewInbox(): ReviewItemView[] {
+  const rows = useRows(Q_REVIEW);
+  return useMemo(
+    () =>
+      rows
+        .filter((r) => String(r['status'] ?? 'open') === 'open' && r['deleted_at'] == null)
+        .map((r) => ({
+          id: String(r['id']),
+          itemType: String(r['item_type']),
+          severity: String(r['severity'] ?? 'warning'),
+          title: String(r['title'] ?? ''),
+          detail: typeof r['detail'] === 'string' ? r['detail'] : JSON.stringify(r['detail'] ?? ''),
+          status: String(r['status'] ?? 'open'),
+          commandId: r['command_id'] == null ? null : String(r['command_id']),
+          createdAt: String(r['created_at'] ?? ''),
+        }))
+        .sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : a.id < b.id ? 1 : -1)),
+    [rows],
+  );
 }
 
 // --- tags (confirmable event tags) ----------------------------------------

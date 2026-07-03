@@ -14,8 +14,26 @@ import type { JobClock } from './clock';
 
 export const RETENTION_DAYS = 90;
 
-/** Soft-delete tables in FK-safe (referencing-first) order; nodes handled separately. */
+/**
+ * R18/§7.2d: server command-dedup records (command_log) are retained at least
+ * this long. A device offline up to the horizon must never re-apply an
+ * already-applied command, so the purge deletes dedup records only OLDER than
+ * this and preserves anything younger.
+ */
+export const MAX_OFFLINE_HORIZON_DAYS = 90;
+
+/**
+ * Soft-delete tables in FK-safe (referencing-first) order; nodes + tags handled
+ * separately. `sync_review_items` has no dependents (its command_id is a plain
+ * uuid). tag_answers → tag_placements must precede schedule_blocks + tags, since
+ * tag_placements references both (S5-F1: without them, soft-deleted review items
+ * and tag rows were never reclaimed, and a soft-deleted block with a lingering
+ * tag_placement could never purge).
+ */
 const PURGE_ORDER = [
+  'sync_review_items',
+  'tag_answers',
+  'tag_placements',
   'habit_completions',
   'decision_scores',
   'decision_criteria',
@@ -53,6 +71,16 @@ export async function runRetentionPurge(
     deleted[table] = res.count ?? 0;
   }
 
+  // tags after their placements: a soft-deleted tag whose placements are not yet
+  // all reclaimed waits (FK NO ACTION would otherwise throw). Global (habit_id
+  // NULL) and habit-scoped tags alike.
+  const tagsRes = await db.execute(sql`
+    DELETE FROM tags t
+    WHERE t.deleted_at IS NOT NULL AND t.deleted_at < ${cutoff}
+      AND NOT EXISTS (SELECT 1 FROM tag_placements p WHERE p.tag_id = t.id)
+  `);
+  deleted['tags'] = tagsRes.count ?? 0;
+
   // nodes last, only those nothing references any more (live or tombstoned).
   const res = await db.execute(sql`
     DELETE FROM nodes n
@@ -67,6 +95,13 @@ export async function runRetentionPurge(
       AND NOT EXISTS (SELECT 1 FROM diagram_layouts l WHERE l.node_id = n.id)
   `);
   deleted['nodes'] = res.count ?? 0;
+
+  // R18/§7.2d: purge command-dedup records only PAST the offline horizon; records
+  // younger than MAX_OFFLINE_HORIZON survive so a long-dormant device reconnecting
+  // never re-applies an already-applied command.
+  const horizonCutoff = new Date(clock.now() - MAX_OFFLINE_HORIZON_DAYS * 86_400_000).toISOString();
+  const dedup = await db.execute(sql`DELETE FROM command_log WHERE applied_at < ${horizonCutoff}`);
+  deleted['command_log'] = dedup.count ?? 0;
 
   return { cutoff, deleted };
 }

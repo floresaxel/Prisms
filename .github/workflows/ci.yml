@@ -43,8 +43,18 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Boot compose postgres + powersync (fresh volumes)
-        run: docker compose up -d --wait postgres powersync
+      - name: Boot postgres (fresh volumes)
+        run: docker compose up -d --wait postgres
+
+      # The initdb script creates the PowerSync publication EMPTY; migration
+      # 0009 scopes it to the synced tables (S6-F4) — and PowerSync snapshots
+      # the schema at boot, so migrate the prisms db before it starts (same
+      # ordering the e2e job uses).
+      - name: Apply migrations (publication + tables exist before PowerSync boots)
+        run: pnpm --filter @prisms/db db:migrate
+
+      - name: Boot PowerSync (after the tables exist)
+        run: docker compose up -d --wait powersync
 
       - name: DB tests (migrations, seed, invariant backstops)
         run: pnpm --filter @prisms/db test
@@ -62,8 +72,14 @@ jobs:
         run: docker compose down -v
 
   e2e:
-    name: Web Playwright e2e (offline + convergence + graph/rules) vs live stack
+    # Runs every apps/web/e2e/*.spec.ts: the v1.0 behavioural suite (dod, s16–s20)
+    # PLUS the v1.4 surface — m9 (suggestions/provenance/force clock-in), m10
+    # (review inbox + freshness), m13 (import/export round-trip), and v14 (§7.15
+    # read-path: no empty-then-fill flash + warm synchronous tab revisit).
+    name: Web Playwright e2e (offline + convergence + graph/rules + read-path + portability) vs live stack
     runs-on: ubuntu-latest
+    # The web client's default powersyncUrl (:8080) matches compose's default
+    # container mapping — no port remap needed (audit S1-F7/S9-F4).
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -111,6 +127,11 @@ jobs:
 
       - name: Run Playwright e2e
         run: pnpm --filter @prisms/web e2e
+        env:
+          # m9/m10/s17 seed server-generated rows (suggestions, review items)
+          # straight into postgres; their fallback is the local dev port 5434,
+          # compose here maps 5432.
+          PRISMS_DB_TEST_URL: postgresql://prisms:prisms_dev_password@localhost:5432/prisms
 
       - name: Upload traces on failure
         if: failure()

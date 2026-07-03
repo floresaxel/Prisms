@@ -6,7 +6,7 @@
  */
 import { useState } from 'react';
 
-import { useCommands, useDecisionBoards, type CommandContext, type DecisionBoardView } from '@prisms/ui';
+import { Skeleton, useCommands, useDecisionBoards, useDecisionsHydrated, type CommandContext, type DecisionBoardView } from '@prisms/ui';
 
 function BoardGrid({ view, ctx }: { view: DecisionBoardView; ctx: CommandContext }) {
   const commands = useCommands(ctx);
@@ -98,6 +98,7 @@ function BoardGrid({ view, ctx }: { view: DecisionBoardView; ctx: CommandContext
 export function DecisionBoard({ ctx }: { ctx: CommandContext }) {
   const boards = useDecisionBoards();
   const commands = useCommands(ctx);
+  const hydrated = useDecisionsHydrated();
 
   return (
     <section>
@@ -105,7 +106,12 @@ export function DecisionBoard({ ctx }: { ctx: CommandContext }) {
       <button className="px-btn" data-testid="new-board" onClick={() => void commands.createBoard('Priorities')} style={{ marginBottom: 16 }}>
         New board
       </button>
-      {boards.length === 0 && <p className="px-muted">No boards yet — create one to weigh projects against criteria.</p>}
+      {boards.length === 0 &&
+        (hydrated ? (
+          <p className="px-muted">No boards yet — create one to weigh projects against criteria.</p>
+        ) : (
+          <Skeleton testId="decisions-skeleton" />
+        ))}
       {boards.map((view) => <BoardGrid key={view.board.id} view={view} ctx={ctx} />)}
     </section>
   );

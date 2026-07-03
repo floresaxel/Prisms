@@ -22,6 +22,14 @@ const nodes = new Table({
   completed_in_block_id: column.text,
   habit_id: column.text,
   attributes: column.text,
+  // §7.8 provenance (server-assigned, streamed via SELECT *) — surfaced so the
+  // UI can answer "why does this exist?" for tasks (M9). Absent on legacy rows
+  // → the mapper defaults source_kind='legacy' ("origin unknown").
+  created_by_command_id: column.text,
+  last_modified_by_command_id: column.text,
+  source_kind: column.text,
+  source_id: column.text,
+  source_detail: column.text,
   created_at: column.text,
   updated_at: column.text,
   deleted_at: column.text,
@@ -49,6 +57,17 @@ const schedule_blocks = new Table({
   suggestion_reason: column.text,
   computed_at: column.text,
   external_event_id: column.text,
+  // §7.5 suggestion lifecycle — so the agenda reflects supersession and the
+  // optimistic accept can mirror the server transaction (M9).
+  suggestion_batch_id: column.text,
+  replaces_block_id: column.text,
+  superseded_at: column.text,
+  // §7.8 provenance — "why is this suggestion here?" (source_kind='scheduler').
+  created_by_command_id: column.text,
+  last_modified_by_command_id: column.text,
+  source_kind: column.text,
+  source_id: column.text,
+  source_detail: column.text,
   created_at: column.text,
   updated_at: column.text,
   deleted_at: column.text,
@@ -244,7 +263,30 @@ const user_settings = new Table({
   updated_at: column.text,
 });
 
-export const appSchema = new Schema({
+/**
+ * The durable conflict/rejection inbox (§7.13). SERVER-OWNED: the dispatcher (M5)
+ * and jobs (M6) create items; they stream down here (M4) for the review inbox.
+ * The client never CREATES these (a rejection just drops the overlay; the item
+ * arrives via sync). It only CLOSES them — via the `review.resolve`/`review.dismiss`
+ * commands (M10), i.e. an overlay effect + a named envelope, never a row patch —
+ * so it stays out of LOCAL_ONLY_TABLE_NAMES (it is synced, not local-only) and the
+ * only-trusted-write-path invariant holds.
+ */
+const sync_review_items = new Table({
+  user_id: column.text,
+  command_id: column.text,
+  item_type: column.text,
+  severity: column.text,
+  title: column.text,
+  detail: column.text,
+  status: column.text,
+  created_at: column.text,
+  updated_at: column.text,
+  deleted_at: column.text,
+});
+
+/** The synced tables (§7.3): the canonical replica streamed down from Postgres. */
+const syncedTables = {
   nodes,
   edges,
   schedule_blocks,
@@ -266,4 +308,74 @@ export const appSchema = new Schema({
   diagram_layouts,
   diagram_groups,
   user_settings,
+  sync_review_items,
+};
+
+export { sync_review_items };
+
+/**
+ * The synced-table contract: exactly the rows the sync rules stream down. The
+ * two-layer overlay tables (below) are deliberately NOT here — they are
+ * client-local and must never be uploaded as row patches (1.3 §7.2, R15).
+ */
+export const appSchema = new Schema(syncedTables);
+
+// --- Two-layer client store (1.3 §7.2a, R15) — LOCAL-ONLY -------------------
+// `client_commands` is the pending-command upload queue; `overlay_effects` is
+// each command's optimistic row effects that the read-merge applies over the
+// replica. Both are `localOnly` so PowerSync never enqueues them in the CRUD
+// upload batch — the only trusted upload is the named command envelope read from
+// `client_commands` (see upload-commands.ts). `sync_review_items` is NOT here: it
+// is server-owned and SYNCED down (above). M5 creates the items; the client reads
+// them and closes them through the `review.resolve`/`review.dismiss` commands (M10)
+// — an overlay effect + envelope, never a direct row patch.
+
+/** Pending-command queue. `id` = the client-minted UUIDv7 (V2, §7.2b). */
+export const client_commands = new Table(
+  {
+    name: column.text,
+    hlc: column.text,
+    payload: column.text, // JSON
+    status: column.text, // pending | applied | rejected
+    created_at: column.text,
+    reject_code: column.text,
+    reject_reason: column.text,
+    // §8/§7.11 command-envelope version axes + §7.2e causal deps, stamped at
+    // enqueue (captures the minting version) and sent verbatim in the envelope
+    // (R6). Local-only, so this is NOT a synced-schema change.
+    command_version: column.integer,
+    schema_version: column.integer,
+    client_version: column.text,
+    depends_on: column.text, // JSON array of prior client_commands ids (§7.2e)
+  },
+  { localOnly: true },
+);
+
+/** Per-command optimistic row effects merged over the replica on read (§7.2). */
+export const overlay_effects = new Table(
+  {
+    command_id: column.text,
+    hlc: column.text,
+    table_name: column.text,
+    row_id: column.text,
+    op: column.text, // insert | update | delete
+    fields: column.text, // JSON
+    seq: column.integer,
+    created_at: column.text,
+  },
+  { localOnly: true },
+);
+
+/** The local-only overlay table names — asserted absent from `appSchema`. */
+export const LOCAL_ONLY_TABLE_NAMES = ['client_commands', 'overlay_effects'] as const;
+
+/**
+ * The full on-device schema: the synced replica PLUS the local-only overlay
+ * tables. PowerSync is opened with this so the overlay tables exist in SQLite,
+ * while `appSchema` stays the clean synced contract.
+ */
+export const clientSchema = new Schema({
+  ...syncedTables,
+  client_commands,
+  overlay_effects,
 });

@@ -4,7 +4,7 @@
 #
 # client_auth: the API signs short-lived HS256 JWTs with this shared dev key
 # (apps/server GET /api/powersync/token, §13). Override the key everywhere via
-# POWERSYNC_JWT_SECRET when deploying.
+# PS_JWT_SECRET when deploying (see docker-compose.prod.yml + .env.example).
 # TODO(s23): production hardening — rotate to API-served JWKS (RS256).
 replication:
   connections:

@@ -5,7 +5,7 @@
  * rolls back via sync). Local-notification + push registration is best-effort.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Text, View } from 'react-native';
+import { Alert, Text, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 
@@ -13,19 +13,21 @@ import { NavigationContainer, DarkTheme } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { PowerSyncContext } from '@powersync/react';
 import type { PowerSyncDatabase } from '@powersync/react-native';
-import { type CommandContext, type CommandRejection } from '@prisms/ui';
+import { clearReadCaches, PrismsDataProvider, type CommandContext, type CommandRejection } from '@prisms/ui';
 
 import { getSession, signOut, type SessionUser } from './src/auth';
 import { getDeviceId, loadDeviceId } from './src/device';
 import { registerForPush, scheduleReminder } from './src/notifications';
-import { connectDb, getDb } from './src/powersync';
-import { theme } from './src/ui';
+import { exportAndShare } from './src/portability';
+import { clearDb, connectDb, getDb } from './src/powersync';
+import { Btn, Field, Muted, theme } from './src/ui';
 import { Agenda } from './src/screens/Agenda';
 import { Dashboard } from './src/screens/Dashboard';
 import { Graph } from './src/screens/Graph';
 import { Habits } from './src/screens/Habits';
 import { Kanban } from './src/screens/Kanban';
 import { Login } from './src/screens/Login';
+import { Review } from './src/screens/Review';
 import { Worklist } from './src/screens/Worklist';
 
 const Tab = createBottomTabNavigator();
@@ -37,48 +39,111 @@ const navTheme = {
 
 function AuthedApp({ user, onSignOut }: { user: SessionUser; onSignOut: () => void }) {
   const dbRef = useRef<PowerSyncDatabase | null>(null);
-  if (dbRef.current === null) dbRef.current = getDb();
+  if (dbRef.current === null) dbRef.current = getDb(user.id);
   const db = dbRef.current;
+  const clearedRef = useRef(false);
 
   const [rejections, setRejections] = useState<CommandRejection[]>([]);
   const ctx: CommandContext = useMemo(() => ({ userId: user.id, deviceId: getDeviceId() }), [user.id]);
 
   useEffect(() => {
-    void connectDb(db, setRejections);
+    let stopUpload: (() => void) | undefined;
+    connectDb(db, setRejections)
+      .then((stop) => {
+        stopUpload = stop;
+      })
+      .catch(() => undefined);
     void registerForPush();
-    return () => { void db.disconnect(); };
+    return () => {
+      stopUpload?.();
+      if (!clearedRef.current) void db.disconnect();
+    };
   }, [db]);
+
+  // §13.2/S9-F1: end this account's local presence on sign-out (warn on unsynced
+  // commands, then wipe the replica + queue + read caches).
+  const handleSignOut = useCallback(async () => {
+    try {
+      const pending = (await db.getAll<{ n: number }>("SELECT count(*) AS n FROM client_commands WHERE status = 'pending'"))[0]?.n ?? 0;
+      const proceed =
+        pending === 0 ||
+        (await new Promise<boolean>((resolve) => {
+          Alert.alert('Sign out', `${pending} unsynced change(s) will be lost.`, [
+            { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+            { text: 'Sign out', style: 'destructive', onPress: () => resolve(true) },
+          ]);
+        }));
+      if (!proceed) return;
+      clearedRef.current = true;
+      await clearDb();
+      clearReadCaches();
+    } catch {
+      // best-effort cleanup; still sign out below.
+    }
+    onSignOut();
+  }, [db, onSignOut]);
 
   return (
     <PowerSyncContext.Provider value={db}>
-      {rejections.length > 0 && (
-        <View style={{ backgroundColor: theme.danger, padding: 8 }}>
-          <Text style={{ color: '#fff' }} onPress={() => setRejections([])}>
-            Change rejected: {rejections.map((r) => r.reject_code).join(', ')} (reverted)
-          </Text>
-        </View>
-      )}
-      <NavigationContainer theme={navTheme}>
-        <Tab.Navigator screenOptions={{ headerStyle: { backgroundColor: theme.surface }, headerTintColor: theme.text }}>
-          <Tab.Screen name="Worklist">{() => <Worklist ctx={ctx} />}</Tab.Screen>
-          <Tab.Screen name="Agenda">{() => <Agenda ctx={ctx} />}</Tab.Screen>
-          <Tab.Screen name="Kanban">{() => <Kanban ctx={ctx} />}</Tab.Screen>
-          <Tab.Screen name="Habits">{() => <Habits ctx={ctx} />}</Tab.Screen>
-          <Tab.Screen name="Graph">{() => <Graph />}</Tab.Screen>
-          <Tab.Screen name="Dashboard">{() => <Dashboard />}</Tab.Screen>
-          <Tab.Screen name="Account">{() => <Account user={user} onSignOut={onSignOut} />}</Tab.Screen>
-        </Tab.Navigator>
-      </NavigationContainer>
+      {/* §7.14 (Fix A): shared read layer mounted above the tab navigator, so its
+          subscriptions + FactContext survive tab switches (parity with web). */}
+      <PrismsDataProvider>
+        {rejections.length > 0 && (
+          <View style={{ backgroundColor: theme.danger, padding: 8 }}>
+            <Text style={{ color: '#fff' }} onPress={() => setRejections([])}>
+              Change rejected: {rejections.map((r) => r.reject_code).join(', ')} (reverted)
+            </Text>
+          </View>
+        )}
+        <NavigationContainer theme={navTheme}>
+          <Tab.Navigator screenOptions={{ headerStyle: { backgroundColor: theme.surface }, headerTintColor: theme.text }}>
+            <Tab.Screen name="Worklist">{() => <Worklist ctx={ctx} />}</Tab.Screen>
+            <Tab.Screen name="Agenda">{() => <Agenda ctx={ctx} />}</Tab.Screen>
+            <Tab.Screen name="Kanban">{() => <Kanban ctx={ctx} />}</Tab.Screen>
+            <Tab.Screen name="Habits">{() => <Habits ctx={ctx} />}</Tab.Screen>
+            <Tab.Screen name="Graph">{() => <Graph />}</Tab.Screen>
+            <Tab.Screen name="Dashboard">{() => <Dashboard />}</Tab.Screen>
+            <Tab.Screen name="Review">{() => <Review ctx={ctx} />}</Tab.Screen>
+            <Tab.Screen name="Account">{() => <Account user={user} onSignOut={() => void handleSignOut()} />}</Tab.Screen>
+          </Tab.Navigator>
+        </NavigationContainer>
+      </PrismsDataProvider>
     </PowerSyncContext.Provider>
   );
 }
 
 function Account({ user, onSignOut }: { user: SessionUser; onSignOut: () => void }) {
+  const [passphrase, setPassphrase] = useState('');
+  const [status, setStatus] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function onExport() {
+    setBusy(true);
+    setStatus(null);
+    try {
+      await exportAndShare(passphrase);
+      setStatus('Encrypted export shared.');
+      setPassphrase('');
+    } catch (e) {
+      setStatus(e instanceof Error ? e.message : 'export failed');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <View style={{ flex: 1, backgroundColor: theme.bg, padding: 16, gap: 14 }}>
       <Text style={{ color: theme.text, fontSize: 16 }}>{user.email}</Text>
+
+      {/* §13.1: installed-target export is encrypted by default — a passphrase is required. */}
+      <Text style={{ color: theme.text, fontSize: 15, marginTop: 8 }}>Backup &amp; export</Text>
+      <Muted>Exports are encrypted on this device — set a passphrase, then share the file.</Muted>
+      <Field value={passphrase} onChangeText={setPassphrase} placeholder="export passphrase" secureTextEntry testID="export-passphrase" />
+      <Btn title="Export encrypted" variant="primary" testID="export-share" disabled={busy || passphrase.length === 0} onPress={() => void onExport()} />
+      {status !== null && <Muted testID="export-status">{status}</Muted>}
+
       <Text
-        style={{ color: theme.accent }}
+        style={{ color: theme.accent, marginTop: 8 }}
         testID="test-reminder"
         onPress={() => void scheduleReminder('Prisms reminder', 'This fires even with the network off.', 5)}
       >

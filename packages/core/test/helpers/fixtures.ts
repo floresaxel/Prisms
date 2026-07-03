@@ -18,6 +18,7 @@ import type {
   TimeEntry,
 } from '../../src/domain/entities';
 import type { JsonValue, Uuid } from '../../src/domain/primitives';
+import { SYNC_ROW_DEFAULTS } from '../../src/domain/entities';
 
 export const TEST_USER: Uuid = '00000000-0000-7000-8000-0000000000aa';
 const T0 = '2026-06-01T00:00:00.000Z';
@@ -35,6 +36,7 @@ export function makeNode(
     created_at: T0,
     updated_at: T0,
     deleted_at: null,
+    ...SYNC_ROW_DEFAULTS,
     parent_id: null,
     title: overrides.node_type,
     description: '',
@@ -63,6 +65,7 @@ export function makeEdge(
     created_at: T0,
     updated_at: T0,
     deleted_at: null,
+    ...SYNC_ROW_DEFAULTS,
     edge_type: 'FS',
     lag_minutes: 0,
     ...overrides,
@@ -77,6 +80,7 @@ export function makeEntry(
     created_at: T0,
     updated_at: T0,
     deleted_at: null,
+    ...SYNC_ROW_DEFAULTS,
     ended_at: null,
     focus_factor: null,
     completed_session: null,
@@ -99,12 +103,16 @@ export function makeBlock(
     created_at: T0,
     updated_at: T0,
     deleted_at: null,
+    ...SYNC_ROW_DEFAULTS,
     anchor_type: 'none',
     rrule: null,
     status: 'committed',
     suggestion_reason: null,
     computed_at: null,
     external_event_id: null,
+    suggestion_batch_id: null,
+    replaces_block_id: null,
+    superseded_at: null,
     ...overrides,
   };
 }
@@ -117,6 +125,7 @@ export function makeSprint(
     created_at: T0,
     updated_at: T0,
     deleted_at: null,
+    ...SYNC_ROW_DEFAULTS,
     title: 'sprint',
     ...overrides,
   };
@@ -130,24 +139,25 @@ export function makeMembership(
     created_at: T0,
     updated_at: T0,
     deleted_at: null,
+    ...SYNC_ROW_DEFAULTS,
     ...overrides,
   };
 }
 
 export function makeTag(overrides: Partial<Tag> & { id: Uuid; label: string }): Tag {
-  return { user_id: TEST_USER, created_at: T0, updated_at: T0, deleted_at: null, habit_id: null, ...overrides };
+  return { user_id: TEST_USER, created_at: T0, updated_at: T0, deleted_at: null, ...SYNC_ROW_DEFAULTS, habit_id: null, ...overrides };
 }
 
 export function makeTagPlacement(
   overrides: Partial<TagPlacement> & { id: Uuid; block_id: Uuid; tag_id: Uuid },
 ): TagPlacement {
-  return { user_id: TEST_USER, created_at: T0, updated_at: T0, deleted_at: null, ...overrides };
+  return { user_id: TEST_USER, created_at: T0, updated_at: T0, deleted_at: null, ...SYNC_ROW_DEFAULTS, ...overrides };
 }
 
 export function makeTagAnswer(
   overrides: Partial<TagAnswer> & { id: Uuid; placement_id: Uuid; value: 'yes' | 'no' },
 ): TagAnswer {
-  return { user_id: TEST_USER, created_at: T0, updated_at: T0, deleted_at: null, answered_at: T0, ...overrides };
+  return { user_id: TEST_USER, created_at: T0, updated_at: T0, deleted_at: null, ...SYNC_ROW_DEFAULTS, answered_at: T0, ...overrides };
 }
 
 export function makeBlockerRule(
@@ -158,6 +168,7 @@ export function makeBlockerRule(
     created_at: T0,
     updated_at: T0,
     deleted_at: null,
+    ...SYNC_ROW_DEFAULTS,
     scope: {},
     label: 'blocker',
     enabled: true,
@@ -173,6 +184,7 @@ export function makeHabit(
     created_at: T0,
     updated_at: T0,
     deleted_at: null,
+    ...SYNC_ROW_DEFAULTS,
     title: 'habit',
     rrule: 'FREQ=DAILY',
     streak_mode: 'daily',
@@ -195,6 +207,7 @@ export function makeHabitCompletion(
     created_at: T0,
     updated_at: T0,
     deleted_at: null,
+    ...SYNC_ROW_DEFAULTS,
     completed_at: `${overrides.occurrence_date}T12:00:00.000Z`,
     ...overrides,
   };
@@ -212,8 +225,10 @@ export function makeAutomationRule(
     created_at: T0,
     updated_at: T0,
     deleted_at: null,
+    ...SYNC_ROW_DEFAULTS,
     conditions: { all: [] },
     enabled: true,
+    rule_version: 1,
     ...overrides,
   };
 }
@@ -226,6 +241,7 @@ export function makeWeatherFact(
     created_at: T0,
     updated_at: T0,
     deleted_at: null,
+    ...SYNC_ROW_DEFAULTS,
     kind: 'weather_forecast',
     computed_at: T0,
     ...overrides,

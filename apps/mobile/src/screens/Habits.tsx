@@ -7,10 +7,10 @@ import { useEffect, useState } from 'react';
 import { View } from 'react-native';
 
 import { asEpochMillis, type Instant } from '@prisms/core';
-import { useCommands, useFactContext, useHabits, type CommandContext } from '@prisms/ui';
+import { useCommands, useFactContext, useHabits, useHabitsHydrated, type CommandContext } from '@prisms/ui';
 
 import { formatMinutes } from '../format';
-import { Btn, Card, H1, Meter, Muted, Row, Screen, Txt } from '../ui';
+import { Btn, Card, H1, Meter, Muted, Row, Screen, Skeleton, Txt } from '../ui';
 
 export function Habits({ ctx }: { ctx: CommandContext }) {
   const [now, setNow] = useState<Instant>(asEpochMillis(Date.now()));
@@ -22,11 +22,13 @@ export function Habits({ ctx }: { ctx: CommandContext }) {
   const fact = useFactContext();
   const habits = useHabits(now);
   const commands = useCommands(ctx);
+  const hydrated = useHabitsHydrated();
 
   return (
     <Screen testID="habits">
       <H1>Habits &amp; skills</H1>
-      {habits.length === 0 && <Muted>No habits yet — create them on the web app.</Muted>}
+      {habits.length === 0 &&
+        (hydrated ? <Muted>No habits yet — create them on the web app.</Muted> : <Skeleton testID="habits-skeleton" />)}
       {habits.map((view) => (
         <Card key={view.habit.id} testID={`habit-${view.habit.id}`}>
           <Txt>{view.habit.title}</Txt>

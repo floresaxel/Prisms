@@ -13,6 +13,7 @@ allowBuilds:
 overrides:
   'drizzle-orm>kysely': '-'
   'drizzle-orm>pg': '-'
-  # one React across web (19.2) + mobile (Expo pins 19.0) so the shared
-  # @prisms/ui hooks resolve to a single React instance.
-  react: '19.2.7'
+# S9-F3: no workspace-wide `react` override. @prisms/ui declares react as a
+# PEER dependency, so each app supplies its own single React instance — web its
+# 19.2.x, mobile Expo 53's 19.0.x (the supported RN 0.79 pairing) — instead of
+# force-resolving 19.2.7 under React Native, which was an unsupported pairing.

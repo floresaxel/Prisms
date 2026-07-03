@@ -38,6 +38,15 @@ body {
 .px-list-leading, .px-list-trailing { display: flex; align-items: center; gap: 8px; }
 .px-list-empty { color: var(--px-text-dim); padding: 16px; text-align: center; }
 
+/* loading-aware reads (§7.15, M12): skeletons render while a read hydrates, so a
+   fresh login / cold read shows shimmer bars instead of flashing the empty state. */
+.px-skeleton { display: block; border-radius: 6px; background: linear-gradient(90deg, var(--px-surface-2) 25%, var(--px-border) 37%, var(--px-surface-2) 63%); background-size: 400% 100%; animation: px-shimmer 1.4s ease infinite; }
+.px-skeleton-line { height: 14px; margin: 5px 0; width: 100%; }
+.px-skeleton-block { padding: 6px 0; }
+.px-skeleton-item .px-skeleton-line { margin: 0; }
+@keyframes px-shimmer { 0% { background-position: 100% 50%; } 100% { background-position: 0 50%; } }
+@media (prefers-reduced-motion: reduce) { .px-skeleton { animation: none; } }
+
 .px-badge { font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; padding: 3px 8px; border-radius: 999px; background: var(--px-surface-2); color: var(--px-text-dim); }
 .px-badge--ongoing { background: rgba(91,140,255,0.18); color: var(--px-accent); }
 .px-badge--scheduled { background: rgba(70,192,138,0.16); color: var(--px-ok); }
@@ -45,6 +54,21 @@ body {
 .px-badge--available { background: var(--px-surface-2); color: var(--px-text-dim); }
 .px-badge--blocked { background: rgba(255,107,107,0.16); color: var(--px-danger); }
 .px-badge--done { background: rgba(70,192,138,0.16); color: var(--px-ok); }
+.px-badge--unverified { background: rgba(255,196,84,0.16); color: #f4c454; text-transform: none; letter-spacing: 0; }
+/* review-item severity (§7.13 inbox): error/warning/info */
+.px-badge--error { background: rgba(255,107,107,0.16); color: var(--px-danger); }
+.px-badge--warning { background: rgba(255,196,84,0.16); color: #f4c454; }
+.px-badge--info { background: var(--px-surface-2); color: var(--px-text-dim); }
+
+/* "why does this exist?" provenance affordance (§7.8) */
+.px-why { position: relative; display: inline-flex; }
+.px-why-btn { padding: 2px 8px; font-size: 11px; color: var(--px-text-dim); }
+.px-why-pop { position: absolute; z-index: 20; top: calc(100% + 6px); right: 0; width: 260px; padding: 10px 12px; background: var(--px-surface); border: 1px solid var(--px-border); border-radius: var(--px-radius); box-shadow: 0 6px 20px rgba(0,0,0,0.4); font-size: 12px; display: flex; flex-direction: column; gap: 3px; }
+.px-why-pop strong { font-size: 13px; }
+
+/* review-inbox banners (§7.13): schema-version upgrade prompt + items pointer */
+.px-banner { margin: 0 0 14px; padding: 10px 14px; border-radius: var(--px-radius); background: var(--px-surface-2); border: 1px solid var(--px-border); color: var(--px-text-dim); font-size: 13px; }
+.px-banner--upgrade { background: rgba(255,107,107,0.14); border-color: var(--px-danger); color: var(--px-text); }
 
 /* task progress bar (§7.2) */
 .px-progress { height: 6px; border-radius: 999px; background: var(--px-surface-2); overflow: hidden; max-width: 320px; }
@@ -84,6 +108,8 @@ body {
 .px-cal-block--suggested { background: transparent; border-style: dashed; }
 .px-cal-block--unjustified { background: rgba(120,120,120,0.22); border-color: #555; color: var(--px-text-dim); }
 .px-cal-block--anchored { border-color: var(--px-ok); }
+.px-cal-block--superseded { opacity: 0.5; border-style: dotted; text-decoration: line-through; }
+.px-cal-block-stale { font-size: 9px; text-transform: uppercase; letter-spacing: 0.4px; color: #f4c454; }
 .px-cal-resize { position: absolute; left: 0; right: 0; bottom: 0; height: 7px; cursor: ns-resize; border-bottom-left-radius: 6px; border-bottom-right-radius: 6px; }
 .px-cal-resize:hover { background: rgba(255,255,255,0.18); }
 .px-cal-entry { position: absolute; left: 3px; right: 3px; padding: 2px 6px; border-radius: 6px; font-size: 11px; background: rgba(255,255,255,0.05); border: 1px dashed var(--px-border); color: var(--px-text-dim); overflow: hidden; }

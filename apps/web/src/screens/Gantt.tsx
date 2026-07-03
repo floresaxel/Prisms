@@ -7,7 +7,7 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import { asEpochMillis, type Instant } from '@prisms/core';
-import { useGantt, useNodeTree } from '@prisms/ui';
+import { Skeleton, useGantt, useIsHydrated, useNodeTree } from '@prisms/ui';
 
 const LABEL_W = 180;
 const DAY_W = 22;
@@ -28,6 +28,7 @@ export function Gantt() {
   const [projectId, setProjectId] = useState('');
   const active = projectId || projects[0]?.id || '';
   const gantt = useGantt(active || null, now);
+  const hydrated = useIsHydrated();
 
   const rowOf = useMemo(() => new Map(gantt.bars.map((b, i) => [b.taskId, i])), [gantt.bars]);
   const barOf = useMemo(() => new Map(gantt.bars.map((b) => [b.taskId, b])), [gantt.bars]);
@@ -40,12 +41,16 @@ export function Gantt() {
     <section>
       <h1>Gantt</h1>
       <select className="px-select" data-testid="gantt-project" value={active} onChange={(e) => setProjectId(e.target.value)} style={{ marginBottom: 12 }}>
-        {projects.length === 0 && <option value="">No projects yet</option>}
+        {projects.length === 0 && <option value="">{hydrated ? 'No projects yet' : 'Loading…'}</option>}
         {projects.map((p) => <option key={p.id} value={p.id}>{p.title}</option>)}
       </select>
 
       {gantt.bars.length === 0 ? (
-        <p className="px-muted">No dated tasks — schedule a block or set a due date to see bars.</p>
+        hydrated ? (
+          <p className="px-muted">No dated tasks — schedule a block or set a due date to see bars.</p>
+        ) : (
+          <Skeleton testId="gantt-skeleton" />
+        )
       ) : (
         <div style={{ overflowX: 'auto' }}>
           <svg className="px-gantt" data-testid="gantt" width={width} height={height} role="img" aria-label="gantt chart">

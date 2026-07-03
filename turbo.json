@@ -10,10 +10,13 @@
       "outputs": []
     },
     "typecheck": {
+      "dependsOn": ["^typecheck"],
       "outputs": []
     },
     "test": {
-      "outputs": []
+      "dependsOn": ["^typecheck"],
+      "outputs": [],
+      "env": ["PRISMS_DB_TEST_URL", "PRISMS_POWERSYNC_URL"]
     }
   }
 }

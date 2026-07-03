@@ -118,6 +118,8 @@ export const timerClockInSchema = z.strictObject({
   task_id: uuidSchema,
   started_at: isoDateTimeSchema,
   planned: z.boolean().optional(),
+  /** §8: override the blocked-task guard (ongoing then wins precedence). */
+  force: z.boolean().optional(),
 });
 export const timerClockOutSchema = z.strictObject({ entry_id: uuidSchema, ended_at: isoDateTimeSchema });
 export const timerReviewSchema = z.strictObject({
@@ -268,6 +270,16 @@ export const layoutSetCollapsedSchema = z.strictObject({
   node_id: uuidSchema,
   collapsed: z.boolean(),
 });
+/**
+ * Deterministic sort_order cleanup over `(sort_order, hlc)` (§7.10a). Carries
+ * the sibling group (`parent_id`, null = roots) and its children in canonical
+ * order; the server (or a batch job) reassigns clean, evenly-spaced fractions.
+ * Idempotent and provenance-tagged (server-assigned). See merge/renormalize.ts.
+ */
+export const layoutRenormalizeOrderSchema = z.strictObject({
+  parent_id: uuidSchema.nullable(),
+  node_ids: z.array(uuidSchema).min(1),
+});
 export const groupCreateSchema = z.strictObject({
   id: uuidSchema,
   diagram_id: uuidSchema,
@@ -282,6 +294,14 @@ export const groupUpdateSchema = z
   })
   .refine((p) => Object.keys(p).length > 1, 'group.update needs at least one field');
 export const groupDeleteSchema = idOnly;
+
+// --- review inbox (§7.13) ---------------------------------------------------
+// Closing a durable conflict/rejection item. The item row is server-owned and
+// synced down; the client CLOSES it through a command (not a row patch), so the
+// only trusted write path still holds — the server flips `status`+`resolved_at`,
+// re-applies authoritatively, and the canonical row reconciles the overlay away.
+export const reviewResolveSchema = idOnly; // review item id
+export const reviewDismissSchema = idOnly; // review item id
 
 /**
  * The catalog: verb name → payload schema. The dispatcher rejects any name
@@ -340,9 +360,12 @@ export const COMMAND_SCHEMAS = {
   'blocker.delete': blockerDeleteSchema,
   'layout.set_position': layoutSetPositionSchema,
   'layout.set_collapsed': layoutSetCollapsedSchema,
+  'layout.renormalize_order': layoutRenormalizeOrderSchema,
   'group.create': groupCreateSchema,
   'group.update': groupUpdateSchema,
   'group.delete': groupDeleteSchema,
+  'review.resolve': reviewResolveSchema,
+  'review.dismiss': reviewDismissSchema,
   'settings.update': settingsUpdateSchema,
 } as const;
 

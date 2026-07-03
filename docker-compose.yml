@@ -2,11 +2,11 @@
 # Boots: postgres (source of truth), powersync (sync service), api (placeholder).
 # Host ports are overridable via .env (PRISMS_*_PORT) for machines where the
 # defaults are taken — container-side ports never change.
-# The api container below is still a placeholder: the real server (apps/server,
-# s10) runs on the host during development via `pnpm --filter @prisms/server dev`
+# The api container below is a DEV placeholder: the real server (apps/server)
+# runs on the host during development via `pnpm --filter @prisms/server dev`
 # and signs PowerSync JWTs with the shared dev key — no container-to-host calls
-# are needed. TODO(s23): build apps/server into this service for one-command
-# deploys.
+# are needed. The real one-command deploy is docker-compose.prod.yml (S23),
+# which builds apps/server into the api service.
 name: prisms
 
 services:
@@ -41,8 +41,9 @@ services:
       POWERSYNC_CONFIG_PATH: /config/powersync.yaml
     volumes:
       - ./infra/powersync:/config:ro
-      # real sync rules live with the schema (§16: versioned alongside)
-      - ./packages/db/sync-rules.yaml:/sync-rules.yaml:ro
+      # real sync config lives with the schema (§16: versioned alongside).
+      # Sync Streams (§7.3); mounted at the path powersync.yaml reads.
+      - ./packages/db/sync-streams.yaml:/sync-rules.yaml:ro
     ports:
       - '${PRISMS_POWERSYNC_PORT:-8080}:8080'
     healthcheck:

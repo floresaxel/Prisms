@@ -20,6 +20,14 @@ export const commandEnvelopeSchema = z.strictObject({
   name: z.string().min(1),
   hlc: hlcStringSchema,
   payload: jsonValueSchema,
+  /** Command-payload version (§8); server migrates or rejects an old payload. */
+  command_version: z.number().int().positive().optional(),
+  /** Row schema version the client writes at (§7.11); below the floor → client_too_old. */
+  schema_version: z.number().int().nonnegative().optional(),
+  /** Free-form client build tag, for diagnostics + version-specific review items. */
+  client_version: z.string().optional(),
+  /** Intra-device causal dependencies (§7.2e): command ids this one builds on. */
+  depends_on: z.array(uuidSchema).optional(),
 });
 export type CommandEnvelope = z.infer<typeof commandEnvelopeSchema>;
 
@@ -29,7 +37,11 @@ export const uploadRequestSchema = z.strictObject({
 });
 export type UploadRequest = z.infer<typeof uploadRequestSchema>;
 
-/** Per-command outcome, §8 pipeline step 5. */
+/**
+ * Per-command outcome — the frozen `uploadData` response contract (§8 step 5).
+ * The shape the convergence harness (M7) asserts and the client (M8) parses to
+ * reconcile its overlay.
+ */
 export const commandOutcomeSchema = z.strictObject({
   id: uuidSchema,
   result: z.enum(['applied', 'rejected', 'noop']),
@@ -37,5 +49,13 @@ export const commandOutcomeSchema = z.strictObject({
   original_result: z.enum(['applied', 'rejected']).optional(),
   reject_code: z.string().optional(),
   reject_reason: z.string().optional(),
+  /**
+   * On `applied`: the provenance id the server stamped on created/updated rows
+   * (equals the command id, §7.2b). The optimistic overlay predicted this, so
+   * the synced-down row keeps its identity on reconciliation.
+   */
+  created_by_command_id: uuidSchema.optional(),
+  /** Ids of any sync_review_items this command produced (§7.13). */
+  review_item_ids: z.array(uuidSchema).optional(),
 });
 export type CommandOutcome = z.infer<typeof commandOutcomeSchema>;

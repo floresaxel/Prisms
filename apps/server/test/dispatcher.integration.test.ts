@@ -29,6 +29,7 @@ const cmd = (name: string, payload: unknown, id = randomUUID()) => ({
   name,
   hlc: `${(++hlc).toString(16).padStart(12, '0')}-0000-test-device`,
   payload,
+  schema_version: 1, // R6: clients emit the §7.11 version (absent = below-floor)
 });
 
 describe.skipIf(!adminUrl)('S11 command dispatcher (§8 pipeline, full catalog)', () => {
@@ -200,6 +201,169 @@ describe.skipIf(!adminUrl)('S11 command dispatcher (§8 pipeline, full catalog)'
     expect(backstops).toContainEqual({ userId: ids.user, trigger: 'task_completed', nodeId: ids.task });
   });
 
+  it('runs automation in-txn: a triggering command spawns the follow-up in its own transaction with §7.8 provenance', async () => {
+    const ids = await seedTree();
+    const ruleId = randomUUID();
+    await results(
+      [
+        cmd('rule.create', {
+          id: ruleId,
+          trigger: 'task_completed',
+          conditions: { all: [] },
+          actions: [{ action: 'spawn_task', slot: 0, template: { title: 'Follow-up', parent: 'same_as_trigger' } }],
+        }),
+      ],
+      ids.user,
+    );
+    const checkOff = cmd('node.check_off', { id: ids.task, completed_at: '2026-06-13T09:00:00.000Z' });
+    const [done] = await results([checkOff], ids.user);
+    expect(done!.result).toBe('applied');
+    // the follow-up exists immediately — created by the check_off's OWN txn, with no backstop run.
+    const spawned = await sql`
+      SELECT title, parent_id, source_kind, source_id, hlc, schema_version, created_by_command_id, source_detail
+      FROM nodes WHERE user_id = ${ids.user} AND title = 'Follow-up'`;
+    expect(spawned).toHaveLength(1);
+    expect(spawned[0]!['parent_id']).toBe(ids.milestone); // same_as_trigger → the trigger task's parent
+    // §7.8 server-assigned provenance: source_id is the producing rule, hlc/schema_version are server values.
+    expect(spawned[0]).toMatchObject({
+      source_kind: 'automation',
+      source_id: ruleId,
+      created_by_command_id: done!.id,
+      hlc: checkOff.hlc,
+      schema_version: 1,
+    });
+    // §10.2 (S3-F4): in-txn spawn provenance names the rule + template versions.
+    expect(spawned[0]!['source_detail']).toMatchObject({ trigger_command_id: done!.id, trigger_node_id: ids.task, action_slot: 0, rule_version: 1, template_version: 1 });
+  });
+
+  it('applies a multi-wave automation cascade (depth>1) inside the single command txn (§10.1 fixpoint)', async () => {
+    const ids = await seedTree();
+    await results(
+      [
+        cmd('rule.create', {
+          id: randomUUID(),
+          trigger: 'task_completed',
+          conditions: { all: [] },
+          actions: [{ action: 'spawn_task', slot: 0, template: { title: 'Alpha', parent: 'same_as_trigger' } }],
+        }),
+        cmd('rule.create', {
+          id: randomUUID(),
+          trigger: 'task_created',
+          conditions: { all: [{ fact: 'node.title', op: 'matches', value: 'alpha' }] },
+          actions: [{ action: 'spawn_task', slot: 0, template: { title: 'Beta', parent: 'same_as_trigger' } }],
+        }),
+      ],
+      ids.user,
+    );
+    const [done] = await results([cmd('node.check_off', { id: ids.task, completed_at: '2026-06-13T09:00:00.000Z' })], ids.user);
+    expect(done!.result).toBe('applied');
+    // both waves (Alpha → its task_created fires the second rule → Beta) committed by the ONE command.
+    const rows = await sql`SELECT title, created_by_command_id, source_kind FROM nodes WHERE user_id = ${ids.user} AND title IN ('Alpha','Beta')`;
+    expect(rows.map((r) => r['title']).sort()).toEqual(['Alpha', 'Beta']);
+    expect(rows.every((r) => r['created_by_command_id'] === done!.id && r['source_kind'] === 'automation')).toBe(true);
+  });
+
+  it('stamps §7.8 provenance on a spawned edge (edge_from_slot) inside the command txn', async () => {
+    const ids = await seedTree();
+    const ruleId = randomUUID();
+    await results(
+      [
+        cmd('rule.create', {
+          id: ruleId,
+          trigger: 'task_completed',
+          conditions: { all: [] },
+          actions: [
+            { action: 'spawn_task', slot: 0, template: { title: 'Pred', parent: 'same_as_trigger' } },
+            { action: 'spawn_task', slot: 1, template: { title: 'Succ', parent: 'same_as_trigger', edge_from_slot: 0 } },
+          ],
+        }),
+      ],
+      ids.user,
+    );
+    const [done] = await results([cmd('node.check_off', { id: ids.task, completed_at: '2026-06-13T09:00:00.000Z' })], ids.user);
+    expect(done!.result).toBe('applied');
+    expect(await sql`SELECT id FROM nodes WHERE user_id = ${ids.user} AND title IN ('Pred','Succ')`).toHaveLength(2);
+    const edge = await sql`SELECT source_kind, source_id, created_by_command_id, source_detail FROM edges WHERE user_id = ${ids.user}`;
+    expect(edge).toHaveLength(1);
+    expect(edge[0]).toMatchObject({ source_kind: 'automation', source_id: ruleId, created_by_command_id: done!.id });
+    expect(edge[0]!['source_detail']).toMatchObject({ trigger_node_id: ids.task });
+  });
+
+  it('drops an automation spawn that would violate I1 hierarchy, without poisoning the command (§6.7)', async () => {
+    const ids = await seedTree();
+    // a task cannot live under a vision (I1); this rule literal-parents there.
+    await results(
+      [
+        cmd('rule.create', {
+          id: randomUUID(),
+          trigger: 'task_completed',
+          conditions: { all: [] },
+          actions: [{ action: 'spawn_task', slot: 0, template: { title: 'Illegal', parent: ids.vision } }],
+        }),
+      ],
+      ids.user,
+    );
+    const [done] = await results([cmd('node.check_off', { id: ids.task, completed_at: '2026-06-13T09:00:00.000Z' })], ids.user);
+    expect(done!.result).toBe('applied'); // the bad rule does NOT roll back the user's command
+    expect(await sql`SELECT id FROM nodes WHERE user_id = ${ids.user} AND title = 'Illegal'`).toHaveLength(0); // type-illegal spawn dropped, not committed
+  });
+
+  it('drops an edge whose endpoint spawn was rejected, without an FK abort of the command (§6.7 + §10.1)', async () => {
+    const ids = await seedTree();
+    await results(
+      [
+        cmd('rule.create', {
+          id: randomUUID(),
+          trigger: 'task_completed',
+          conditions: { all: [] },
+          actions: [
+            { action: 'spawn_task', slot: 0, template: { title: 'BadParent', parent: ids.vision } }, // I1-illegal → dropped
+            { action: 'spawn_task', slot: 1, template: { title: 'GoodChild', parent: 'same_as_trigger', edge_from_slot: 0 } },
+          ],
+        }),
+      ],
+      ids.user,
+    );
+    const [done] = await results([cmd('node.check_off', { id: ids.task, completed_at: '2026-06-13T09:00:00.000Z' })], ids.user);
+    expect(done!.result).toBe('applied'); // the bad spawn + its dangling edge do not roll back the command
+    expect(await sql`SELECT id FROM nodes WHERE user_id = ${ids.user} AND title = 'BadParent'`).toHaveLength(0); // I1-illegal spawn dropped
+    expect(await sql`SELECT id FROM nodes WHERE user_id = ${ids.user} AND title = 'GoodChild'`).toHaveLength(1); // the valid spawn is kept
+    const edgeCount = await sql`SELECT count(*)::int AS n FROM edges WHERE user_id = ${ids.user}`;
+    expect(edgeCount[0]!['n']).toBe(0); // the edge dangling off the dropped node was dropped, not FK-inserted
+  });
+
+  it('raises a sync_warning review item when an automation cascade hits the depth limit (§7.13)', async () => {
+    const ids = await seedTree();
+    // chain: <trigger> completed → D1 (task_created) → D2 → … past MAX_DEPTH (5).
+    const rules = [
+      cmd('rule.create', {
+        id: randomUUID(),
+        trigger: 'task_completed',
+        conditions: { all: [] },
+        actions: [{ action: 'spawn_task', slot: 0, template: { title: 'D1', parent: 'same_as_trigger' } }],
+      }),
+    ];
+    for (let i = 1; i <= 5; i += 1) {
+      rules.push(
+        cmd('rule.create', {
+          id: randomUUID(),
+          trigger: 'task_created',
+          conditions: { all: [{ fact: 'node.title', op: 'matches', value: `d${i}` }] },
+          actions: [{ action: 'spawn_task', slot: 0, template: { title: `D${i + 1}`, parent: 'same_as_trigger' } }],
+        }),
+      );
+    }
+    await results(rules, ids.user);
+    const [done] = await results([cmd('node.check_off', { id: ids.task, completed_at: '2026-06-13T09:00:00.000Z' })], ids.user);
+    expect(done!.result).toBe('applied'); // the command still applies despite the truncated cascade
+    const items = await sql`
+      SELECT severity, detail FROM sync_review_items
+      WHERE user_id = ${ids.user} AND command_id = ${done!.id} AND item_type = 'sync_warning'`;
+    expect(items).toHaveLength(1);
+    expect(items[0]!['severity']).toBe('warning');
+    expect((items[0]!['detail'] as { reason: string }).reason).toBe('max_depth');
+  });
+
   it('node.check_off records the disposition: default completed, explicit obsolete; uncheck clears (Phase 2)', async () => {
     const ids = await seedTree();
     // default: a check-off with no disposition records 'completed'
@@ -255,11 +419,16 @@ describe.skipIf(!adminUrl)('S11 command dispatcher (§8 pipeline, full catalog)'
     expect(logs[0]!['n']).toBe(1);
   });
 
-  it('rejects unknown verbs, malformed payloads, and full-row-write attempts', async () => {
+  it('rejects unknown verbs and malformed payloads; strips client-supplied trust fields (§7.2c)', async () => {
     const [unknown] = await results([cmd('node.update', { id: randomUUID() })]);
     expect(unknown).toMatchObject({ result: 'rejected', reject_code: 'E_UNKNOWN_COMMAND' });
-    const [parse] = await results([cmd('node.rename', { id: randomUUID(), title: 'x', user_id: OTHER })]);
+    // a non-trust extra field is still rejected — no generic full-row write.
+    const [parse] = await results([cmd('node.rename', { id: randomUUID(), title: 'x', estimate_minutes: 5 })]);
     expect(parse).toMatchObject({ result: 'rejected', reject_code: 'E_PARSE' });
+    // a forged trust field (user_id) is STRIPPED, not E_PARSE'd; the command then
+    // fails only because the target row is absent.
+    const [stripped] = await results([cmd('node.rename', { id: randomUUID(), title: 'x', user_id: OTHER })]);
+    expect(stripped).toMatchObject({ result: 'rejected', reject_code: 'E_NOT_FOUND' });
   });
 
   it('enforces ownership: another user cannot touch these rows or command ids', async () => {
@@ -273,6 +442,41 @@ describe.skipIf(!adminUrl)('S11 command dispatcher (§8 pipeline, full catalog)'
     await results([shared], ids.user);
     const [reused] = await results([shared], attacker);
     expect(reused).toMatchObject({ result: 'rejected', reject_code: 'E_OWNERSHIP' });
+  });
+
+  it('review.resolve / review.dismiss close a synced review item; ownership + replay hold (§7.13, M10)', async () => {
+    const ids = await seedTree();
+    // a rejected command creates a durable command_rejection item (the outcome
+    // carries its id via the frozen response contract).
+    const mkItem = async () => {
+      const [rej] = await results([cmd('node.rename', { id: randomUUID(), title: 'ghost' })], ids.user);
+      expect(rej).toMatchObject({ result: 'rejected', reject_code: 'E_NOT_FOUND' });
+      return rej!.review_item_ids![0]!;
+    };
+    const a = await mkItem();
+    const b = await mkItem();
+
+    // resolve A → status 'resolved' + resolved_at stamped
+    const resolveA = cmd('review.resolve', { id: a });
+    const [ra] = await results([resolveA], ids.user);
+    expect(ra!.result).toBe('applied');
+    const [rowA] = await sql`SELECT status, resolved_at FROM sync_review_items WHERE id = ${a}`;
+    expect(rowA!['status']).toBe('resolved');
+    expect(rowA!['resolved_at']).not.toBeNull();
+
+    // dismiss B → status 'dismissed'
+    const [rb] = await results([cmd('review.dismiss', { id: b })], ids.user);
+    expect(rb!.result).toBe('applied');
+    const [rowB] = await sql`SELECT status FROM sync_review_items WHERE id = ${b}`;
+    expect(rowB!['status']).toBe('dismissed');
+
+    // another user cannot close my item (ownership checked first)
+    const [foreign] = await results([cmd('review.resolve', { id: a })], randomUUID());
+    expect(foreign).toMatchObject({ result: 'rejected', reject_code: 'E_OWNERSHIP' });
+
+    // replay of the resolve is a converged no-op (idempotency by command id)
+    const [replay] = await results([resolveA], ids.user);
+    expect(replay).toEqual({ id: resolveA.id, result: 'noop', original_result: 'applied' });
   });
 
   it('timer.review can complete the task and enqueue a backstop', async () => {
@@ -390,5 +594,40 @@ describe.skipIf(!adminUrl)('S11 command dispatcher (§8 pipeline, full catalog)'
     const rows = await sql`SELECT title FROM nodes WHERE id = ${ids.vision}`;
     expect(rows).toHaveLength(1);
     expect(rows[0]!['title']).toBe('V'); // original content preserved
+  });
+
+  it('command_log.effects records writes + automation spawns w/ triggering_command_id (§7.2f, S4-F3)', async () => {
+    const ids = await seedTree();
+    // an automation that spawns a follow-up when a "lecture" task is completed.
+    await results(
+      [cmd('rule.create', {
+        id: randomUUID(),
+        trigger: 'task_completed',
+        conditions: { all: [{ fact: 'node.title', op: 'matches', value: 'lecture' }] },
+        actions: [{ action: 'spawn_task', slot: 0, template: { title: 'Pre-brief: {trigger.title}', parent: 'same_as_trigger' } }],
+      })],
+      ids.user,
+    );
+    const rename = cmd('node.rename', { id: ids.task, title: 'Lecture' });
+    await results([rename], ids.user);
+    const checkoff = cmd('node.check_off', { id: ids.task, completed_at: '2026-06-13T14:00:00.000Z' });
+    await results([checkoff], ids.user);
+
+    type Eff = { table: string; row_id: string; op: string; fields?: string[]; triggering_command_id?: string };
+
+    // rename → a nodes update naming the `title` field.
+    const [renameLog] = await sql`SELECT effects FROM command_log WHERE id = ${rename.id}`;
+    const renameEff = renameLog!['effects'] as Eff[];
+    expect(renameEff).toContainEqual(expect.objectContaining({ table: 'nodes', row_id: ids.task, op: 'update', fields: ['title'] }));
+
+    // check_off → the completion update (names completed_at) + the spawned node,
+    // attributed to the check_off command via triggering_command_id.
+    const [coLog] = await sql`SELECT effects FROM command_log WHERE id = ${checkoff.id}`;
+    const eff = coLog!['effects'] as Eff[];
+    const completion = eff.find((e) => e.table === 'nodes' && e.row_id === ids.task && e.op === 'update');
+    expect(completion?.fields).toContain('completed_at');
+    const spawn = eff.find((e) => e.op === 'insert' && e.triggering_command_id === checkoff.id);
+    expect(spawn).toBeTruthy();
+    expect(spawn!.table).toBe('nodes');
   });
 });

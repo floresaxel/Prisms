@@ -57,6 +57,20 @@
       "when": 1781660030162,
       "tag": "0007_completed_in_block",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1782575331836,
+      "tag": "0008_v13_convergence",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1783084119405,
+      "tag": "0009_powersync_publication",
+      "breakpoints": true
     }
   ]
 }

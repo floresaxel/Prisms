@@ -7,11 +7,13 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 
 import type { PowerSyncDatabase } from '@powersync/web';
 import { PowerSyncContext } from '@powersync/react';
-import { getDeviceId, Layout, type CommandContext, type CommandRejection } from '@prisms/ui';
+import { getDeviceId, Layout, loadImportedHlcFloor, PrismsDataProvider, type CommandContext, type CommandRejection } from '@prisms/ui';
 
 import { getSession, signOut, type SessionUser } from './auth';
+import { ReviewBanner } from './components/ReviewBanner';
 import { isDesktop, osNotify } from './desktop';
-import { connectDb, createDb } from './powersync';
+import { rejectionMessage } from './format';
+import { clearLocalAccount, connectDb, createDb } from './powersync';
 import { Agenda } from './screens/Agenda';
 import { Blockers } from './screens/Blockers';
 import { Dashboard } from './screens/Dashboard';
@@ -22,6 +24,7 @@ import { Habits } from './screens/Habits';
 import { Inbox } from './screens/Inbox';
 import { Kanban } from './screens/Kanban';
 import { Login } from './screens/Login';
+import { Review } from './screens/Review';
 import { Rules } from './screens/Rules';
 import { Settings } from './screens/Settings';
 import { Worklist } from './screens/Worklist';
@@ -38,12 +41,38 @@ type Route =
   | '/gantt'
   | '/rules'
   | '/blockers'
+  | '/review'
   | '/settings';
 
 function AuthedApp({ user, onSignOut }: { user: SessionUser; onSignOut: () => void }) {
   const dbRef = useRef<PowerSyncDatabase | null>(null);
-  if (dbRef.current === null) dbRef.current = createDb();
+  if (dbRef.current === null) dbRef.current = createDb(user.id);
   const db = dbRef.current;
+  const clearedRef = useRef(false);
+
+  // §13.2/S9-F1: end this account's LOCAL presence on sign-out — warn if there
+  // are unsynced commands (they'd be lost), then wipe the replica + queue and the
+  // in-memory read caches so nothing of this account survives for the next login.
+  const handleSignOut = useCallback(async () => {
+    try {
+      const cleared = await clearLocalAccount(db, (pending) =>
+        window.confirm(`${pending} unsynced change(s) will be lost. Sign out anyway?`),
+      );
+      if (!cleared) return; // user cancelled at the unsynced-changes warning
+      clearedRef.current = true; // signal the unmount cleanup not to double-disconnect
+    } catch (e) {
+      console.error('sign-out cleanup failed', e);
+    }
+    onSignOut();
+  }, [db, onSignOut]);
+
+  // §13.1/R20: re-observe the persisted import HLC floor before any command is
+  // minted, so a post-import reload still orders new edits after imported state.
+  const flooredRef = useRef(false);
+  if (!flooredRef.current) {
+    flooredRef.current = true;
+    loadImportedHlcFloor();
+  }
 
   const [rejections, setRejections] = useState<CommandRejection[]>([]);
   const [route, setRoute] = useState<Route>((window.location.pathname as Route) || '/');
@@ -51,12 +80,19 @@ function AuthedApp({ user, onSignOut }: { user: SessionUser; onSignOut: () => vo
 
   useEffect(() => {
     let cancelled = false;
+    let stopUpload: (() => void) | undefined;
     connectDb(db, (r) => setRejections(r))
-      .then(() => !cancelled && setConnected(true))
+      .then((stop) => {
+        stopUpload = stop;
+        if (cancelled) stop();
+        else setConnected(true);
+      })
       .catch((e: unknown) => console.error('powersync connect failed', e));
     return () => {
       cancelled = true;
-      void db.disconnect();
+      stopUpload?.();
+      // sign-out already ran disconnectAndClear; don't double-disconnect.
+      if (!clearedRef.current) void db.disconnect();
     };
   }, [db]);
 
@@ -69,8 +105,12 @@ function AuthedApp({ user, onSignOut }: { user: SessionUser; onSignOut: () => vo
 
   return (
     <PowerSyncContext.Provider value={db}>
-      <Layout
-        title="Prisms"
+      {/* §7.14 (Fix A): the shared read layer is mounted ABOVE the router, so its
+          9 base subscriptions + FactContext/TreeIndex are created once per session
+          and survive navigation (navigate() only swaps the screen below). */}
+      <PrismsDataProvider>
+        <Layout
+          title="Prisms"
         nav={[
           { label: 'Worklist', href: '/', active: route === '/' },
           { label: 'Inbox', href: '/inbox', active: route === '/inbox' },
@@ -83,6 +123,7 @@ function AuthedApp({ user, onSignOut }: { user: SessionUser; onSignOut: () => vo
           { label: 'Rules', href: '/rules', active: route === '/rules' },
           { label: 'Blockers', href: '/blockers', active: route === '/blockers' },
           { label: 'Dashboard', href: '/dashboard', active: route === '/dashboard' },
+          { label: 'Review', href: '/review', active: route === '/review' },
           { label: 'Settings', href: '/settings', active: route === '/settings' },
         ]}
         onNavigate={navigate}
@@ -100,13 +141,14 @@ function AuthedApp({ user, onSignOut }: { user: SessionUser; onSignOut: () => vo
                 Test notification
               </button>
             )}
-            <button className="px-btn" style={{ marginTop: 8 }} onClick={onSignOut}>Sign out</button>
+            <button className="px-btn" style={{ marginTop: 8 }} data-testid="sign-out" onClick={() => void handleSignOut()}>Sign out</button>
           </>
         }
       >
+        <ReviewBanner onOpen={() => navigate('/review')} />
         {rejections.length > 0 && (
           <div className="px-error" data-testid="rejection-toast" onClick={() => setRejections([])}>
-            Change rejected: {rejections.map((r) => r.reject_code).join(', ')} (reverted)
+            {rejections.map((r) => rejectionMessage(r.reject_code)).join(' ')}
           </div>
         )}
         {({
@@ -121,9 +163,11 @@ function AuthedApp({ user, onSignOut }: { user: SessionUser; onSignOut: () => vo
           '/rules': <Rules ctx={ctx} />,
           '/blockers': <Blockers ctx={ctx} />,
           '/dashboard': <Dashboard ctx={ctx} />,
+          '/review': <Review ctx={ctx} />,
           '/settings': <Settings ctx={ctx} />,
         } satisfies Record<Route, ReactNode>)[route] ?? <Worklist ctx={ctx} />}
-      </Layout>
+        </Layout>
+      </PrismsDataProvider>
     </PowerSyncContext.Provider>
   );
 }

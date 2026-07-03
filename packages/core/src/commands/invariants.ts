@@ -11,10 +11,12 @@
  */
 import type { AutomationRule, Node, NodeType } from '../domain/entities';
 import { domainError } from '../domain/errors';
-import { minutesBetween } from '../time/duration';
+import { minutesBetween, MS_PER_MINUTE } from '../time/duration';
 import type { IsoDateTime, Uuid } from '../domain/primitives';
 import { err, ok, type Result } from '../domain/result';
-import { validateEdge, type EdgeIndex } from '../graph/dag';
+import { isoToEpochMillis, type Instant } from '../time/instant';
+import { incomingEdges, validateEdge, type EdgeIndex } from '../graph/dag';
+import type { FactContext } from '../status/context';
 import {
   ALLOWED_PARENT_TYPES,
   validateNodeMove,
@@ -92,12 +94,13 @@ export function checkNodeRetype(
   // I1: the node's own parent must accept the new type…
   const ownTyping = validateNodeParent(tree, payload.node_type, node.parent_id);
   if (!ownTyping.ok) return ownTyping;
-  // …and every existing child must still accept it as their parent.
+  // …and every existing child must still accept it as their parent (§8: orphaning
+  // a child type is its own machine-readable rejection).
   for (const child of tree.childrenByParent.get(node.id) ?? []) {
     if (!ALLOWED_PARENT_TYPES[child.node_type].includes(payload.node_type)) {
       return err(
         domainError(
-          'E_HIERARCHY',
+          'E_INVALID_RETYPE_CHILDREN',
           `retyping to ${payload.node_type} would orphan a ${child.node_type} child (I1)`,
         ),
       );
@@ -170,6 +173,57 @@ export function checkBlockMove(
   }
   if (task && task.completed_at !== null) return doneImmutable(block.task_id); // I8
   if (!intervalOk(payload.starts_at, payload.ends_at)) return badInterval; // I6
+  return ok(undefined);
+}
+
+// --- completion gates (§7.6, the completion surface of edge semantics) ------
+
+/**
+ * §7.6 completion: a task cannot be completed while a dependency requirement is
+ * unmet. FS and FF require the predecessor COMPLETED (+ lag); SF requires it
+ * STARTED. SS gates availability, not completion. A dangling/deleted
+ * predecessor cannot block (its obligation died with it). The error identifies
+ * the blocking edge type and predecessor.
+ */
+export function checkCompletion(
+  task: Node,
+  ctx: FactContext,
+  now: Instant,
+): Result<void> {
+  const blocked = (edgeType: string, predId: Uuid): Result<void> =>
+    err(
+      domainError(
+        'E_COMPLETION_BLOCKED',
+        `cannot complete ${task.id}: ${edgeType} predecessor ${predId} requirement unmet (§7.6)`,
+        { edge_type: edgeType, predecessor_id: predId },
+      ),
+    );
+  for (const edge of incomingEdges(ctx.edgeIndex, task.id)) {
+    const pred = getNode(ctx.tree, edge.predecessor_id);
+    if (!pred) continue;
+    const lagMs = edge.lag_minutes * MS_PER_MINUTE;
+    switch (edge.edge_type) {
+      case 'FS':
+      case 'FF':
+        if (pred.completed_at === null) return blocked(edge.edge_type, pred.id);
+        if (now < isoToEpochMillis(pred.completed_at) + lagMs) return blocked(edge.edge_type, pred.id);
+        break;
+      case 'SF': {
+        // "started" = any time entry exists, or the predecessor is complete (§7.6).
+        if (!ctx.hasAnyEntry(pred.id) && pred.completed_at === null) return blocked(edge.edge_type, pred.id);
+        // §7.6: SF blocks completion until the predecessor's START + lag. Gate on
+        // the earliest recorded start when an entry exists; a lag-less SF is
+        // satisfied by any start (above).
+        if (edge.lag_minutes > 0) {
+          const startedAt = ctx.earliestEntryStart(pred.id);
+          if (startedAt !== undefined && now < startedAt + lagMs) return blocked(edge.edge_type, pred.id);
+        }
+        break;
+      }
+      case 'SS':
+        break;
+    }
+  }
   return ok(undefined);
 }
 

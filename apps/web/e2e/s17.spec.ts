@@ -24,6 +24,7 @@ const cmd = (name: string, payload: unknown) => ({
   name,
   hlc: `${(++seq).toString(16).padStart(12, '0')}-0000-e2e`,
   payload,
+  schema_version: 1, // R6: clients emit the §7.11 version (absent = below-floor rejection)
 });
 
 /** ISO at `offset` days from today, `hourUtc` (→ a daytime hour in America/New_York). */
