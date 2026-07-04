@@ -12,7 +12,9 @@
   --px-ok: #46c08a;
   --px-radius: 10px;
   --px-gap: 12px;
-  --px-font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  /* Emoji fallbacks (D6): Segoe UI Emoji = Windows, Apple Color Emoji = macOS/iOS,
+     Noto Color Emoji = Android/Linux — so the D6 corpus renders in color everywhere. */
+  --px-font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji';
 }
 
 * { box-sizing: border-box; }
@@ -193,3 +195,21 @@ body {
 .px-field input { font: inherit; padding: 10px 12px; border-radius: var(--px-radius); border: 1px solid var(--px-border); background: var(--px-bg); color: var(--px-text); }
 .px-error { color: var(--px-danger); font-size: 13px; margin: 8px 0; }
 .px-muted { color: var(--px-text-dim); }
+
+/* journal (D2/D3): day-header note affordance + editor + toolbar + markdown preview */
+.px-cal-col-head { cursor: pointer; gap: 4px; }
+.px-cal-col-head:hover { color: var(--px-text); }
+.px-cal-col-head--sel { color: var(--px-text); background: var(--px-surface-2); }
+.px-note-dot { width: 6px; height: 6px; border-radius: 999px; background: var(--px-accent); display: inline-block; }
+.px-journal-editor { font: inherit; padding: 10px 12px; border-radius: var(--px-radius); border: 1px solid var(--px-border); background: var(--px-bg); color: var(--px-text); line-height: 1.5; }
+.px-md-toolbar { display: flex; flex-wrap: wrap; gap: 4px; }
+.px-md-toolbar .px-btn { padding: 4px 8px; font-size: 12px; min-width: 30px; }
+.px-md { background: var(--px-surface); border: 1px solid var(--px-border); border-radius: var(--px-radius); padding: 2px 14px; margin-top: 8px; }
+.px-md > :first-child { margin-top: 6px; }
+.px-md pre { background: var(--px-bg); padding: 10px 12px; border-radius: 8px; overflow-x: auto; }
+.px-md code { background: var(--px-surface-2); padding: 1px 5px; border-radius: 4px; font-size: 0.92em; }
+.px-md pre code { background: none; padding: 0; }
+.px-md a { color: var(--px-accent); }
+.px-md blockquote { border-left: 3px solid var(--px-border); margin: 8px 0; padding-left: 12px; color: var(--px-text-dim); }
+.px-md ul, .px-md ol { padding-left: 22px; }
+.px-md input[type='checkbox'] { margin-right: 6px; }

@@ -457,7 +457,32 @@ inserts around a selection containing `'👨‍👩‍👧‍👦'`, preview ren
 markdown (`<script>`, `javascript:` link, `<img onerror>`) renders inert; day-panel export
 downloads exactly the entered content as `YYYY-MM-DD.md`; Settings archive button (mocked
 fetch) triggers a zip download whose entries match the mocked days.
-**DoD:** gate green; manual Win+. emoji входит check on Windows Chromium + Tauri dev build.
+**DoD:** gate green; manual Win+. emoji input check on Windows Chromium + Tauri dev build.
+
+#### J4 — AS BUILT (2026-07-04) → **DONE, gate green** (core `architecture-lint` + `optimize`
+property tests flake on CPU-starved parallel turbo runs — both pass @prisms/core in isolation;
+coverage 90.43%). Web +20 tests (13 ui markdown, 7 web components → 8 with the archive test).
+Shipped: `applyMarkdownEdit`/`truncatePlain` (packages/ui/src/markdown.ts, pure), the
+`DayJournalPanel` + `MarkdownView` (apps/web/src/components/DayJournal.tsx), Agenda day-header
+note dot + panel swap, `theme.css` emoji font stack (`--px-font`), and both export surfaces
+(day-panel Blob download + Settings `.md` archive via `downloadJournalArchive`).
+
+Key findings / deviations:
+- **Sanitized renderer:** `react-markdown`@9 + `remark-gfm`@4, NO `rehype-raw` (raw HTML stays
+  escaped text), `urlTransform` allowlists `http/https/mailto`. Tested inert against `<script>`,
+  `javascript:` links, and `<img onerror>` — the security-critical test.
+- **Editor:** textarea + shared toolbar (`applyMarkdownEdit` on the DOM selection) + preview
+  toggle; save debounces 800ms + flushes on blur; `existingId` (from the reactive `useJournalDay`)
+  makes edits patch the live row, a new day mints one. Panel keyed `key={date}` so it re-inits
+  per day; a `dirty` ref adopts synced content without clobbering an in-progress edit.
+- **`Uint8Array`→`Blob` (TS 5.7 variance):** fflate returns `Uint8Array<ArrayBufferLike>` which
+  isn't a `BlobPart`; wrap in a fresh `new Uint8Array(...)` (plain ArrayBuffer).
+- **Test harness:** the repo screen-test pattern = `.test.ts` + `createElement` (no JSX) +
+  `// @vitest-environment jsdom`, mock `@prisms/ui` hooks via `importOriginal` (keep the pure
+  helpers real). The full Agenda renders under that mock (dot date computed with real `bucketDate`
+  so it's not time-flaky). fflate added to @prisms/web devDeps (for the archive round-trip test).
+- **Deps:** `react-markdown`/`remark-gfm` (web deps); `fflate` (web devDep).
+- Not done (needs a human): the manual Win+. emoji input check on Windows Chromium + Tauri.
 
 ### J5 — Mobile (Expo RN) + desktop parity
 `apps/mobile/src/screens/Agenda.tsx` + new `JournalDay` screen/modal:

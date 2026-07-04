@@ -23,7 +23,9 @@
     "@xyflow/react": "^12.3.5",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
+    "react-markdown": "^9.1.0",
     "react-router-dom": "^7.17.0",
+    "remark-gfm": "^4.0.1",
     "zustand": "^5.0.14"
   },
   "devDependencies": {
@@ -34,6 +36,7 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.2",
     "eslint": "^10.4.1",
+    "fflate": "^0.8.3",
     "jsdom": "^29.1.1",
     "postgres": "^3.4.9",
     "typescript": "^6.0.3",

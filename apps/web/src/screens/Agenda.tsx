@@ -25,16 +25,19 @@ import {
 } from '@prisms/core';
 import {
   Skeleton,
+  truncatePlain,
   useAgenda,
   useBlockTags,
   useCommands,
   useIsHydrated,
+  useJournalMonths,
   useTagCatalog,
   type AgendaBlock,
   type BlockTagView,
   type CommandContext,
 } from '@prisms/ui';
 
+import { DayJournalPanel } from '../components/DayJournal';
 import { WhyButton } from '../components/Why';
 
 const GRID_START_HOUR = 6;
@@ -165,6 +168,7 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
 
   const [weekOffset, setWeekOffset] = useState(0);
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const agenda = useAgenda(now);
   const commands = useCommands(ctx);
   const hydrated = useIsHydrated();
@@ -216,6 +220,13 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
     const base = addDays(bucketDate(now, 0, tz), weekOffset * 7);
     return Array.from({ length: 7 }, (_, i) => addDays(base, i));
   }, [now, tz, weekOffset]);
+
+  // §7.3/D3: hold the visible week's month(s) — a week can span two, so subscribe
+  // BOTH — so the day-header note dots reflect synced notes. Lazy: nothing outside
+  // the viewed months ever syncs.
+  const months = useMemo(() => [...new Set(days.map((d) => d.slice(0, 7)))], [days]);
+  const journal = useJournalMonths(months);
+  const noteByDate = useMemo(() => new Map(journal.entries.map((e) => [e.entry_date, e.content])), [journal.entries]);
 
   const colIndexOf = (start: Instant): number => days.indexOf(bucketDate(start, 0, tz));
 
@@ -275,7 +286,10 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
             </div>
           ))}
         </div>
-        {selectedBlock ? (
+        {selectedDay ? (
+          // key by day so the editor re-initializes per day (J4/D3).
+          <DayJournalPanel key={selectedDay} date={selectedDay} ctx={ctx} />
+        ) : selectedBlock ? (
           <>
             <div className="px-why-inline" style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
               <span className="px-muted">{selectedBlock.status === 'suggested' ? 'Suggested event' : 'Event'}</span>
@@ -284,7 +298,7 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
             <BlockTagsPanel blockId={selectedBlock.id} title={selectedBlock.title} ctx={ctx} />
           </>
         ) : (
-          <p className="px-muted" style={{ marginTop: 16 }}>Select an event to tag it.</p>
+          <p className="px-muted" style={{ marginTop: 16 }}>Select a day header for a note, or an event to tag it.</p>
         )}
       </div>
 
@@ -304,7 +318,20 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
 
           {days.map((date, col) => (
             <div key={date} className="px-cal-col" data-testid={`day-${col}`}>
-              <div className="px-cal-col-head">{DAY_LABEL[new Date(`${date}T00:00:00Z`).getUTCDay()]} {date.slice(8)}</div>
+              <div
+                className={`px-cal-col-head${selectedDay === date ? ' px-cal-col-head--sel' : ''}`}
+                data-testid={`day-head-${col}`}
+                role="button"
+                tabIndex={0}
+                title={noteByDate.has(date) ? truncatePlain(noteByDate.get(date)!, 80) : 'Add a note for this day'}
+                onClick={() => {
+                  setSelectedDay(date);
+                  setSelectedBlockId(null);
+                }}
+              >
+                {DAY_LABEL[new Date(`${date}T00:00:00Z`).getUTCDay()]} {date.slice(8)}
+                {noteByDate.has(date) && <span className="px-note-dot" data-testid={`note-dot-${date}`} aria-label="has note" />}
+              </div>
               <div className="px-cal-col-body" style={{ height: BODY_HEIGHT }}>
                 {/* hour grid lines */}
                 {Array.from({ length: GRID_END_HOUR - GRID_START_HOUR }, (_, i) => (
@@ -347,7 +374,10 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
                         e.preventDefault();
                         startBlockDrag(b);
                       }}
-                      onClick={() => setSelectedBlockId(b.id)}
+                      onClick={() => {
+                        setSelectedBlockId(b.id);
+                        setSelectedDay(null);
+                      }}
                     >
                       <span className="px-cal-block-title">{b.anchored && <span aria-label="anchored">🔒 </span>}{b.title}</span>
                       {b.superseded && (

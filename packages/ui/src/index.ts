@@ -57,6 +57,13 @@ export {
   journalArchiveFilename,
   type JournalExportEntry,
 } from './portability/journal-md';
+export {
+  applyMarkdownEdit,
+  truncatePlain,
+  type Selection,
+  type MarkdownAction,
+  type MarkdownEdit,
+} from './markdown';
 
 // two-layer client store (1.3 §7.2, R15) — M0 spike
 export {

@@ -11,7 +11,7 @@ import type { ImportReport } from '@prisms/core';
 import { subscribeHistory, useCommands, useUserSettings, type CommandContext, type StreamSubscriber } from '@prisms/ui';
 
 import { isDesktop } from '../desktop';
-import { downloadExport, dryRunImport, fetchExport, readImportFile, restoreImport } from '../portability';
+import { downloadExport, downloadJournalArchive, dryRunImport, fetchExport, readImportFile, restoreImport } from '../portability';
 
 export function Settings({ ctx }: { ctx: CommandContext }) {
   // §7.14: settings come from the warm shared read layer, not a screen-local
@@ -75,6 +75,7 @@ function Portability() {
   const [busy, setBusy] = useState(false);
   const [plaintextOptOut, setPlaintextOptOut] = useState(false);
   const [historyOn, setHistoryOn] = useState(false);
+  const [journalBusy, setJournalBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const db = usePowerSync();
   const historyUnsub = useRef<(() => void) | null>(null);
@@ -113,6 +114,19 @@ function Portability() {
       setStatus(e instanceof Error ? e.message : 'export failed');
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function onJournalExport() {
+    setJournalBusy(true);
+    setStatus(null);
+    try {
+      const name = await downloadJournalArchive();
+      setStatus(`Exported ${name}`);
+    } catch (e) {
+      setStatus(e instanceof Error ? e.message : 'journal export failed');
+    } finally {
+      setJournalBusy(false);
     }
   }
 
@@ -238,6 +252,17 @@ function Portability() {
         </div>
       )}
       {status && <div className="px-muted" data-testid="portability-status" style={{ marginTop: 10 }}>{status}</div>}
+
+      <div style={{ marginTop: 24 }}>
+        <h3 style={{ marginBottom: 4 }}>Journal</h3>
+        <p className="px-muted" style={{ marginTop: 0, fontSize: 13 }}>
+          Download all your day notes as a folder of Markdown files — one <code>.md</code> per day. Sourced from the
+          server, so it includes every month, not just the ones synced to this device.
+        </p>
+        <button className="px-btn" data-testid="journal-export-archive" disabled={journalBusy} onClick={() => void onJournalExport()}>
+          Export journal (.md archive)
+        </button>
+      </div>
 
       <div style={{ marginTop: 24 }}>
         <h3 style={{ marginBottom: 4 }}>Older history</h3>
