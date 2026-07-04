@@ -70,7 +70,7 @@ journal_month:
     - SELECT * FROM journal_entries
       WHERE user_id = auth.user_id()
         AND deleted_at IS NULL
-        AND month_key = subscription.parameters() ->> 'month'   # exact syntax pinned at J0
+        AND month_key = subscription.parameters() ->> 'month'   # J0-CONFIRMED: compiled + ACTIVE on 1.22.0
 ```
 
 - Tombstones join the existing `history` stream (parity with `habit_completions`).
@@ -86,7 +86,9 @@ journal_month:
   covering the visible week on mount/navigation (a week can span two months — subscribe both).
   Fresh device on today's Agenda ⇒ at most the current month's rows sync; nothing else, ever,
   until viewed.
-- **Fallback (decided at J0 exit):** if parameterized subscribe fails on the pinned service
+- **Fallback (decided at J0 exit): ✅ NOT TRIGGERED — J0 confirmed parameterized streams
+  compile + activate on service 1.22.0 (see J0 Findings).** Kept here for the record: if
+  parameterized subscribe fails on the pinned service
   (powersync-service 1.22.0 / common ^1.54 / web ^1.38 / RN ^1.23), ship a single
   `journal` stream, `auto_subscribe: false`, whole-table, subscribed on first journal open.
   Coarser but preserves the "zero rows on fresh login" requirement; the month manager's API
@@ -184,6 +186,50 @@ Throwaway branch/worktree; nothing merges except findings appended to this file.
    `SHOW server_encoding` = UTF8 on the compose Postgres.
 4. **Exit:** go/no-go on parameterized streams recorded here; fallback (D3) triggered or not.
    Sanity: `git checkout` away the scratch stream.
+
+#### J0 — FINDINGS (recorded 2026-07-04) → **GO. D3 fallback NOT triggered.**
+Method: scratch table `_j0_journal` (id/user_id/month_key/content) added to the `powersync`
+publication; two scratch streams `journal_probe_a` (`subscription.parameters() ->> 'month'`)
+and `journal_probe_b` (`subscription.parameter('month')`) over it; driven against the live WSL
+stack (postgres:16 + journeyapps/powersync-service:**1.22.0**). All scratch artifacts reverted
+after (yaml `git checkout`, table dropped, service recompiled to a clean probe-free ACTIVE
+ruleset — verified `id=5 state=ACTIVE has_probe=f no_fatal=t`).
+
+- **(2a) Parameter syntax — BOTH forms valid, syntax A pinned.** Offline parser
+  `@powersync/service-sync-rules@0.37.0` (the exact engine `sync-rules:check` runs) registers
+  both `subscription.parameters()` (returns the params JSON as TEXT → `->> 'month'`) and
+  `subscription.parameter('month')` (single-key extract). **Pinned: `subscription.parameters()
+  ->> 'month'`** (text-typed both sides of the `month_key =` equality; matches PowerSync's
+  documented form). `auto_subscribe: false` is **mandatory**, not stylistic — the compiler
+  emits a warning if a parameterized stream auto-subscribes (default-subscription passes null
+  params). D3 already specifies false.
+- **(2f) `check-sync-rules.ts` accepts it** — `sync-streams.yaml: valid` with both probes.
+- **Live 1.22.0 compiles + activates it (the real compatibility gate).** The service ingested
+  the changed rules into `powersync_storage.powersync.sync_rules` as a new row
+  `state=ACTIVE, last_fatal_error=null` carrying both param syntaxes (prior probe-less rulesets
+  → `TERMINATED`). A failed compile could never reach ACTIVE. NB: the offline 0.37.0 parser is
+  only *necessary*; this ACTIVE row on the pinned image is the *sufficient* evidence.
+- **(2c) Parameter compiles to a BUCKET KEY (distinct month ⇒ distinct bucket).** The persisted
+  `sync_plan` shows `dataSources[].partitionBy … column = "month_key"` and the stream querier
+  `parameters: [{source.request:"subscription"}, {value:"month"}]` — i.e. the client
+  subscription param `month` is wired into a `month_key`-partitioned bucket. So two month values
+  address two independent buckets; with `auto_subscribe:false` nothing flows until subscribed
+  **(2b** holds by construction).
+- **(2d TTL eviction / 2e offline→reconnect / end-to-end client delivery): NOT exercised in
+  J0** — no pure-node PowerSync client exists in the repo (client is browser wa-sqlite / RN
+  quick-sqlite). Deferred to **J3** (subscription-manager + convergence harness) and **J6**
+  (Playwright fresh-device lazy-load proof), where the real client runs. Residual risk LOW:
+  the bucket is parameter-partitioned in the ACTIVE plan and M-series already runtime-verified
+  edition-3 stream transport (incl. lazy `history`) on this exact 1.22.0 image.
+- **(3) Emoji round-trip — byte-identical through Postgres.** `SHOW server_encoding` = **UTF8**
+  (client_encoding UTF8). The full D6 corpus inserted via the driver and read back matched on
+  `md5(content)`, `octet_length`, `char_length`, AND `content = <js string>` for every case:
+  `👍🏽`(2cp/8B) · `👨‍👩‍👧‍👦`(7cp/25B) · `🇫🇷`(2cp/8B) · `❤️`(2cp/6B) · combining-`café`(5cp/6B) ·
+  `שלום 🌍 hello`(12cp/19B). The PG boundary is lossless; the SQLite/JS-UTF16 leg is lossless by
+  construction and is re-asserted at every layer in J2/J3.
+- Tooling note: nested-quote hell across PowerShell→WSL→docker→psql — drive Postgres from a
+  Node `postgres` script (workspace dep) or pipe SQL via **stdin** to `psql -f -`; avoid
+  `psql -c "…$$…"` (WSL `sh` expands `$$` to a PID inside double quotes).
 
 ### J1 — Schema, core domain, command payloads, sync config
 `packages/core`:
@@ -372,7 +418,7 @@ branch/PR; no schema or server changes by construction.
 ## Risk register
 | Risk | Session | Mitigation |
 |---|---|---|
-| Parameterized streams unsupported/buggy on service 1.22.0 | J0 | D3 fallback: single lazy `journal` stream; API shaped so only the subscription body changes |
+| Parameterized streams unsupported/buggy on service 1.22.0 | J0 | ✅ CLEARED at J0 — compiled + ACTIVE with a `month_key`-partitioned bucket on 1.22.0; fallback not needed (kept in D3 as insurance). Client-delivery/TTL/offline re-proof carried to J3/J6 |
 | Publication omission ⇒ silent no-sync | J1 | Migration reviewed against R10 pattern; J6 e2e would catch (rows never arrive) |
 | Ghost overlay on two-device same-new-day | J2/J3 | D5 ack-effects rewrite + convergence tests (also hardens tag.answer) |
 | Losing a paragraph to LWW silently | J2 | hlc_conflict review item carries losing content |
