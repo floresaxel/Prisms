@@ -643,3 +643,42 @@ Graph editing is React-Flow/DOM-based and deliberately not ported to RN. Mobile 
 - Errors: never throw strings; `Result<T, DomainError>` in core, typed error codes over the API.
 - Migrations forward-only; sync rules versioned alongside schema; mutation payloads only ever gain optional fields (old clients keep working).
 - Test floor: core ≥ 90% line coverage; every invariant in §6.7 has a rejecting test; scheduler and rules engine have fast-check property suites; one end-to-end two-device convergence test runs in CI.
+
+---
+
+## Annex J — Journal (day notes) *(post-1.0 feature; full spec: `Blueprints/JOURNAL_PLAN.md`)*
+
+A markdown note on any calendar day. Design decisions D1–D7 are normative; distilled:
+
+- **Data (D1).** `journal_entries` — a new synced table, **not** a `node_type` (journals have
+  no status, hierarchy, scheduling, or StatusIndex). One live row per `(user_id, entry_date)`
+  via a §7.7 partial unique index; `month_key` ('YYYY-MM', server-derived from `entry_date`);
+  `content` is CommonMark markdown text. Migration `0010_journal.sql` (+ `ALTER PUBLICATION
+  powersync ADD TABLE journal_entries` — the publication is scoped, R10).
+- **Rich text (D2).** Markdown text forever — renders on every platform (react-markdown on
+  web/desktop, react-native-markdown-display on mobile), one LWW field, no CRDT, no vendor
+  lock-in. Rendering is sanitized: raw HTML is never rendered; link hrefs allowlisted to
+  http/https/mailto. Concurrent same-day edits are whole-content LWW by HLC; the LOSING content
+  is surfaced as an `hlc_conflict` review item (§7.13) so no prose vanishes.
+- **Lazy sync (D3).** A parameterized `journal_month` stream (`auto_subscribe: false`, matches
+  `month_key = subscription.parameters() ->> 'month'`). Stream-parameter invariant (extends
+  §7.3): a subscription parameter may only **narrow** within the user's own rows — every query
+  still filters `auth.user_id()`; it never widens. So a fresh device pulls **zero** journal rows
+  until a month is viewed. The client holds the visible month(s) with a ref-counted subscription
+  manager; a week spanning two months holds both.
+- **Commands (D4, §8.1).** `journal.write {id, entry_date, content}` (upsert keyed by day;
+  `month_key` server-derived, never in the payload) and `journal.delete {id}`.
+- **Ack effects (D5).** The `/sync/upload` response (`commandOutcomeSchema`) gains optional
+  per-command `effects: [{table, row_id, op}]`. When two offline devices mint different ids for
+  the same new day and the server converges onto one, the ack's authoritative row id lets the
+  loser's client rewrite its overlay id and reconcile instead of ghosting.
+- **Emoji (D6).** Plain Unicode end to end (UTF-8 in PG, UTF-16 in JS, TEXT in SQLite); the work
+  is font fallbacks + code-point-safe truncation (never `Intl.Segmenter` — Hermes lacks it) +
+  corpus tests at every layer.
+- **Export (D7).** Per-day `.md`, the `content` verbatim (`YYYY-MM-DD.md`). Single day on every
+  platform. Full archive (web/desktop): `GET /sync/journal/export` returns all live rows
+  (owner-scoped, date-ordered) and the client zips one file per day — **server-sourced**, so
+  lazy month sync can never truncate an "export all".
+
+API surface additions: `GET /sync/journal/export` (requireSession + rate-gated) → `{ entries:
+[{ entry_date, content, updated_at }] }`.

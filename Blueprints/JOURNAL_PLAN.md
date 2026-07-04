@@ -565,6 +565,36 @@ Docs + release:
 
 **DoD:** all gates + e2e green in CI; fresh-device proof is an asserted test, not a claim.
 
+#### J6 — AS BUILT (2026-07-04) → **DONE.** `apps/web/e2e/journal.spec.ts` (3 tests) runs GREEN
+against the live WSL stack:
+1. create (markdown + `👨‍👩‍👧‍👦`) → server-persist → reload keeps it → edit converges → delete
+   (dot gone); the day-panel Export .md downloads exactly the typed content.
+2. **FRESH-DEVICE LAZY-LOAD PROOF (asserted, not claimed):** a note seeded in a past month
+   (`daysAgo(42)`) is `localCount(page, pastA) === 0` after login+Agenda (its month never
+   subscribed), while today's note IS local; navigating 6 weeks back subscribes the month →
+   `localCount === 1`. Page-evals the local replica via `window.__db` (App.tsx exposes it under
+   `import.meta.env.DEV`).
+3. The Settings `.md` archive (server-sourced) contains the never-synced past month.
+4. Offline (`context.setOffline`) write shows immediately (overlay), syncs on reconnect, one row.
+
+Notes:
+- **Ran it locally to verify** (the DoD's "asserted, not a claim"). Recipe on THIS machine:
+  server `start` with `POWERSYNC_JWT_SECRET=<dev>` + `PS_JWT_K_B64URL=<base64url(dev)>` (the
+  committed .env's prod `PS_JWT_K_B64URL` would trip the S10-F5 boot check) +
+  `BETTER_AUTH_TRUSTED_ORIGINS=http://localhost:5173` + `PRISMS_JOBS_ENABLED=false` +
+  `DATABASE_URL=…@127.0.0.1:5434/…`; web `dev` with `VITE_POWERSYNC_URL=http://localhost:8081`;
+  then `playwright test journal.spec.ts --workers=1`. MUST be the DEV server (not `vite preview`)
+  so `__db` is exposed. Vite proxies `/api`+`/sync` → :3001.
+- The plan's "two-context pattern from v14.spec" does not exist (v14.spec is M12, single-context;
+  no e2e uses `newContext`). Two-device same-day convergence is proven deterministically at the
+  store (journal-overlay) + server (journal.integration) level; the e2e offline test covers the
+  single-device overlay→sync path.
+- **Docs:** `docs/SELF_HOSTING.md` — migration-0010 publication note (restart PowerSync) + the
+  Sync-Streams row now names `journal_month` + the narrow-only parameter invariant. `ARCHITECTURE.md`
+  — new **Annex J** (D1–D7 distilled + stream-param invariant + `/sync/journal/export`), added as
+  an appendix (the frozen v1.0 §6/§8 bodies left untouched, per the J1 decision).
+- CI: no new jobs — the spec joins the existing Playwright job (config already `workers:1` on CI).
+
 ### J7 (optional, post-merge) — WYSIWYG on web/desktop
 TipTap + `tiptap-markdown` bound to the same `content` field (markdown in/out; storage format
 unchanged — mobile keeps the J4 toolbar editor). Interactive task-list checkboxes. Separate
