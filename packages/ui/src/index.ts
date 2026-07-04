@@ -51,6 +51,12 @@ export {
   type SerializeOptions,
   type ParseOptions,
 } from './portability/export-import';
+export {
+  buildJournalArchive,
+  journalDayFilename,
+  journalArchiveFilename,
+  type JournalExportEntry,
+} from './portability/journal-md';
 
 // two-layer client store (1.3 §7.2, R15) — M0 spike
 export {
@@ -61,6 +67,7 @@ export {
   type SqlExecutor,
   type SqlTx,
   type ReviewItem,
+  type AckEffect,
 } from './powersync/overlay-store';
 export { createExecuteCommand, type ExecuteCommand, type ExecuteContext, type ExecuteDeps, type ExecuteOptions } from './powersync/execute';
 export { buildOptimisticEffects, buildAcceptSuggestionEffects, type EffectSpec, type OptimisticEffectCtx, type AcceptSuggestionBlock } from './powersync/effects';
@@ -69,8 +76,18 @@ export { uploadClientCommands, UploadClientError, MAX_UPLOAD_BATCH, type UploadC
 // persistent client read layer (1.4 §7.14, Fix A) — M11
 export { PrismsDataProvider, usePrismsData, toOverlayEffect, type PrismsData, type SharedRows } from './powersync/data-provider';
 
-// sync-stream tiers — lazy Tier 2 (1.3 §7.3) — M14
-export { subscribeHistory, HISTORY_STREAM, type StreamSubscriber, type StreamSubscription, type HistorySubscribeOptions } from './powersync/streams';
+// sync-stream tiers — lazy Tier 2 (1.3 §7.3) — M14; lazy journal months (D3) — J3
+export {
+  subscribeHistory,
+  HISTORY_STREAM,
+  createJournalMonthSubscriptions,
+  JOURNAL_MONTH_STREAM,
+  type StreamSubscriber,
+  type StreamSubscription,
+  type HistorySubscribeOptions,
+  type JournalMonthSubscriptions,
+  type JournalMonthOptions,
+} from './powersync/streams';
 
 // provenance ("why does this exist?", §7.8) — M9
 export { explainProvenance, type ProvenanceFields, type ProvenanceExplanation } from './provenance';
@@ -100,6 +117,8 @@ export {
   useReviewInbox,
   useTagCatalog,
   useBlockTags,
+  useJournalMonths,
+  useJournalDay,
   useTimeBlocksForDay,
   useGroupedWorklist,
   useBlockedTasks,
@@ -137,6 +156,8 @@ export {
   type TimeBlockOption,
   type HabitTasksView,
   type ReviewItemView,
+  type JournalMonthsRead,
+  type JournalDayRead,
 } from './hooks';
 export { groupWorklistBySchedule, type WorklistGroup } from './worklist-grouping';
 

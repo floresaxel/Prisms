@@ -22,6 +22,8 @@ interface CommandResult {
   result: 'applied' | 'rejected' | 'noop';
   reject_code?: string;
   reject_reason?: string;
+  /** D5: authoritative rows this command wrote (for divergent-id overlay rewrite). */
+  effects?: { table: string; row_id: string; op: 'insert' | 'update' | 'delete' }[];
 }
 interface UploadResult {
   results?: CommandResult[];
@@ -135,7 +137,9 @@ export async function uploadClientCommands(options: UploadCommandsOptions): Prom
       } else {
         // applied | noop: mark applied but KEEP the overlay until the canonical
         // row arrives (reconcileConfirmed drops it) — no revert-flicker (S7-F6).
-        await store.markApplied(command.id);
+        // D5: pass the ack effects so a divergent authoritative row id (two
+        // devices, same new day) rewrites the overlay instead of ghosting.
+        await store.markApplied(command.id, result.effects);
         if (result.result === 'noop') summary.noop += 1;
         else summary.applied += 1;
       }

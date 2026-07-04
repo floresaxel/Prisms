@@ -139,6 +139,18 @@ const tag_answers = new Table({
   deleted_at: column.text,
 });
 
+/** A markdown note on a calendar day (§6.0, J3). Synced via the lazy
+ *  `journal_month` stream — a fresh device holds zero rows until a month is viewed. */
+const journal_entries = new Table({
+  user_id: column.text,
+  entry_date: column.text,
+  month_key: column.text,
+  content: column.text,
+  created_at: column.text,
+  updated_at: column.text,
+  deleted_at: column.text,
+});
+
 const decision_boards = new Table({
   user_id: column.text,
   title: column.text,
@@ -296,6 +308,7 @@ const syncedTables = {
   tags,
   tag_placements,
   tag_answers,
+  journal_entries,
   decision_boards,
   decision_criteria,
   decision_scores,

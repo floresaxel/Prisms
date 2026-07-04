@@ -240,6 +240,19 @@ export function createCommands(store: OverlayStore, ctx: CommandContext, deps: E
       await run('tag.clear_answer', { id: answerId });
     },
 
+    // --- journal (a note on any calendar day, D3) ---------------------------
+    /**
+     * Upsert a day's note (journal.write, keyed by entry_date). Editing passes
+     * the live row's `existingId` so the optimistic `ins` patches that row; a NEW
+     * day mints an id (the answerTag pattern). month_key is server-derived.
+     */
+    async writeJournal(input: { existingId?: string; entryDate: string; content: string }): Promise<void> {
+      await run('journal.write', { id: input.existingId ?? newId(), entry_date: input.entryDate, content: input.content });
+    },
+    async deleteJournal(id: string): Promise<void> {
+      await run('journal.delete', { id });
+    },
+
     // --- edges (the dependency graph, §6.7 I4) ------------------------------
     async createEdge(input: { id?: string; predecessorId: string; successorId: string; edgeType?: 'FS' | 'SS' | 'FF' | 'SF'; lagMinutes?: number }): Promise<string> {
       const id = input.id ?? newId();

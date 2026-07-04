@@ -44,3 +44,59 @@ export async function subscribeHistory(db: StreamSubscriber, opts: HistorySubscr
   if (opts.waitForFirstSync) await sub.waitForFirstSync();
   return () => sub.unsubscribe();
 }
+
+/** The parameterized journal stream name (must match sync-streams.yaml, D3). */
+export const JOURNAL_MONTH_STREAM = 'journal_month';
+
+export interface JournalMonthOptions {
+  /** Seconds a month stays subscribed after its LAST hold is released (default 1h). */
+  ttlSeconds?: number;
+}
+
+export interface JournalMonthSubscriptions {
+  /** Hold the subscription for `monthKey` ('YYYY-MM'); returns an idempotent release. */
+  hold(monthKey: string): () => void;
+  /** Months currently held (introspection/tests). */
+  heldMonths(): string[];
+}
+
+/**
+ * Ref-counted subscriptions to the lazy month-bucketed `journal_month` stream
+ * (D3). `hold(monthKey)` subscribes the month ONCE (however many concurrent
+ * holders) with `{ month: monthKey }` as the subscription parameter, TTL 1h,
+ * priority 3; the returned release drops the ref and unsubscribes only when the
+ * LAST holder lets go (PowerSync's TTL then evicts the local rows). The Agenda
+ * holds the visible month(s), so a fresh device pulls ZERO journal rows until it
+ * actually views a month. Typed against the minimal `StreamSubscriber` so it
+ * unit-tests with a mock; the real `PowerSyncDatabase` satisfies it.
+ */
+export function createJournalMonthSubscriptions(db: StreamSubscriber, opts: JournalMonthOptions = {}): JournalMonthSubscriptions {
+  const ttl = opts.ttlSeconds ?? 3600;
+  const held = new Map<string, { count: number; sub: Promise<StreamSubscription> }>();
+  return {
+    hold(monthKey) {
+      let entry = held.get(monthKey);
+      if (!entry) {
+        const sub = db.syncStream(JOURNAL_MONTH_STREAM, { month: monthKey }).subscribe({ ttl, priority: 3 });
+        entry = { count: 0, sub };
+        held.set(monthKey, entry);
+      }
+      entry.count += 1;
+      let released = false;
+      return () => {
+        if (released) return; // idempotent — double release is a no-op
+        released = true;
+        const e = held.get(monthKey);
+        if (!e) return;
+        e.count -= 1;
+        if (e.count <= 0) {
+          held.delete(monthKey);
+          void e.sub.then((s) => s.unsubscribe()).catch(() => undefined);
+        }
+      };
+    },
+    heldMonths() {
+      return [...held.keys()];
+    },
+  };
+}

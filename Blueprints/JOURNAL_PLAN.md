@@ -401,6 +401,34 @@ canonical row lands — S7-F6 semantics now exercised for a parameterized stream
 
 **DoD:** gate green; convergence harness (the M-series SQLite harness) covers the new paths.
 
+#### J3 — AS BUILT (2026-07-04) → **DONE, gate green** (core `architecture-lint` flake passes
+in isolation; coverage 90.39%; ui 100 tests, +11 journal). Shipped: PowerSync `journal_entries`
+Table (minimal, synced), `toJournalEntry`, `writeJournal`/`deleteJournal` (answerTag upsert
+shape), the `JournalMonthSubscriptions` ref-counted month manager, `useJournalMonths`/
+`useJournalDay`, the D5 `markApplied` ack-rewrite, and `buildJournalArchive` (fflate).
+
+Key findings / deviations:
+- **The D5 loser-overlay resolves for free** because the CLIENT `journal_entries` schema OMITS
+  `last_modified_by_command_id` (minimal, like `tags`). So `reconcileConfirmed` falls back to
+  PRESENCE-only for journal — the moment the winning canonical row (by the rewritten id) arrives,
+  the overlay clears. No stamp-mismatch stuck overlay; the losing content lives in the review
+  inbox (J2). The `markApplied` rewrite therefore only needs to fix the row_id (+ `fields.id`,
+  else the insert-seed's `id` corrupts the row keyed under the new id) + op→update.
+- **`markApplied` keeps a single-statement fast path** when nothing diverges (`sql.execute`),
+  opening a `writeTransaction` ONLY for an actual rewrite — otherwise the connector test (which
+  asserts the db-level `execute` saw `status='applied'`) breaks, since a txn routes through
+  `tx.execute`.
+- **Rewrite matching** is per-(command,table) with EXACTLY ONE local effect on the table (the
+  minted-id upsert shape: journal.write / tag.answer …); multi-effect commands are left untouched.
+- **`mergeRow` is NOT hlc-aware** (an overlay always overrides the replica) — that's WHY the
+  rewrite (not just keeping the stale insert) is required to avoid a phantom-id row; the plan's
+  "exactly one row before AND after canonical" is asserted on real better-sqlite3.
+- **Test harness:** the real `createSqlOverlayStore` runs on a better-sqlite3 `:memory:` handle
+  (added to @prisms/ui devDeps; already built for @prisms/server). The M7 server `Device` harness
+  is a SEPARATE simulation (columns `tbl`, own reconcile) — it does NOT use the real store, so the
+  faithful D5 test lives in ui. Deps added: `fflate` (dep), `better-sqlite3`/types (devDep).
+- **Coupling:** `appSchema` is now 23 synced tables (overlay-spike.test.ts updated 22→23).
+
 ### J4 — Web UI: Agenda integration + markdown editor/renderer
 `apps/web/src/screens/Agenda.tsx` + new `components/DayJournal.tsx` (+ `packages/ui` helpers):
 - Day-column headers (`px-cal-col-head`) get a note affordance: dot when the day has a live
