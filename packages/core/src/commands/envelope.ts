@@ -57,5 +57,15 @@ export const commandOutcomeSchema = z.strictObject({
   created_by_command_id: uuidSchema.optional(),
   /** Ids of any sync_review_items this command produced (§7.13). */
   review_item_ids: z.array(uuidSchema).optional(),
+  /**
+   * On `applied` (D5): the authoritative rows this command wrote, as
+   * `{table, row_id, op}`. When a `row_id` differs from the client's optimistic
+   * effect (two offline devices minted different ids for the SAME new row, e.g. a
+   * journal day), the client rewrites its overlay effect to the server's id so it
+   * reconciles instead of leaving a ghost. Absent ⇒ old server; behavior unchanged.
+   */
+  effects: z
+    .array(z.strictObject({ table: z.string(), row_id: uuidSchema, op: z.enum(['insert', 'update', 'delete']) }))
+    .optional(),
 });
 export type CommandOutcome = z.infer<typeof commandOutcomeSchema>;

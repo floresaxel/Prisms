@@ -32,6 +32,7 @@ export const MAX_OFFLINE_HORIZON_DAYS = 90;
  */
 const PURGE_ORDER = [
   'sync_review_items',
+  'journal_entries', // J2 — no dependents; omitting it never reclaims day-note tombstones (S5-F1 class)
   'tag_answers',
   'tag_placements',
   'habit_completions',

@@ -335,6 +335,35 @@ Integration tests (live PG via `PRISMS_DB_TEST_URL`):
 
 **DoD:** gate green; command_log rows carry effects; review-inbox recovery path proven.
 
+#### J2 — AS BUILT (2026-07-04) → **DONE, gate green** (core flake `architecture-lint`
+re-run passes in isolation; coverage 90.43% stmts). 13 new journal integration tests
+(`journal.integration.test.ts` dispatcher+jobs, `journal-http.integration.test.ts` D7 HTTP).
+
+Key findings / deviations:
+- **`lwwFields` ALREADY surfaces losing content generically** (`maybeHlcConflict`,
+  dispatcher.ts:~439) — an `hlc_conflict` review item whose `detail.losing_value` carries the
+  loser. So the "incoming edit LOSES" path needed only verification. The subtle gap J2 had to
+  add: the **out-of-order** case where the incoming write WINS and overwrites a DIFFERENT
+  device's row — the generic path never fires there, so the overwritten prose would vanish.
+  Fix: after a winning cross-device merge, call `maybeHlcConflict` with the prior content as the
+  loser. **`crossDevice = live.id !== p.id`** cleanly distinguishes a cross-device collision
+  (surface a conflict) from a user's own sequential same-id edit (never a conflict).
+- **Arbiter race:** `onConflictDoNothing({target:[user_id,entry_date], where: deleted_at IS
+  NULL})` + returning() → if 0 rows, re-select the live row and merge (never error/drop). NB the
+  drizzle option is `where` (the partial-index predicate), NOT `targetWhere`.
+- **D5 ack effects:** threaded the handler's `EffectSummary[]` out of the txn into
+  `CommandOutcome.effects` as minimal `{table,row_id,op}` (added to core `commandOutcomeSchema`).
+  Included ONLY when non-empty, so the settings/noop exact-match response tests are untouched.
+  A winning cross-device merge recs `update` on the AUTHORITATIVE row id (≠ the losing minted
+  id) — that divergence is exactly what J3's `markApplied` rewrites. `rec()` also runs on the
+  LOSS branch so the client still learns the authoritative row.
+- **Export (D7):** `runJournalExport` job (owner-scoped, live-only, date-ordered) +
+  `GET /sync/journal/export` (requireSession + shared `rateGate`, fixed endpoint limit 30).
+  Server-sourced — never the local replica (lazy sync would truncate).
+- **PURGE_ORDER** += journal_entries (no dependents; omitting it = S5-F1 tombstone leak).
+- **Test gotcha:** the command envelope id (dedup key) MUST be fresh per command — conflating
+  it with the journal ROW id makes a delete/rebind look like an idempotent replay (noop).
+
 ### J3 — Client store: schema, mappers, effects, commands, month subscriptions
 `packages/ui/src/powersync/`:
 - `schema.ts`: `journal_entries` Table (user_id, entry_date, month_key, content, created_at,
