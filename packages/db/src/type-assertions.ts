@@ -20,6 +20,7 @@ import type {
   ExternalFact,
   Habit,
   HabitCompletion,
+  JournalEntry,
   Node,
   ScheduleBlock,
   ScheduleSuggestionBatch,
@@ -65,6 +66,7 @@ export type AssertDiagramLayouts = Assert<Equal<Row<'diagram_layouts'>, DiagramL
 export type AssertDiagramGroups = Assert<Equal<Row<'diagram_groups'>, DiagramGroup>>;
 export type AssertCommandLog = Assert<Equal<Row<'command_log'>, CommandLogEntry>>;
 export type AssertUserSettings = Assert<Equal<Row<'user_settings'>, UserSettings>>;
+export type AssertJournalEntries = Assert<Equal<Row<'journal_entries'>, JournalEntry>>;
 
 // New 1.3 synced tables (not yet in the `tables` registry — M4 wires sync).
 export type AssertSuggestionBatches = Assert<Equal<typeof schedule_suggestion_batches.$inferSelect, ScheduleSuggestionBatch>>;

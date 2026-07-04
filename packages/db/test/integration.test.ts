@@ -44,15 +44,15 @@ describe.skipIf(!adminUrl)('migrations + seed against fresh postgres', () => {
       WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
       ORDER BY table_name`;
     // the §6.0 tables + 4 better-auth + 2 server-internal (command_field_versions
-    // s12, push_subscriptions s14) + 3 tag tables + the 2 new 1.3 tables (M3:
-    // schedule_suggestion_batches §7.5, sync_review_items §7.13); drizzle
-    // bookkeeping lives in its own schema
+    // s12, push_subscriptions s14) + 3 tag tables + the 2 M3 1.3 tables
+    // (schedule_suggestion_batches §7.5, sync_review_items §7.13) + journal_entries
+    // (J1 §6.0); drizzle bookkeeping lives in its own schema
     const expected = [
       'account', 'automation_rules', 'blocker_rules', 'command_field_versions',
       'command_log', 'computed_aggregates', 'decision_boards',
       'decision_criteria', 'decision_scores', 'diagram_groups',
       'diagram_layouts', 'edges', 'external_facts', 'habit_completions',
-      'habits', 'nodes', 'push_subscriptions', 'schedule_blocks',
+      'habits', 'journal_entries', 'nodes', 'push_subscriptions', 'schedule_blocks',
       'schedule_suggestion_batches', 'session', 'sprint_memberships', 'sprints',
       'sync_review_items', 'tag_answers', 'tag_placements', 'tags',
       'time_entries', 'user', 'user_settings', 'verification',
@@ -72,6 +72,7 @@ describe.skipIf(!adminUrl)('migrations + seed against fresh postgres', () => {
       habit_completions: 8,
       edges: 6,
       time_entries: 8,
+      journal_entries: 2,
     });
     const idsBefore = (await sql`SELECT id FROM nodes ORDER BY id`).map((r) => r['id']);
     await seedDemoUser(url);

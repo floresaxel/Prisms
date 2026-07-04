@@ -24,6 +24,7 @@ import {
   external_facts,
   habit_completions,
   habits,
+  journal_entries,
   nodes,
   schedule_blocks,
   sprint_memberships,
@@ -40,6 +41,7 @@ export interface SeedSummary {
   habit_completions: number;
   edges: number;
   time_entries: number;
+  journal_entries: number;
 }
 
 type NodeInsert = typeof nodes.$inferInsert;
@@ -299,6 +301,28 @@ export async function seedDemoUser(databaseUrl: string): Promise<SeedSummary> {
     entry(vectorsTask.id, '2026-06-07T19:00:00.000Z', '2026-06-07T20:15:00.000Z', null, null, false),
   ];
 
+  // --- journal notes (a note on a day) -----------------------------------------
+  // Two PAST months (before T0's June) so the J6 e2e can prove lazy month-bucketed
+  // sync: a fresh device holds zero journal rows until it navigates to each month.
+  // Explicit schema_version — rows built in JS must carry it (0f6b95d lesson).
+  const journalNote = (entry_date: string, content: string) => ({
+    ...base(),
+    entry_date,
+    month_key: entry_date.slice(0, 7),
+    content,
+    schema_version: 1,
+  });
+  const journalRows = [
+    journalNote(
+      '2026-04-15',
+      '# Kickoff\n\nStarted the **Prisms** build. Next up:\n\n- [ ] domain schemas\n- [ ] migrations\n\nFeeling good 🚀',
+    ),
+    journalNote(
+      '2026-05-20',
+      'Shipped the scheduler — long day, celebrated with the family 👨‍👩‍👧‍👦\n\n> _ship it_',
+    ),
+  ];
+
   // --- habit completions (bucketed dates, §7.2) --------------------------------
   const completion = (habit_id: string, occurrence_date: string, completed_at: string) => ({
     ...base(),
@@ -334,6 +358,7 @@ export async function seedDemoUser(databaseUrl: string): Promise<SeedSummary> {
     await db.insert(edges).values(edgeRows);
     await db.insert(time_entries).values(entryRows);
     await db.insert(habit_completions).values(completionRows);
+    await db.insert(journal_entries).values(journalRows);
 
     return {
       nodes: allNodes.length,
@@ -341,6 +366,7 @@ export async function seedDemoUser(databaseUrl: string): Promise<SeedSummary> {
       habit_completions: completionRows.length,
       edges: edgeRows.length,
       time_entries: entryRows.length,
+      journal_entries: journalRows.length,
     };
   } finally {
     await client.end();
@@ -350,6 +376,7 @@ export async function seedDemoUser(databaseUrl: string): Promise<SeedSummary> {
 /** Children/referencing rows first; NO ACTION FKs are checked per statement. */
 async function wipeDemoUser(db: PostgresJsDatabase): Promise<void> {
   const uid = DEMO_USER_ID;
+  await db.delete(journal_entries).where(eq(journal_entries.user_id, uid));
   await db.delete(time_entries).where(eq(time_entries.user_id, uid));
   await db.delete(habit_completions).where(eq(habit_completions.user_id, uid));
   await db.delete(habits).where(eq(habits.user_id, uid));

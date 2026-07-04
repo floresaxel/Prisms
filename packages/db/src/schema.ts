@@ -607,6 +607,37 @@ export const sync_review_items = pgTable(
   ],
 );
 
+// --- JOURNAL (a note on any calendar day, §6.0) -----------------------------------------
+
+/**
+ * One live markdown note per `(user_id, entry_date)` — the §7.7 partial unique
+ * index is the arbiter. `month_key` (entry_date's 'YYYY-MM', server-derived) is
+ * the equality key of the lazy `journal_month` sync stream (§7.3), so a fresh
+ * device pulls zero journal rows until a month is viewed. Not a node_type.
+ */
+export const journal_entries = pgTable(
+  'journal_entries',
+  {
+    ...baseColumns,
+    entry_date: date('entry_date', { mode: 'string' }).notNull(),
+    // 'YYYY-MM' of entry_date; server-derived (never client-supplied).
+    month_key: text('month_key').notNull(),
+    // CommonMark markdown; emoji ride through as plain Unicode.
+    content: text('content').notNull().default(''),
+  },
+  (t) => [
+    // [0-9] not \d — Drizzle's sql template is JS; \d would lose its backslash.
+    check('journal_entries_month_key_check', sql`${t.month_key} ~ '^[0-9]{4}-[0-9]{2}$'`),
+    // §7.7 partial unique: one live note per day; a soft-deleted day can be re-created.
+    uniqueIndex('journal_entries_user_date_uq')
+      .on(t.user_id, t.entry_date)
+      .where(sql`${t.deleted_at} IS NULL`),
+    index('journal_entries_month')
+      .on(t.user_id, t.month_key)
+      .where(sql`${t.deleted_at} IS NULL`),
+  ],
+);
+
 // --- COMMAND LOG (audit; written server-side on every applied mutation) -----------------
 
 export const command_log = pgTable(
@@ -724,6 +755,7 @@ export const tables = {
   diagram_groups,
   schedule_suggestion_batches,
   sync_review_items,
+  journal_entries,
   command_log,
   user_settings,
 } as const;

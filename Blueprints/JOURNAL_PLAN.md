@@ -258,6 +258,47 @@ ruleset — verified `id=5 state=ACTIVE has_probe=f no_fatal=t`).
 Docs: ARCHITECTURE.md §6.0 table, §8.1 verbs, §7.3 stream table + parameter-invariant wording.
 **DoD:** gate green; migration applies on a fresh DB and on a copy of a populated one.
 
+#### J1 — AS BUILT (2026-07-04) → **DONE, gate green.** `pnpm turbo lint typecheck test` all
+green (core 563 · db 49 · server 126 · ui/web units); `@prisms/core` coverage 90.47% stmts
+(≥90 floor). Migration **0010_journal** applies fresh (integration test, full 0000→0010 chain)
+AND on the populated dev DB (317 nodes preserved; journal_entries created + added to the scoped
+`powersync` publication). The **real** `journal_month` stream compiles + ACTIVATES on live
+1.22.0 (sync_rules id ACTIVE, no fatal error) — not just J0's probe.
+
+Deviations / discoveries (read before J2/J3):
+- **The 2 command verbs are an ATOMIC 3-package edit.** Registering `journal.write`/`.delete`
+  in core `COMMAND_SCHEMAS` widens the `CommandName` union, which breaks the EXHAUSTIVE switches
+  in ui `effects.ts` (`default: const _exhaustive: never = name`) and server `dispatcher.ts`
+  (no default — TS "must return" makes it exhaustive) at **typecheck**. So J1 necessarily shipped
+  the client optimistic effect + the server dispatcher case too (the plan had penciled them for
+  J3/J2). They are the REAL handlers, so J2/J3 only ADD around them — no rewrite:
+    - **J2 still owns:** hardening the insert against the §7.7 arbiter race
+      (`onConflictDoNothing({target:[user_id,entry_date], targetWhere: deleted_at IS NULL})` +
+      re-select-merge), the `hlc_conflict` review item carrying the losing content, the
+      `/sync/upload` `effects` response, PURGE_ORDER, the export endpoint, integration tests.
+      J1's dispatcher is the tag.answer-shaped load-then-insert-or-LWW-merge + ownership +
+      `E_DUPLICATE` + server-derived month_key + `rec()` effect logging (ack-effects-ready).
+    - **J3 still owns:** client schema.ts/rows.ts/commands.ts/streams.ts/hooks.ts + the
+      ack-rewrite. J1's `effects.ts` case is the final `ins('journal_entries', …)` from D3.
+- **`journalEntrySchema` follows the 1.3 precedent, NOT the plan's "register in entitySchemas".**
+  `schedule_suggestion_batches`/`sync_review_items` are synced tables that live in `schema.ts` +
+  `type-assertions.ts` but are NOT in core's `entitySchemas` (frozen at the 22 §6.0 tables).
+  Journal matches them: parity is proven by `AssertJournalEntries` in type-assertions.ts, so
+  `entities.test.ts` (`toHaveLength(22)`) was left untouched.
+- **Registry completeness also required:** import-restore `RESTORE_ORDER` (journal_entries at
+  level 0 — else backup-snapshot's always-present `journal_entries:[]` key trips the "unknown
+  table" warning on every import); catalog.test.ts count 59→**61**; sync-streams.test.ts
+  "no parameter" test rewritten to the D3 "parameters only NARROW; every query still
+  auth.user_id()" invariant; integration.test.ts table list (+journal_entries) & seed summary
+  (+`journal_entries: 2`).
+- **Migration** was `drizzle-kit generate --name journal` (clean single-table diff) then the
+  `ALTER PUBLICATION powersync ADD TABLE journal_entries;` hand-appended (drizzle can't know the
+  scoped publication). CHECK uses `[0-9]` not `\d` (Drizzle's `sql` template is JS — `\d` would
+  drop its backslash).
+- **Docs:** ARCHITECTURE.md left UNCHANGED. It is frozen "Version 1.0" — its §6.0/§8.1/§7.3 never
+  gained tags/review/suggestion-batches/streams, so a journal-only edit would be a lone
+  inconsistency. THIS file (JOURNAL_PLAN.md) is the journal feature's living spec.
+
 ### J2 — Server: dispatcher, ack effects, jobs
 `apps/server/src/dispatcher.ts`:
 - `journal.write` per D4: `existingById` guards first (ownership reject; same-user id bound to

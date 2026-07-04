@@ -68,6 +68,7 @@ import {
   external_facts,
   habit_completions,
   habits,
+  journal_entries,
   nodes,
   schedule_blocks,
   sprint_memberships,
@@ -1132,6 +1133,54 @@ export function createDispatcher(
         const own = ownershipReject('tag answer', p.id, await one(tx.select().from(tag_answers).where(eq(tag_answers.id, p.id)).limit(1)), userId);
         if (own) return own;
         await tx.update(tag_answers).set({ deleted_at: now, ...sys }).where(eq(tag_answers.id, p.id));
+        return applied();
+      }
+
+      // --- journal (a note on any calendar day, D4) -------------------------
+      case 'journal.write': {
+        const p = payload as Payload<'journal.write'>;
+        // month_key is SERVER-derived from entry_date (never client-supplied); a
+        // date::text cast is DateStyle-dependent, so derive it in JS (D1/D3).
+        const month_key = p.entry_date.slice(0, 7);
+        const existingById = await one(tx.select().from(journal_entries).where(eq(journal_entries.id, p.id)).limit(1));
+        const ownExisting = existingById ? ownershipReject('journal entry', p.id, existingById, userId) : null;
+        if (ownExisting) return ownExisting;
+        // a known id rebound to a DIFFERENT day is a client bug, not an upsert (tag.answer's guard).
+        if (existingById && existingById.entry_date !== p.entry_date) {
+          return reject('E_DUPLICATE', 'journal.write id already belongs to a different day');
+        }
+        // Upsert keyed by the day (one live note per (user, entry_date)); LWW the content.
+        // NB: J2 hardens the insert against the §7.7 partial-unique arbiter race
+        // (onConflictDoNothing + re-select-merge) and surfaces the LWW loser to the
+        // review inbox (hlc_conflict), so no prose is lost silently (D2/D4/D5).
+        const live =
+          existingById ??
+          (await one(
+            tx
+              .select()
+              .from(journal_entries)
+              .where(and(eq(journal_entries.user_id, userId), eq(journal_entries.entry_date, p.entry_date), isNull(journal_entries.deleted_at)))
+              .limit(1),
+          ));
+        if (!live) {
+          await tx.insert(journal_entries).values({ id: p.id, user_id: userId, entry_date: p.entry_date, month_key, content: p.content, ...born });
+          await lwwFields(tx, hlc, userId, 'journal_entries', p.id, { content: p.content });
+          rec('journal_entries', p.id, 'insert');
+        } else {
+          const win = await lwwFields(tx, hlc, userId, 'journal_entries', live.id, { content: p.content });
+          if (Object.keys(win).length > 0) {
+            await tx.update(journal_entries).set({ ...win, ...sys }).where(eq(journal_entries.id, live.id));
+            rec('journal_entries', live.id, 'update', Object.keys(win));
+          }
+        }
+        return applied();
+      }
+      case 'journal.delete': {
+        const p = payload as Payload<'journal.delete'>;
+        const own = ownershipReject('journal entry', p.id, await one(tx.select().from(journal_entries).where(eq(journal_entries.id, p.id)).limit(1)), userId);
+        if (own) return own;
+        await tx.update(journal_entries).set({ deleted_at: now, ...sys }).where(eq(journal_entries.id, p.id));
+        rec('journal_entries', p.id, 'delete');
         return applied();
       }
 

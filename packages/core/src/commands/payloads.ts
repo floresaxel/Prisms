@@ -218,6 +218,18 @@ export const tagAnswerPayloadSchema = z.strictObject({
 });
 export const tagClearAnswerSchema = idOnly; // answer row id
 
+// --- journal (a note on any calendar day) -----------------------------------
+// Upsert keyed by entry_date (the tag.answer shape): carries the client row id
+// so two devices writing the same day converge. `month_key` is server-derived
+// (entry_date.slice(0,7)), NEVER in the payload. Emoji are plain Unicode; the
+// 100k cap counts UTF-16 code units (§D4).
+export const journalWriteSchema = z.strictObject({
+  id: uuidSchema,
+  entry_date: isoDateSchema,
+  content: z.string().max(100_000),
+});
+export const journalDeleteSchema = idOnly; // journal entry row id
+
 // --- automation & blocker rules ---------------------------------------------
 
 export const ruleCreateSchema = z.strictObject({
@@ -350,6 +362,8 @@ export const COMMAND_SCHEMAS = {
   'tag.unplace': tagUnplaceSchema,
   'tag.answer': tagAnswerPayloadSchema,
   'tag.clear_answer': tagClearAnswerSchema,
+  'journal.write': journalWriteSchema,
+  'journal.delete': journalDeleteSchema,
   'rule.create': ruleCreateSchema,
   'rule.update': ruleUpdateSchema,
   'rule.toggle': ruleToggleSchema,
