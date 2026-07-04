@@ -60,9 +60,22 @@ export function JournalDay({ date, ctx, onClose }: { date: string; ctx: CommandC
   useEffect(() => {
     if (!dirty.current) setDraft(entry?.content ?? '');
   }, [entry?.content]);
-  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
-
   const write = (content: string) => commands.writeJournal({ existingId, entryDate: date, content });
+
+  // A pending debounced save must survive unmount (switching day). RN's
+  // keyboardShouldPersistTaps can let a day-switch tap through WITHOUT blurring
+  // the TextInput, so onBlur may never fire — flush the latest draft here or the
+  // last <800ms of typing is lost. Guarded on `timer` so an already-flushed day
+  // (blur fired) doesn't re-write. The ref holds the newest draft/write closure.
+  const flushPending = useRef<() => void>(() => undefined);
+  flushPending.current = () => {
+    if (timer.current) {
+      clearTimeout(timer.current);
+      timer.current = null;
+      void write(draft);
+    }
+  };
+  useEffect(() => () => flushPending.current(), []);
   function change(next: string) {
     dirty.current = true;
     setDraft(next);

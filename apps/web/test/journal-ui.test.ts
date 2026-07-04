@@ -131,6 +131,17 @@ describe('DayJournalPanel — editor', () => {
     fireEvent.click(screen.getByTestId('journal-delete'));
     expect(command('deleteJournal')).toHaveBeenCalledWith('j1');
   });
+
+  it('flushes a pending debounced save on unmount (day switch, no blur) — last edit not lost', () => {
+    state.entry = { id: 'j1', content: 'start', deleted_at: null };
+    const { unmount } = render(createElement(DayJournalPanel, { date: '2026-06-11', ctx: CTX }));
+    fireEvent.change(screen.getByTestId('journal-editor'), { target: { value: 'start + more' } });
+    expect(command('writeJournal')).not.toHaveBeenCalled(); // still inside the 800ms debounce
+
+    unmount(); // switch day before the debounce fires AND without an onBlur flush
+    expect(command('writeJournal')).toHaveBeenCalledWith({ existingId: 'j1', entryDate: '2026-06-11', content: 'start + more' });
+    expect(command('writeJournal')).toHaveBeenCalledTimes(1); // exactly once — no double-write
+  });
 });
 
 describe('Agenda — journal integration', () => {

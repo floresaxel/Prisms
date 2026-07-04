@@ -72,9 +72,21 @@ export function DayJournalPanel({ date, ctx }: { date: string; ctx: CommandConte
   useEffect(() => {
     if (!dirty.current) setDraft(entry?.content ?? '');
   }, [entry?.content]);
-  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
-
   const write = (content: string) => commands.writeJournal({ existingId, entryDate: date, content });
+
+  // Flush a pending debounced save if the panel unmounts (day switch) before the
+  // debounce fires and without an onBlur — otherwise the last edit is dropped.
+  // Guarded on `timer` so a clean unmount (already saved on blur) doesn't re-write.
+  const flushPending = useRef<() => void>(() => undefined);
+  flushPending.current = () => {
+    if (timer.current) {
+      clearTimeout(timer.current);
+      timer.current = null;
+      void write(draft);
+    }
+  };
+  useEffect(() => () => flushPending.current(), []);
+
   function scheduleSave(next: string) {
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(() => void write(next), SAVE_DEBOUNCE_MS);
