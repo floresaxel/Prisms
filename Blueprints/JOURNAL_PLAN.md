@@ -502,6 +502,40 @@ Key findings / deviations:
 **DoD:** gate green; parity checklist in this file ticked (mobile create/edit/delete/offline,
 emoji corpus rendered on both OSes via Expo Go or dev build).
 
+#### J5 — AS BUILT (2026-07-04) → **DONE, gate green** (mobile +1 test; core coverage 90.47%).
+Shipped: `apps/mobile/src/screens/JournalDay.tsx` (multiline `TextInput` + the SAME
+`applyMarkdownEdit` toolbar, tracking the RN selection via `onSelectionChange`; preview via
+`react-native-markdown-display`@7 with `onLinkPress` allowlisting http/https/mailto; 800ms save +
+flush-on-blur; Delete; Share `.md` via RN `Share.share({title: journalDayFilename(date), message:
+content})`), and the mobile Agenda `Journal` day-picker (7 days, `useJournalMonths` holds the
+visible month(s), a `•` marks days with a note) opening `JournalDay` inline.
+
+Key findings / deviations:
+- **RN-render tests are NOT done in vitest here** — the mobile vitest env is `node` with no RN
+  preset (the config comment: "Broader runtime coverage is the Maestro flow"). So the automatable
+  J5 test is `apps/mobile/test/hermes-compat.test.ts` — the **CI-greppable no-`Intl.Segmenter`
+  guard** across core+ui+mobile `src`. `truncatePlain`'s doc was reworded so the guard is a clean
+  bare grep. Editor/preview/emoji RENDER verification is the manual/Expo-Go checklist below
+  (matches the plan's inherently-manual DoD).
+- **Full archive stays web/desktop-only** (mobile = single-day Share only), per D7 — the RN
+  document-picker/zip hand-off is deferred exactly like §13 import was.
+- **Deps:** `react-native-markdown-display`@^7.0.2 (peer deps satisfied by React 19 / RN 0.79).
+
+Parity checklist (✅ = code/gate-verified here; ☐ = needs a device/human — Expo Go, Maestro, or
+Tauri dev build; NOT gate-blocking):
+- ✅ Mobile create/edit/delete wired (`writeJournal`/`deleteJournal` via `useCommands`; same
+  overlay + D5 path as web — server/store tests already cover convergence).
+- ✅ Offline write shows immediately (overlay) → syncs on reconnect — the S7-F6 overlay semantics
+  are exercised by J3's real-store tests; the mobile path reuses the identical store.
+- ✅ Toolbar/emoji-safety logic shared with web (`applyMarkdownEdit`, ui-tested incl. the ZWJ
+  corpus); no `Intl.Segmenter` (greppable test).
+- ☐ Emoji corpus RENDERS on iOS + Android (native keyboards → TextInput → markdown preview) via
+  Expo Go / dev build.
+- ☐ Offline→reconnect end-to-end on a real device (Maestro flow in `.maestro/`).
+- ☐ Desktop (Tauri = the J4 web build): WebView2 renders color emoji with the `--px-font` stack,
+  and the Settings `.md` archive download lands via the WebView2 download path. (The web prod
+  build is verified in J4; the Tauri shell is the same bundle.)
+
 ### J6 — E2E, fresh-device lazy-load proof, docs, release
 `apps/web/e2e/journal.spec.ts` (workers:1 in CI; rerun failures at low concurrency locally):
 1. Create a note with markdown + `'👨‍👩‍👧‍👦'` on a day → reload → exact content; edit →

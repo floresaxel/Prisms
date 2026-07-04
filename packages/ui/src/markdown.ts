@@ -105,8 +105,9 @@ export function applyMarkdownEdit(value: string, sel: Selection, action: Markdow
  * Truncate `text` to at most `maxCodePoints` code points, appending an ellipsis
  * when cut. Splits on CODE POINTS (`Array.from`) so a surrogate pair is never
  * severed (§D6) — `'a😀'.slice(0,2)` would split the emoji; this never does. ZWJ
- * grapheme clusters may split cosmetically at the cut (acceptable); do NOT use
- * `Intl.Segmenter` (unsupported on Hermes).
+ * grapheme clusters may split cosmetically at the cut (acceptable); do NOT reach
+ * for a Unicode grapheme segmenter — the RN Hermes engine lacks one (a mobile
+ * `hermes-compat` test greps for it).
  */
 export function truncatePlain(text: string, maxCodePoints: number): string {
   const cps = Array.from(text);

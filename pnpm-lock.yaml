@@ -105,6 +105,9 @@ importers:
       react-native-get-random-values:
         specifier: ~1.11.0
         version: 1.11.0(react-native@0.79.7(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.0.0))
+      react-native-markdown-display:
+        specifier: ^7.0.2
+        version: 7.0.2(react-native@0.79.7(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.0.0))(react@19.0.0)
       react-native-nitro-modules:
         specifier: ^0.36.1
         version: 0.36.1(react-native@0.79.7(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.0.0))(react@19.0.0)
@@ -3337,6 +3340,9 @@ packages:
     resolution: {integrity: sha512-Gmy6FhYlCY7uOElZUSbxo2UCDH8owEk996gkbrpsgGtrJLM3J7jGxl9Ic7Qwwj4ivOE5AWZWRMecDdF7hqGjFA==}
     engines: {node: '>=10'}
 
+  camelize@1.0.1:
+    resolution: {integrity: sha512-dU+Tx2fsypxTgtLoE36npi3UqcjSSMNYfkqgmoEhtZrraP5VWq0K7FkWVTYa8eMPtnU/G2txVsfdCJTn9uzpuQ==}
+
   caniuse-lite@1.0.30001799:
     resolution: {integrity: sha512-hG1bReV+OUU+MOqK4t/ZWI0tZOyz3rqS9XuhOUz1cIcbwBKjOyJEJuw9ER5JuNyqxNk8u/JUVbGibBOL1yrjFw==}
 
@@ -3493,6 +3499,13 @@ packages:
   crypto-random-string@2.0.0:
     resolution: {integrity: sha512-v1plID3y9r/lPhviJ1wrXpLeyUIGAZ2SHNYTEapm7/8A9nLPoyvVp3RK/EPFqn5kEznyWgYZNsRtYYIWbuG8KA==}
     engines: {node: '>=8'}
+
+  css-color-keywords@1.0.0:
+    resolution: {integrity: sha512-FyyrDHZKEjXDpNJYvVsV960FiqQyXc/LlYmsxl2BcdMb2WPx0OGRVgTg55rPSyLSNMqP52R9r8geSp7apN3Ofg==}
+    engines: {node: '>=4'}
+
+  css-to-react-native@3.2.0:
+    resolution: {integrity: sha512-e8RKaLXMOFii+02mOlqwjbD00KSEKqblnpO9e++1aXS1fPQOpS1YoqdVHBqPjHNoxeF2mimzVqawm2KCbEdtHQ==}
 
   css-tree@3.2.1:
     resolution: {integrity: sha512-X7sjQzceUhu1u7Y/ylrRZFU2FS6LRiFVp6rKLPg23y3x3c3DOKAwuXGDp+PAGjh6CSnCjYeAul8pcT8bAl+lSA==}
@@ -3803,6 +3816,9 @@ packages:
 
   end-of-stream@1.4.5:
     resolution: {integrity: sha512-ooEGc6HP26xXq/N+GCGOT0JKCLDGrq2bQUZrQ7gyrJiZANJ/8YDTxTpQBXGMn+WbIQXNVpyWymm7KYVICQnyOg==}
+
+  entities@2.0.3:
+    resolution: {integrity: sha512-MyoZ0jgnLvB2X3Lg5HqpFmn1kybDiIfEQmKzTb5apr51Rb+T3KdmMiqa70T+bhGnyv7bQ6WMj2QMHpGMmlrUYQ==}
 
   entities@8.0.0:
     resolution: {integrity: sha512-zwfzJecQ/Uej6tusMqwAqU/6KL2XaB2VZ2Jg54Je6ahNBGNH6Ek6g3jjNCF0fG9EWQKGZNddNjU5F1ZQn/sBnA==}
@@ -4944,6 +4960,9 @@ packages:
   lines-and-columns@1.2.4:
     resolution: {integrity: sha512-7ylylesZQ/PV29jhEDl3Ufjo6ZX7gCqJr5F7PKrqc93v7fzSymt1BpwEU8nAUXs8qzzvqhbjhK5QZg6Mt/HkBg==}
 
+  linkify-it@2.2.0:
+    resolution: {integrity: sha512-GnAl/knGn+i1U/wjBz3akz2stz+HrHLsxMwHQGofCDfPvlf+gDKN58UtfmUquTY4/MXeE2x7k19KQmeoZi94Iw==}
+
   locate-path@5.0.0:
     resolution: {integrity: sha512-t7hw9pI+WvuwNJXwk5zVHpyhIqzg2qTlklJOf0mVxGSbe3Fp2VieZcduNYjaLDoy6p9uGpQEGWG87WpMKlNq8g==}
     engines: {node: '>=8'}
@@ -5006,6 +5025,10 @@ packages:
   makeerror@1.0.12:
     resolution: {integrity: sha512-JmqCvUhmt43madlpFzG4BQzG2Z3m6tvQDNKdClZnO3VbIudJYmxsT0FNJMeiB2+JTSlTQTSbU8QdesVmwJcmLg==}
 
+  markdown-it@10.0.0:
+    resolution: {integrity: sha512-YWOP1j7UbDNz+TumYP1kpwnP0aEa711cJjrAQrzd0UXlbJfc5aAq0F/PZHjiioqDC1NKgvIMX+o+9Bk7yuM2dg==}
+    hasBin: true
+
   markdown-table@3.0.4:
     resolution: {integrity: sha512-wiYz4+JrLyb/DqW2hkFJxP7Vd7JuTDm77fvbM8VfEQdmSMqcImWeeRbHwZjBjIFki/VaMK2BhFi7oUUZeM5bqw==}
 
@@ -5063,6 +5086,9 @@ packages:
 
   mdn-data@2.27.1:
     resolution: {integrity: sha512-9Yubnt3e8A0OKwxYSXyhLymGW4sCufcLG6VdiDdUGVkPhpqLxlvP5vl1983gQjJl3tqbrM731mjaZaP68AgosQ==}
+
+  mdurl@1.0.1:
+    resolution: {integrity: sha512-/sKlQJCBYVY9Ers9hqzKou4H6V5UWc/M59TH2dvkt+84itfnq7uFOMLpOiOS4ujvHP4etln18fmIxA5R5fll0g==}
 
   memoize-one@5.2.1:
     resolution: {integrity: sha512-zYiwtZUcYyXKo/np96AGZAckk+FWWsUdJ3cHGGmld7+AhvcWmQyGCYUh1hc4Q/pkOhb65dQR/pqCyK0cOaHz4Q==}
@@ -5587,6 +5613,9 @@ packages:
     resolution: {integrity: sha512-/+5VFTchJDoVj3bhoqi6UeymcD00DAwb1nJwamzPvHEszJ4FpF6SNNbUbOS8yI56qHzdV8eK0qEfOSiodkTdxg==}
     engines: {node: '>= 0.4'}
 
+  postcss-value-parser@4.2.0:
+    resolution: {integrity: sha512-1NNCs6uurfkVbeXG4S8JFT9t19m45ICnif8zWLd5oPSZ50QnwMfK+H3jv408d4jw/7Bttv5axS5IiHoLaVNHeQ==}
+
   postcss@8.4.49:
     resolution: {integrity: sha512-OCVPnIObs4N29kxTjzLfUryOkvZEq+pf8jTF0lg8E7uETuWHA+v7j3c/xJmiqpX450191LlmZfUKkXxkTry7nA==}
     engines: {node: ^10 || ^12 || >=14}
@@ -5667,6 +5696,9 @@ packages:
     resolution: {integrity: sha512-NxNv/kLguCA7p3jE8oL2aEBsrJWgAakBpgmgK6lpPWV+WuOmY6r2/zbAVnP+T8bQlA0nzHXSJSJW0Hq7ylaD2Q==}
     engines: {node: '>= 6'}
 
+  prop-types@15.8.1:
+    resolution: {integrity: sha512-oj87CgZICdulUohogVAR7AjlC0327U4el4L6eAvOqCeudMDVU0NThNaV+b9Df4dXgSP1gXMTnPdhfe/2qDH5cg==}
+
   property-information@7.2.0:
     resolution: {integrity: sha512-IAtzIB6sUiWaJYrX9smp3V46pBGbBeLFRGdh25kg1334VcBlD8HzhPeNIWQH9zhGmo2itIe25EHt9dQP7G5hmg==}
 
@@ -5720,6 +5752,9 @@ packages:
     peerDependencies:
       react: '>=17.0.0'
 
+  react-is@16.13.1:
+    resolution: {integrity: sha512-24e6ynE2H+OKt4kqsOvNd8kBpV65zoxbA4BVsEOB3ARVWQki/DHzaUoC5KuON/BiccDaCCTZBuOcfZs70kR8bQ==}
+
   react-is@17.0.2:
     resolution: {integrity: sha512-w2GsyukL62IJnlaff/nRegPQR94C/XXamvMWmSHRJ4y7Ts/4ocGRmTHvOs8PSE6pB3dWOrD/nueuU5sduBsQ4w==}
 
@@ -5741,6 +5776,9 @@ packages:
       react: '*'
       react-native: '*'
 
+  react-native-fit-image@1.5.5:
+    resolution: {integrity: sha512-Wl3Vq2DQzxgsWKuW4USfck9zS7YzhvLNPpkwUUCF90bL32e1a0zOVQ3WsJILJOwzmPdHfzZmWasiiAUNBkhNkg==}
+
   react-native-get-random-values@1.11.0:
     resolution: {integrity: sha512-4BTbDbRmS7iPdhYLRcz3PGFIpFJBwNZg9g42iwa2P6FOv9vZj/xJc678RZXnLNZzd0qd7Q3CCF6Yd+CU2eoXKQ==}
     peerDependencies:
@@ -5751,6 +5789,12 @@ packages:
     peerDependencies:
       react: '*'
       react-native: '*'
+
+  react-native-markdown-display@7.0.2:
+    resolution: {integrity: sha512-Mn4wotMvMfLAwbX/huMLt202W5DsdpMO/kblk+6eUs55S57VVNni1gzZCh5qpznYLjIQELNh50VIozEfY6fvaQ==}
+    peerDependencies:
+      react: '>=16.2.0'
+      react-native: '>=0.50.4'
 
   react-native-nitro-modules@0.36.1:
     resolution: {integrity: sha512-kBv/VvKqAmkXAvP1DxJMC9b/fRhh7JdSO4EUnPP46hJjrIFeFR8AwKm8mYaKZEuF014M/TVdv2vomVUW0umsQQ==}
@@ -6455,6 +6499,9 @@ packages:
     resolution: {integrity: sha512-y2TvuxSZPDyQakkFRPZHKFm+KKVqIisdg9/CZwm9ftvKXLP8NRWj38/ODjNbr43SsoXqNuAisEf1GdCxqWcdBw==}
     engines: {node: '>=14.17'}
     hasBin: true
+
+  uc.micro@1.0.6:
+    resolution: {integrity: sha512-8Y75pvTYkLJW2hWQHXxoqRgV7qb9B+9vFEtidML+7koHUFapnVJAZ6cKs+Qjz5Aw3aZWHMC6u0wJE3At+nSGwA==}
 
   uglify-js@3.19.3:
     resolution: {integrity: sha512-v3Xu+yuwBXisp6QYTcH4UbH+xYJXqnq2m/LtQVWKWzYc1iehYnLixoQDN9FH6/j9/oybfd6W9Ghwkl8+UMKTKQ==}
@@ -10046,6 +10093,8 @@ snapshots:
 
   camelcase@6.3.0: {}
 
+  camelize@1.0.1: {}
+
   caniuse-lite@1.0.30001799: {}
 
   ccount@2.0.1: {}
@@ -10204,6 +10253,14 @@ snapshots:
       which: 2.0.2
 
   crypto-random-string@2.0.0: {}
+
+  css-color-keywords@1.0.0: {}
+
+  css-to-react-native@3.2.0:
+    dependencies:
+      camelize: 1.0.1
+      css-color-keywords: 1.0.0
+      postcss-value-parser: 4.2.0
 
   css-tree@3.2.1:
     dependencies:
@@ -10399,6 +10456,8 @@ snapshots:
   end-of-stream@1.4.5:
     dependencies:
       once: 1.4.0
+
+  entities@2.0.3: {}
 
   entities@8.0.0: {}
 
@@ -11691,6 +11750,10 @@ snapshots:
 
   lines-and-columns@1.2.4: {}
 
+  linkify-it@2.2.0:
+    dependencies:
+      uc.micro: 1.0.6
+
   locate-path@5.0.0:
     dependencies:
       p-locate: 4.1.0
@@ -11746,6 +11809,14 @@ snapshots:
   makeerror@1.0.12:
     dependencies:
       tmpl: 1.0.5
+
+  markdown-it@10.0.0:
+    dependencies:
+      argparse: 1.0.10
+      entities: 2.0.3
+      linkify-it: 2.2.0
+      mdurl: 1.0.1
+      uc.micro: 1.0.6
 
   markdown-table@3.0.4: {}
 
@@ -11907,6 +11978,8 @@ snapshots:
       '@types/mdast': 4.0.4
 
   mdn-data@2.27.1: {}
+
+  mdurl@1.0.1: {}
 
   memoize-one@5.2.1: {}
 
@@ -12623,6 +12696,8 @@ snapshots:
 
   possible-typed-array-names@1.1.0: {}
 
+  postcss-value-parser@4.2.0: {}
+
   postcss@8.4.49:
     dependencies:
       nanoid: 3.3.12
@@ -12702,6 +12777,12 @@ snapshots:
       kleur: 3.0.3
       sisteransi: 1.0.5
 
+  prop-types@15.8.1:
+    dependencies:
+      loose-envify: 1.4.0
+      object-assign: 4.1.1
+      react-is: 16.13.1
+
   property-information@7.2.0: {}
 
   pump@3.0.4:
@@ -12759,6 +12840,8 @@ snapshots:
     dependencies:
       react: 19.0.0
 
+  react-is@16.13.1: {}
+
   react-is@17.0.2: {}
 
   react-is@18.3.1: {}
@@ -12788,6 +12871,10 @@ snapshots:
       react: 19.0.0
       react-native: 0.79.7(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.0.0)
 
+  react-native-fit-image@1.5.5:
+    dependencies:
+      prop-types: 15.8.1
+
   react-native-get-random-values@1.11.0(react-native@0.79.7(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.0.0)):
     dependencies:
       fast-base64-decode: 1.0.0
@@ -12797,6 +12884,15 @@ snapshots:
     dependencies:
       react: 19.0.0
       react-native: 0.79.7(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.0.0)
+
+  react-native-markdown-display@7.0.2(react-native@0.79.7(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.0.0))(react@19.0.0):
+    dependencies:
+      css-to-react-native: 3.2.0
+      markdown-it: 10.0.0
+      prop-types: 15.8.1
+      react: 19.0.0
+      react-native: 0.79.7(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.0.0)
+      react-native-fit-image: 1.5.5
 
   react-native-nitro-modules@0.36.1(react-native@0.79.7(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.0.0))(react@19.0.0):
     dependencies:
@@ -13655,6 +13751,8 @@ snapshots:
       - supports-color
 
   typescript@6.0.3: {}
+
+  uc.micro@1.0.6: {}
 
   uglify-js@3.19.3:
     optional: true
