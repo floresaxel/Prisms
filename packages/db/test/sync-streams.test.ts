@@ -74,10 +74,19 @@ describe('sync-streams.yaml (§7.3)', () => {
     }
   });
 
-  it('exposes no client-widenable parameter (cross-user isolation)', () => {
-    expect(yaml).not.toMatch(/subscription\.parameter/);
+  it('subscription parameters only NARROW, never widen (cross-user isolation holds; J1/D3)', () => {
+    // Journal lazily scopes by month via a client SUBSCRIPTION parameter. The
+    // invariant is not "no parameters" but "a parameter only narrows within the
+    // user's own rows": every query that reads subscription.parameters() must
+    // STILL filter auth.user_id(). Auth-level / unauthenticated request params
+    // remain forbidden — those could bypass the per-user scoping entirely.
     expect(yaml).not.toMatch(/token_parameters/);
     expect(yaml).not.toMatch(/request\.parameters/);
+    const paramLines = queryLines.filter((l) => l.includes('subscription.parameter'));
+    expect(paramLines.length).toBeGreaterThanOrEqual(1); // journal_month
+    for (const line of paramLines) {
+      expect(line, line).toContain('auth.user_id()');
+    }
   });
 
   it('subscribes Tier 0/1 automatically and Tier 2 (history) lazily', () => {

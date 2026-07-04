@@ -68,6 +68,7 @@ import {
   external_facts,
   habit_completions,
   habits,
+  journal_entries,
   nodes,
   schedule_blocks,
   sprint_memberships,
@@ -1135,6 +1136,98 @@ export function createDispatcher(
         return applied();
       }
 
+      // --- journal (a note on any calendar day, D4) -------------------------
+      case 'journal.write': {
+        const p = payload as Payload<'journal.write'>;
+        // month_key is SERVER-derived from entry_date (never client-supplied); a
+        // date::text cast is DateStyle-dependent, so derive it in JS (D1/D3).
+        const month_key = p.entry_date.slice(0, 7);
+        const existingById = await one(tx.select().from(journal_entries).where(eq(journal_entries.id, p.id)).limit(1));
+        const ownExisting = existingById ? ownershipReject('journal entry', p.id, existingById, userId) : null;
+        if (ownExisting) return ownExisting;
+        // a known id rebound to a DIFFERENT day is a client bug, not an upsert (tag.answer's guard).
+        if (existingById && existingById.entry_date !== p.entry_date) {
+          return reject('E_DUPLICATE', 'journal.write id already belongs to a different day');
+        }
+        // Upsert keyed by the day (one live note per (user, entry_date)); LWW the content.
+        const liveByDay = () =>
+          one(
+            tx
+              .select()
+              .from(journal_entries)
+              .where(and(eq(journal_entries.user_id, userId), eq(journal_entries.entry_date, p.entry_date), isNull(journal_entries.deleted_at)))
+              .limit(1),
+          );
+        let live = existingById ?? (await liveByDay());
+        if (!live) {
+          // No live row yet: insert, GUARDING the §7.7 partial-unique arbiter race —
+          // a concurrent upload may create the same day between our lookup and this
+          // insert. onConflictDoNothing turns that unique violation into 0 rows so we
+          // fall through to the merge path instead of erroring or dropping content
+          // (D4; habit.check_off's bare DoNothing would silently drop the loser).
+          const inserted = await tx
+            .insert(journal_entries)
+            .values({ id: p.id, user_id: userId, entry_date: p.entry_date, month_key, content: p.content, ...born })
+            .onConflictDoNothing({ target: [journal_entries.user_id, journal_entries.entry_date], where: isNull(journal_entries.deleted_at) })
+            .returning({ id: journal_entries.id });
+          if (inserted.length > 0) {
+            await lwwFields(tx, hlc, userId, 'journal_entries', p.id, { content: p.content });
+            rec('journal_entries', p.id, 'insert');
+            return applied();
+          }
+          live = await liveByDay(); // lost the race — merge onto the row that won it
+          if (!live) return applied();
+        }
+
+        // Merge content onto the live row. `crossDevice` = a DIFFERENT id already owns
+        // this day (two offline devices minted ids for the same new day → D5); a
+        // same-id write is the user editing their own note (never a conflict).
+        const crossDevice = live.id !== p.id;
+        const priorContent = live.content;
+        const priorHlc = crossDevice
+          ? (
+              await one(
+                tx
+                  .select({ hlc: command_field_versions.hlc })
+                  .from(command_field_versions)
+                  .where(
+                    and(
+                      eq(command_field_versions.table_name, 'journal_entries'),
+                      eq(command_field_versions.row_id, live.id),
+                      eq(command_field_versions.field, 'content'),
+                    ),
+                  )
+                  .limit(1),
+              )
+            )?.hlc ?? live.hlc
+          : live.hlc;
+        const win = await lwwFields(tx, hlc, userId, 'journal_entries', live.id, { content: p.content });
+        if (Object.keys(win).length > 0) {
+          await tx.update(journal_entries).set({ ...win, ...sys }).where(eq(journal_entries.id, live.id));
+          rec('journal_entries', live.id, 'update', Object.keys(win));
+          // The incoming content WON. If it overwrote a DIFFERENT device's materially
+          // different prose, surface the overwritten text so it stays recoverable —
+          // the generic lwwFields conflict only fires when the INCOMING write loses (D2).
+          if (crossDevice && priorContent !== p.content) {
+            await maybeHlcConflict(tx, userId, 'journal_entries', live.id, 'content', priorContent, hlc, priorHlc);
+          }
+        } else {
+          // Incoming content LOST — lwwFields already surfaced it (maybeHlcConflict).
+          // Still record the authoritative row so the client rewrites its overlay id
+          // (the optimistic insert of a losing duplicate) and reconciles it away (D5).
+          rec('journal_entries', live.id, 'update', []);
+        }
+        return applied();
+      }
+      case 'journal.delete': {
+        const p = payload as Payload<'journal.delete'>;
+        const own = ownershipReject('journal entry', p.id, await one(tx.select().from(journal_entries).where(eq(journal_entries.id, p.id)).limit(1)), userId);
+        if (own) return own;
+        await tx.update(journal_entries).set({ deleted_at: now, ...sys }).where(eq(journal_entries.id, p.id));
+        rec('journal_entries', p.id, 'delete');
+        return applied();
+      }
+
       // --- automation & blocker rules ---------------------------------------
       case 'rule.create': {
         const p = payload as Payload<'rule.create'>;
@@ -1473,7 +1566,7 @@ export function createDispatcher(
     }
 
     try {
-      const { out } = await db.transaction(async (tx) => {
+      const { out, effects: appliedEffects } = await db.transaction(async (tx) => {
         // §7.2f effect summary the handler + automation accumulate (S4-F3).
         const effects: EffectSummary[] = [];
         const result = await runHandler(cmd.name as CommandName, tx, userId, deviceId, cmd.id, cmd.hlc, parsed.data, batchCtx, effects);
@@ -1498,7 +1591,7 @@ export function createDispatcher(
           result: result.status === 'applied' ? 'applied' : 'rejected',
           reject_reason: result.status === 'rejected' ? `${result.code}: ${result.reason}` : null,
         });
-        return { out: result };
+        return { out: result, effects };
       });
       if (out.status === 'applied') {
         // S4-F2: this command committed — drop the cached context artifacts that
@@ -1508,7 +1601,17 @@ export function createDispatcher(
         if (out.backstop && options.enqueueBackstop) await options.enqueueBackstop(out.backstop);
         // §7.2b: the provenance id stamped on every created/updated row == the
         // command id, so the optimistic overlay reconciles without identity churn.
-        return { id: cmd.id, result: 'applied', created_by_command_id: cmd.id };
+        // D5: the authoritative {table,row_id,op} effects ride the ack so a client
+        // whose optimistic row id diverged (two devices, same new day) can rewrite
+        // its overlay to the server's id and reconcile instead of ghosting.
+        return {
+          id: cmd.id,
+          result: 'applied' as const,
+          created_by_command_id: cmd.id,
+          ...(appliedEffects.length
+            ? { effects: appliedEffects.map((e) => ({ table: e.table, row_id: e.row_id, op: e.op })) }
+            : {}),
+        };
       }
       return { id: cmd.id, result: 'rejected', reject_code: out.code, reject_reason: out.reason };
     } catch (error) {

@@ -44,6 +44,7 @@ import {
   type Habit,
   type Instant,
   type IsoDate,
+  type JournalEntry,
   type Node,
   type PracticeValue,
   type ProgressValue,
@@ -62,6 +63,7 @@ import {
 import { createCommands, type CommandContext } from './powersync/commands';
 import { usePrismsData, toOverlayEffect } from './powersync/data-provider';
 import { createSqlOverlayStore, type SqlExecutor } from './powersync/overlay-store';
+import { createJournalMonthSubscriptions, type JournalMonthSubscriptions, type StreamSubscriber } from './powersync/streams';
 import { type ProvenanceFields } from './provenance';
 import { groupWorklistBySchedule, type WorklistGroup } from './worklist-grouping';
 import {
@@ -76,6 +78,7 @@ import {
   toEdge,
   toHabit,
   toHabitCompletion,
+  toJournalEntry,
   toMembership,
   toNode,
   toScheduleBlock,
@@ -1246,4 +1249,73 @@ export function useBlockTags(blockId: string): BlockTagView[] {
     }
     return out.sort((a, b) => a.tag.label.localeCompare(b.tag.label));
   }, [placements, tags, answers, blockId]);
+}
+
+// --- journal (a note on any calendar day, D3) -----------------------------
+
+// One ref-counted month-subscription manager per PowerSync db, module-scoped so
+// several mounted journal views SHARE holds (the Agenda + a day panel on the same
+// month subscribe once). WeakMap → GC'd with the db on account switch.
+const journalSubs = new WeakMap<object, JournalMonthSubscriptions>();
+function journalSubsFor(db: object): JournalMonthSubscriptions {
+  let mgr = journalSubs.get(db);
+  if (!mgr) {
+    mgr = createJournalMonthSubscriptions(db as unknown as StreamSubscriber);
+    journalSubs.set(db, mgr);
+  }
+  return mgr;
+}
+
+export interface JournalMonthsRead {
+  entries: JournalEntry[];
+  isLoading: boolean;
+}
+
+/**
+ * The journal notes for the given month(s), reactive + merged with the overlay
+ * (D3). HOLDS the month subscriptions while mounted (ref-counted) so the rows
+ * sync down lazily — a fresh device pulls ZERO journal rows until a month is
+ * viewed — and releases on unmount/month change (PowerSync's TTL then evicts).
+ * Pass the month(s) covering the visible range; a week can span two months, so
+ * pass both. Overlay-only inserts (a new day not yet synced) are filtered to the
+ * requested months since `mergeTable` appends them regardless of the SQL filter.
+ */
+export function useJournalMonths(monthKeys: readonly string[]): JournalMonthsRead {
+  const db = usePowerSync();
+  const key = useMemo(() => [...new Set(monthKeys)].sort(), [monthKeys.join(' ')]);
+
+  useEffect(() => {
+    const mgr = journalSubsFor(db as unknown as object);
+    const releases = key.map((m) => mgr.hold(m));
+    return () => {
+      for (const release of releases) release();
+    };
+  }, [db, key]);
+
+  const sql = key.length
+    ? `SELECT * FROM journal_entries WHERE deleted_at IS NULL AND month_key IN (${key.map(() => '?').join(',')})`
+    : 'SELECT * FROM journal_entries WHERE 0';
+  const read = useRowsRead(sql, key);
+  const entries = useMemo(
+    () =>
+      read.data
+        .map(toJournalEntry)
+        .filter((e) => e.deleted_at === null && key.includes(e.month_key))
+        .sort((a, b) => (a.entry_date < b.entry_date ? -1 : a.entry_date > b.entry_date ? 1 : 0)),
+    [read.data, key],
+  );
+  return { entries, isLoading: read.isLoading };
+}
+
+export interface JournalDayRead {
+  entry: JournalEntry | null;
+  isLoading: boolean;
+}
+
+/** One day's note (or null), derived from its month subscription (D3). */
+export function useJournalDay(date: string): JournalDayRead {
+  const months = useMemo(() => [date.slice(0, 7)], [date]);
+  const { entries, isLoading } = useJournalMonths(months);
+  const entry = useMemo(() => entries.find((e) => e.entry_date === date) ?? null, [entries, date]);
+  return { entry, isLoading };
 }

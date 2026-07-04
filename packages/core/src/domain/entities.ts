@@ -496,6 +496,27 @@ export const syncReviewItemSchema = z.strictObject({
 });
 export type SyncReviewItem = z.infer<typeof syncReviewItemSchema>;
 
+// --- JOURNAL (a note on any calendar day, §6.0) ----------------------------------------------------
+
+/**
+ * One live note per `(user_id, entry_date)` — the §7.7 partial unique index is
+ * the arbiter (a soft-deleted day can be re-created). NOT a node_type: journals
+ * carry no status, hierarchy, scheduling, or StatusIndex involvement. `content`
+ * is CommonMark markdown text, rendered per-platform; emoji ride through as plain
+ * Unicode. `month_key` is `entry_date`'s 'YYYY-MM', server-derived, and the
+ * equality key of the lazy `journal_month` sync stream (§7.3) — so a fresh device
+ * pulls zero journal rows until a month is viewed.
+ */
+export const journalEntrySchema = z.strictObject({
+  ...baseRow,
+  entry_date: isoDateSchema,
+  /** 'YYYY-MM' of entry_date; server-derived. DDL: CHECK (month_key ~ '^[0-9]{4}-[0-9]{2}$'). */
+  month_key: z.string().regex(/^\d{4}-\d{2}$/),
+  /** CommonMark markdown; the cap counts UTF-16 code units (§D4). */
+  content: z.string().max(100_000),
+});
+export type JournalEntry = z.infer<typeof journalEntrySchema>;
+
 // --- REGISTRY -------------------------------------------------------------------------------------
 
 /** Every §6.0 table, keyed by SQL table name (s03 asserts Drizzle parity against this). */

@@ -22,6 +22,7 @@ import { runBackupSnapshot } from './jobs/backup-snapshot';
 import { systemClock } from './jobs/clock';
 import { runImportRestore } from './jobs/import-restore';
 import { runImportValidate } from './jobs/import-validate';
+import { runJournalExport } from './jobs/journal-export';
 import { createRateLimiter } from './rate-limit';
 import { requestLog } from './request-log';
 
@@ -157,6 +158,17 @@ export function createApp(options: AppOptions): PrismsServer {
     if (limited) return limited;
     const manifest = await runBackupSnapshot(db, c.get('userId'), systemClock);
     return c.json(manifest);
+  });
+
+  // D7: source for the per-day `.md` archive — ALL of a user's live journal notes,
+  // date-ordered. Server-sourced (never the local replica): under the lazy
+  // journal_month stream a fresh device holds only viewed months, so a local
+  // "export all" would truncate. JSON; the client packages the .md files into a zip.
+  app.get('/sync/journal/export', requireSession, async (c) => {
+    const limited = rateGate(c, `${c.get('userId')}:journal-export`);
+    if (limited) return limited;
+    const entries = await runJournalExport(db, c.get('userId'));
+    return c.json({ entries });
   });
 
   // Import (§13.1): `?dry_run=1` returns the validation report and writes only

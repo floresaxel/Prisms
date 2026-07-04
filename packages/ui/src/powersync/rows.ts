@@ -17,6 +17,7 @@ import {
   type ExternalFact,
   type Habit,
   type HabitCompletion,
+  type JournalEntry,
   type Node,
   type ScheduleBlock,
   type SourceKind,
@@ -277,6 +278,18 @@ export const toTagAnswer = (r: Row): TagAnswer => ({
   placement_id: String(r['placement_id']),
   value: r['value'] as TagAnswer['value'],
   answered_at: String(r['answered_at']),
+  created_at: String(r['created_at'] ?? ''),
+  updated_at: String(r['updated_at'] ?? ''),
+  deleted_at: str(r['deleted_at']),
+  ...syncFields(r),
+});
+
+export const toJournalEntry = (r: Row): JournalEntry => ({
+  id: String(r['id']),
+  user_id: String(r['user_id']),
+  entry_date: String(r['entry_date']),
+  month_key: String(r['month_key'] ?? ''),
+  content: String(r['content'] ?? ''),
   created_at: String(r['created_at'] ?? ''),
   updated_at: String(r['updated_at'] ?? ''),
   deleted_at: str(r['deleted_at']),

@@ -5,10 +5,11 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 
-import { asEpochMillis, epochMillisToIso, validWindowsFor, type Instant, type Interval } from '@prisms/core';
-import { useAgenda, useCommands, useIsHydrated, type CommandContext } from '@prisms/ui';
+import { addDays, asEpochMillis, bucketDate, epochMillisToIso, validWindowsFor, type Instant, type Interval } from '@prisms/core';
+import { useAgenda, useCommands, useIsHydrated, useJournalMonths, type CommandContext } from '@prisms/ui';
 
 import { Btn, Card, H1, H2, Muted, Row, Screen, Skeleton, Txt } from '../ui';
+import { JournalDay } from './JournalDay';
 
 const fmt = (ms: number): string => new Date(ms).toLocaleString(undefined, { weekday: 'short', hour: '2-digit', minute: '2-digit' });
 
@@ -23,6 +24,19 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
   const commands = useCommands(ctx);
   const hydrated = useIsHydrated();
   const [selected, setSelected] = useState<string | null>(null);
+  const [journalDay, setJournalDay] = useState<string | null>(null);
+
+  // §7.3/D3: a 7-day journal picker. useJournalMonths holds the visible day(s)'
+  // month(s) (may span two), so a fresh device pulls zero journal rows until a
+  // day here is viewed. A dot marks days that already have a note.
+  const tz = agenda.input.timezone;
+  const days = useMemo(() => {
+    const base = bucketDate(now, 0, tz);
+    return Array.from({ length: 7 }, (_, i) => addDays(base, i));
+  }, [now, tz]);
+  const months = useMemo(() => [...new Set(days.map((d) => d.slice(0, 7)))], [days]);
+  const journal = useJournalMonths(months);
+  const noteDates = useMemo(() => new Set(journal.entries.map((e) => e.entry_date)), [journal.entries]);
 
   const windows = useMemo<Interval[]>(() => {
     if (selected === null) return [];
@@ -43,6 +57,20 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
     <Screen testID="agenda">
       <H1>Agenda</H1>
       <Muted>Tap a task, then tap a highlighted window to schedule it.</Muted>
+
+      <H2>Journal</H2>
+      <Row>
+        {days.map((d) => (
+          <Btn
+            key={d}
+            title={`${d.slice(5)}${noteDates.has(d) ? ' •' : ''}`}
+            testID={`journal-day-${d}`}
+            variant={journalDay === d ? 'primary' : 'default'}
+            onPress={() => setJournalDay(journalDay === d ? null : d)}
+          />
+        ))}
+      </Row>
+      {journalDay !== null && <JournalDay key={journalDay} date={journalDay} ctx={ctx} onClose={() => setJournalDay(null)} />}
 
       <H2>To-do</H2>
       {agenda.todo.length === 0 && (hydrated ? <Muted>Nothing to place.</Muted> : <Skeleton testID="todo-skeleton" rows={2} />)}

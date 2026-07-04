@@ -53,6 +53,13 @@ export interface ReviewItem {
   created_at: string;
 }
 
+/** An authoritative row a command wrote, per the `/sync/upload` ack (D5). */
+export interface AckEffect {
+  table: string;
+  row_id: string;
+  op: 'insert' | 'update' | 'delete';
+}
+
 /** The repository the writer (execute.ts) and uploader (upload-commands.ts) use. */
 export interface OverlayStore {
   /**
@@ -72,8 +79,15 @@ export interface OverlayStore {
    * effects — they stay applied in the merged read until the identical canonical
    * row syncs down, so there is NO revert-flicker between ack and download
    * (S7-F6). `reconcileConfirmed` drops them once the canonical row arrives.
+   *
+   * D5: `effects` is the server's authoritative `{table,row_id,op}` per command.
+   * When it targets a DIFFERENT row than the client optimistically minted (two
+   * offline devices minted ids for the SAME new day → the server converged onto
+   * one), the local overlay effect's `row_id` (and its `fields.id`) is rewritten
+   * to the server's id so `reconcileConfirmed` clears it when the canonical row
+   * arrives — instead of ghosting forever on a minted id that never syncs down.
    */
-  markApplied(commandId: string): Promise<void>;
+  markApplied(commandId: string, effects?: readonly AckEffect[]): Promise<void>;
   /**
    * Drop the overlay of every `applied` command whose canonical rows have now
    * arrived (present + carrying `last_modified_by_command_id === id`, or gone/
@@ -179,10 +193,41 @@ export function createSqlOverlayStore(sql: SqlExecutor): OverlayStore {
       // `table` is an internal constant (never user input); no injection surface.
       return sql.getAll(`SELECT * FROM ${table}`);
     },
-    async markApplied(commandId) {
-      // Keep the overlay effects; only flip status so pendingCommands() stops
-      // re-uploading it. reconcileConfirmed drops the effects on canonical arrival.
-      await sql.execute("UPDATE client_commands SET status = 'applied' WHERE id = ?", [commandId]);
+    async markApplied(commandId, effects) {
+      // D5: reconcile a divergent authoritative row id. When the server applied
+      // this command onto a DIFFERENT row than the client optimistically minted,
+      // rewrite the local overlay effect's row_id (+ fields.id, + insert→update) to
+      // the server's id so reconcileConfirmed clears it on canonical arrival. Only
+      // an UNAMBIGUOUS single effect on a table can be a minted-id upsert
+      // (journal.write / tag.answer …); a multi-effect command is left untouched.
+      const rewrites: { effectId: string; rowId: string; fields: string }[] = [];
+      if (effects && effects.length > 0) {
+        const local = await sql.getAll<{ id: string; table_name: string; row_id: string; fields: string }>(
+          'SELECT id, table_name, row_id, fields FROM overlay_effects WHERE command_id = ?',
+          [commandId],
+        );
+        for (const ack of effects) {
+          const matches = local.filter((l) => l.table_name === ack.table);
+          if (matches.length !== 1) continue;
+          const m = matches[0]!;
+          if (m.row_id === ack.row_id) continue; // no divergence
+          const fields = { ...(parseJson(m.fields, {}) as Record<string, unknown>), id: ack.row_id };
+          rewrites.push({ effectId: m.id, rowId: ack.row_id, fields: JSON.stringify(fields) });
+        }
+      }
+      if (rewrites.length === 0) {
+        // Common case (no divergence): keep the single-statement flip; the overlay
+        // stays until reconcileConfirmed drops it on canonical arrival (no flicker).
+        await sql.execute("UPDATE client_commands SET status = 'applied' WHERE id = ?", [commandId]);
+        return;
+      }
+      // Divergent: rewrite the overlay effect(s) + flip status atomically.
+      await sql.writeTransaction(async (tx) => {
+        for (const r of rewrites) {
+          await tx.execute("UPDATE overlay_effects SET row_id = ?, op = 'update', fields = ? WHERE id = ?", [r.rowId, r.fields, r.effectId]);
+        }
+        await tx.execute("UPDATE client_commands SET status = 'applied' WHERE id = ?", [commandId]);
+      });
     },
     async reconcileConfirmed(nowMs = Date.now()) {
       const cleared: string[] = [];

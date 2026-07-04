@@ -78,6 +78,15 @@ function AuthedApp({ user, onSignOut }: { user: SessionUser; onSignOut: () => vo
   const [route, setRoute] = useState<Route>((window.location.pathname as Route) || '/');
   const [connected, setConnected] = useState(false);
 
+  // e2e-only: expose the PowerSync handle so a Playwright spec can page-eval the
+  // LOCAL replica — e.g. the journal lazy-load proof asserts the seeded past-month
+  // rows are NOT local until their month is viewed. Guarded to a LOCAL host (dev
+  // server AND the CI `vite preview` build both serve on localhost); a real
+  // deployment (Tailscale/prod hostname) never exposes it.
+  if (import.meta.env.DEV || ['localhost', '127.0.0.1'].includes(window.location.hostname)) {
+    (window as unknown as { __db?: PowerSyncDatabase }).__db = db;
+  }
+
   useEffect(() => {
     let cancelled = false;
     let stopUpload: (() => void) | undefined;

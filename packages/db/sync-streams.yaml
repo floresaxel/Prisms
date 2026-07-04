@@ -1,9 +1,12 @@
 # PowerSync Sync Streams (ARCHITECTURE_1.3 §7.3). Replaces the v1.0 single
 # per-user bucket (legacy Sync Rules). Compiled streams (edition 3).
 #
-# Access control is the verified JWT user id ONLY — every query filters on
-# `auth.user_id()`. No stream reads a client-supplied parameter, so a client
-# cannot widen its scope and one user can never receive another's rows.
+# Access control is the verified JWT user id — every query filters on
+# `auth.user_id()`. Streams MAY read a client SUBSCRIPTION parameter (the
+# `journal_month` stream matches `month_key`), but the invariant is: a parameter
+# only ever NARROWS within the user's own rows — it never replaces or widens the
+# `auth.user_id()` filter, so one user can never receive another's rows. Auth-level
+# / unauthenticated request parameters are never used (those could bypass scoping).
 #
 # Tiers (clients auto-subscribe to 0/1; Tier 2 is subscribed lazily, M12/M14):
 #   bootstrap  (Tier 0) — the cold-start working set: settings, the LIVE tree,
@@ -74,3 +77,16 @@ streams:
       - SELECT * FROM time_entries WHERE user_id = auth.user_id() AND deleted_at IS NOT NULL
       - SELECT * FROM habit_completions WHERE user_id = auth.user_id() AND deleted_at IS NOT NULL
       - SELECT * FROM diagram_layouts WHERE user_id = auth.user_id() AND deleted_at IS NOT NULL
+      - SELECT * FROM journal_entries WHERE user_id = auth.user_id() AND deleted_at IS NOT NULL
+
+  # Journal — lazy, MONTH-BUCKETED (J1/D3). auto_subscribe:false + a subscription
+  # parameter (month_key equality) means a fresh device pulls ZERO journal rows
+  # until the client subscribes a month (the Agenda holds the visible month(s), M-
+  # series stream API). The parameter only NARROWS within the user's own rows —
+  # the query still filters auth.user_id() (see the header invariant). The exact
+  # `subscription.parameters() ->> 'month'` syntax is J0-confirmed compiling +
+  # activating on powersync-service 1.22.0 (Blueprints/JOURNAL_PLAN.md, J0 findings).
+  journal_month:
+    auto_subscribe: false
+    queries:
+      - SELECT * FROM journal_entries WHERE user_id = auth.user_id() AND deleted_at IS NULL AND month_key = subscription.parameters() ->> 'month'

@@ -6,7 +6,7 @@
  * order after the imported state (monotonicity, R20).
  */
 import type { ExportManifest, ImportReport } from '@prisms/core';
-import { parseImportFile, persistImportedHlc, serializeExport, exportFilename } from '@prisms/ui';
+import { buildJournalArchive, journalArchiveFilename, parseImportFile, persistImportedHlc, serializeExport, exportFilename } from '@prisms/ui';
 
 import { config } from './config';
 
@@ -79,4 +79,39 @@ export async function restoreImport(manifest: ExportManifest): Promise<ImportRes
   const result = (await jsonOrThrow(res)) as ImportRestoreResult;
   if (result.ok) persistImportedHlc(manifest.hlc_high_water);
   return result;
+}
+
+/** A journal note as the D7 export endpoint returns it. */
+export interface JournalExportRow {
+  entry_date: string;
+  content: string;
+  updated_at: string;
+}
+
+/**
+ * GET all of the user's live journal notes (D7). SERVER-sourced — never the local
+ * replica — because under lazy month sync a device may hold only viewed months, so
+ * a local "export all" would silently truncate.
+ */
+export async function fetchJournalExport(): Promise<JournalExportRow[]> {
+  const res = await fetch(`${api}/sync/journal/export`, { credentials: 'include' });
+  if (!res.ok) throw new Error(`journal export failed (${res.status})`);
+  return ((await res.json()) as { entries: JournalExportRow[] }).entries;
+}
+
+/** Fetch all notes, build the per-day `.md` zip, and trigger a browser download. */
+export async function downloadJournalArchive(): Promise<string> {
+  const entries = await fetchJournalExport();
+  const name = journalArchiveFilename(new Date().toISOString());
+  // Copy into a fresh Uint8Array (plain ArrayBuffer) so it satisfies BlobPart (TS 5.7 variance).
+  const blob = new Blob([new Uint8Array(buildJournalArchive(entries))], { type: 'application/zip' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  return name;
 }

@@ -10,7 +10,7 @@ up the whole stack.
 | Service | Image / build | Role |
 |---|---|---|
 | `postgres` | `postgres:16` | Source of truth (logical replication on) |
-| `powersync` | `journeyapps/powersync-service` | Sync Streams (edition-3, `packages/db/sync-streams.yaml`): `bootstrap`/`active` tiers auto-sync live rows, `history` (Tier 2, soft-deleted tombstones) lazily; every stream JWT-scoped by `user_id`, no client-widenable params |
+| `powersync` | `journeyapps/powersync-service` | Sync Streams (edition-3, `packages/db/sync-streams.yaml`): `bootstrap`/`active` tiers auto-sync live rows, `history` (Tier 2, soft-deleted tombstones) + `journal_month` (day-notes, by month) lazily; every stream JWT-scoped by `user_id` — a subscription parameter (journal's `month`) may only NARROW within the user's own rows, never widen |
 | `api` | `apps/server/Dockerfile` | Hono + Better Auth + command dispatcher + pg-boss jobs; runs migrations on start |
 | `web` | `apps/web/Dockerfile` → nginx | Static SPA; reverse-proxies `/api`, `/sync` → api and `/powersync` → powersync (single-origin) |
 
@@ -119,6 +119,14 @@ PowerSync so it reprocesses against the narrowed publication:
 ```sh
 docker compose -f docker-compose.prod.yml restart powersync
 ```
+
+**Journal day-notes (migration 0010).** The journal feature adds a `journal_entries`
+table synced through a new lazy, month-bucketed `journal_month` stream. Its migration
+(`packages/db/migrations/0010_journal.sql`) runs after 0009 and **also changes the
+publication** — `ALTER PUBLICATION powersync ADD TABLE journal_entries` — because the
+publication is scoped. So the same rule applies: after this upgrade lands on a live
+deployment, **restart PowerSync** (the same `restart powersync` above) so it reprocesses
+the new table. Omitting the restart leaves journals silently un-synced.
 
 **History window (D4).** Soft-deleted rows and the `command_log` dedup history are
 purged after **90 days** by the retention job — this is the v1 dedup/undo horizon,

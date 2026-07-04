@@ -62,6 +62,7 @@ const RESTORE_ORDER = [
   'computed_aggregates',
   'schedule_suggestion_batches',
   'sync_review_items',
+  'journal_entries', // J1 — no FK; one live note per (user, entry_date)
   // level 1 — FK to a level-0 table (habits/edges/blocks/entries/memberships/diagrams → nodes)
   'habits',
   'edges',

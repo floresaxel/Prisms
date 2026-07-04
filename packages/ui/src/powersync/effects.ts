@@ -258,6 +258,17 @@ export function buildOptimisticEffects(name: CommandName, payload: unknown, ctx:
     case 'tag.clear_answer':
       return [del('tag_answers', id)];
 
+    // --- journal (a note on any calendar day) ------------------------------
+    case 'journal.write': {
+      // Upsert keyed by entry_date; edits pass the existing row id so `ins` only
+      // creates when the day is genuinely new (the tag.answer precedent). month_key
+      // is derived here exactly as the server derives it (entry_date.slice(0,7)).
+      const entryDate = String(p['entry_date'] ?? '');
+      return [ins('journal_entries', p['id'], { entry_date: entryDate, month_key: entryDate.slice(0, 7), content: p['content'] ?? '' })];
+    }
+    case 'journal.delete':
+      return [del('journal_entries', id)];
+
     // --- automation & blocker rules ----------------------------------------
     case 'rule.create':
       return [
