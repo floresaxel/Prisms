@@ -632,8 +632,9 @@ with mobile and the `.md` export.
   content checks use containment. Added a J7 e2e: toolbar task list → serialized `- [ ] buy milk` →
   click the rendered checkbox → `- [x] buy milk` → reload → checkbox still checked.
 - **Gate:** web/mobile typecheck + lint green; web vitest 9/9; `vite build` bundles TipTap (index chunk
-  ~1.6MB / 500KB gz — acceptable). **e2e (4 tests incl. J7) written but NOT yet run locally** this session
-  (dev server/web were torn down at an interrupt before the run); the CI Playwright job exercises them.
+  ~1.6MB / 500KB gz — acceptable). **e2e 4/4 GREEN locally** (workers=1) against the live stack serving
+  the production `vite preview` build (CI parity) — create/reload/edit/delete, lazy-load proof, offline
+  overlay, and the J7 interactive-checkbox round-trip.
 
 #### J7 audit fix (pre-J7, commit `12c1ed0`) — editor unmount data loss
 Audit of the shipped journal found one real defect: switching calendar days within the 800ms debounce
