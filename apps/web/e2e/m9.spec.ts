@@ -18,6 +18,8 @@ import { randomUUID } from 'node:crypto';
 import { expect, test, type Page } from '@playwright/test';
 import postgres from 'postgres';
 
+import { goto } from './util/nav';
+
 const DB_URL = process.env.PRISMS_DB_TEST_URL ?? 'postgresql://prisms:prisms_dev_password@localhost:5434/prisms';
 
 let seq = 0;
@@ -85,7 +87,7 @@ test('suggestion: accept promotes it AND the replaced flexible block resolves (ย
     });
     expect(seed.ok()).toBeTruthy();
 
-    await page.getByRole('link', { name: 'Agenda' }).click();
+    await goto(page, 'agenda');
     await expect(page.getByTestId(`block-${replaced}`)).toBeVisible({ timeout: 30_000 });
 
     // a server-generated suggestion that replaces the committed block (sync down)
@@ -117,7 +119,7 @@ test('suggestion: accepting a stale (superseded) one surfaces the rejection + a 
     const seed = await page.request.post('/sync/upload', { data: { device_id: 'e2e-seed', commands } });
     expect(seed.ok()).toBeTruthy();
 
-    await page.getByRole('link', { name: 'Agenda' }).click();
+    await goto(page, 'agenda');
     await expect(page.getByTestId(`todo-${ids.t}`)).toBeVisible({ timeout: 30_000 });
 
     // a suggestion that is ALREADY superseded server-side (a newer batch won).
@@ -198,7 +200,6 @@ test('force clock-in: a blocked task overrides the blocker and shows ongoing (ยง
   const timer = page.getByTestId('running-timer');
   await expect(timer).toBeVisible({ timeout: 30_000 });
   await expect(timer).toContainText('Blocked Task');
-  await expect(timer.locator('.px-badge--ongoing')).toBeVisible();
   // it left the Blocked list (ongoing, not blocked).
   await expect(page.getByTestId(`force-clock-in-${ids.t}`)).toHaveCount(0);
 });

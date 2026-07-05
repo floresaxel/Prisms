@@ -11,6 +11,8 @@ import { randomUUID } from 'node:crypto';
 
 import { expect, test } from '@playwright/test';
 
+import { goto } from './util/nav';
+
 let seq = 0;
 const cmd = (name: string, payload: unknown) => ({
   id: randomUUID(),
@@ -54,7 +56,7 @@ test('inbox → promote → clock in/out → review, offline then synced; double
   await context.setOffline(true);
 
   // create an activity in the inbox
-  await page.getByRole('link', { name: 'Inbox' }).click();
+  await goto(page, 'tasks');
   await page.getByTestId('activity-title').fill('Promoted Task');
   await page.getByTestId('activity-add').click();
   const inboxRow = page.getByTestId('inbox').locator('li', { hasText: 'Promoted Task' });
@@ -65,7 +67,7 @@ test('inbox → promote → clock in/out → review, offline then synced; double
   await expect(page.getByTestId('inbox')).not.toContainText('Promoted Task');
 
   // --- worklist: the promoted task is now an available task --------------
-  await page.getByRole('link', { name: 'Worklist' }).click();
+  await goto(page, 'myday');
   const promoted = page.getByTestId('worklist').locator('li', { hasText: 'Promoted Task' });
   await expect(promoted).toBeVisible();
   await expect(promoted.locator('.px-badge')).toHaveText('available');

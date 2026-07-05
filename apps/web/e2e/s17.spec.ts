@@ -16,6 +16,8 @@ import { randomUUID } from 'node:crypto';
 import { expect, test } from '@playwright/test';
 import postgres from 'postgres';
 
+import { goto } from './util/nav';
+
 const DB_URL = process.env.PRISMS_DB_TEST_URL ?? 'postgresql://prisms:prisms_dev_password@localhost:5434/prisms';
 
 let seq = 0;
@@ -87,7 +89,7 @@ test('agenda: drag→valid windows→drop commits; anchored refuses; suggestion 
     });
     expect(seed.ok()).toBeTruthy();
 
-    await page.getByRole('link', { name: 'Agenda' }).click();
+    await goto(page, 'agenda');
     await expect(page.getByTestId(`block-${ids.anchored}`)).toBeVisible({ timeout: 30_000 });
 
     // --- server-style rows via Postgres (sync down like any server write) ---
@@ -165,7 +167,7 @@ test('agenda: a committed block moves to another day and resizes (block.move)', 
   });
   expect(seed.ok()).toBeTruthy();
 
-  await page.getByRole('link', { name: 'Agenda' }).click();
+  await goto(page, 'agenda');
   const block = page.getByTestId(`block-${ids.block}`);
   await expect(block).toBeVisible({ timeout: 30_000 });
   await expect(block).toHaveAttribute('data-duration-min', '60');

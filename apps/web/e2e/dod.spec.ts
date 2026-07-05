@@ -9,6 +9,8 @@ import { randomUUID } from 'node:crypto';
 
 import { expect, test } from '@playwright/test';
 
+import { goto } from './util/nav';
+
 let seq = 0;
 const cmd = (name: string, payload: unknown) => ({
   id: randomUUID(),
@@ -65,7 +67,7 @@ test('login → seed renders, airplane reload, optimistic rollback', async ({ pa
   await context.setOffline(false);
 
   // --- DoD 3: an optimistic edit rejected by the server rolls back -------
-  await page.getByRole('link', { name: 'Dashboard' }).click();
+  await goto(page, 'dashboard');
   await expect(page.getByTestId('vision-count')).toHaveText('(4)');
   await page.getByTestId('new-vision').click();
   // optimistic insert briefly shows 5; the server rejects (E_MAX_VISIONS) and

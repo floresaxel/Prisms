@@ -7,6 +7,7 @@
   --px-bg: #f6f7f9;
   --px-surface: #ffffff;
   --px-surface-2: #f2f4f7;
+  --px-sb-bg: #fbfcfd;
   --px-border: #e6e8ec;
   --px-border-2: #d9dde3;
   --px-text: #18202b;
@@ -43,14 +44,57 @@ body {
   color: var(--px-text);
 }
 
-.px-app { display: grid; grid-template-columns: 240px 1fr; min-height: 100vh; }
-.px-sidebar { display: flex; flex-direction: column; gap: var(--px-gap); padding: 20px 16px; background: var(--px-surface); border-right: 1px solid var(--px-border); }
-.px-brand { font-weight: 700; font-size: 18px; letter-spacing: 0.3px; }
-.px-navlink { display: block; padding: 8px 12px; border-radius: var(--px-radius); color: var(--px-text-dim); text-decoration: none; }
+/* ── app shell v2 (web redesign W1): sidebar with grouped nav + topbar. Ported
+   from docs/mockups/web-layout-redesign.html (.app/.sb/.topbar), px-prefixed. ── */
+.px-app { display: flex; min-height: 100vh; }
+.px-sidebar { width: 234px; flex: none; display: flex; flex-direction: column; padding: 12px 10px 10px; background: var(--px-sb-bg); border-right: 1px solid var(--px-border); }
+.px-brand { display: flex; align-items: center; gap: 8px; padding: 2px 8px 10px; font-weight: 650; font-size: 14px; letter-spacing: 0.1px; }
+.px-brand-logo { width: 22px; height: 22px; border-radius: 6px; background: var(--px-blue); color: #fff; display: flex; align-items: center; justify-content: center; flex: none; }
+.px-brand-logo .px-ic { width: 13px; height: 13px; }
+.px-nav { flex: 1; overflow-y: auto; padding-bottom: 8px; }
+.px-nav-group { margin: 14px 8px 4px; font-size: 10.5px; font-weight: 640; letter-spacing: 0.7px; color: var(--px-faint); text-transform: uppercase; }
+.px-navlink { display: flex; align-items: center; gap: 9px; padding: 6px 9px; margin: 1px 0; border-radius: 7px; color: var(--px-text-dim); text-decoration: none; font-size: 13px; font-weight: 480; cursor: pointer; }
+.px-navlink .px-ic { width: 16px; height: 16px; color: var(--px-faint); }
 .px-navlink:hover { background: var(--px-surface-2); color: var(--px-text); }
-.px-navlink--active { background: var(--px-surface-2); color: var(--px-text); }
-.px-sidebar-foot { margin-top: auto; font-size: 12px; color: var(--px-text-dim); }
-.px-main { padding: 28px 32px; }
+.px-navlink--active { background: var(--px-blue-bg); color: var(--px-blue-deep); font-weight: 560; }
+.px-navlink--active .px-ic { color: var(--px-blue); }
+.px-nav-badge { margin-left: auto; font-size: 11px; font-weight: 580; color: var(--px-text-dim); background: var(--px-surface-2); border-radius: 9px; padding: 1px 7px; }
+.px-navlink--active .px-nav-badge { background: #fff; }
+.px-nav-badge--alert { background: var(--px-red-bg); color: var(--px-red); }
+.px-sidebar-foot { border-top: 1px solid var(--px-border); padding-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+.px-sidebar-user { display: flex; align-items: center; gap: 8px; padding: 7px 9px 3px; font-size: 12px; color: var(--px-text-dim); }
+.px-avatar { width: 24px; height: 24px; border-radius: 50%; background: var(--px-teal); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 640; flex: none; }
+
+/* main column: topbar over a scrolling content area */
+.px-shell { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.px-topbar { height: 50px; flex: none; background: var(--px-surface); border-bottom: 1px solid var(--px-border); display: flex; align-items: center; gap: 12px; padding: 0 20px; }
+.px-crumb { font-size: 13px; color: var(--px-faint); }
+.px-crumb b { color: var(--px-text); font-weight: 600; }
+.px-crumb-sep { margin: 0 7px; color: var(--px-border-2); }
+.px-topbar-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+.px-now-clock { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 640; letter-spacing: 0.2px; font-variant-numeric: tabular-nums; }
+.px-now-clock .px-ic { width: 14px; height: 14px; color: var(--px-faint); }
+.px-sync-chip { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--px-text-dim); border: 1px solid var(--px-border); border-radius: 8px; padding: 5px 10px; background: var(--px-surface); }
+.px-sync-chip .px-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--px-green); }
+.px-sync-chip--connecting .px-dot { background: var(--px-amber); }
+.px-content { flex: 1; overflow: auto; padding: 20px 26px 40px; }
+
+/* global running-timer pill in the topbar (D7): white with an amber outline */
+.px-timer-pill { display: flex; align-items: center; gap: 8px; padding: 5px 10px 5px 9px; border: 1.5px solid var(--px-amber); background: var(--px-surface); border-radius: 8px; font-size: 12.5px; color: #92600a; }
+.px-timer-pill .px-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--px-amber); animation: px-pulse 1.6s ease-in-out infinite; }
+@keyframes px-pulse { 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) { .px-timer-pill .px-dot { animation: none; } }
+.px-timer-pill-task { font-weight: 600; max-width: 180px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.px-timer-pill-elapsed { font-weight: 640; font-variant-numeric: tabular-nums; }
+.px-timer-stop { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--px-amber-brd); background: var(--px-surface); border-radius: 6px; padding: 2.5px 8px; font-size: 11.5px; font-weight: 560; color: #92600a; cursor: pointer; }
+.px-timer-stop:hover { background: var(--px-amber-bg); }
+
+/* hub tabs (Projects / Automations shells) */
+.px-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--px-border); margin: 0 0 18px; }
+.px-tab { display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px 9px; font: inherit; font-size: 12.5px; font-weight: 520; color: var(--px-text-dim); background: none; border: none; border-bottom: 2px solid transparent; margin-bottom: -1px; cursor: pointer; }
+.px-tab .px-ic { width: 14px; height: 14px; }
+.px-tab:hover { color: var(--px-text); }
+.px-tab--on { color: var(--px-blue-deep); border-bottom-color: var(--px-blue); font-weight: 600; }
 
 /* shared icon primitive (W0): 16px default, non-shrinking, inherits currentColor */
 .px-ic { width: 16px; height: 16px; flex: none; }

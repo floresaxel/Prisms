@@ -12,6 +12,8 @@ import { randomUUID } from 'node:crypto';
 
 import { expect, test } from '@playwright/test';
 
+import { goto } from './util/nav';
+
 let seq = 0;
 const cmd = (name: string, payload: unknown) => ({
   id: randomUUID(),
@@ -53,7 +55,7 @@ test('flowchart: add an edge, a cycle is rejected with E_CYCLE, group + collapse
   });
   expect(seed.ok()).toBeTruthy();
 
-  await page.getByRole('link', { name: 'Flowchart' }).click();
+  await goto(page, 'graph');
   await page.getByTestId('diagram-root').selectOption(ids.p);
   await expect(page.getByTestId(`flow-node-${ids.t1}`)).toBeVisible({ timeout: 30_000 });
 
@@ -99,7 +101,7 @@ test('gantt: a dependency arrow matches the edge between two dated tasks', async
   });
   expect(seed.ok()).toBeTruthy();
 
-  await page.getByRole('link', { name: 'Gantt' }).click();
+  await goto(page, 'timeline');
   await page.getByTestId('gantt-project').selectOption(ids.p);
   await expect(page.getByTestId(`gantt-bar-${ids.t1}`)).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId(`gantt-bar-${ids.t2}`)).toBeVisible();
@@ -122,7 +124,7 @@ test('rules: a rule built in the editor spawns a task on completion', async ({ p
   expect(seed.ok()).toBeTruthy();
 
   // build a task_completed rule that spawns a follow-up
-  await page.getByRole('link', { name: 'Rules' }).click();
+  await goto(page, 'rules');
   await page.getByTestId('rule-spawn-title').fill('Follow-up: {trigger.title}');
   await page.getByTestId('rule-spawn-estimate').fill('30');
   await page.getByTestId('rule-add').click();
@@ -132,7 +134,7 @@ test('rules: a rule built in the editor spawns a task on completion', async ({ p
 
   // complete the Lecture in the worklist → backstop spawns "Follow-up: Lecture".
   // The Done button opens the completed/obsolete check-off modal; confirm "Completed".
-  await page.getByRole('link', { name: 'Worklist' }).click();
+  await goto(page, 'myday');
   await page.getByTestId(`check-${ids.lecture}`).click();
   await page.getByTestId('checkoff-completed').click();
   await expect(page.getByTestId('worklist')).toContainText('Follow-up: Lecture', { timeout: 30_000 });

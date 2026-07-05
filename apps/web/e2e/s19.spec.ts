@@ -12,6 +12,8 @@ import { randomUUID } from 'node:crypto';
 
 import { expect, test } from '@playwright/test';
 
+import { goto } from './util/nav';
+
 let seq = 0;
 const cmd = (name: string, payload: unknown) => ({
   id: randomUUID(),
@@ -50,7 +52,7 @@ test('dashboard renders from local data offline, with a projection freshness lab
   });
   expect(seed.ok()).toBeTruthy();
 
-  await page.getByRole('link', { name: 'Dashboard' }).click();
+  await goto(page, 'dashboard');
   await expect(page.getByTestId('dashboard')).toBeVisible();
   await expect(page.getByTestId('burndown')).toBeVisible({ timeout: 30_000 });
   // completion bar for the project appears once seed syncs
@@ -95,7 +97,7 @@ test('changing a criterion weight reorders the priority ranking instantly', asyn
   });
   expect(seed.ok()).toBeTruthy();
 
-  await page.getByRole('link', { name: 'Decisions' }).click();
+  await goto(page, 'decisions');
   const ranking = page.getByTestId(`ranking-${ids.board}`);
   // C1 (Impact) heavy → Project A ranks first
   await expect(ranking.locator('li').first()).toHaveAttribute('data-testid', `rank-${ids.pa}`, { timeout: 30_000 });
@@ -105,6 +107,6 @@ test('changing a criterion weight reorders the priority ranking instantly', asyn
   await expect(ranking.locator('li').first()).toHaveAttribute('data-testid', `rank-${ids.pb}`);
 
   // and the dashboard priority list reflects the same ranking
-  await page.getByRole('link', { name: 'Dashboard' }).click();
+  await goto(page, 'dashboard');
   await expect(page.getByTestId('priority-list').locator('li').first()).toContainText('Project B');
 });

@@ -2,47 +2,208 @@
  * App shell: gate on a Better Auth session, then open the PowerSync database,
  * connect it, and provide it to the reactive hooks. A global toast surfaces
  * server command rejections (the row itself rolls back via sync).
+ *
+ * Web redesign W1: consolidated routes with old→new redirects (D3) rendered
+ * inside the Layout v2 shell (grouped nav + topbar); the running-timer pill and
+ * its focus-review modal are global (GlobalTimer, D7). Nav badges come from the
+ * shared read layer, so the shell composition lives in <Shell> (mounted BELOW
+ * PrismsDataProvider) while db lifecycle + routing stay in <AuthedApp>.
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import type { PowerSyncDatabase } from '@powersync/web';
 import { PowerSyncContext } from '@powersync/react';
-import { getDeviceId, Layout, loadImportedHlcFloor, PrismsDataProvider, type CommandContext, type CommandRejection } from '@prisms/ui';
+import {
+  getDeviceId,
+  Layout,
+  loadImportedHlcFloor,
+  PrismsDataProvider,
+  useActivityInbox,
+  useReviewInbox,
+  type BreadcrumbSpec,
+  type CommandContext,
+  type CommandRejection,
+  type NavGroupSpec,
+  type NavItemSpec,
+} from '@prisms/ui';
 
 import { getSession, signOut, type SessionUser } from './auth';
+import { GlobalTimer } from './components/GlobalTimer';
 import { ReviewBanner } from './components/ReviewBanner';
 import { isDesktop, osNotify } from './desktop';
 import { rejectionMessage } from './format';
 import { clearLocalAccount, connectDb, createDb } from './powersync';
 import { Agenda } from './screens/Agenda';
-import { Blockers } from './screens/Blockers';
+import { Automations } from './screens/Automations';
 import { Dashboard } from './screens/Dashboard';
-import { DecisionBoard } from './screens/DecisionBoard';
-import { Flowchart } from './screens/Flowchart';
-import { Gantt } from './screens/Gantt';
 import { Habits } from './screens/Habits';
 import { Inbox } from './screens/Inbox';
-import { Kanban } from './screens/Kanban';
 import { Login } from './screens/Login';
+import { Projects } from './screens/Projects';
 import { Review } from './screens/Review';
-import { Rules } from './screens/Rules';
 import { Settings } from './screens/Settings';
 import { Worklist } from './screens/Worklist';
 
 type Route =
   | '/'
-  | '/inbox'
+  | '/tasks'
   | '/agenda'
-  | '/kanban'
   | '/habits'
-  | '/decisions'
+  | '/projects'
   | '/dashboard'
-  | '/flowchart'
-  | '/gantt'
-  | '/rules'
-  | '/blockers'
+  | '/automations'
   | '/review'
   | '/settings';
+
+const ROUTES = new Set<Route>(['/', '/tasks', '/agenda', '/habits', '/projects', '/dashboard', '/automations', '/review', '/settings']);
+
+// Old flat routes → new consolidated route (+ hub tab hash), applied once on boot
+// (D3) so bookmarks and mid-migration deep links never 404. The hub reads the
+// hash to select its tab.
+const REDIRECTS: Record<string, string> = {
+  '/inbox': '/tasks',
+  '/worklist': '/',
+  '/kanban': '/projects#board',
+  '/gantt': '/projects#timeline',
+  '/flowchart': '/projects#graph',
+  '/decisions': '/projects#decisions',
+  '/rules': '/automations#rules',
+  '/blockers': '/automations#blockers',
+};
+
+const CRUMBS: Record<Route, BreadcrumbSpec> = {
+  '/': { section: 'My work', page: 'My Day' },
+  '/tasks': { section: 'My work', page: 'Tasks' },
+  '/agenda': { section: 'My work', page: 'Agenda' },
+  '/habits': { section: 'My work', page: 'Habits & Skills' },
+  '/projects': { section: 'Plan', page: 'Projects' },
+  '/dashboard': { section: 'Plan', page: 'Dashboard' },
+  '/automations': { section: 'Automate', page: 'Automations' },
+  '/review': { section: 'My work', page: 'Review' },
+  '/settings': { section: 'Workspace', page: 'Settings' },
+};
+
+/** Boot route: apply an old→new redirect (replaceState) if the path is legacy. */
+function resolveBootRoute(): Route {
+  const path = window.location.pathname;
+  const redirect = REDIRECTS[path];
+  if (redirect) {
+    window.history.replaceState({}, '', redirect);
+    return redirect.split('#')[0] as Route;
+  }
+  return ROUTES.has(path as Route) ? (path as Route) : '/';
+}
+
+/** Shell composition — mounted inside PrismsDataProvider so it can read the
+ *  inbox/review counts for the nav badges. Layout itself stays presentational. */
+function Shell({
+  user,
+  route,
+  navigate,
+  ctx,
+  connected,
+  rejections,
+  onClearRejections,
+  onSignOut,
+}: {
+  user: SessionUser;
+  route: Route;
+  navigate: (href: string) => void;
+  ctx: CommandContext;
+  connected: boolean;
+  rejections: CommandRejection[];
+  onClearRejections: () => void;
+  onSignOut: () => void;
+}) {
+  const inboxCount = useActivityInbox().length;
+  const reviewCount = useReviewInbox().length;
+
+  const groups: NavGroupSpec[] = [
+    {
+      items: [
+        { key: 'tasks', label: 'Tasks', href: '/tasks', icon: 'list', badge: inboxCount },
+        { key: 'review', label: 'Review', href: '/review', icon: 'bell', badge: reviewCount, badgeTone: 'alert' },
+      ],
+    },
+    {
+      label: 'My work',
+      items: [
+        { key: 'myday', label: 'My Day', href: '/', icon: 'sun' },
+        { key: 'agenda', label: 'Agenda', href: '/agenda', icon: 'cal' },
+        { key: 'habits', label: 'Habits & Skills', href: '/habits', icon: 'repeat' },
+      ],
+    },
+    {
+      label: 'Plan',
+      items: [
+        { key: 'projects', label: 'Projects', href: '/projects', icon: 'layers' },
+        { key: 'dashboard', label: 'Dashboard', href: '/dashboard', icon: 'chart' },
+      ],
+    },
+    {
+      label: 'Automate',
+      items: [{ key: 'automations', label: 'Automations', href: '/automations', icon: 'zap' }],
+    },
+  ];
+  const foot: NavItemSpec[] = [{ key: 'settings', label: 'Settings', href: '/settings', icon: 'sliders' }];
+
+  const screen: ReactNode =
+    (
+      {
+        '/': <Worklist ctx={ctx} />,
+        '/tasks': <Inbox ctx={ctx} />,
+        '/agenda': <Agenda ctx={ctx} />,
+        '/habits': <Habits ctx={ctx} />,
+        '/projects': <Projects ctx={ctx} />,
+        '/dashboard': <Dashboard ctx={ctx} />,
+        '/automations': <Automations ctx={ctx} />,
+        '/review': <Review ctx={ctx} />,
+        '/settings': <Settings ctx={ctx} />,
+      } satisfies Record<Route, ReactNode>
+    )[route] ?? <Worklist ctx={ctx} />;
+
+  return (
+    <Layout
+      groups={groups}
+      foot={foot}
+      active={route}
+      onNavigate={navigate}
+      breadcrumb={CRUMBS[route]}
+      timer={<GlobalTimer ctx={ctx} />}
+      user={{ name: user.name, email: user.email }}
+      sync={
+        <div className={`px-sync-chip${connected ? '' : ' px-sync-chip--connecting'}`} data-testid="sync-state">
+          <span className="px-dot" />
+          {connected ? 'synced' : 'connecting…'}
+        </div>
+      }
+      footer={
+        <>
+          {isDesktop() && (
+            <button
+              className="px-btn"
+              data-testid="desktop-notify"
+              onClick={() => void osNotify('Prisms', 'Desktop notifications are working.')}
+            >
+              Test notification
+            </button>
+          )}
+          <button className="px-btn" data-testid="sign-out" onClick={onSignOut}>
+            Sign out
+          </button>
+        </>
+      }
+    >
+      <ReviewBanner onOpen={() => navigate('/review')} />
+      {rejections.length > 0 && (
+        <div className="px-error" data-testid="rejection-toast" onClick={onClearRejections}>
+          {rejections.map((r) => rejectionMessage(r.reject_code)).join(' ')}
+        </div>
+      )}
+      {screen}
+    </Layout>
+  );
+}
 
 function AuthedApp({ user, onSignOut }: { user: SessionUser; onSignOut: () => void }) {
   const dbRef = useRef<PowerSyncDatabase | null>(null);
@@ -75,7 +236,7 @@ function AuthedApp({ user, onSignOut }: { user: SessionUser; onSignOut: () => vo
   }
 
   const [rejections, setRejections] = useState<CommandRejection[]>([]);
-  const [route, setRoute] = useState<Route>((window.location.pathname as Route) || '/');
+  const [route, setRoute] = useState<Route>(resolveBootRoute);
   const [connected, setConnected] = useState(false);
 
   // e2e-only: expose the PowerSync handle so a Playwright spec can page-eval the
@@ -107,7 +268,7 @@ function AuthedApp({ user, onSignOut }: { user: SessionUser; onSignOut: () => vo
 
   const navigate = useCallback((href: string) => {
     window.history.pushState({}, '', href);
-    setRoute(href as Route);
+    setRoute((href.split('#')[0] || '/') as Route);
   }, []);
 
   const ctx: CommandContext = useMemo(() => ({ userId: user.id, deviceId: getDeviceId() }), [user.id]);
@@ -118,64 +279,16 @@ function AuthedApp({ user, onSignOut }: { user: SessionUser; onSignOut: () => vo
           9 base subscriptions + FactContext/TreeIndex are created once per session
           and survive navigation (navigate() only swaps the screen below). */}
       <PrismsDataProvider>
-        <Layout
-          title="Prisms"
-        nav={[
-          { label: 'Worklist', href: '/', active: route === '/' },
-          { label: 'Inbox', href: '/inbox', active: route === '/inbox' },
-          { label: 'Agenda', href: '/agenda', active: route === '/agenda' },
-          { label: 'Kanban', href: '/kanban', active: route === '/kanban' },
-          { label: 'Habits', href: '/habits', active: route === '/habits' },
-          { label: 'Flowchart', href: '/flowchart', active: route === '/flowchart' },
-          { label: 'Gantt', href: '/gantt', active: route === '/gantt' },
-          { label: 'Decisions', href: '/decisions', active: route === '/decisions' },
-          { label: 'Rules', href: '/rules', active: route === '/rules' },
-          { label: 'Blockers', href: '/blockers', active: route === '/blockers' },
-          { label: 'Dashboard', href: '/dashboard', active: route === '/dashboard' },
-          { label: 'Review', href: '/review', active: route === '/review' },
-          { label: 'Settings', href: '/settings', active: route === '/settings' },
-        ]}
-        onNavigate={navigate}
-        status={
-          <>
-            <div data-testid="sync-state">{connected ? 'synced' : 'connecting…'}</div>
-            <div>{user.email}</div>
-            {isDesktop() && (
-              <button
-                className="px-btn"
-                style={{ marginTop: 8 }}
-                data-testid="desktop-notify"
-                onClick={() => void osNotify('Prisms', 'Desktop notifications are working.')}
-              >
-                Test notification
-              </button>
-            )}
-            <button className="px-btn" style={{ marginTop: 8 }} data-testid="sign-out" onClick={() => void handleSignOut()}>Sign out</button>
-          </>
-        }
-      >
-        <ReviewBanner onOpen={() => navigate('/review')} />
-        {rejections.length > 0 && (
-          <div className="px-error" data-testid="rejection-toast" onClick={() => setRejections([])}>
-            {rejections.map((r) => rejectionMessage(r.reject_code)).join(' ')}
-          </div>
-        )}
-        {({
-          '/': <Worklist ctx={ctx} />,
-          '/inbox': <Inbox ctx={ctx} />,
-          '/agenda': <Agenda ctx={ctx} />,
-          '/kanban': <Kanban ctx={ctx} />,
-          '/habits': <Habits ctx={ctx} />,
-          '/flowchart': <Flowchart ctx={ctx} />,
-          '/gantt': <Gantt />,
-          '/decisions': <DecisionBoard ctx={ctx} />,
-          '/rules': <Rules ctx={ctx} />,
-          '/blockers': <Blockers ctx={ctx} />,
-          '/dashboard': <Dashboard ctx={ctx} />,
-          '/review': <Review ctx={ctx} />,
-          '/settings': <Settings ctx={ctx} />,
-        } satisfies Record<Route, ReactNode>)[route] ?? <Worklist ctx={ctx} />}
-        </Layout>
+        <Shell
+          user={user}
+          route={route}
+          navigate={navigate}
+          ctx={ctx}
+          connected={connected}
+          rejections={rejections}
+          onClearRejections={() => setRejections([])}
+          onSignOut={() => void handleSignOut()}
+        />
       </PrismsDataProvider>
     </PowerSyncContext.Provider>
   );

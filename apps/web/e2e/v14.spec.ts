@@ -16,6 +16,8 @@ import { randomUUID } from 'node:crypto';
 
 import { expect, test, type Page } from '@playwright/test';
 
+import { goto } from './util/nav';
+
 let seq = 0;
 const cmd = (name: string, payload: unknown) => ({
   id: randomUUID(),
@@ -54,31 +56,31 @@ test('warm revisit: Decisions / Habits / Flowchart return prior rows with no emp
   expect(seed.ok()).toBeTruthy();
 
   // ── Decisions (decision_* screen-local) ────────────────────────────────────
-  await page.getByRole('link', { name: 'Decisions' }).click();
+  await goto(page, 'decisions');
   await expect(page.getByTestId(`board-${ids.b}`)).toBeVisible({ timeout: 30_000 });
   // away, then back — the board must be present again, and NEITHER the skeleton
   // nor the confirmed-empty branch may show (the SWR cache serves it synchronously).
-  await page.getByRole('link', { name: 'Worklist' }).click();
-  await page.getByRole('link', { name: 'Decisions' }).click();
+  await goto(page, 'myday');
+  await goto(page, 'decisions');
   await expect(page.getByTestId(`board-${ids.b}`)).toBeVisible();
   await expect(page.getByTestId('decisions-skeleton')).toHaveCount(0);
   await expect(page.getByText('No boards yet')).toHaveCount(0);
 
   // ── Habits (habits screen-local) ───────────────────────────────────────────
-  await page.getByRole('link', { name: 'Habits' }).click();
+  await goto(page, 'habits');
   await expect(page.getByText('Morning Run')).toBeVisible({ timeout: 30_000 });
-  await page.getByRole('link', { name: 'Worklist' }).click();
-  await page.getByRole('link', { name: 'Habits' }).click();
+  await goto(page, 'myday');
+  await goto(page, 'habits');
   await expect(page.getByText('Morning Run')).toBeVisible();
   await expect(page.getByTestId('list-skeleton')).toHaveCount(0);
   await expect(page.getByText('No habits yet')).toHaveCount(0);
 
   // ── Flowchart (diagram_* screen-local + provider tree) ─────────────────────
-  await page.getByRole('link', { name: 'Flowchart' }).click();
+  await goto(page, 'graph');
   await page.getByTestId('diagram-root').selectOption(ids.p);
   await expect(page.getByTestId(`flow-node-${ids.t}`)).toBeVisible({ timeout: 30_000 });
-  await page.getByRole('link', { name: 'Worklist' }).click();
-  await page.getByRole('link', { name: 'Flowchart' }).click();
+  await goto(page, 'myday');
+  await goto(page, 'graph');
   await page.getByTestId('diagram-root').selectOption(ids.p);
   await expect(page.getByTestId(`flow-node-${ids.t}`)).toBeVisible();
   await expect(page.getByTestId('edge-skeleton')).toHaveCount(0);
@@ -89,16 +91,16 @@ test('fresh account: confirmed-empty screens render the empty branch (not a stuc
 
   // Rules — no automation rules; once the (empty) initial sync completes, the
   // hydrated empty branch renders and the skeleton is gone.
-  await page.getByRole('link', { name: 'Rules' }).click();
+  await goto(page, 'rules');
   await expect(page.getByText('No automation rules yet.')).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId('list-skeleton')).toHaveCount(0);
 
   // Review inbox — nothing to review.
-  await page.getByRole('link', { name: 'Review' }).click();
+  await goto(page, 'review');
   await expect(page.getByTestId('review-empty')).toBeVisible({ timeout: 30_000 });
 
   // Decisions — no boards yet.
-  await page.getByRole('link', { name: 'Decisions' }).click();
+  await goto(page, 'decisions');
   await expect(page.getByText('No boards yet')).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId('decisions-skeleton')).toHaveCount(0);
 });
