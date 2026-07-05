@@ -7,6 +7,7 @@ import { useEffect, useMemo, useSyncExternalStore } from 'react';
 import { usePowerSync, useQuery } from '@powersync/react';
 import {
   addDays,
+  ancestorsOf,
   asEpochMillis,
   bucketDate,
   buildEdgeIndex,
@@ -852,6 +853,89 @@ export function useDecisionBoards(): DecisionBoardView[] {
       })
       .sort((a, b) => (a.board.created_at < b.board.created_at ? -1 : a.board.created_at > b.board.created_at ? 1 : 0));
   }, [tree, boardRows, criterionRows, scoreRows]);
+}
+
+/**
+ * Parent-project priority for My Day ordering (W2/D5). Uses the FIRST decision
+ * board (earliest created — useDecisionBoards sorts boards by created_at) as the
+ * canonical priority source; its live weighted ranking maps each project →
+ * {priority, rank} (rank 1 = highest). Empty when there is no board. A weight or
+ * score edit reorders it (and My Day) instantly and offline.
+ */
+export function useProjectPriorities(): Map<string, { priority: number; rank: number }> {
+  const boards = useDecisionBoards();
+  return useMemo(() => {
+    const map = new Map<string, { priority: number; rank: number }>();
+    const board = boards[0];
+    if (!board) return map;
+    board.ranking.forEach((r, i) => map.set(r.project.id, { priority: r.priority, rank: i + 1 }));
+    return map;
+  }, [boards]);
+}
+
+export interface MyDayItem extends WorklistItem {
+  projectId: string | null;
+  projectTitle: string | null;
+  /** Parent-project priority from the decision board, or null when unscored. */
+  priority: number | null;
+}
+
+/**
+ * The My Day "Available now" list (W2/D5): the actionable worklist enriched with
+ * each task's parent project + its decision-board priority, sorted by priority
+ * DESC, tie-broken by due date (earliest first, undated last) then sort_order.
+ */
+export function useMyDayAvailable(now: Instant): MyDayItem[] {
+  const items = useWorklist(now);
+  const ctx = useFactContext();
+  const priorities = useProjectPriorities();
+  return useMemo(() => {
+    const enriched: MyDayItem[] = items.map((it) => {
+      const project = ancestorsOf(ctx.tree, it.task.id).find((a) => a.node_type === 'project') ?? null;
+      const p = project ? priorities.get(project.id) : undefined;
+      return { ...it, projectId: project?.id ?? null, projectTitle: project?.title ?? null, priority: p?.priority ?? null };
+    });
+    return enriched.sort((a, b) => {
+      const pa = a.priority ?? -Infinity;
+      const pb = b.priority ?? -Infinity;
+      if (pb !== pa) return pb - pa;
+      const da = a.task.due_date ?? '~'; // '~' > any ISO date → undated sorts last
+      const db = b.task.due_date ?? '~';
+      if (da !== db) return da < db ? -1 : 1;
+      return a.task.sort_order < b.task.sort_order ? -1 : a.task.sort_order > b.task.sort_order ? 1 : 0;
+    });
+  }, [items, ctx, priorities]);
+}
+
+export interface DoneTodayItem {
+  task: Node;
+  /** Minutes logged against the task from time entries (merged, §7.10b). */
+  consumedMinutes: number;
+}
+
+/**
+ * Tasks completed since the day-reset (W2/D5 "Done today"), most-recent first,
+ * each with the minutes logged against it. Done tasks are excluded from the
+ * worklist, so this is a separate read; it also drives the "Done N" header chip.
+ */
+export function useDoneToday(now: Instant): DoneTodayItem[] {
+  const { factContext: ctx, rows } = usePrismsData();
+  const entryRows = rows.time_entries;
+  return useMemo(() => {
+    const entries = entryRows.map(toTimeEntry);
+    const today = ctx.today(now);
+    const out: DoneTodayItem[] = [];
+    for (const node of ctx.tree.byId.values()) {
+      if (node.node_type !== 'task' || node.completed_at === null) continue;
+      if (bucketDate(isoToEpochMillis(node.completed_at), ctx.dayResetHour, ctx.timezone) !== today) continue;
+      out.push({ task: node, consumedMinutes: canonicalProgress(node, entries).consumedMinutes });
+    }
+    return out.sort((a, b) => {
+      const ca = a.task.completed_at ?? '';
+      const cb = b.task.completed_at ?? '';
+      return cb < ca ? -1 : cb > ca ? 1 : 0; // most-recent completion first
+    });
+  }, [ctx, entryRows, now]);
 }
 
 export interface ProjectCompletion {

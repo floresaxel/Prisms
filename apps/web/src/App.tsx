@@ -39,10 +39,10 @@ import { Dashboard } from './screens/Dashboard';
 import { Habits } from './screens/Habits';
 import { Inbox } from './screens/Inbox';
 import { Login } from './screens/Login';
+import { MyDay } from './screens/MyDay';
 import { Projects } from './screens/Projects';
 import { Review } from './screens/Review';
 import { Settings } from './screens/Settings';
-import { Worklist } from './screens/Worklist';
 
 type Route =
   | '/'
@@ -150,7 +150,7 @@ function Shell({
   const screen: ReactNode =
     (
       {
-        '/': <Worklist ctx={ctx} />,
+        '/': <MyDay ctx={ctx} onNavigate={navigate} />,
         '/tasks': <Inbox ctx={ctx} />,
         '/agenda': <Agenda ctx={ctx} />,
         '/habits': <Habits ctx={ctx} />,
@@ -160,7 +160,7 @@ function Shell({
         '/review': <Review ctx={ctx} />,
         '/settings': <Settings ctx={ctx} />,
       } satisfies Record<Route, ReactNode>
-    )[route] ?? <Worklist ctx={ctx} />;
+    )[route] ?? <MyDay ctx={ctx} onNavigate={navigate} />;
 
   return (
     <Layout

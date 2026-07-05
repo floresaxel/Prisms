@@ -70,13 +70,14 @@ test('inbox → promote → clock in/out → review, offline then synced; double
   await goto(page, 'myday');
   const promoted = page.getByTestId('worklist').locator('li', { hasText: 'Promoted Task' });
   await expect(promoted).toBeVisible();
-  await expect(promoted.locator('.px-badge')).toHaveText('available');
+  // available → it offers a Clock in button (My Day rows, W2)
+  await expect(promoted.getByRole('button', { name: 'Clock in' })).toBeVisible();
 
-  // clock in → ongoing + the single running-timer bar appears
+  // clock in → the task lifts into the run banner + the global running-timer pill
   await promoted.getByRole('button', { name: 'Clock in' }).click();
   await expect(page.getByTestId('running-timer')).toBeVisible();
   await expect(page.getByTestId('running-timer')).toContainText('Promoted Task');
-  await expect(promoted.locator('.px-badge')).toHaveText('ongoing');
+  await expect(page.getByTestId('run-banner')).toContainText('Promoted Task');
 
   // double-timer impossible: every other task's clock-in is disabled
   const existing = page.getByTestId('worklist').locator('li', { hasText: 'Existing Task' });

@@ -191,8 +191,11 @@ test('force clock-in: a blocked task overrides the blocker and shows ongoing (§
   });
   expect(seed.ok()).toBeTruthy();
 
-  // the blocked task is kept out of the worklist and listed under "Blocked".
-  await expect(page.getByTestId(`force-clock-in-${ids.t}`)).toBeVisible({ timeout: 30_000 });
+  // the blocked task is kept out of the worklist and listed under "Blocked"
+  // (collapsed by default in My Day, W2 — expand it to reach the force affordance).
+  await expect(page.getByTestId('sec-blocked')).toBeVisible({ timeout: 30_000 });
+  await page.getByTestId('sec-blocked').click();
+  await expect(page.getByTestId(`force-clock-in-${ids.t}`)).toBeVisible();
   await expect(page.getByTestId('running-timer')).toHaveCount(0);
 
   // --- DoD: force clock-in opens a timer → the task becomes `ongoing` (wins precedence) ---

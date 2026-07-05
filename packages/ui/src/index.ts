@@ -128,6 +128,9 @@ export {
   useJournalDay,
   useTimeBlocksForDay,
   useGroupedWorklist,
+  useMyDayAvailable,
+  useProjectPriorities,
+  useDoneToday,
   useBlockedTasks,
   useHabitTasks,
   // loading-aware read layer (1.4 §7.15, Fix C) — M12
@@ -140,6 +143,8 @@ export {
   clearReadCaches,
   type RowsRead,
   type WorklistItem,
+  type MyDayItem,
+  type DoneTodayItem,
   type BlockedTask,
   type RunningTimer,
   type PromoteTarget,
