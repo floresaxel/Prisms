@@ -268,6 +268,26 @@ export function checkHabitVision(tree: TreeIndex, visionId: Uuid): Result<void> 
   return ok(undefined);
 }
 
+// --- task steps (checklist, W3/D4) ------------------------------------------
+
+/**
+ * A checklist step can only hang off a LIVE, not-done task: I1 parent typing
+ * (the parent must be a `task`, never a milestone/project/etc.) plus the I8
+ * spirit — a completed task's checklist is frozen (no add/rename/toggle/reorder/
+ * remove). Ownership is enforced separately by the dispatcher; this is the pure
+ * parent-shape gate the client runs offline and the server re-runs on upload.
+ */
+export function checkStepParent(parent: Node | undefined, taskId: Uuid): Result<void> {
+  if (!parent || parent.deleted_at !== null) return notFound('task', taskId);
+  if (parent.node_type !== 'task') {
+    return err(domainError('E_HIERARCHY', `a checklist step requires a task parent, not a ${parent.node_type}`));
+  }
+  if (parent.completed_at !== null) {
+    return err(domainError('E_DONE_IMMUTABLE', `task ${taskId} is done — its checklist is frozen (I8)`));
+  }
+  return ok(undefined);
+}
+
 // --- automation rules -------------------------------------------------------
 
 export function checkRule(

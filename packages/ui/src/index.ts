@@ -127,6 +127,7 @@ export {
   useJournalMonths,
   useJournalDay,
   useTimeBlocksForDay,
+  useTaskSteps,
   useGroupedWorklist,
   useMyDayAvailable,
   useProjectPriorities,

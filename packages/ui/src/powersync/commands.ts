@@ -253,6 +253,26 @@ export function createCommands(store: OverlayStore, ctx: CommandContext, deps: E
       await run('journal.delete', { id });
     },
 
+    // --- task steps (checklist on a task, W3/D4) ----------------------------
+    /** Append a checklist step to a task; the caller mints `sortOrder` (fractional, like nodes). */
+    async addStep(input: { id?: string; taskId: string; title: string; sortOrder: string }): Promise<string> {
+      const id = input.id ?? newId();
+      await run('step.add', { id, task_id: input.taskId, title: input.title, sort_order: input.sortOrder });
+      return id;
+    },
+    async renameStep(id: string, title: string): Promise<void> {
+      await run('step.rename', { id, title });
+    },
+    async toggleStep(id: string, done: boolean): Promise<void> {
+      await run('step.toggle', { id, done });
+    },
+    async reorderStep(id: string, sortOrder: string): Promise<void> {
+      await run('step.reorder', { id, sort_order: sortOrder });
+    },
+    async removeStep(id: string): Promise<void> {
+      await run('step.remove', { id });
+    },
+
     // --- edges (the dependency graph, §6.7 I4) ------------------------------
     async createEdge(input: { id?: string; predecessorId: string; successorId: string; edgeType?: 'FS' | 'SS' | 'FF' | 'SF'; lagMinutes?: number }): Promise<string> {
       const id = input.id ?? newId();

@@ -57,6 +57,7 @@ import {
   type Tag,
   type TagAnswerValue,
   type TaskStatus,
+  type TaskStep,
   type TimeEntry,
   type TreeIndex,
 } from '@prisms/core';
@@ -87,6 +88,7 @@ import {
   toTag,
   toTagAnswer,
   toTagPlacement,
+  toTaskStep,
   toTimeEntry,
   toUserSettings,
 } from './powersync/rows';
@@ -420,6 +422,23 @@ export function useBlockedTasks(now: Instant): BlockedTask[] {
     }
     return out.sort((a, b) => (a.task.title < b.task.title ? -1 : a.task.title > b.task.title ? 1 : a.task.id < b.task.id ? -1 : 1));
   }, [ctx, now]);
+}
+
+/**
+ * A task's checklist steps (W3/D4), ordered by sort_order then id. Screen-local
+ * overlay-merged read: `mergeTable` appends optimistic inserts regardless of the
+ * SQL filter, so re-filter by task_id + live here (the journal precedent).
+ */
+export function useTaskSteps(taskId: string): TaskStep[] {
+  const rows = useRows('SELECT * FROM task_steps WHERE task_id = ? AND deleted_at IS NULL', [taskId]);
+  return useMemo(
+    () =>
+      rows
+        .map(toTaskStep)
+        .filter((s) => s.task_id === taskId && s.deleted_at === null)
+        .sort((a, b) => (a.sort_order < b.sort_order ? -1 : a.sort_order > b.sort_order ? 1 : a.id < b.id ? -1 : 1)),
+    [rows, taskId],
+  );
 }
 
 export interface HabitTasksView {

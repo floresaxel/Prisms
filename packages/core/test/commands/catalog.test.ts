@@ -21,6 +21,7 @@ import {
   checkNodeMove,
   checkNodeRetype,
   checkRule,
+  checkStepParent,
   isCommandName,
   isoToEpochMillis,
   softDeleteClosure,
@@ -30,15 +31,38 @@ import { buildTreeIndex } from '../../src/graph/tree';
 import { idOf, makeEdge, makeEntry, makeNode } from '../helpers/fixtures';
 
 describe('catalog completeness + strictness (DoD schema test)', () => {
-  it('registers all 50 §8.1 verbs (incl. layout.renormalize_order) + 7 tag + 2 review + 2 journal verbs and resolves names', () => {
-    expect(COMMAND_NAMES.length).toBe(61);
+  it('registers all 50 §8.1 verbs (incl. layout.renormalize_order) + 7 tag + 2 review + 2 journal + 5 step verbs and resolves names', () => {
+    expect(COMMAND_NAMES.length).toBe(66);
     expect(isCommandName('node.create')).toBe(true);
     expect(isCommandName('layout.renormalize_order')).toBe(true); // §7.10a, M1
     expect(isCommandName('review.resolve')).toBe(true); // §7.13 inbox close, M10
     expect(isCommandName('review.dismiss')).toBe(true);
     expect(isCommandName('journal.write')).toBe(true); // day note, J1
     expect(isCommandName('journal.delete')).toBe(true);
+    expect(isCommandName('step.add')).toBe(true); // task checklist, W3/D4
+    expect(isCommandName('step.toggle')).toBe(true);
+    expect(isCommandName('step.remove')).toBe(true);
     expect(isCommandName('node.update')).toBe(false); // no generic update endpoint
+  });
+
+  it('I-step: a checklist step requires a live, not-done task parent (W3/D4)', () => {
+    const { task, project, milestone } = world();
+    // a live task parent is fine
+    expect(checkStepParent(task, task.id).ok).toBe(true);
+    // a non-task parent (milestone/project) is rejected (I1 typing)
+    for (const notTask of [project, milestone]) {
+      const r = checkStepParent(notTask, notTask.id);
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.error.code).toBe('E_HIERARCHY');
+    }
+    // a done parent freezes its checklist (I8 spirit)
+    const done = { ...task, completed_at: '2026-06-12T00:00:00.000Z' };
+    const rDone = checkStepParent(done, done.id);
+    expect(rDone.ok).toBe(false);
+    if (!rDone.ok) expect(rDone.error.code).toBe('E_DONE_IMMUTABLE');
+    // a missing/deleted parent is E_NOT_FOUND
+    expect(checkStepParent(undefined, task.id).ok).toBe(false);
+    expect(checkStepParent({ ...task, deleted_at: '2026-06-12T00:00:00.000Z' }, task.id).ok).toBe(false);
   });
 
   it('rejects any field the verb does not name — no full-row write', () => {

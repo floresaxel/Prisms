@@ -32,6 +32,7 @@ import {
   checkNodeMove,
   checkNodeRetype,
   checkRule,
+  checkStepParent,
   incomingEdges,
   isBlockedForAcceptance,
   isClientTooOld,
@@ -77,6 +78,7 @@ import {
   tag_answers,
   tag_placements,
   tags,
+  task_steps,
   time_entries,
   user_settings,
 } from '@prisms/db';
@@ -168,6 +170,14 @@ const CONTEXT_WRITES: Partial<Record<CommandName, readonly ContextTable[]>> = {
   'timer.clock_out': ['time_entries'],
   'timer.review': ['time_entries'],
   'settings.update': ['user_settings'],
+  // task_steps is NOT a context table (steps have no status/schedule/estimate,
+  // D4) — a step command invalidates NO context, so an explicit empty set beats
+  // the absent-means-invalidate-all default.
+  'step.add': [],
+  'step.rename': [],
+  'step.toggle': [],
+  'step.reorder': [],
+  'step.remove': [],
 };
 
 /** Map a rejection code to the review-item it produces (§7.13). */
@@ -210,6 +220,7 @@ export function createDispatcher(
 
   const one = async <T>(rows: Promise<T[]>): Promise<T | undefined> => (await rows)[0];
   const loadNodeRow = (tx: Tx, id: string) => one(tx.select().from(nodes).where(eq(nodes.id, id)).limit(1));
+  const loadStepRow = (tx: Tx, id: string) => one(tx.select().from(task_steps).where(eq(task_steps.id, id)).limit(1));
   const loadDecisionScoreByPair = (tx: Tx, criterionId: string, projectId: string) =>
     one(
       tx
@@ -537,6 +548,21 @@ export function createDispatcher(
       }
       return applied();
     };
+    /** Ownership + parent-task gate (D4) then an HLC-filtered field update on `task_steps`. */
+    const updateStep = async (id: string, fields: Record<string, unknown>): Promise<HandlerOut> => {
+      const step = await loadStepRow(tx, id);
+      const own = ownershipReject('step', id, step, userId);
+      if (own) return own;
+      const bad = fromCheck(checkStepParent((await loadNodeRow(tx, step!.task_id)) as CoreNode | undefined, step!.task_id));
+      if (bad) return bad;
+      const win = await lwwFields(tx, hlc, userId, 'task_steps', id, fields);
+      const changed = Object.keys(win);
+      if (changed.length > 0) {
+        await tx.update(task_steps).set({ ...win, ...sys }).where(eq(task_steps.id, id));
+        rec('task_steps', id, 'update', changed);
+      }
+      return applied();
+    };
 
     switch (name) {
       // --- nodes ------------------------------------------------------------
@@ -652,6 +678,18 @@ export function createDispatcher(
         if (ids.length > 0) {
           await tx.update(nodes).set({ deleted_at: now, ...sys }).where(and(eq(nodes.user_id, userId), inArray(nodes.id, ids)));
           for (const id of ids) rec('nodes', id, 'delete');
+          // D4 cascade: soft-delete the checklist steps of every deleted task.
+          const stepRows = await tx
+            .select({ id: task_steps.id })
+            .from(task_steps)
+            .where(and(eq(task_steps.user_id, userId), inArray(task_steps.task_id, ids), isNull(task_steps.deleted_at)));
+          if (stepRows.length > 0) {
+            await tx
+              .update(task_steps)
+              .set({ deleted_at: now, ...sys })
+              .where(and(eq(task_steps.user_id, userId), inArray(task_steps.task_id, ids), isNull(task_steps.deleted_at)));
+            for (const s of stepRows) rec('task_steps', s.id, 'delete');
+          }
         }
         return applied();
       }
@@ -1225,6 +1263,46 @@ export function createDispatcher(
         if (own) return own;
         await tx.update(journal_entries).set({ deleted_at: now, ...sys }).where(eq(journal_entries.id, p.id));
         rec('journal_entries', p.id, 'delete');
+        return applied();
+      }
+
+      // --- task steps (checklist on a task, W3/D4) --------------------------
+      case 'step.add': {
+        const p = payload as Payload<'step.add'>;
+        const conv = convergeOrOwn(await loadStepRow(tx, p.id), 'step', p.id);
+        if (conv) return conv;
+        // I1 parent typing + I8 freeze (+ ownership) on the parent task.
+        const parent = await loadNodeRow(tx, p.task_id);
+        const ownParent = ownershipReject('task', p.task_id, parent, userId);
+        if (ownParent) return ownParent;
+        const bad = fromCheck(checkStepParent(parent as CoreNode | undefined, p.task_id));
+        if (bad) return bad;
+        await tx.insert(task_steps).values({ id: p.id, user_id: userId, task_id: p.task_id, title: p.title, done: false, sort_order: p.sort_order, ...born });
+        rec('task_steps', p.id, 'insert');
+        return applied();
+      }
+      case 'step.rename': {
+        const p = payload as Payload<'step.rename'>;
+        return updateStep(p.id, { title: p.title });
+      }
+      case 'step.toggle': {
+        const p = payload as Payload<'step.toggle'>;
+        return updateStep(p.id, { done: p.done });
+      }
+      case 'step.reorder': {
+        const p = payload as Payload<'step.reorder'>;
+        return updateStep(p.id, { sort_order: p.sort_order });
+      }
+      case 'step.remove': {
+        const p = payload as Payload<'step.remove'>;
+        const step = await loadStepRow(tx, p.id);
+        const own = ownershipReject('step', p.id, step, userId);
+        if (own) return own;
+        // freeze on a done parent (I8 spirit); a cascade delete (node.soft_delete) bypasses this.
+        const bad = fromCheck(checkStepParent((await loadNodeRow(tx, step!.task_id)) as CoreNode | undefined, step!.task_id));
+        if (bad) return bad;
+        await tx.update(task_steps).set({ deleted_at: now, ...sys }).where(eq(task_steps.id, p.id));
+        rec('task_steps', p.id, 'delete');
         return applied();
       }
 

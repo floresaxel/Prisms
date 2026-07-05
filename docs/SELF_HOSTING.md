@@ -128,6 +128,14 @@ publication is scoped. So the same rule applies: after this upgrade lands on a l
 deployment, **restart PowerSync** (the same `restart powersync` above) so it reprocesses
 the new table. Omitting the restart leaves journals silently un-synced.
 
+**Task checklist steps (migration 0011).** The substeps feature adds a `task_steps`
+table (a per-task checklist) synced always-on through the `active` tier, its tombstones
+in the lazy `history` tier. Its migration (`packages/db/migrations/0011_task_steps.sql`)
+runs after 0010 and **also changes the publication** — `ALTER PUBLICATION powersync ADD
+TABLE task_steps`. Same rule: after this upgrade lands on a live deployment, **restart
+PowerSync** (the `restart powersync` above) so it reprocesses the new table. Omitting the
+restart leaves checklist steps silently un-synced.
+
 **History window (D4).** Soft-deleted rows and the `command_log` dedup history are
 purged after **90 days** by the retention job — this is the v1 dedup/undo horizon,
 not a user-facing archival guarantee. Longer retention is a post-v1 feature (the
