@@ -46,6 +46,22 @@ vi.mock('@prisms/ui', async (importOriginal) => {
   };
 });
 
+// TipTap needs a real browser DOM; jsdom can't run ProseMirror. Mock the rich
+// editor as a controlled textarea so the SHELL (save/flush/export/delete/preview)
+// stays unit-testable here — the real WYSIWYG is covered by Playwright e2e.
+vi.mock('../src/components/RichJournalEditor', async () => {
+  const { createElement: h } = await import('react');
+  return {
+    RichJournalEditor: ({ value, onChange, onBlur }: { value: string; onChange: (m: string) => void; onBlur?: (m: string) => void }) =>
+      h('textarea', {
+        'data-testid': 'journal-rich',
+        value,
+        onChange: (e: { target: { value: string } }) => onChange(e.target.value),
+        onBlur: (e: { target: { value: string } }) => onBlur?.(e.target.value),
+      }),
+  };
+});
+
 // Imported AFTER the mock (vitest hoists vi.mock).
 import { DayJournalPanel, MarkdownView } from '../src/components/DayJournal';
 import { Agenda } from '../src/screens/Agenda';
@@ -84,15 +100,13 @@ describe('MarkdownView — sanitized rendering (D2)', () => {
 });
 
 describe('DayJournalPanel — editor', () => {
-  it('adopts the synced content and bolds a ZWJ-emoji selection verbatim', () => {
+  it('adopts the synced content into the editor (ZWJ emoji intact)', () => {
+    // J7: the edit surface is the TipTap WYSIWYG (mocked here to a textarea). Its
+    // markdown formatting (bold/task toggle/…) is covered by e2e; the pure
+    // `applyMarkdownEdit` transform keeps its unit tests in @prisms/ui.
     state.entry = { id: 'j1', content: `${ZWJ} family`, deleted_at: null };
     render(createElement(DayJournalPanel, { date: '2026-06-11', ctx: CTX }));
-    const ta = screen.getByTestId('journal-editor') as HTMLTextAreaElement;
-    expect(ta.value).toBe(`${ZWJ} family`);
-    ta.focus();
-    ta.setSelectionRange(0, ZWJ.length);
-    fireEvent.click(screen.getByTestId('md-bold'));
-    expect((screen.getByTestId('journal-editor') as HTMLTextAreaElement).value).toBe(`**${ZWJ}** family`);
+    expect((screen.getByTestId('journal-rich') as HTMLTextAreaElement).value).toBe(`${ZWJ} family`);
   });
 
   it('preview toggle renders the markdown', () => {
@@ -135,7 +149,7 @@ describe('DayJournalPanel — editor', () => {
   it('flushes a pending debounced save on unmount (day switch, no blur) — last edit not lost', () => {
     state.entry = { id: 'j1', content: 'start', deleted_at: null };
     const { unmount } = render(createElement(DayJournalPanel, { date: '2026-06-11', ctx: CTX }));
-    fireEvent.change(screen.getByTestId('journal-editor'), { target: { value: 'start + more' } });
+    fireEvent.change(screen.getByTestId('journal-rich'), { target: { value: 'start + more' } });
     expect(command('writeJournal')).not.toHaveBeenCalled(); // still inside the 800ms debounce
 
     unmount(); // switch day before the debounce fires AND without an onBlur flush
@@ -159,7 +173,7 @@ describe('Agenda — journal integration', () => {
 
     fireEvent.click(screen.getByTestId('day-head-0'));
     expect(screen.getByTestId(`journal-${today}`)).toBeTruthy();
-    expect((screen.getByTestId('journal-editor') as HTMLTextAreaElement).value).toBe('has a note');
+    expect((screen.getByTestId('journal-rich') as HTMLTextAreaElement).value).toBe('has a note');
   });
 });
 

@@ -196,12 +196,14 @@ body {
 .px-error { color: var(--px-danger); font-size: 13px; margin: 8px 0; }
 .px-muted { color: var(--px-text-dim); }
 
-/* journal (D2/D3): day-header note affordance + editor + toolbar + markdown preview */
+/* journal (D2/D3/J7): day-header note affordance + TipTap WYSIWYG editor + toolbar + markdown preview */
 .px-cal-col-head { cursor: pointer; gap: 4px; }
 .px-cal-col-head:hover { color: var(--px-text); }
 .px-cal-col-head--sel { color: var(--px-text); background: var(--px-surface-2); }
 .px-note-dot { width: 6px; height: 6px; border-radius: 999px; background: var(--px-accent); display: inline-block; }
-.px-journal-editor { font: inherit; padding: 10px 12px; border-radius: var(--px-radius); border: 1px solid var(--px-border); background: var(--px-bg); color: var(--px-text); line-height: 1.5; }
+.px-journal-rich-wrap { margin-top: 8px; }
+.px-journal-rich { min-height: 200px; line-height: 1.5; cursor: text; }
+.px-journal-rich:focus, .px-journal-rich:focus-visible { outline: none; border-color: var(--px-accent); }
 .px-md-toolbar { display: flex; flex-wrap: wrap; gap: 4px; }
 .px-md-toolbar .px-btn { padding: 4px 8px; font-size: 12px; min-width: 30px; }
 .px-md { background: var(--px-surface); border: 1px solid var(--px-border); border-radius: var(--px-radius); padding: 2px 14px; margin-top: 8px; }
@@ -213,3 +215,9 @@ body {
 .px-md blockquote { border-left: 3px solid var(--px-border); margin: 8px 0; padding-left: 12px; color: var(--px-text-dim); }
 .px-md ul, .px-md ol { padding-left: 22px; }
 .px-md input[type='checkbox'] { margin-right: 6px; }
+/* interactive task-list checkboxes (J7): flex so the box sits inline with its text */
+.px-md ul[data-type='taskList'] { list-style: none; padding-left: 2px; }
+.px-md ul[data-type='taskList'] li { display: flex; align-items: flex-start; gap: 6px; }
+.px-md ul[data-type='taskList'] li > label { margin-top: 3px; }
+.px-md ul[data-type='taskList'] li > div { flex: 1 1 auto; }
+.px-md ul[data-type='taskList'] li > div > p { margin: 6px 0; }

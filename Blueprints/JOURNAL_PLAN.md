@@ -600,6 +600,50 @@ TipTap + `tiptap-markdown` bound to the same `content` field (markdown in/out; s
 unchanged — mobile keeps the J4 toolbar editor). Interactive task-list checkboxes. Separate
 branch/PR; no schema or server changes by construction.
 
+#### J7 — AS BUILT (branch `journal-j7`)
+Web/desktop editor swapped from the `<textarea>` + `applyMarkdownEdit` toolbar to a TipTap v3
+WYSIWYG; **mobile is untouched** (keeps the J4 toolbar editor — the shared `applyMarkdownEdit`
+transform keeps its `@prisms/ui` unit tests). No schema, sync, dispatcher, or server change; the
+storage stays CommonMark in the one LWW `content` field, so the new surface interops byte-for-byte
+with mobile and the `.md` export.
+- **New:** `apps/web/src/components/RichJournalEditor.tsx` — controlled by markdown (`value` seeds,
+  `onChange` emits `editor.storage.markdown.getMarkdown()` on every edit, `onBlur` flushes). Extensions:
+  `StarterKit` (v3 bundles Link → configured with the `openOnClick:false` + http/https/mailto protocol
+  allowlist, matching `MarkdownView`), `TaskList` + `TaskItem({nested:true})` from `@tiptap/extension-list`,
+  and `Markdown({html:false})` (raw HTML dropped on parse — D2 preserved). A compact command toolbar
+  (`rt-bold`…`rt-codeBlock`). External (synced) `value` changes are adopted only while the editor is
+  **unfocused** (`editor.isFocused` guard) so a same-day cross-device update can't yank the caret.
+- **`DayJournalPanel`** keeps its shell (draft/dirty/debounce/**flush-on-unmount**/export/delete) and the
+  Preview toggle (now renders the read-only `MarkdownView` — the exact sanitized `.md` output); only the
+  edit surface changed to `<RichJournalEditor>`.
+- **Deps** (`@prisms/web`): `@tiptap/react` `@tiptap/starter-kit` `@tiptap/extension-list` `@tiptap/pm`
+  `tiptap-markdown@0.9` (peers `@tiptap/core ^3`). `tiptap-markdown` resolves serialize specs by node
+  **name** (`getMarkdownSpec`), so the stock extension-list `taskItem`/`taskList` serialize to `- [ ]`/`- [x]`
+  (`checked ? "[x]" : "[ ]"`) and parse back via `markdown-it-task-lists` — the interactive checkbox
+  round-trips with no custom spec.
+- **CSS** (`packages/ui/src/theme.css`): retired `.px-journal-editor`; added `.px-journal-rich(-wrap)` +
+  `ul[data-type=taskList]` flex layout for inline checkboxes. The editor div carries `.px-md` too, so it
+  reuses the markdown styling.
+- **Tests.** jsdom can't run ProseMirror, so `journal-ui.test.ts` **mocks** `RichJournalEditor` to a
+  controlled textarea (`journal-rich`) — the shell (save/flush/export/delete/preview/adopt) stays
+  unit-tested here (9 pass). The real WYSIWYG is Playwright-only: `journal.spec.ts` now drives the
+  contenteditable via `click` + `keyboard.insertText` (atomic unicode) and asserts on **server-stored
+  markdown** / rendered nodes (not `.fill`/`.toHaveValue`); WYSIWYG serialization is normalized so
+  content checks use containment. Added a J7 e2e: toolbar task list → serialized `- [ ] buy milk` →
+  click the rendered checkbox → `- [x] buy milk` → reload → checkbox still checked.
+- **Gate:** web/mobile typecheck + lint green; web vitest 9/9; `vite build` bundles TipTap (index chunk
+  ~1.6MB / 500KB gz — acceptable). **e2e (4 tests incl. J7) written but NOT yet run locally** this session
+  (dev server/web were torn down at an interrupt before the run); the CI Playwright job exercises them.
+
+#### J7 audit fix (pre-J7, commit `12c1ed0`) — editor unmount data loss
+Audit of the shipped journal found one real defect: switching calendar days within the 800ms debounce
+window could drop the last edit. The unmount cleanup cleared the pending timer **without flushing**, and
+the `[]`-dep closure couldn't see the latest draft. Web's `onBlur` masks most cases; **mobile**'s
+`keyboardShouldPersistTaps="handled"` lets a day-switch tap through WITHOUT blurring the TextInput, so the
+debounce timer is the only save path — and unmount was killing it. Fix (web + mobile): a ref holding the
+newest draft/write closure, flushed on unmount, guarded on `timer` so an already-saved day doesn't
+re-write. Locked with a web jsdom test (type → unmount before debounce → `writeJournal` fires once).
+
 ---
 
 ## Risk register
