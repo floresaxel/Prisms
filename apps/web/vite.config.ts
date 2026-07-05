@@ -28,8 +28,8 @@ export default defineConfig({
       manifest: {
         name: 'Prisms',
         short_name: 'Prisms',
-        theme_color: '#0f1115',
-        background_color: '#0f1115',
+        theme_color: '#ffffff',
+        background_color: '#f6f7f9',
         display: 'standalone',
         // Installability requires real icons (audit S10-F7); generated under
         // apps/web/public/ (R1), maskable variant keeps the glyph in the safe zone.

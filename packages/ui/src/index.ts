@@ -170,5 +170,6 @@ export { groupWorklistBySchedule, type WorklistGroup } from './worklist-grouping
 
 // design system
 export { Layout, type LayoutProps, type NavLinkSpec } from './components/Layout';
+export { Ic, IconSprite, type IcProps, type IconName } from './components/icons';
 export { List, ListItem, Skeleton, ListSkeleton, type ListProps, type ListItemProps, type SkeletonProps } from './components/List';
 export { Modal, type ModalProps } from './components/Modal';

@@ -1,20 +1,38 @@
-/* Prisms base design system — tokens + the layout/list/modal primitives. */
+/* Prisms base design system — tokens + the layout/list/modal primitives.
+   Light theme (web redesign W0): the --px-* names are stable; only their values
+   flipped from the original dark palette. Screens reference tokens, so the whole
+   app re-themes here with no markup change. */
 :root {
-  --px-bg: #0f1115;
-  --px-surface: #171a21;
-  --px-surface-2: #1f2430;
-  --px-border: #2a3140;
-  --px-text: #e6e9ef;
-  --px-text-dim: #98a2b3;
-  --px-accent: #5b8cff;
-  --px-accent-press: #4a76e0;
-  --px-danger: #ff6b6b;
-  --px-ok: #46c08a;
+  /* surfaces + ink */
+  --px-bg: #f6f7f9;
+  --px-surface: #ffffff;
+  --px-surface-2: #f2f4f7;
+  --px-border: #e6e8ec;
+  --px-border-2: #d9dde3;
+  --px-text: #18202b;
+  --px-text-dim: #5f6b7a;
+  --px-faint: #98a1ae;
+  /* primary + intent (names kept; --px-accent is now blue) */
+  --px-accent: #2563eb;
+  --px-accent-press: #1d4ed8;
+  --px-danger: #dc2626;
+  --px-ok: #16a34a;
+  /* extended families (mockup palette): solid + soft bg + border tint */
+  --px-blue: #2563eb;  --px-blue-deep: #1d4ed8; --px-blue-bg: #e9f0fe; --px-blue-brd: #c8d9fb;
+  --px-teal: #0d9488;  --px-teal-bg: #e3f5f2;   --px-teal-brd: #b4e3da;
+  --px-amber: #d97706; --px-amber-bg: #fdf1dd;  --px-amber-brd: #f2d8a4;
+  --px-green: #16a34a; --px-green-bg: #e7f6ec;  --px-green-brd: #bfe5cb;
+  --px-red: #dc2626;   --px-red-bg: #fdecec;    --px-red-brd: #f5c6c6;
+  --px-sky: #0369a1;   --px-sky-bg: #e6f4fc;
+  --px-slate: #475569; --px-slate-bg: #edf0f4;
+  --px-shadow: 0 1px 2px rgba(16,24,40,.05);
+  --px-shadow-pop: 0 6px 20px rgba(16,24,40,.12);
   --px-radius: 10px;
   --px-gap: 12px;
-  /* Emoji fallbacks (D6): Segoe UI Emoji = Windows, Apple Color Emoji = macOS/iOS,
-     Noto Color Emoji = Android/Linux — so the D6 corpus renders in color everywhere. */
-  --px-font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji';
+  /* Inter-first, then platform UI fonts. Emoji fallbacks (D6): Segoe UI Emoji =
+     Windows, Apple Color Emoji = macOS/iOS, Noto Color Emoji = Android/Linux —
+     so the D6 corpus renders in color everywhere. */
+  --px-font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI Variable Text', 'Segoe UI', Roboto, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji';
 }
 
 * { box-sizing: border-box; }
@@ -34,6 +52,9 @@ body {
 .px-sidebar-foot { margin-top: auto; font-size: 12px; color: var(--px-text-dim); }
 .px-main { padding: 28px 32px; }
 
+/* shared icon primitive (W0): 16px default, non-shrinking, inherits currentColor */
+.px-ic { width: 16px; height: 16px; flex: none; }
+
 .px-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .px-list-item { display: flex; align-items: center; gap: 12px; padding: 12px 14px; background: var(--px-surface); border: 1px solid var(--px-border); border-radius: var(--px-radius); }
 .px-list-body { flex: 1; }
@@ -50,27 +71,27 @@ body {
 @media (prefers-reduced-motion: reduce) { .px-skeleton { animation: none; } }
 
 .px-badge { font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; padding: 3px 8px; border-radius: 999px; background: var(--px-surface-2); color: var(--px-text-dim); }
-.px-badge--ongoing { background: rgba(91,140,255,0.18); color: var(--px-accent); }
-.px-badge--scheduled { background: rgba(70,192,138,0.16); color: var(--px-ok); }
-.px-badge--prioritized { background: rgba(255,196,84,0.16); color: #f4c454; }
+.px-badge--ongoing { background: var(--px-blue-bg); color: var(--px-blue-deep); }
+.px-badge--scheduled { background: var(--px-green-bg); color: var(--px-green); }
+.px-badge--prioritized { background: var(--px-amber-bg); color: var(--px-amber); }
 .px-badge--available { background: var(--px-surface-2); color: var(--px-text-dim); }
-.px-badge--blocked { background: rgba(255,107,107,0.16); color: var(--px-danger); }
-.px-badge--done { background: rgba(70,192,138,0.16); color: var(--px-ok); }
-.px-badge--unverified { background: rgba(255,196,84,0.16); color: #f4c454; text-transform: none; letter-spacing: 0; }
+.px-badge--blocked { background: var(--px-red-bg); color: var(--px-red); }
+.px-badge--done { background: var(--px-green-bg); color: var(--px-green); }
+.px-badge--unverified { background: var(--px-amber-bg); color: var(--px-amber); text-transform: none; letter-spacing: 0; }
 /* review-item severity (§7.13 inbox): error/warning/info */
-.px-badge--error { background: rgba(255,107,107,0.16); color: var(--px-danger); }
-.px-badge--warning { background: rgba(255,196,84,0.16); color: #f4c454; }
-.px-badge--info { background: var(--px-surface-2); color: var(--px-text-dim); }
+.px-badge--error { background: var(--px-red-bg); color: var(--px-red); }
+.px-badge--warning { background: var(--px-amber-bg); color: var(--px-amber); }
+.px-badge--info { background: var(--px-sky-bg); color: var(--px-sky); }
 
 /* "why does this exist?" provenance affordance (§7.8) */
 .px-why { position: relative; display: inline-flex; }
 .px-why-btn { padding: 2px 8px; font-size: 11px; color: var(--px-text-dim); }
-.px-why-pop { position: absolute; z-index: 20; top: calc(100% + 6px); right: 0; width: 260px; padding: 10px 12px; background: var(--px-surface); border: 1px solid var(--px-border); border-radius: var(--px-radius); box-shadow: 0 6px 20px rgba(0,0,0,0.4); font-size: 12px; display: flex; flex-direction: column; gap: 3px; }
+.px-why-pop { position: absolute; z-index: 20; top: calc(100% + 6px); right: 0; width: 260px; padding: 10px 12px; background: var(--px-surface); border: 1px solid var(--px-border); border-radius: var(--px-radius); box-shadow: var(--px-shadow-pop); font-size: 12px; display: flex; flex-direction: column; gap: 3px; }
 .px-why-pop strong { font-size: 13px; }
 
 /* review-inbox banners (§7.13): schema-version upgrade prompt + items pointer */
 .px-banner { margin: 0 0 14px; padding: 10px 14px; border-radius: var(--px-radius); background: var(--px-surface-2); border: 1px solid var(--px-border); color: var(--px-text-dim); font-size: 13px; }
-.px-banner--upgrade { background: rgba(255,107,107,0.14); border-color: var(--px-danger); color: var(--px-text); }
+.px-banner--upgrade { background: var(--px-red-bg); border-color: var(--px-red-brd); color: var(--px-text); }
 
 /* task progress bar (§7.2) */
 .px-progress { height: 6px; border-radius: 999px; background: var(--px-surface-2); overflow: hidden; max-width: 320px; }
@@ -83,7 +104,7 @@ body {
 .px-timerbar-elapsed { font-variant-numeric: tabular-nums; font-size: 18px; color: var(--px-accent); }
 
 /* form controls */
-.px-input, .px-select { font: inherit; padding: 8px 12px; border-radius: var(--px-radius); border: 1px solid var(--px-border); background: var(--px-bg); color: var(--px-text); }
+.px-input, .px-select { font: inherit; padding: 8px 12px; border-radius: var(--px-radius); border: 1px solid var(--px-border); background: var(--px-surface); color: var(--px-text); }
 .px-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .px-btn:disabled:hover { border-color: var(--px-border); }
 
@@ -103,23 +124,23 @@ body {
 .px-cal-col-body { position: relative; }
 .px-cal-line { position: absolute; left: 0; right: 0; border-top: 1px dashed var(--px-border); opacity: 0.5; }
 
-.px-cal-block { position: absolute; left: 3px; right: 3px; padding: 3px 6px; border-radius: 6px; font-size: 12px; overflow: hidden; background: rgba(91,140,255,0.22); border: 1px solid var(--px-accent); color: var(--px-text); display: flex; flex-direction: column; gap: 2px; }
+.px-cal-block { position: absolute; left: 3px; right: 3px; padding: 3px 6px; border-radius: 6px; font-size: 12px; overflow: hidden; background: var(--px-blue-bg); border: 1px solid var(--px-blue-brd); color: var(--px-blue-deep); display: flex; flex-direction: column; gap: 2px; }
 .px-cal-block-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .px-cal-block-actions { display: flex; gap: 4px; }
 .px-cal-block-actions .px-btn { padding: 1px 6px; font-size: 11px; }
 .px-cal-block--suggested { background: transparent; border-style: dashed; }
-.px-cal-block--unjustified { background: rgba(120,120,120,0.22); border-color: #555; color: var(--px-text-dim); }
+.px-cal-block--unjustified { background: var(--px-slate-bg); border-color: var(--px-border-2); color: var(--px-slate); }
 .px-cal-block--anchored { border-color: var(--px-ok); }
 .px-cal-block--superseded { opacity: 0.5; border-style: dotted; text-decoration: line-through; }
-.px-cal-block-stale { font-size: 9px; text-transform: uppercase; letter-spacing: 0.4px; color: #f4c454; }
+.px-cal-block-stale { font-size: 9px; text-transform: uppercase; letter-spacing: 0.4px; color: var(--px-amber); }
 .px-cal-resize { position: absolute; left: 0; right: 0; bottom: 0; height: 7px; cursor: ns-resize; border-bottom-left-radius: 6px; border-bottom-right-radius: 6px; }
-.px-cal-resize:hover { background: rgba(255,255,255,0.18); }
-.px-cal-entry { position: absolute; left: 3px; right: 3px; padding: 2px 6px; border-radius: 6px; font-size: 11px; background: rgba(255,255,255,0.05); border: 1px dashed var(--px-border); color: var(--px-text-dim); overflow: hidden; }
+.px-cal-resize:hover { background: rgba(16,24,40,0.08); }
+.px-cal-entry { position: absolute; left: 3px; right: 3px; padding: 2px 6px; border-radius: 6px; font-size: 11px; background: var(--px-surface-2); border: 1px dashed var(--px-border-2); color: var(--px-text-dim); overflow: hidden; }
 
 .px-cal-drop { position: absolute; inset: 0; z-index: 5; }
 .px-cal-cell { position: absolute; left: 0; right: 0; }
-.px-cal-cell--valid { background: rgba(70,192,138,0.28); outline: 1px solid var(--px-ok); cursor: copy; }
-.px-cal-cell--invalid { background: rgba(0,0,0,0.35); }
+.px-cal-cell--valid { background: var(--px-green-bg); outline: 1px solid var(--px-ok); cursor: copy; }
+.px-cal-cell--invalid { background: rgba(16,24,40,0.06); }
 
 /* habits (§7.2): daily-target ring + create form */
 .px-habit-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
@@ -153,7 +174,7 @@ body {
 .px-flow-node-type { color: var(--px-text-dim); font-size: 10px; text-transform: uppercase; letter-spacing: 0.4px; }
 .px-flow-node .px-btn { padding: 2px 8px; font-size: 11px; }
 .px-flow-edge-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 10px; background: var(--px-surface); border: 1px solid var(--px-border); border-radius: var(--px-radius); margin-bottom: 6px; }
-/* React Flow draws on a light canvas; keep its text readable on our dark theme */
+/* React Flow draws on a light canvas; keep its chrome aligned with our light theme */
 .react-flow__edge-text { fill: var(--px-text); font-size: 10px; }
 .react-flow__controls button { background: var(--px-surface-2); color: var(--px-text); border-bottom: 1px solid var(--px-border); }
 
@@ -179,20 +200,20 @@ body {
 .px-ranking li { padding: 4px 0; }
 .px-board { margin-bottom: 28px; }
 
-.px-btn { font: inherit; padding: 8px 14px; border-radius: var(--px-radius); border: 1px solid var(--px-border); background: var(--px-surface-2); color: var(--px-text); cursor: pointer; }
-.px-btn:hover { border-color: var(--px-accent); }
+.px-btn { font: inherit; padding: 8px 14px; border-radius: var(--px-radius); border: 1px solid var(--px-border); background: var(--px-surface); color: var(--px-text); cursor: pointer; box-shadow: var(--px-shadow); }
+.px-btn:hover { border-color: var(--px-accent); background: var(--px-surface-2); }
 .px-btn--primary { background: var(--px-accent); border-color: var(--px-accent); color: white; }
 .px-btn--primary:hover { background: var(--px-accent-press); }
 .px-btn--danger { color: var(--px-danger); }
 
-.px-scrim { position: fixed; inset: 0; background: rgba(0,0,0,0.55); display: flex; align-items: center; justify-content: center; z-index: 50; }
-.px-modal { background: var(--px-surface); border: 1px solid var(--px-border); border-radius: var(--px-radius); padding: 22px; width: min(440px, 92vw); }
+.px-scrim { position: fixed; inset: 0; background: rgba(16,24,40,0.45); display: flex; align-items: center; justify-content: center; z-index: 50; }
+.px-modal { background: var(--px-surface); border: 1px solid var(--px-border); border-radius: var(--px-radius); padding: 22px; width: min(440px, 92vw); box-shadow: var(--px-shadow-pop); }
 .px-modal-title { margin: 0 0 12px; font-size: 18px; }
 .px-modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
 
 .px-auth { max-width: 360px; margin: 12vh auto; padding: 28px; background: var(--px-surface); border: 1px solid var(--px-border); border-radius: var(--px-radius); }
 .px-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
-.px-field input { font: inherit; padding: 10px 12px; border-radius: var(--px-radius); border: 1px solid var(--px-border); background: var(--px-bg); color: var(--px-text); }
+.px-field input { font: inherit; padding: 10px 12px; border-radius: var(--px-radius); border: 1px solid var(--px-border); background: var(--px-surface); color: var(--px-text); }
 .px-error { color: var(--px-danger); font-size: 13px; margin: 8px 0; }
 .px-muted { color: var(--px-text-dim); }
 
