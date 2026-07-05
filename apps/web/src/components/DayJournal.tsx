@@ -1,20 +1,25 @@
 /**
- * DayJournal (J4, D2/D3/D7): the left-panel editor for a calendar day's note.
- * Markdown textarea + a formatting toolbar (the shared, unit-tested
- * `applyMarkdownEdit`) + a preview toggle rendered by `react-markdown`+`remark-gfm`.
+ * DayJournal (J4/J7, D2/D3/D7): the left-panel editor for a calendar day's note.
+ * The edit surface is the TipTap WYSIWYG (`RichJournalEditor`, J7) bound to the
+ * markdown `content` field; a Preview toggle renders the same markdown read-only
+ * via `react-markdown`+`remark-gfm` (the exact sanitized output shared with the
+ * `.md` export and other clients). Mobile keeps the J4 toolbar/textarea editor.
  *
  * Rendering is SANITIZED (D2): raw HTML in the markdown is NEVER rendered
  * (react-markdown default — we deliberately do NOT add rehype-raw), link hrefs are
  * allowlisted to http/https/mailto (anything else, e.g. `javascript:`, is dropped),
  * and task-list checkboxes render disabled. Saves debounce (800ms) + flush on blur
- * via `journal.write`; an explicit Delete soft-deletes; empty saves are allowed.
+ * (and on unmount) via `journal.write`; an explicit Delete soft-deletes; empty
+ * saves are allowed.
  */
 import { useEffect, useRef, useState } from 'react';
 
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
-import { applyMarkdownEdit, journalDayFilename, useCommands, useJournalDay, type CommandContext, type MarkdownAction } from '@prisms/ui';
+import { journalDayFilename, useCommands, useJournalDay, type CommandContext } from '@prisms/ui';
+
+import { RichJournalEditor } from './RichJournalEditor';
 
 const SAVE_DEBOUNCE_MS = 800;
 
@@ -36,22 +41,6 @@ export function MarkdownView({ markdown }: { markdown: string }) {
   );
 }
 
-const TOOLBAR: { action: MarkdownAction; label: string; title: string }[] = [
-  { action: 'bold', label: 'B', title: 'Bold' },
-  { action: 'italic', label: 'I', title: 'Italic' },
-  { action: 'strikethrough', label: 'S', title: 'Strikethrough' },
-  { action: 'h1', label: 'H1', title: 'Heading 1' },
-  { action: 'h2', label: 'H2', title: 'Heading 2' },
-  { action: 'h3', label: 'H3', title: 'Heading 3' },
-  { action: 'bulletList', label: '•', title: 'Bullet list' },
-  { action: 'numberList', label: '1.', title: 'Numbered list' },
-  { action: 'taskList', label: '☑', title: 'Task list' },
-  { action: 'quote', label: '❝', title: 'Quote' },
-  { action: 'code', label: '‹›', title: 'Inline code' },
-  { action: 'codeBlock', label: '{ }', title: 'Code block' },
-  { action: 'link', label: '🔗', title: 'Link' },
-];
-
 /**
  * Editor for one day. Mounted with `key={date}` by the Agenda so it re-initializes
  * per day; the draft adopts the synced content when it first loads but never
@@ -64,7 +53,6 @@ export function DayJournalPanel({ date, ctx }: { date: string; ctx: CommandConte
   const [draft, setDraft] = useState(entry?.content ?? '');
   const [preview, setPreview] = useState(false);
   const dirty = useRef(false);
-  const taRef = useRef<HTMLTextAreaElement>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const existingId = entry?.id;
 
@@ -72,9 +60,21 @@ export function DayJournalPanel({ date, ctx }: { date: string; ctx: CommandConte
   useEffect(() => {
     if (!dirty.current) setDraft(entry?.content ?? '');
   }, [entry?.content]);
-  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
-
   const write = (content: string) => commands.writeJournal({ existingId, entryDate: date, content });
+
+  // Flush a pending debounced save if the panel unmounts (day switch) before the
+  // debounce fires and without an onBlur — otherwise the last edit is dropped.
+  // Guarded on `timer` so a clean unmount (already saved on blur) doesn't re-write.
+  const flushPending = useRef<() => void>(() => undefined);
+  flushPending.current = () => {
+    if (timer.current) {
+      clearTimeout(timer.current);
+      timer.current = null;
+      void write(draft);
+    }
+  };
+  useEffect(() => () => flushPending.current(), []);
+
   function scheduleSave(next: string) {
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(() => void write(next), SAVE_DEBOUNCE_MS);
@@ -87,17 +87,6 @@ export function DayJournalPanel({ date, ctx }: { date: string; ctx: CommandConte
     dirty.current = true;
     setDraft(next);
     scheduleSave(next);
-  }
-
-  function toolbar(action: MarkdownAction) {
-    const ta = taRef.current;
-    if (!ta) return;
-    const result = applyMarkdownEdit(draft, { start: ta.selectionStart, end: ta.selectionEnd }, action);
-    change(result.value);
-    requestAnimationFrame(() => {
-      ta.focus();
-      ta.setSelectionRange(result.selection.start, result.selection.end);
-    });
   }
 
   function exportDay() {
@@ -134,34 +123,7 @@ export function DayJournalPanel({ date, ctx }: { date: string; ctx: CommandConte
       ) : preview ? (
         <MarkdownView markdown={draft} />
       ) : (
-        <>
-          <div className="px-md-toolbar" role="toolbar" aria-label="formatting">
-            {TOOLBAR.map((t) => (
-              <button
-                key={t.action}
-                className="px-btn"
-                data-testid={`md-${t.action}`}
-                title={t.title}
-                aria-label={t.title}
-                onMouseDown={(e) => e.preventDefault()} // keep the textarea selection
-                onClick={() => toolbar(t.action)}
-              >
-                {t.label}
-              </button>
-            ))}
-          </div>
-          <textarea
-            ref={taRef}
-            className="px-journal-editor"
-            data-testid="journal-editor"
-            value={draft}
-            placeholder="Write a note for this day… (markdown)"
-            onChange={(e) => change(e.target.value)}
-            onBlur={(e) => flush(e.target.value)}
-            rows={12}
-            style={{ width: '100%', marginTop: 8, resize: 'vertical' }}
-          />
-        </>
+        <RichJournalEditor value={draft} onChange={change} onBlur={flush} />
       )}
 
       <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>

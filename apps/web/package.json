@@ -20,12 +20,17 @@
     "@prisms/ui": "workspace:*",
     "@tauri-apps/api": "^2.0.0",
     "@tauri-apps/plugin-notification": "^2.0.0",
+    "@tiptap/extension-list": "^3.27.1",
+    "@tiptap/pm": "^3.27.1",
+    "@tiptap/react": "^3.27.1",
+    "@tiptap/starter-kit": "^3.27.1",
     "@xyflow/react": "^12.3.5",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-markdown": "^9.1.0",
     "react-router-dom": "^7.17.0",
     "remark-gfm": "^4.0.1",
+    "tiptap-markdown": "^0.9.0",
     "zustand": "^5.0.14"
   },
   "devDependencies": {

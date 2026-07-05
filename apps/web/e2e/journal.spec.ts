@@ -1,27 +1,33 @@
 /**
- * J6 DoD e2e (Playwright) — the journal feature end to end against the live stack:
- *   1. create a markdown+emoji note → reload keeps it → edit → delete (dot gone);
- *      the day-panel Export .md downloads exactly what was typed;
+ * Journal e2e (Playwright) against the live stack — J6 DoD + J7 WYSIWYG:
+ *   1. create a note in the TipTap editor (emoji intact) → reload keeps it → edit
+ *      → delete (dot gone); the day-panel Export .md downloads the stored markdown;
  *   2. FRESH-DEVICE LAZY-LOAD PROOF (asserted, not claimed): a note seeded in a
  *      PAST month is NOT in the local replica until that month is viewed, while
  *      the current month's note IS — proving the month-bucketed `journal_month`
  *      stream pulls zero journal rows until a month is opened;
- *   3. the Settings `.md` archive is SERVER-sourced, so it contains the past
- *      month even though it was never synced to this device;
- *   4. an offline write shows immediately (overlay) and syncs on reconnect —
- *      one row, no ghost.
+ *   3. an offline write shows immediately (overlay) and syncs on reconnect —
+ *      one row, no ghost;
+ *   4. J7: toolbar formatting + an INTERACTIVE task checkbox round-trip through
+ *      the markdown `content` field (`- [ ]` ⇄ `- [x]`), the headline J7 affordance.
  *
- * The store/server already prove convergence + the D5 ack-rewrite deterministically
+ * The store/server prove convergence + the D5 ack-rewrite deterministically
  * (packages/ui journal-overlay + apps/server journal.integration); this drives the
  * browser surface. Requires the live stack (see playwright.config.ts). `__db` is
- * exposed by the dev app (App.tsx, guarded to import.meta.env.DEV) so the lazy-load
- * proof can page-eval the local replica.
+ * exposed by the app behind a localhost guard (App.tsx — dev + CI vite-preview are
+ * both localhost, never prod) so the lazy-load proof can page-eval the local replica.
+ *
+ * The editor is a TipTap contenteditable (`journal-rich`), NOT a form field, so we
+ * drive it with click + keyboard.insertText (atomic unicode, unlike per-char type)
+ * and assert on the SERVER-stored markdown / rendered nodes rather than `.fill`/
+ * `.toHaveValue`. WYSIWYG serialization is normalized, so content checks use
+ * containment, not byte-equality (byte-exact emoji is proven in the unit archive test).
  */
 import { readFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 
 import { addDays, asEpochMillis, bucketDate } from '@prisms/core';
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import { strFromU8, unzipSync } from 'fflate';
 
 const TZ = 'America/New_York'; // a fresh account's default day-reset timezone
@@ -48,6 +54,16 @@ async function register(page: Page, label: string): Promise<void> {
   await expect(page.getByTestId('sync-state')).toBeVisible();
 }
 
+/** Replace the TipTap editor's whole content with `text` (insertText = atomic unicode). */
+async function setEditor(page: Page, text: string): Promise<Locator> {
+  const editor = page.getByTestId('journal-rich');
+  await editor.click();
+  await page.keyboard.press('ControlOrMeta+A');
+  await page.keyboard.press('Delete');
+  await page.keyboard.insertText(text);
+  return editor;
+}
+
 /** Count non-deleted local journal rows for a day (the LOCAL replica, via __db). */
 const localCount = (page: Page, entryDate: string): Promise<number> =>
   page.evaluate(async (d) => {
@@ -63,36 +79,46 @@ const serverDays = async (page: Page): Promise<string[]> => {
   return ((await res.json()) as { entries: { entry_date: string }[] }).entries.map((e) => e.entry_date);
 };
 
-test('create → reload → edit → delete, with markdown+emoji; day Export .md downloads it', async ({ page }) => {
+/** The SERVER-stored markdown for one day (undefined if absent) — the persisted truth. */
+const serverContent = async (page: Page, entryDate: string): Promise<string | undefined> => {
+  const res = await page.request.get('/sync/journal/export');
+  if (!res.ok()) return undefined;
+  const j = (await res.json()) as { entries: { entry_date: string; content: string }[] };
+  return j.entries.find((e) => e.entry_date === entryDate)?.content;
+};
+
+test('create → reload → edit → delete (WYSIWYG) with emoji; day Export .md downloads it', async ({ page }) => {
   await register(page, 'journal-crud');
   await page.getByRole('link', { name: 'Agenda' }).click();
   await page.getByTestId('day-head-0').click(); // day-head-0 == today
 
-  const editor = page.getByTestId('journal-editor');
-  await expect(editor).toBeVisible();
-  const content = '# Standup\n\n- [x] shipped it 👨‍👩‍👧‍👦\n\n**done**';
-  await editor.fill(content);
+  await expect(page.getByTestId('journal-rich')).toBeVisible();
+  const editor = await setEditor(page, 'Standup notes 👨‍👩‍👧‍👦 shipped it');
   await editor.blur(); // flush the debounced save
 
   // the dot appears on today (overlay is instant) and the server persists it.
   await expect(page.getByTestId(`note-dot-${today}`)).toBeVisible({ timeout: 30_000 });
-  await expect.poll(() => serverDays(page), { timeout: 30_000 }).toContain(today);
+  await expect.poll(() => serverContent(page, today), { timeout: 30_000 }).toContain('Standup notes');
+  const stored = (await serverContent(page, today))!;
+  expect(stored).toContain('👨‍👩‍👧‍👦'); // ZWJ emoji byte-intact through the WYSIWYG (D6)
 
-  // Export .md downloads exactly what was typed, named <today>.md.
+  // Export .md downloads exactly the stored markdown, named <today>.md.
   const [dl] = await Promise.all([page.waitForEvent('download'), page.getByTestId('journal-export').click()]);
   expect(dl.suggestedFilename()).toBe(`${today}.md`);
-  expect(await readFile(await dl.path(), 'utf8')).toBe(content);
+  expect(await readFile(await dl.path(), 'utf8')).toBe(stored);
 
-  // reload → the note survives (came back from the server) with exact content.
+  // reload → the note survives (came back from the server) and renders in the editor.
   await page.reload();
   await page.getByRole('link', { name: 'Agenda' }).click();
   await page.getByTestId('day-head-0').click();
-  await expect(page.getByTestId('journal-editor')).toHaveValue(content);
+  await expect(page.getByTestId('journal-rich')).toContainText('Standup notes', { timeout: 30_000 });
 
-  // edit → converges; then delete → the dot disappears.
-  await page.getByTestId('journal-editor').fill(`${content}\n\nedited ✏️`);
-  await page.getByTestId('journal-editor').blur();
-  await expect.poll(async () => (await serverDays(page)).length, { timeout: 30_000 }).toBe(1); // still ONE row
+  // edit (append) → converges as ONE row; then delete → the dot disappears.
+  await page.getByTestId('journal-rich').click();
+  await page.keyboard.press('ControlOrMeta+End');
+  await page.keyboard.insertText(' — edited ✏️');
+  await page.getByTestId('journal-rich').blur();
+  await expect.poll(async () => (await serverDays(page)).length, { timeout: 30_000 }).toBe(1);
   await page.getByTestId('journal-delete').click();
   await expect(page.getByTestId(`note-dot-${today}`)).toHaveCount(0);
   await expect.poll(async () => (await serverDays(page)).length, { timeout: 30_000 }).toBe(0);
@@ -145,8 +171,8 @@ test('offline write shows immediately (overlay) and syncs on reconnect — one r
 
   await context.setOffline(true);
   await page.getByTestId('day-head-0').click();
-  await page.getByTestId('journal-editor').fill('written offline 🌍');
-  await page.getByTestId('journal-editor').blur();
+  await setEditor(page, 'written offline 🌍');
+  await page.getByTestId('journal-rich').blur();
   await expect(page.getByTestId(`note-dot-${today}`)).toBeVisible(); // overlay shows it WHILE offline
 
   await context.setOffline(false);
@@ -155,6 +181,34 @@ test('offline write shows immediately (overlay) and syncs on reconnect — one r
   await page.reload();
   await page.getByRole('link', { name: 'Agenda' }).click();
   await page.getByTestId('day-head-0').click();
-  await expect(page.getByTestId('journal-editor')).toHaveValue('written offline 🌍');
+  await expect(page.getByTestId('journal-rich')).toContainText('written offline', { timeout: 30_000 });
   expect(await localCount(page, today)).toBe(1); // exactly one row — no ghost duplicate
+});
+
+test('J7 WYSIWYG: toolbar task list + an interactive checkbox round-trip to markdown', async ({ page }) => {
+  await register(page, 'journal-wysiwyg');
+  await page.getByRole('link', { name: 'Agenda' }).click();
+  await page.getByTestId('day-head-0').click();
+  const editor = page.getByTestId('journal-rich');
+  await expect(editor).toBeVisible();
+
+  // Build a task item via the toolbar (deterministic — no reliance on input rules).
+  await editor.click();
+  await page.getByTestId('rt-task').click();
+  await page.keyboard.insertText('buy milk');
+  await editor.blur();
+
+  // serialized as an UNCHECKED task in the stored markdown.
+  await expect.poll(() => serverContent(page, today), { timeout: 30_000 }).toContain('[ ] buy milk');
+
+  // Toggle the RENDERED checkbox → the stored markdown flips to CHECKED ([x]).
+  await editor.getByRole('checkbox').first().click();
+  await editor.blur();
+  await expect.poll(() => serverContent(page, today), { timeout: 30_000 }).toContain('[x] buy milk');
+
+  // reload → the checkbox comes back CHECKED (state persisted through markdown, not DOM).
+  await page.reload();
+  await page.getByRole('link', { name: 'Agenda' }).click();
+  await page.getByTestId('day-head-0').click();
+  await expect(page.getByTestId('journal-rich').getByRole('checkbox').first()).toBeChecked({ timeout: 30_000 });
 });
