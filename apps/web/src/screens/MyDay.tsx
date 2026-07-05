@@ -32,18 +32,7 @@ import {
 } from '@prisms/ui';
 
 import { WhyButton } from '../components/Why';
-import { formatElapsed, formatMinutes } from '../format';
-
-const DOT_TONES = ['teal', 'blue', 'amber', 'green'] as const;
-type DotTone = (typeof DOT_TONES)[number];
-
-/** Stable per-project dot colour (the mock tints each project) derived from its id. */
-function projectTone(projectId: string | null): DotTone {
-  if (!projectId) return 'blue';
-  let h = 0;
-  for (let i = 0; i < projectId.length; i++) h = (h * 31 + projectId.charCodeAt(i)) >>> 0;
-  return DOT_TONES[h % DOT_TONES.length]!;
-}
+import { formatElapsed, formatMinutes, projectTone } from '../format';
 
 function fmtClock(iso: string): string {
   return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });

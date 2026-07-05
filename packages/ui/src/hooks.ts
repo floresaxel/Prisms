@@ -441,6 +441,63 @@ export function useTaskSteps(taskId: string): TaskStep[] {
   );
 }
 
+export interface ProjectTasksGroup {
+  project: Node;
+  tasks: { task: Node; status: TaskStatus; blockedBy: string[] }[];
+}
+
+/**
+ * All non-done tasks grouped by their ancestor PROJECT (W4/D6 "By project"): the
+ * Tasks view mirrors the tree, so a task under a milestone rolls up to its
+ * project. Habit-parentless tasks (no project) are omitted here — they surface in
+ * the By-status view. Groups + tasks are in tree (sort_order) order.
+ */
+export function useTasksByProject(now: Instant): ProjectTasksGroup[] {
+  const ctx = useFactContext();
+  return useMemo(() => {
+    const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+    const byProject = new Map<string, { task: Node; status: TaskStatus; blockedBy: string[] }[]>();
+    for (const node of ctx.tree.byId.values()) {
+      if (node.node_type !== 'task' || node.deleted_at !== null || node.completed_at !== null) continue;
+      const project = ancestorsOf(ctx.tree, node.id).find((a) => a.node_type === 'project');
+      if (!project) continue;
+      const status = taskStatus(node, ctx, now);
+      const blockedBy = status === 'blocked' ? evaluateBlockerRules(node, ctx, now).blockedBy.map((r) => r.label) : [];
+      const list = byProject.get(project.id) ?? [];
+      list.push({ task: node, status, blockedBy });
+      byProject.set(project.id, list);
+    }
+    const projects = [...ctx.tree.byId.values()].filter((n) => n.node_type === 'project' && byProject.has(n.id));
+    projects.sort((a, b) => cmp(a.sort_order, b.sort_order) || cmp(a.id, b.id));
+    return projects.map((project) => ({
+      project,
+      tasks: byProject.get(project.id)!.sort((x, y) => cmp(x.task.sort_order, y.task.sort_order) || cmp(x.task.id, y.task.id)),
+    }));
+  }, [ctx, now]);
+}
+
+/**
+ * All live task_steps grouped by task_id (W4) — ONE overlay-merged subscription
+ * for the whole Tasks view, so each task row reads its steps (count + list) from
+ * the map without a per-row watch. Steps within a task are in sort_order.
+ */
+export function useTaskStepsByTask(): Map<string, TaskStep[]> {
+  const rows = useRows('SELECT * FROM task_steps WHERE deleted_at IS NULL');
+  return useMemo(() => {
+    const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+    const m = new Map<string, TaskStep[]>();
+    for (const r of rows) {
+      const s = toTaskStep(r);
+      if (s.deleted_at !== null) continue; // an overlay delete drops the row
+      const list = m.get(s.task_id) ?? [];
+      list.push(s);
+      m.set(s.task_id, list);
+    }
+    for (const list of m.values()) list.sort((a, b) => cmp(a.sort_order, b.sort_order) || cmp(a.id, b.id));
+    return m;
+  }, [rows]);
+}
+
 export interface HabitTasksView {
   habit: Habit;
   /** The habit's actionable (not done/blocked) recurring task instances. */

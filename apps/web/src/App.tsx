@@ -37,12 +37,12 @@ import { Agenda } from './screens/Agenda';
 import { Automations } from './screens/Automations';
 import { Dashboard } from './screens/Dashboard';
 import { Habits } from './screens/Habits';
-import { Inbox } from './screens/Inbox';
 import { Login } from './screens/Login';
 import { MyDay } from './screens/MyDay';
 import { Projects } from './screens/Projects';
 import { Review } from './screens/Review';
 import { Settings } from './screens/Settings';
+import { Tasks } from './screens/Tasks';
 
 type Route =
   | '/'
@@ -151,7 +151,7 @@ function Shell({
     (
       {
         '/': <MyDay ctx={ctx} onNavigate={navigate} />,
-        '/tasks': <Inbox ctx={ctx} />,
+        '/tasks': <Tasks ctx={ctx} />,
         '/agenda': <Agenda ctx={ctx} />,
         '/habits': <Habits ctx={ctx} />,
         '/projects': <Projects ctx={ctx} />,
