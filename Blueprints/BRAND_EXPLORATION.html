@@ -1,0 +1,1703 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prisms — Naming &amp; Brand Exploration</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&amp;family=Space+Grotesk:wght@400;500;700&amp;family=Barlow+Condensed:wght@500;600&amp;family=IBM+Plex+Serif:wght@500;600&amp;family=IBM+Plex+Mono:wght@400;500&amp;family=Plus+Jakarta+Sans:wght@400;600;700&amp;family=Archivo+Black&amp;family=JetBrains+Mono:wght@400;700&amp;family=Lora:ital,wght@0,500;0,600;1,500&amp;family=DM+Serif+Display:ital@0;1&amp;family=Rubik:wght@500;700&amp;family=Silkscreen&amp;family=Zilla+Slab:wght@500;600&amp;family=Caveat:wght@500;600&amp;display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#F7F7F4; --card:#FFFFFF; --ink:#191A1E; --muted:#6B7078; --line:#E6E6E2;
+    --accent:#2456F0; --star:#C9950C;
+    --risk-low:#1B7F4D; --risk-lowmed:#4E7A2E; --risk-med:#B07C10; --risk-medhigh:#B3552E; --risk-high:#B3402E;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0; background:var(--paper); color:var(--ink);
+    font:15px/1.55 Inter,-apple-system,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased; padding-bottom:110px;
+  }
+  main, .page-head-inner{max-width:1120px; margin:0 auto; padding:0 28px}
+  a{color:var(--accent)}
+
+  /* ---------- header ---------- */
+  .page-head{border-bottom:1px solid var(--line); background:var(--card); padding:44px 0 36px}
+  .kicker{font-size:12px; font-weight:600; letter-spacing:.14em; text-transform:uppercase; color:var(--muted)}
+  h1{font-size:34px; line-height:1.15; font-weight:700; letter-spacing:-.02em; margin:10px 0 14px}
+  .lede{max-width:760px; color:#3A3D44; font-size:16px}
+  .lede b{font-weight:600}
+  .howto{display:flex; gap:10px; flex-wrap:wrap; margin-top:20px}
+  .howto span{font-size:13px; color:var(--muted); background:var(--paper); border:1px solid var(--line); border-radius:99px; padding:5px 12px}
+
+  section{margin-top:52px}
+  h2{font-size:23px; letter-spacing:-.015em; margin:0 0 6px}
+  .section-note{color:var(--muted); font-size:14px; max-width:740px; margin:0 0 26px}
+  .family{margin-top:34px}
+  .family h3{font-size:13px; font-weight:600; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); margin:0 0 4px}
+  .family .fam-desc{font-size:13.5px; color:var(--muted); margin:0 0 14px}
+
+  /* ---------- name cards ---------- */
+  .name-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(320px,1fr)); gap:14px}
+  .name-card{
+    background:var(--card); border:1px solid var(--line); border-radius:12px; padding:18px 18px 14px;
+    cursor:pointer; transition:border-color .15s, box-shadow .15s; position:relative;
+  }
+  .name-card:hover{border-color:#C9CBD2; box-shadow:0 2px 10px rgba(20,22,28,.05)}
+  .name-card.active{border-color:var(--accent); box-shadow:0 0 0 1px var(--accent)}
+  .name-card.active::after{
+    content:"previewing below ↓"; position:absolute; top:-9px; right:12px;
+    background:var(--accent); color:#fff; font-size:10.5px; font-weight:600; letter-spacing:.04em;
+    padding:2px 8px; border-radius:99px;
+  }
+  .name-row{display:flex; align-items:baseline; justify-content:space-between; gap:8px}
+  .name-row .name{font-size:21px; font-weight:650; letter-spacing:-.01em; margin:0}
+  .name-row .phon{font-size:12px; color:var(--muted); font-weight:400; margin-left:6px}
+  .star{
+    border:none; background:none; font-size:19px; line-height:1; cursor:pointer; color:#B9BCC3;
+    padding:4px 2px; flex:none; transition:transform .1s;
+  }
+  .star:hover{transform:scale(1.15)}
+  .star.on{color:var(--star)}
+  .why{margin:8px 0 0; font-size:13.8px; color:#3A3D44}
+  .fit{margin:8px 0 0; font-size:12.5px; color:var(--muted)}
+  .fit b{color:#4A4E56; font-weight:600}
+  .meta{display:flex; align-items:center; justify-content:space-between; margin-top:12px; padding-top:10px; border-top:1px solid var(--line)}
+  .chip{font-size:11px; font-weight:600; letter-spacing:.02em; border-radius:99px; padding:3px 9px; background:var(--paper)}
+  .risk-low{color:var(--risk-low)} .risk-lowmed{color:var(--risk-lowmed)} .risk-med{color:var(--risk-med)}
+  .risk-medhigh{color:var(--risk-medhigh)} .risk-high{color:var(--risk-high)}
+  .risk-note{font-size:11.5px; color:var(--muted); text-align:right; max-width:60%}
+
+  /* ---------- style cards ---------- */
+  .style-card{
+    background:var(--card); border:1px solid var(--line); border-radius:14px; margin-top:20px;
+    display:grid; grid-template-columns:360px 1fr; overflow:hidden;
+  }
+  @media (max-width:880px){ .style-card{grid-template-columns:1fr} }
+  .style-meta{padding:24px 26px; border-right:1px solid var(--line)}
+  @media (max-width:880px){ .style-meta{border-right:none; border-bottom:1px solid var(--line)} }
+  .style-kicker{font-size:11px; font-weight:600; letter-spacing:.14em; text-transform:uppercase; color:var(--muted)}
+  .style-meta h3{font-size:20px; margin:6px 0 0; display:flex; align-items:center; gap:6px}
+  .style-desc{font-size:13.8px; color:#3A3D44; margin:10px 0 0}
+  .keywords{font-size:12.5px; color:var(--muted); margin-top:10px}
+  .cf{font-size:12px; color:var(--muted); margin-top:6px}
+  .cf b{font-weight:600; color:#4A4E56}
+  .swatches{display:flex; gap:8px; margin-top:16px}
+  .sw{flex:1; min-width:0}
+  .sw-chip{height:40px; border-radius:8px; border:1px solid rgba(20,22,28,.10)}
+  .sw-hex{font:10.5px "IBM Plex Mono",monospace; color:var(--muted); margin-top:4px; text-align:center; letter-spacing:-.02em}
+  .voice{font-size:13.5px; margin-top:16px; color:#3A3D44}
+  .voice b{font-weight:600}
+  .pairs{font-size:12.5px; color:var(--muted); margin-top:8px}
+  .pairs b{font-weight:600; color:#4A4E56}
+  .typenote{font-size:11.5px; color:var(--muted); margin-top:14px; padding-top:10px; border-top:1px solid var(--line)}
+
+  .style-stage{padding:30px 32px; display:flex; align-items:center; gap:34px; flex-wrap:wrap}
+  .wordmark-zone{flex:1 1 260px; min-width:240px}
+  .wordmark{display:block; white-space:nowrap}
+  .tagline{display:block; margin-top:10px}
+
+  /* mini "My Day" mock, restyled per brand */
+  .mock{flex:0 1 270px; min-width:250px}
+  .mock-card{border-radius:12px; padding:16px 16px 14px}
+  .mock-brandrow{display:flex; align-items:center; gap:7px; margin-bottom:12px}
+  .mock-logo{width:8px; height:8px; border-radius:2px; flex:none}
+  .mock-brand{font-size:12px; font-weight:600; letter-spacing:.02em}
+  .mock-title{font-size:15px; font-weight:650; margin-bottom:10px}
+  .mock-task{display:flex; align-items:center; gap:9px; font-size:13px; padding:7px 0}
+  .mock-task + .mock-task{border-top:1px solid rgba(20,22,28,.06)}
+  .mock-check{width:15px; height:15px; border-radius:50%; border:1.5px solid currentColor; flex:none; opacity:.55}
+  .mock-task.done{opacity:.5; text-decoration:line-through}
+  .mock-task.done .mock-check{opacity:1}
+  .mock-btn{margin-top:12px; width:100%; border:none; cursor:pointer; font-weight:600; font-size:13px; padding:9px 0; border-radius:8px; font-family:inherit}
+
+  /* ----- S1 Gridlight ----- */
+  .s1 .style-stage{background:#FBFBFA; color:#17181C}
+  .s1 .wordmark{font:650 clamp(30px,4.4vw,44px)/1.05 Inter,sans-serif; letter-spacing:-.03em; color:#17181C}
+  .s1 .wordmark-zone::after{content:""; display:block; width:44px; height:3px; background:#2456F0; margin-top:14px; border-radius:2px}
+  .s1 .tagline{font:400 13.5px Inter,sans-serif; color:#5C6470}
+  .s1 .mock-card{background:#fff; border:1px solid #E7E7E4; color:#17181C}
+  .s1 .mock-logo{background:#2456F0}
+  .s1 .mock-btn{background:#2456F0; color:#fff; border-radius:7px}
+  .s1 .mock-check{color:#2456F0; border-radius:5px}
+
+  /* ----- S2 Warm Paper ----- */
+  .s2 .style-stage{background:#F6F1E7; color:#2A2520}
+  .s2 .wordmark{font:600 clamp(32px,4.6vw,46px)/1.05 Fraunces,Georgia,serif; letter-spacing:-.015em; color:#2A2520}
+  .s2 .wordmark-zone::after{content:""; display:block; width:150px; margin-top:12px; border-bottom:2px dashed #C05B33; opacity:.8}
+  .s2 .tagline{font:italic 500 14.5px Fraunces,Georgia,serif; color:#7A6E5C}
+  .s2 .mock-card{background:#FDFAF3; border:1px solid #E4DCC9; color:#2A2520}
+  .s2 .mock-title{font-family:Fraunces,Georgia,serif}
+  .s2 .mock-logo{background:#C05B33; border-radius:50%}
+  .s2 .mock-btn{background:#C05B33; color:#FDFAF3; border-radius:8px}
+  .s2 .mock-check{color:#C05B33}
+
+  /* ----- S3 Prismatic ----- */
+  .s3 .style-stage{background:radial-gradient(120% 100% at 72% 0%, #EAF6FF 0%, #FCFDFF 58%); color:#1B2432}
+  .s3 .wordmark{font:500 clamp(30px,4.4vw,44px)/1.05 "Space Grotesk",Inter,sans-serif; letter-spacing:.06em; color:#1B2432}
+  .s3 .wordmark-zone::after{content:""; display:block; height:2px; width:210px; margin-top:13px; background:linear-gradient(90deg,#F2B23E,#12B5A5,#0EA5E9)}
+  .s3 .tagline{font:400 13.5px Inter,sans-serif; color:#5A6678; letter-spacing:.03em}
+  .s3 .mock-card{background:rgba(255,255,255,.75); border:1px solid #DCEAF5; color:#1B2432; backdrop-filter:blur(4px)}
+  .s3 .mock-logo{background:linear-gradient(135deg,#F2B23E,#12B5A5,#0EA5E9); border-radius:2px}
+  .s3 .mock-btn{background:#0EA5E9; color:#fff; border-radius:8px}
+  .s3 .mock-check{color:#0EA5E9}
+
+  /* ----- S4 Fieldline ----- */
+  .s4 .style-stage{
+    background:#EFEBE0; color:#1F4A38;
+    background-image:repeating-radial-gradient(circle at 28% 18%, rgba(31,74,56,.07) 0 1px, transparent 1px 36px);
+  }
+  .s4 .wordmark{font:600 clamp(32px,4.8vw,48px)/1 "Barlow Condensed",Inter,sans-serif; text-transform:uppercase; letter-spacing:.09em; color:#1F4A38}
+  .s4 .wordmark::before{content:"▸ "; color:#E2571B}
+  .s4 .tagline{font:500 12.5px Inter,sans-serif; text-transform:uppercase; letter-spacing:.16em; color:#6B7A66}
+  .s4 .mock-card{background:#F7F4EA; border:1.5px solid #1F4A38; border-radius:6px; color:#243B2F}
+  .s4 .mock-title{text-transform:uppercase; letter-spacing:.08em; font-family:"Barlow Condensed",sans-serif; font-size:16px}
+  .s4 .mock-logo{background:#E2571B; border-radius:1px}
+  .s4 .mock-btn{background:#1F4A38; color:#EFEBE0; border-radius:4px; text-transform:uppercase; letter-spacing:.08em; font-size:12px}
+  .s4 .mock-check{color:#1F4A38; border-radius:3px}
+
+  /* ----- S5 Instrument ----- */
+  .s5 .style-stage{background:#F4EEDF; color:#16233D; box-shadow:inset 0 0 0 6px #F4EEDF, inset 0 0 0 7px #DED4B9}
+  .s5 .wordmark-zone::before{content:""; display:block; height:8px; width:190px; margin-bottom:14px;
+    background:repeating-linear-gradient(90deg,#B98A2F 0 1px, transparent 1px 10px); opacity:.75}
+  .s5 .wordmark{font:600 clamp(30px,4.4vw,44px)/1.08 "IBM Plex Serif",Georgia,serif; letter-spacing:.005em; color:#16233D}
+  .s5 .tagline{font:500 11.5px "IBM Plex Mono",monospace; text-transform:uppercase; letter-spacing:.22em; color:#B98A2F}
+  .s5 .mock-card{background:#FAF6EA; border:1px solid #16233D; box-shadow:0 0 0 3px #FAF6EA, 0 0 0 4px #DED4B9; border-radius:4px; color:#16233D}
+  .s5 .mock-title{font-family:"IBM Plex Serif",serif}
+  .s5 .mock-task{font-family:"IBM Plex Mono",monospace; font-size:12px}
+  .s5 .mock-logo{background:#B98A2F; border-radius:50%}
+  .s5 .mock-btn{background:#16233D; color:#E9CF8B; border-radius:3px; letter-spacing:.06em}
+  .s5 .mock-check{color:#B98A2F}
+
+  /* ----- S6 Morning ----- */
+  .s6 .style-stage{background:#FAF7F2; color:#3B3833}
+  .s6 .wordmark{font:700 clamp(30px,4.4vw,44px)/1.05 "Plus Jakarta Sans",Inter,sans-serif; letter-spacing:-.02em; color:#3B3833}
+  .s6 .wordmark::after{content:""; display:inline-block; width:10px; height:10px; border-radius:50%; background:#7C9473; margin-left:8px}
+  .s6 .tagline{font:400 14px "Plus Jakarta Sans",sans-serif; color:#8A857C}
+  .s6 .mock-card{background:#fff; border:none; border-radius:18px; box-shadow:0 10px 28px rgba(90,80,60,.10); color:#3B3833; font-family:"Plus Jakarta Sans",sans-serif}
+  .s6 .mock-logo{background:#7C9473; border-radius:50%}
+  .s6 .mock-btn{background:#7C9473; color:#fff; border-radius:99px}
+  .s6 .mock-check{color:#7C9473}
+
+  /* ----- S7 Signal ----- */
+  .s7 .style-stage{background:#F4F3EE; color:#101010}
+  .s7 .wordmark{font:400 clamp(32px,4.8vw,48px)/1 "Archivo Black",Inter,sans-serif; letter-spacing:-.02em; text-transform:uppercase; color:#101010}
+  .s7 .wordmark-zone::after{content:""; display:block; width:120px; height:6px; background:#FF4D00; margin-top:14px}
+  .s7 .tagline{font:600 12.5px Inter,sans-serif; text-transform:uppercase; letter-spacing:.14em; color:#8B8E94}
+  .s7 .mock-card{background:#fff; border:2px solid #101010; border-radius:0; color:#101010}
+  .s7 .mock-title{text-transform:uppercase; letter-spacing:.04em}
+  .s7 .mock-logo{background:#FF4D00; border-radius:0}
+  .s7 .mock-btn{background:#101010; color:#F4F3EE; border-radius:0; text-transform:uppercase; letter-spacing:.08em; font-size:12px}
+  .s7 .mock-check{color:#101010; border-radius:2px}
+
+  /* ----- S8 Nightwatch ----- */
+  .s8 .style-stage{background:#0F1219; color:#E8EAF0}
+  .s8 .wordmark{font:500 clamp(30px,4.4vw,44px)/1.05 "Space Grotesk",Inter,sans-serif; letter-spacing:.03em; color:#E8EAF0}
+  .s8 .wordmark-zone::after{content:""; display:block; width:44px; height:3px; background:#F2A93B; margin-top:14px; border-radius:2px}
+  .s8 .tagline{font:400 12.5px "IBM Plex Mono",monospace; color:#8891A5; letter-spacing:.04em}
+  .s8 .mock-card{background:#171B26; border:1px solid #262C3B; color:#E8EAF0}
+  .s8 .mock-task + .mock-task{border-top-color:rgba(255,255,255,.08)}
+  .s8 .mock-logo{background:#F2A93B}
+  .s8 .mock-btn{background:#F2A93B; color:#14161D}
+  .s8 .mock-check{color:#F2A93B}
+
+  /* ----- S9 Broadsheet ----- */
+  .s9 .style-stage{background:#FFFFFF; color:#141414}
+  .s9 .wordmark-zone{border-top:3px solid #141414; padding-top:14px}
+  .s9 .wordmark{font:600 clamp(30px,4.4vw,44px)/1.08 Lora,Georgia,serif; letter-spacing:-.01em; color:#141414}
+  .s9 .wordmark-zone::after{content:""; display:block; border-bottom:1px solid #141414; margin-top:12px}
+  .s9 .tagline{font:400 11.5px "IBM Plex Mono",monospace; color:#6E6A61; text-transform:uppercase; letter-spacing:.14em; margin-top:12px}
+  .s9 .mock-card{background:#fff; border:1px solid #D8D5CC; color:#141414}
+  .s9 .mock-title{font-family:Lora,Georgia,serif}
+  .s9 .mock-logo{background:#B62B23; border-radius:0}
+  .s9 .mock-btn{background:#141414; color:#fff; border-radius:2px}
+  .s9 .mock-check{color:#B62B23}
+
+  /* ----- S10 Terminal ----- */
+  .s10 .style-stage{background:#0C1210; color:#D7E4DC}
+  .s10 .wordmark{font:700 clamp(24px,3.6vw,36px)/1.15 "JetBrains Mono",monospace; text-transform:lowercase; color:#D7E4DC}
+  .s10 .wordmark::before{content:"$ "; color:#3FD068}
+  .s10 .wordmark::after{content:"▊"; color:#3FD068; margin-left:6px; animation:s10blink 1.1s steps(1) infinite}
+  @keyframes s10blink{50%{opacity:0}}
+  .s10 .tagline{font:400 12px "JetBrains Mono",monospace; color:#55655C}
+  .s10 .mock-card{background:#101815; border:1px solid #1F2B24; color:#D7E4DC; font-family:"JetBrains Mono",monospace}
+  .s10 .mock-task{font-size:12px}
+  .s10 .mock-task + .mock-task{border-top-color:rgba(255,255,255,.06)}
+  .s10 .mock-logo{background:#3FD068; border-radius:1px}
+  .s10 .mock-btn{background:#3FD068; color:#0C1210; border-radius:3px}
+  .s10 .mock-check{color:#3FD068; border-radius:2px}
+
+  /* ----- S11 Bauhaus ----- */
+  .s11 .style-stage{background:#F7F3EA; color:#16161A}
+  .s11 .wordmark{font:400 clamp(30px,4.6vw,46px)/1 "Archivo Black",Inter,sans-serif; text-transform:lowercase; letter-spacing:-.02em; color:#16161A}
+  .s11 .wordmark-zone::after{content:""; display:block; height:10px; width:180px; margin-top:14px; background:linear-gradient(90deg,#E63B2E 0 33.4%,#F2C230 33.4% 66.7%,#1D4ED8 66.7% 100%)}
+  .s11 .tagline{font:500 13px Inter,sans-serif; color:#5B5B60}
+  .s11 .mock-card{background:#fff; border:2px solid #16161A; border-radius:0; color:#16161A}
+  .s11 .mock-logo{background:#F2C230; border-radius:50%}
+  .s11 .mock-btn{background:#E63B2E; color:#fff; border-radius:0}
+  .s11 .mock-check{color:#1D4ED8}
+
+  /* ----- S12 Riso ----- */
+  .s12 .style-stage{background:#FAF6EC; color:#223042;
+    background-image:radial-gradient(rgba(42,102,196,.10) 1px, transparent 1px); background-size:7px 7px}
+  .s12 .wordmark{font:700 clamp(30px,4.4vw,44px)/1.05 "Space Grotesk",sans-serif; color:#2A66C4; text-shadow:3px 3px 0 rgba(255,90,31,.5); letter-spacing:-.01em}
+  .s12 .tagline{font:500 13px "Space Grotesk",sans-serif; color:#223042; margin-top:14px}
+  .s12 .mock-card{background:#FFFDF5; border:1.5px solid #2A66C4; color:#223042}
+  .s12 .mock-logo{background:#FF5A1F; border-radius:50%}
+  .s12 .mock-btn{background:#2A66C4; color:#FFFDF5; border-radius:6px}
+  .s12 .mock-check{color:#FF5A1F}
+
+  /* ----- S13 Atelier ----- */
+  .s13 .style-stage{background:#FFFFFF; color:#1A1A18}
+  .s13 .wordmark-zone::before{content:""; display:block; width:26px; height:1px; background:#A98A4C; margin-bottom:18px}
+  .s13 .wordmark{font:400 clamp(32px,4.8vw,48px)/1.08 "DM Serif Display",Georgia,serif; color:#1A1A18}
+  .s13 .tagline{font:500 10.5px Inter,sans-serif; text-transform:uppercase; letter-spacing:.26em; color:#8A8578; margin-top:14px}
+  .s13 .mock-card{background:#fff; border:1px solid #E5E2DA; color:#1A1A18}
+  .s13 .mock-title{font-family:"DM Serif Display",serif; font-weight:400}
+  .s13 .mock-logo{background:#1A1A18; border-radius:50%}
+  .s13 .mock-btn{background:#1A1A18; color:#fff; border-radius:0; letter-spacing:.1em; text-transform:uppercase; font-size:11px}
+  .s13 .mock-check{color:#A98A4C}
+
+  /* ----- S14 Grove ----- */
+  .s14 .style-stage{background:#F4F3EC; color:#23331F}
+  .s14 .wordmark{font:600 clamp(30px,4.4vw,44px)/1.08 Lora,Georgia,serif; color:#23331F}
+  .s14 .wordmark::after{content:" ❧"; color:#5F7A4E; font-size:.55em; vertical-align:middle}
+  .s14 .tagline{font:italic 500 14px Lora,Georgia,serif; color:#6B7A5E}
+  .s14 .mock-card{background:#FBFAF3; border:1px solid #DCDACB; color:#2C3B27}
+  .s14 .mock-logo{background:#7A5C3E; border-radius:50%}
+  .s14 .mock-btn{background:#5F7A4E; color:#FBFAF3; border-radius:10px}
+  .s14 .mock-check{color:#5F7A4E}
+
+  /* ----- S15 Paper Cut ----- */
+  .s15 .style-stage{background:#FFF8EE; color:#2E2A26}
+  .s15 .wordmark{font:700 clamp(30px,4.4vw,44px)/1.05 Rubik,Inter,sans-serif; color:#2E2A26; text-shadow:4px 4px 0 #F0B429; letter-spacing:-.01em}
+  .s15 .tagline{font:500 13.5px Rubik,sans-serif; color:#8A7E6E; margin-top:14px}
+  .s15 .mock-card{background:#fff; border:none; border-radius:16px; box-shadow:0 6px 0 #F0B429; color:#2E2A26; font-family:Rubik,sans-serif}
+  .s15 .mock-logo{background:#2BA6A0; border-radius:6px}
+  .s15 .mock-btn{background:#E8503A; color:#fff; border-radius:99px}
+  .s15 .mock-check{color:#2BA6A0}
+
+  /* ----- S16 Blueprint ----- */
+  .s16 .style-stage{background:#103C77; color:#EAF2FF;
+    background-image:linear-gradient(rgba(255,255,255,.09) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.09) 1px, transparent 1px);
+    background-size:26px 26px}
+  .s16 .wordmark{font:600 clamp(32px,4.8vw,48px)/1 "Barlow Condensed",sans-serif; text-transform:uppercase; letter-spacing:.1em; color:#EAF2FF}
+  .s16 .wordmark-zone::after{content:"DWG № 001 — DAILY SYSTEM"; display:block; font:500 10.5px "IBM Plex Mono",monospace; letter-spacing:.18em; color:#9FBCE8; margin-top:12px}
+  .s16 .tagline{font:400 13px Inter,sans-serif; color:#C4D6F2; margin-top:8px}
+  .s16 .mock-card{background:rgba(255,255,255,.05); border:1px dashed #9FBCE8; color:#EAF2FF; border-radius:4px}
+  .s16 .mock-task + .mock-task{border-top-color:rgba(255,255,255,.14)}
+  .s16 .mock-logo{background:#FFD34D; border-radius:1px}
+  .s16 .mock-btn{background:#EAF2FF; color:#103C77; border-radius:2px}
+  .s16 .mock-check{color:#EAF2FF; border-radius:2px}
+
+  /* ----- S17 Zen Garden ----- */
+  .s17 .style-stage{background:#F2F0EB; color:#4A4742}
+  .s17 .wordmark-zone::before{content:""; display:block; width:30px; height:30px; border:1.5px solid #C93A2B; border-radius:50%; margin-bottom:20px}
+  .s17 .wordmark{font:300 clamp(28px,4.2vw,42px)/1.1 Inter,sans-serif; letter-spacing:.2em; color:#4A4742}
+  .s17 .tagline{font:300 13px Inter,sans-serif; letter-spacing:.12em; color:#8B8680; margin-top:12px}
+  .s17 .mock-card{background:#FAF9F6; border:none; box-shadow:0 1px 3px rgba(60,55,50,.08); color:#4A4742}
+  .s17 .mock-logo{background:#C93A2B; border-radius:50%}
+  .s17 .mock-btn{background:transparent; color:#4A4742; border:1px solid #4A4742; border-radius:2px; font-weight:500}
+  .s17 .mock-check{color:#C93A2B}
+
+  /* ----- S18 Transit ----- */
+  .s18 .style-stage{background:#FFFFFF; color:#15181D}
+  .s18 .wordmark{font:700 clamp(30px,4.4vw,44px)/1.05 Inter,sans-serif; letter-spacing:-.035em; color:#15181D}
+  .s18 .wordmark-zone::after{content:""; display:block; height:10px; width:210px; margin-top:14px;
+    background:linear-gradient(90deg,#0039A6 0 48px, transparent 48px 56px, #00933C 56px 104px, transparent 104px 112px, #FF6319 112px 160px, transparent 160px 168px, #FCCC0A 168px 210px)}
+  .s18 .tagline{font:600 11.5px Inter,sans-serif; text-transform:uppercase; letter-spacing:.14em; color:#6E727B; margin-top:10px}
+  .s18 .mock-card{background:#fff; border:1px solid #D9DBE0; color:#15181D}
+  .s18 .mock-logo{background:#FCCC0A; border-radius:50%}
+  .s18 .mock-btn{background:#0039A6; color:#fff; border-radius:4px}
+  .s18 .mock-check{color:#FF6319}
+
+  /* ----- S19 Darkroom ----- */
+  .s19 .style-stage{background:#101010; color:#F2EFE8}
+  .s19 .wordmark{font:500 clamp(30px,4.4vw,44px)/1.05 "Space Grotesk",sans-serif; color:#F2EFE8; letter-spacing:.01em}
+  .s19 .wordmark-zone::after{content:""; display:block; height:10px; width:200px; margin-top:14px; opacity:.55;
+    background:repeating-linear-gradient(90deg,#F2EFE8 0 8px, transparent 8px 17px)}
+  .s19 .tagline{font:400 12px "IBM Plex Mono",monospace; color:#B9B4A8}
+  .s19 .mock-card{background:#1A1A1A; border:1px solid #2E2E2E; color:#F2EFE8}
+  .s19 .mock-task + .mock-task{border-top-color:rgba(255,255,255,.08)}
+  .s19 .mock-logo{background:#E0342C; border-radius:50%}
+  .s19 .mock-btn{background:#E0342C; color:#fff; border-radius:4px}
+  .s19 .mock-check{color:#E0342C}
+
+  /* ----- S20 Woodcut ----- */
+  .s20 .style-stage{background:#F3EBD8; color:#33251A}
+  .s20 .wordmark{font:700 clamp(30px,4.4vw,44px)/1.08 Fraunces,Georgia,serif; color:#33251A}
+  .s20 .wordmark-zone::after{content:"⁂"; display:block; margin-top:8px; color:#9E3B23; letter-spacing:.3em; font-size:15px}
+  .s20 .tagline{font:italic 500 14px Fraunces,Georgia,serif; color:#7A6A50}
+  .s20 .mock-card{background:#FAF3E1; border:2px solid #33251A; border-radius:3px; color:#33251A}
+  .s20 .mock-title{font-family:Fraunces,Georgia,serif}
+  .s20 .mock-logo{background:#9E3B23; border-radius:0}
+  .s20 .mock-btn{background:#33251A; color:#F3EBD8; border-radius:2px}
+  .s20 .mock-check{color:#9E3B23}
+
+  /* ----- S21 Daybreak ----- */
+  .s21 .style-stage{color:#402E1C;
+    background:radial-gradient(circle 46px at 82% 78%, #FFB627 0 45px, transparent 46px), linear-gradient(180deg,#FFF3DC, #FFFBF2)}
+  .s21 .wordmark{font:700 clamp(30px,4.4vw,44px)/1.05 "Space Grotesk",sans-serif; letter-spacing:-.02em; color:#402E1C}
+  .s21 .wordmark-zone::before{content:""; display:block; width:44px; height:22px; border-radius:22px 22px 0 0; background:#E8890C; margin-bottom:16px}
+  .s21 .tagline{font:500 13.5px Inter,sans-serif; color:#9A7A4E}
+  .s21 .mock-card{background:#FFFDF7; border:1px solid #F2DFC0; color:#402E1C}
+  .s21 .mock-logo{background:#FFB627; border-radius:50%}
+  .s21 .mock-btn{background:#E8890C; color:#fff; border-radius:8px}
+  .s21 .mock-check{color:#E8890C}
+
+  /* ----- S22 Slate ----- */
+  .s22 .style-stage{background:#EFEFED; color:#1C1C1E}
+  .s22 .wordmark-zone::before{content:""; display:block; width:12px; height:12px; background:#1C1C1E; margin-bottom:16px}
+  .s22 .wordmark{font:500 clamp(24px,3.8vw,38px)/1.1 "IBM Plex Mono",monospace; text-transform:uppercase; letter-spacing:.14em; color:#1C1C1E}
+  .s22 .tagline{font:400 13px Inter,sans-serif; color:#6E6E73; margin-top:12px}
+  .s22 .mock-card{background:#fff; border:1px solid #DCDCDA; color:#1C1C1E}
+  .s22 .mock-logo{background:#1C1C1E; border-radius:0}
+  .s22 .mock-btn{background:#1C1C1E; color:#fff; border-radius:6px}
+  .s22 .mock-check{color:#1C1C1E; border-radius:3px}
+
+  /* ----- S23 Retro OS ----- */
+  .s23 .style-stage{background:#CDD2DA; color:#000}
+  .s23 .wordmark-zone{background:#fff; border:2px solid #000; box-shadow:4px 4px 0 #000; padding:16px 18px; flex:0 1 auto; min-width:240px}
+  .s23 .wordmark-zone::before{content:""; display:block; height:12px; margin-bottom:14px;
+    background:repeating-linear-gradient(180deg,#000 0 1px, transparent 1px 3px)}
+  .s23 .wordmark{font:400 clamp(18px,2.8vw,30px)/1.25 Silkscreen,monospace; color:#000}
+  .s23 .tagline{font:400 11px "IBM Plex Mono",monospace; color:#3A3F47; margin-top:10px}
+  .s23 .mock-card{background:#fff; border:2px solid #000; border-radius:0; box-shadow:4px 4px 0 #000; color:#000}
+  .s23 .mock-title{font-family:Silkscreen,monospace; font-size:12px}
+  .s23 .mock-task{font:400 12px "IBM Plex Mono",monospace}
+  .s23 .mock-logo{background:#2A5CC4; border-radius:0}
+  .s23 .mock-btn{background:#fff; color:#000; border:2px solid #000; border-radius:0; box-shadow:2px 2px 0 #000; font-family:"IBM Plex Mono",monospace}
+  .s23 .mock-check{color:#000; border-radius:0}
+
+  /* ----- S24 Canyon ----- */
+  .s24 .style-stage{background:#EAD9C2; color:#4E3226}
+  .s24 .wordmark{font:600 clamp(30px,4.4vw,44px)/1.08 "Zilla Slab",Georgia,serif; color:#4E3226}
+  .s24 .wordmark-zone::after{content:""; display:block; height:8px; width:180px; margin-top:14px;
+    background:repeating-linear-gradient(135deg,#B4552D 0 8px, transparent 8px 16px)}
+  .s24 .tagline{font:500 13px Inter,sans-serif; color:#8A6A4C}
+  .s24 .mock-card{background:#F6EBDB; border:1.5px solid #4E3226; border-radius:8px; color:#4E3226}
+  .s24 .mock-title{font-family:"Zilla Slab",serif}
+  .s24 .mock-logo{background:#5C7351; border-radius:50%}
+  .s24 .mock-btn{background:#B4552D; color:#F6EBDB; border-radius:6px}
+  .s24 .mock-check{color:#B4552D}
+
+  /* ----- S25 Regatta ----- */
+  .s25 .style-stage{background:#FFFFFF; color:#12294B}
+  .s25 .wordmark{font:600 clamp(28px,4.2vw,42px)/1.05 "Zilla Slab",Georgia,serif; text-transform:uppercase; letter-spacing:.08em; color:#12294B}
+  .s25 .wordmark-zone::after{content:""; display:block; height:10px; width:192px; margin-top:14px; border:1px solid #12294B;
+    background:linear-gradient(90deg,#12294B 0 25%, #fff 25% 50%, #D6402B 50% 75%, #fff 75% 100%)}
+  .s25 .tagline{font:600 11px Inter,sans-serif; text-transform:uppercase; letter-spacing:.18em; color:#7A8699; margin-top:10px}
+  .s25 .mock-card{background:#fff; border:2px solid #12294B; border-radius:8px; color:#12294B}
+  .s25 .mock-logo{background:#D6402B; border-radius:1px; transform:rotate(45deg)}
+  .s25 .mock-btn{background:#12294B; color:#fff; border-radius:5px}
+  .s25 .mock-check{color:#D6402B}
+
+  /* ----- S26 Marginalia ----- */
+  .s26 .style-stage{background:#FBF8F1; color:#26313A;
+    background-image:linear-gradient(90deg, transparent 0 44px, rgba(192,57,43,.35) 44px 45px, transparent 45px 100%),
+      repeating-linear-gradient(180deg, transparent 0 27px, #DCE6EC 27px 28px)}
+  .s26 .wordmark{font:600 clamp(28px,4.2vw,42px)/1.1 Lora,Georgia,serif; color:#26313A}
+  .s26 .wordmark::after{content:"  ← this one?"; font:600 clamp(14px,2vw,20px)/1 Caveat,cursive; color:#C0392B; vertical-align:middle}
+  .s26 .tagline{font:600 17px Caveat,cursive; color:#6B7683}
+  .s26 .mock-card{background:#fff; border:1px solid #E2DFD6; color:#26313A}
+  .s26 .mock-title{font-family:Lora,Georgia,serif}
+  .s26 .mock-logo{background:#C0392B; border-radius:50%}
+  .s26 .mock-btn{background:#26313A; color:#fff; border-radius:6px}
+  .s26 .mock-check{color:#C0392B}
+
+  /* ----- S27 Observatory ----- */
+  .s27 .style-stage{background:#0B1526; color:#EDE6D4;
+    background-image:radial-gradient(circle 1px at 18% 26%, rgba(255,255,255,.9) 0 1px, transparent 2px),
+      radial-gradient(circle 1px at 64% 18%, rgba(255,255,255,.6) 0 1px, transparent 2px),
+      radial-gradient(circle 1.5px at 82% 64%, rgba(217,178,74,.9) 0 1.5px, transparent 3px),
+      radial-gradient(circle 1px at 38% 74%, rgba(255,255,255,.5) 0 1px, transparent 2px),
+      radial-gradient(circle 1px at 90% 30%, rgba(255,255,255,.7) 0 1px, transparent 2px)}
+  .s27 .wordmark{font:400 clamp(32px,4.6vw,46px)/1.08 "DM Serif Display",Georgia,serif; color:#EDE6D4; letter-spacing:.02em}
+  .s27 .wordmark-zone::after{content:"✦ · ✧ · ✦"; display:block; margin-top:10px; color:#D9B24A; font-size:13px; letter-spacing:.4em}
+  .s27 .tagline{font:400 13px Inter,sans-serif; color:#93A0B8; margin-top:8px}
+  .s27 .mock-card{background:#121F35; border:1px solid #24344F; color:#EDE6D4}
+  .s27 .mock-task + .mock-task{border-top-color:rgba(255,255,255,.08)}
+  .s27 .mock-logo{background:#D9B24A; border-radius:50%}
+  .s27 .mock-btn{background:#D9B24A; color:#122036; border-radius:5px}
+  .s27 .mock-check{color:#D9B24A}
+
+  /* ---------- outro + tray ---------- */
+  .outro{margin-top:44px; padding:22px 26px; background:var(--card); border:1px solid var(--line); border-radius:12px; font-size:14px; color:#3A3D44; max-width:820px}
+  .outro b{font-weight:600}
+  footer{margin-top:36px; font-size:12px; color:var(--muted)}
+
+  .tray{
+    position:fixed; bottom:18px; left:50%; transform:translateX(-50%);
+    background:var(--card); border:1px solid var(--line); border-radius:99px;
+    box-shadow:0 8px 28px rgba(20,22,28,.14); padding:10px 12px 10px 20px;
+    display:flex; align-items:center; gap:14px; font-size:13.5px; white-space:nowrap; z-index:50; max-width:94vw;
+  }
+  .tray .sep{color:var(--line)}
+  .tray b{font-weight:650}
+  #resetName{border:none; background:none; cursor:pointer; color:var(--muted); font-size:14px; padding:2px 4px}
+  #resetName:hover{color:var(--ink)}
+  #trayCount{color:var(--muted)}
+  #copyBtn{
+    border:none; background:var(--ink); color:#fff; font:600 12.5px Inter,sans-serif;
+    padding:8px 15px; border-radius:99px; cursor:pointer;
+  }
+  #copyBtn:hover{background:#000}
+  @media (max-width:640px){ .tray{gap:9px; padding-left:14px; font-size:12.5px} }
+</style>
+</head>
+<body>
+
+<header class="page-head">
+  <div class="page-head-inner">
+    <div class="kicker">Prisms · brand exploration · July 2026</div>
+    <h1>What else could it be called?</h1>
+    <p class="lede">
+      <b>20 name candidates</b> in five families, and <b>27 brand styles</b> to dress them in.
+      The current name, <b>Prisms</b>, stays loaded as the default wordmark so every candidate is judged against the incumbent.
+    </p>
+    <div class="howto">
+      <span>Click any name → see it as a wordmark in all 27 styles</span>
+      <span>★ star names &amp; styles you like — survives reloads</span>
+      <span>Copy your shortlist from the tray below when done</span>
+    </div>
+  </div>
+</header>
+
+<main>
+
+<!-- ==================== NAMES ==================== -->
+<section id="names">
+  <h2>The 20 names</h2>
+  <p class="section-note">
+    <b>Crowding</b> is my offline gut-check of how contested each name feels (similar products, famous marks) —
+    it is <em>not</em> a trademark or domain search. Verify before falling in love.
+  </p>
+
+  <div class="family">
+    <h3>Light &amp; Optics</h3>
+    <p class="fam-desc">Continuity picks — keep the Prisms heritage, sharpen the metaphor.</p>
+    <div class="name-grid">
+
+      <article class="name-card" data-name="Refract" title="Click to preview this name in the styles below">
+        <div class="name-row"><h3 class="name">Refract</h3><button class="star" aria-label="Shortlist Refract">☆</button></div>
+        <p class="why">Prisms as a verb. One white beam of “everything I have to do” goes in; separate, ordered colors come out. The name does what the app does.</p>
+        <p class="fit"><b>Flatters:</b> My Day — one day, split into focus.</p>
+        <div class="meta"><span class="chip risk-lowmed">Crowding: low–med</span><span class="risk-note">a few small dev tools, nothing dominant</span></div>
+      </article>
+
+      <article class="name-card" data-name="Facet" title="Click to preview this name in the styles below">
+        <div class="name-row"><h3 class="name">Facet</h3><button class="star" aria-label="Shortlist Facet">☆</button></div>
+        <p class="why">One life, many faces: tasks, journal, habits, projects are facets of the same stone — and this is where they meet. Quietly premium, easy to say in any language.</p>
+        <p class="fit"><b>Flatters:</b> the grouped sidebar — every area one facet.</p>
+        <div class="meta"><span class="chip risk-med">Crowding: medium</span><span class="risk-note">common word; a wealth-mgmt firm uses it</span></div>
+      </article>
+
+      <article class="name-card" data-name="Spectra" title="Click to preview this name in the styles below">
+        <div class="name-row"><h3 class="name">Spectra</h3><button class="star" aria-label="Shortlist Spectra">☆</button></div>
+        <p class="why">What a prism produces: the full range of your life laid out in order, nothing blended into mud. The plural feels like a system, not a tool.</p>
+        <p class="fit"><b>Flatters:</b> Dashboard + Projects — the whole range at a glance.</p>
+        <div class="meta"><span class="chip risk-med">Crowding: medium</span><span class="risk-note">scattered brands across industries</span></div>
+      </article>
+
+      <article class="name-card" data-name="Lumen" title="Click to preview this name in the styles below">
+        <div class="name-row"><h3 class="name">Lumen</h3><button class="star" aria-label="Shortlist Lumen">☆</button></div>
+        <p class="why">The unit of light output. A day well-run has a brightness to it — this is where you generate it. Short, latinate, timeless.</p>
+        <p class="fit"><b>Flatters:</b> Habits &amp; streaks — output you can measure.</p>
+        <div class="meta"><span class="chip risk-high">Crowding: high</span><span class="risk-note">telecom giant, metabolism device, PHP framework</span></div>
+      </article>
+
+      <article class="name-card" data-name="Aperture" title="Click to preview this name in the styles below">
+        <div class="name-row"><h3 class="name">Aperture</h3><button class="star" aria-label="Shortlist Aperture">☆</button></div>
+        <p class="why">The mechanism that decides how much light gets in. Attention as a dial you set, not an accident that happens to you.</p>
+        <p class="fit"><b>Flatters:</b> the global focus timer.</p>
+        <div class="meta"><span class="chip risk-med">Crowding: medium</span><span class="risk-note">Apple’s retired photo app; Portal’s lab is nerd-charm, not a competitor</span></div>
+      </article>
+
+    </div>
+  </div>
+
+  <div class="family">
+    <h3>Time &amp; Rhythm</h3>
+    <p class="fam-desc">The system that keeps you ticking — daily, weekly, seasonal.</p>
+    <div class="name-grid">
+
+      <article class="name-card" data-name="Cadence" title="Click to preview this name in the styles below">
+        <div class="name-row"><h3 class="name">Cadence</h3><button class="star" aria-label="Shortlist Cadence">☆</button></div>
+        <p class="why">The rhythm a good week settles into: plan, do, review, repeat. Musical and human where most productivity words are cold.</p>
+        <p class="fit"><b>Flatters:</b> Review + Habits — the weekly beat.</p>
+        <div class="meta"><span class="chip risk-medhigh">Crowding: med–high</span><span class="risk-note">EDA giant (far field) + several calendar startups</span></div>
+      </article>
+
+      <article class="name-card" data-name="Meridian" title="Click to preview this name in the styles below">
+        <div class="name-row"><h3 class="name">Meridian</h3><button class="star" aria-label="Shortlist Meridian">☆</button></div>
+        <p class="why">The line the sun crosses at noon — time and place in one word. A reference line for the day; everything is measured from it.</p>
+        <p class="fit"><b>Flatters:</b> Agenda — the day has a spine.</p>
+        <div class="meta"><span class="chip risk-med">Crowding: medium</span><span class="risk-note">banks &amp; audio brands use it; none in this space</span></div>
+      </article>
+
+      <article class="name-card" data-name="Sundial" title="Click to preview this name in the styles below">
+        <div class="name-row"><h3 class="name">Sundial</h3><button class="star" aria-label="Shortlist Sundial">☆</button></div>
+        <p class="why">The first instrument that turned light into a plan for the day — which is literally the product. Concrete, friendly, spellable by ear.</p>
+        <p class="fit"><b>Flatters:</b> My Day + Agenda; bridges the Prisms light-heritage.</p>
+        <div class="meta"><span class="chip risk-lowmed">Crowding: low–med</span><span class="risk-note">a small analytics startup used it</span></div>
+      </article>
+
+      <article class="name-card" data-name="Vesper" title="Click to preview this name in the styles below">
+        <div class="name-row"><h3 class="name">Vesper</h3><button class="star" aria-label="Shortlist Vesper">☆</button></div>
+        <p class="why">The evening star — and the hour when the day gets written down and closed. Elegant, a little moody; owns the nightly ritual.</p>
+        <p class="fit"><b>Flatters:</b> Journal + evening review.</p>
+        <div class="meta"><span class="chip risk-med">Crowding: medium</span><span class="risk-note">the cocktail, the Bond character, and a beloved-but-retired iOS notes app</span></div>
+      </article>
+
+      <article class="name-card" data-name="Mainspring" title="Click to preview this name in the styles below">
+        <div class="name-row"><h3 class="name">Mainspring</h3><button class="star" aria-label="Shortlist Mainspring">☆</button></div>
+        <p class="why">The coiled spring that powers a watch all week from one winding. Your system as the thing that drives the days — and a wink at the wearables roadmap.</p>
+        <p class="fit"><b>Flatters:</b> Automations + the watch plans.</p>
+        <div class="meta"><span class="chip risk-low">Crowding: low</span><span class="risk-note">clear in this space</span></div>
+      </article>
+
+    </div>
+  </div>
+
+  <div class="family">
+    <h3>Journey &amp; Structure</h3>
+    <p class="fam-desc">Progress you can point at; structure that holds you steady.</p>
+    <div class="name-grid">
+
+      <article class="name-card" data-name="Waypoint" title="Click to preview this name in the styles below">
+        <div class="name-row"><h3 class="name">Waypoint</h3><button class="star" aria-label="Shortlist Waypoint">☆</button></div>
+        <p class="why">A route is just a chain of small fixed points. Plans you can actually hit, one mark at a time.</p>
+        <p class="fit"><b>Flatters:</b> Tasks &amp; substeps — every step a point on the route.</p>
+        <div class="meta"><span class="chip risk-med">Crowding: medium</span><span class="risk-note">HashiCorp’s (discontinued) deploy tool — devs know it</span></div>
+      </article>
+
+      <article class="name-card" data-name="Cairn" title="Click to preview this name in the styles below">
+        <div class="name-row"><h3 class="name">Cairn <span class="phon">/ KAIRN /</span></h3><button class="star" aria-label="Shortlist Cairn">☆</button></div>
+        <p class="why">The stone stacks that mark a trail — built one rock at a time. Streaks and progress made physical; you can see how far you’ve come.</p>
+        <p class="fit"><b>Flatters:</b> Habits — one stone a day.</p>
+        <div class="meta"><span class="chip risk-lowmed">Crowding: low–med</span><span class="risk-note">an outdoor-gear subscription box</span></div>
+      </article>
+
+      <article class="name-card" data-name="Keel" title="Click to preview this name in the styles below">
+        <div class="name-row"><h3 class="name">Keel</h3><button class="star" aria-label="Shortlist Keel">☆</button></div>
+        <p class="why">The part of the boat you never see that keeps the whole thing steady — and lets you sail <em>against</em> the wind. “On an even keel” is the brand promise.</p>
+        <p class="fit"><b>Flatters:</b> the whole system — calm-productivity positioning.</p>
+        <div class="meta"><span class="chip risk-low">Crowding: low</span><span class="risk-note">only a tiny k8s tool shares it</span></div>
+      </article>
+
+      <article class="name-card" data-name="Trellis" title="Click to preview this name in the styles below">
+        <div class="name-row"><h3 class="name">Trellis</h3><button class="star" aria-label="Shortlist Trellis">☆</button></div>
+        <p class="why">Structure that doesn’t force growth — it just gives it something to climb. The kindest possible metaphor for routines.</p>
+        <p class="fit"><b>Flatters:</b> Habits + Projects — scaffolding, not pressure.</p>
+        <div class="meta"><span class="chip risk-lowmed">Crowding: low–med</span><span class="risk-note">a WordPress dev tool shares it</span></div>
+      </article>
+
+      <article class="name-card" data-name="Strata" title="Click to preview this name in the styles below">
+        <div class="name-row"><h3 class="name">Strata</h3><button class="star" aria-label="Shortlist Strata">☆</button></div>
+        <p class="why">Days deposit into layers: task → project → area → life. Geological patience — your record accumulates into something solid.</p>
+        <p class="fit"><b>Flatters:</b> Journal + Review + Dashboard — the accumulated record.</p>
+        <div class="meta"><span class="chip risk-med">Crowding: medium</span><span class="risk-note">a retired O’Reilly conference; real-estate term in AU/NZ</span></div>
+      </article>
+
+    </div>
+  </div>
+
+  <div class="family">
+    <h3>Paper &amp; Ink</h3>
+    <p class="fam-desc">Journal-forward — the writing desk as the center of gravity.</p>
+    <div class="name-grid">
+
+      <article class="name-card" data-name="Daybook" title="Click to preview this name in the styles below">
+        <div class="name-row"><h3 class="name">Daybook</h3><button class="star" aria-label="Shortlist Daybook">☆</button></div>
+        <p class="why">The historical name for the ledger you wrote each day’s business in before sorting it — which is exactly My Day + Journal + Review. Needs zero explanation.</p>
+        <p class="fit"><b>Flatters:</b> Journal + My Day, in one old word.</p>
+        <div class="meta"><span class="chip risk-medhigh">Crowding: med–high</span><span class="risk-note">a journaling app already trades under it on Android</span></div>
+      </article>
+
+      <article class="name-card" data-name="Folio" title="Click to preview this name in the styles below">
+        <div class="name-row"><h3 class="name">Folio</h3><button class="star" aria-label="Shortlist Folio">☆</button></div>
+        <p class="why">A leaf of a manuscript; a life kept in well-ordered pages. Compact, bookish, premium.</p>
+        <p class="fit"><b>Flatters:</b> Journal + the per-day .md export.</p>
+        <div class="meta"><span class="chip risk-med">Crowding: medium</span><span class="risk-note">assorted fintech “folios”</span></div>
+      </article>
+
+      <article class="name-card" data-name="Almanac" title="Click to preview this name in the styles below">
+        <div class="name-row"><h3 class="name">Almanac</h3><button class="star" aria-label="Shortlist Almanac">☆</button></div>
+        <p class="why">The book that holds a year’s rhythms — what’s coming, what recurs, what the season demands. Planning, recurrence and reflection in one word.</p>
+        <p class="fit"><b>Flatters:</b> Agenda + Review — the long rhythm.</p>
+        <div class="meta"><span class="chip risk-med">Crowding: medium</span><span class="risk-note">a VC-backed docs startup used it</span></div>
+      </article>
+
+    </div>
+  </div>
+
+  <div class="family">
+    <h3>Craft &amp; Practice</h3>
+    <p class="fam-desc">The daily discipline, and the place it all comes home to.</p>
+    <div class="name-grid">
+
+      <article class="name-card" data-name="Kata" title="Click to preview this name in the styles below">
+        <div class="name-row"><h3 class="name">Kata <span class="phon">/ KAH-tah /</span></h3><button class="star" aria-label="Shortlist Kata">☆</button></div>
+        <p class="why">The practiced form you repeat until it’s second nature. Habits and automations as craft, not willpower. Four letters, pronounceable everywhere.</p>
+        <p class="fit"><b>Flatters:</b> Habits + Automations.</p>
+        <div class="meta"><span class="chip risk-med">Crowding: medium</span><span class="risk-note">“code kata” culture + Kata Containers — arguably a feature for this audience</span></div>
+      </article>
+
+      <article class="name-card" data-name="Harbor" title="Click to preview this name in the styles below">
+        <div class="name-row"><h3 class="name">Harbor</h3><button class="star" aria-label="Shortlist Harbor">☆</button></div>
+        <p class="why">The home base every day departs from and returns to. Not about doing more — about having somewhere everything is held. Calm positioning in one word.</p>
+        <p class="fit"><b>Flatters:</b> the shell itself — the place you keep coming back to.</p>
+        <div class="meta"><span class="chip risk-medhigh">Crowding: med–high</span><span class="risk-note">CNCF’s container registry — every dev knows it</span></div>
+      </article>
+
+    </div>
+  </div>
+</section>
+
+<!-- ==================== STYLES ==================== -->
+<section id="styles">
+  <h2>The 27 brand styles</h2>
+  <p class="section-note">
+    Each is a full direction — palette, type, shape language, voice. The wordmark and the mini “My Day” card render
+    whichever name you clicked above (default: <b>Prisms</b>). Roughly what the topbar brand and a landing hero would feel like.
+    Styles 01–07 are the core, app-adjacent directions; 08–27 range wider — print, dark, retro, municipal — to map the whole territory.
+    Some go dark or loud on purpose; none touches a purple-pink gradient.
+  </p>
+
+  <!-- S1 -->
+  <article class="style-card s1" data-style="Gridlight">
+    <div class="style-meta">
+      <div class="style-kicker">Style 01</div>
+      <h3>Gridlight <button class="star" aria-label="Shortlist Gridlight">☆</button></h3>
+      <p class="style-desc">Swiss-calm software minimalism. Hairline borders, tabular numerals, one disciplined cobalt accent, whitespace doing the heavy lifting. The closest to the app’s current design language — brand and product become one continuous surface.</p>
+      <div class="keywords">precise · calm · engineered · quiet confidence</div>
+      <div class="cf"><b>cf.</b> Linear, Things 3</div>
+      <div class="swatches">
+        <div class="sw"><div class="sw-chip" style="background:#FBFBFA"></div><div class="sw-hex">FBFBFA</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#17181C"></div><div class="sw-hex">17181C</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#5C6470"></div><div class="sw-hex">5C6470</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#2456F0"></div><div class="sw-hex">2456F0</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#E7E7E4"></div><div class="sw-hex">E7E7E4</div></div>
+      </div>
+      <p class="voice"><b>Voice:</b> plain, exact, verbs first.</p>
+      <p class="pairs"><b>Wears well on:</b> Refract, Waypoint, Strata</p>
+      <div class="typenote">Inter 650 headlines · Inter 400 body · tabular numerals</div>
+    </div>
+    <div class="style-stage">
+      <div class="wordmark-zone">
+        <span class="wordmark name-slot">Prisms</span>
+        <span class="tagline">Plan the day. Close the loop.</span>
+      </div>
+      <div class="mock"><div class="mock-card">
+        <div class="mock-brandrow"><span class="mock-logo"></span><span class="mock-brand name-slot">Prisms</span></div>
+        <div class="mock-title">My Day</div>
+        <div class="mock-task"><span class="mock-check"></span>Review sprint notes</div>
+        <div class="mock-task done"><span class="mock-check"></span>Morning pages</div>
+        <button class="mock-btn">Start focus</button>
+      </div></div>
+    </div>
+  </article>
+
+  <!-- S2 -->
+  <article class="style-card s2" data-style="Warm Paper">
+    <div class="style-meta">
+      <div class="style-kicker">Style 02</div>
+      <h3>Warm Paper <button class="star" aria-label="Shortlist Warm Paper">☆</button></h3>
+      <p class="style-desc">Analog and literary: cream stock, ink-brown text, a terracotta accent that feels hand-set. Puts the Journal at the center of the brand — software that behaves like a good notebook.</p>
+      <div class="keywords">tactile · journal-first · grounded · unhurried</div>
+      <div class="cf"><b>cf.</b> iA Writer, Bear, Field Notes</div>
+      <div class="swatches">
+        <div class="sw"><div class="sw-chip" style="background:#F6F1E7"></div><div class="sw-hex">F6F1E7</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#2A2520"></div><div class="sw-hex">2A2520</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#C05B33"></div><div class="sw-hex">C05B33</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#D9A441"></div><div class="sw-hex">D9A441</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#E4DCC9"></div><div class="sw-hex">E4DCC9</div></div>
+      </div>
+      <p class="voice"><b>Voice:</b> literary but brisk.</p>
+      <p class="pairs"><b>Wears well on:</b> Daybook, Folio, Almanac, Vesper</p>
+      <div class="typenote">Fraunces 600 headlines · Inter 400 body · dashed rules</div>
+    </div>
+    <div class="style-stage">
+      <div class="wordmark-zone">
+        <span class="wordmark name-slot">Prisms</span>
+        <span class="tagline">Write it down before it evaporates.</span>
+      </div>
+      <div class="mock"><div class="mock-card">
+        <div class="mock-brandrow"><span class="mock-logo"></span><span class="mock-brand name-slot">Prisms</span></div>
+        <div class="mock-title">My Day</div>
+        <div class="mock-task"><span class="mock-check"></span>Review sprint notes</div>
+        <div class="mock-task done"><span class="mock-check"></span>Morning pages</div>
+        <button class="mock-btn">Start focus</button>
+      </div></div>
+    </div>
+  </article>
+
+  <!-- S3 -->
+  <article class="style-card s3" data-style="Prismatic">
+    <div class="style-meta">
+      <div class="style-kicker">Style 03</div>
+      <h3>Prismatic <button class="star" aria-label="Shortlist Prismatic">☆</button></h3>
+      <p class="style-desc">The light-heritage direction: airy white, glassy cards, wide-tracked type, and a single restrained brand device — a thin spectral hairline running amber → teal → sky (deliberately no purple, no pink). Optical, technical, weightless.</p>
+      <div class="keywords">luminous · airy · optical · quietly technical</div>
+      <div class="cf"><b>cf.</b> Notion Calendar, Arc’s lighter moments</div>
+      <div class="swatches">
+        <div class="sw"><div class="sw-chip" style="background:#FCFDFF"></div><div class="sw-hex">FCFDFF</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#1B2432"></div><div class="sw-hex">1B2432</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#0EA5E9"></div><div class="sw-hex">0EA5E9</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#12B5A5"></div><div class="sw-hex">12B5A5</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#F2B23E"></div><div class="sw-hex">F2B23E</div></div>
+      </div>
+      <p class="voice"><b>Voice:</b> clear; optical metaphors used sparingly.</p>
+      <p class="pairs"><b>Wears well on:</b> Refract, Spectra, Facet, Lumen — and Prisms itself</p>
+      <div class="typenote">Space Grotesk 500 headlines (wide tracking) · Inter 400 body</div>
+    </div>
+    <div class="style-stage">
+      <div class="wordmark-zone">
+        <span class="wordmark name-slot">Prisms</span>
+        <span class="tagline">One day, split into focus.</span>
+      </div>
+      <div class="mock"><div class="mock-card">
+        <div class="mock-brandrow"><span class="mock-logo"></span><span class="mock-brand name-slot">Prisms</span></div>
+        <div class="mock-title">My Day</div>
+        <div class="mock-task"><span class="mock-check"></span>Review sprint notes</div>
+        <div class="mock-task done"><span class="mock-check"></span>Morning pages</div>
+        <button class="mock-btn">Start focus</button>
+      </div></div>
+    </div>
+  </article>
+
+  <!-- S4 -->
+  <article class="style-card s4" data-style="Fieldline">
+    <div class="style-meta">
+      <div class="style-kicker">Style 04</div>
+      <h3>Fieldline <button class="star" aria-label="Shortlist Fieldline">☆</button></h3>
+      <p class="style-desc">Topo-map energy: chalk paper, pine ink, faint contour rings, condensed uppercase wayfinding type and a blaze-orange trail marker. Frames the product as navigation — you’re going somewhere, and it keeps you on route.</p>
+      <div class="keywords">purposeful · outdoor · waymarked · sturdy</div>
+      <div class="cf"><b>cf.</b> Gaia GPS, AllTrails, Topo Designs</div>
+      <div class="swatches">
+        <div class="sw"><div class="sw-chip" style="background:#EFEBE0"></div><div class="sw-hex">EFEBE0</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#1F4A38"></div><div class="sw-hex">1F4A38</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#7A9278"></div><div class="sw-hex">7A9278</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#E2571B"></div><div class="sw-hex">E2571B</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#D8D2C2"></div><div class="sw-hex">D8D2C2</div></div>
+      </div>
+      <p class="voice"><b>Voice:</b> expedition log.</p>
+      <p class="pairs"><b>Wears well on:</b> Waypoint, Cairn, Keel, Meridian</p>
+      <div class="typenote">Barlow Condensed 600 caps headlines · Inter 400 body · contour motifs</div>
+    </div>
+    <div class="style-stage">
+      <div class="wordmark-zone">
+        <span class="wordmark name-slot">Prisms</span>
+        <span class="tagline">Mark the waypoint. Keep moving.</span>
+      </div>
+      <div class="mock"><div class="mock-card">
+        <div class="mock-brandrow"><span class="mock-logo"></span><span class="mock-brand name-slot">Prisms</span></div>
+        <div class="mock-title">My Day</div>
+        <div class="mock-task"><span class="mock-check"></span>Review sprint notes</div>
+        <div class="mock-task done"><span class="mock-check"></span>Morning pages</div>
+        <button class="mock-btn">Start focus</button>
+      </div></div>
+    </div>
+  </article>
+
+  <!-- S5 -->
+  <article class="style-card s5" data-style="Instrument">
+    <div class="style-meta">
+      <div class="style-kicker">Style 05</div>
+      <h3>Instrument <button class="star" aria-label="Shortlist Instrument">☆</button></h3>
+      <p class="style-desc">Horology and chart-room: navy ink on chart cream, brass tick-marks, engraved serif with mono numerals. Built to feel like a precision object you’ll still trust in twenty years — and it makes the watch-face roadmap feel inevitable.</p>
+      <div class="keywords">crafted · enduring · precise · heirloom</div>
+      <div class="cf"><b>cf.</b> Hodinkee, Shinola, field-watch dials</div>
+      <div class="swatches">
+        <div class="sw"><div class="sw-chip" style="background:#F4EEDF"></div><div class="sw-hex">F4EEDF</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#16233D"></div><div class="sw-hex">16233D</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#B98A2F"></div><div class="sw-hex">B98A2F</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#7A2E2A"></div><div class="sw-hex">7A2E2A</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#DED4B9"></div><div class="sw-hex">DED4B9</div></div>
+      </div>
+      <p class="voice"><b>Voice:</b> instrument-plate concision.</p>
+      <p class="pairs"><b>Wears well on:</b> Mainspring, Sundial, Keel, Meridian</p>
+      <div class="typenote">IBM Plex Serif 600 headlines · IBM Plex Mono labels &amp; numerals</div>
+    </div>
+    <div class="style-stage">
+      <div class="wordmark-zone">
+        <span class="wordmark name-slot">Prisms</span>
+        <span class="tagline">Wound once · runs all week</span>
+      </div>
+      <div class="mock"><div class="mock-card">
+        <div class="mock-brandrow"><span class="mock-logo"></span><span class="mock-brand name-slot">Prisms</span></div>
+        <div class="mock-title">My Day</div>
+        <div class="mock-task"><span class="mock-check"></span>Review sprint notes</div>
+        <div class="mock-task done"><span class="mock-check"></span>Morning pages</div>
+        <button class="mock-btn">Start focus</button>
+      </div></div>
+    </div>
+  </article>
+
+  <!-- S6 -->
+  <article class="style-card s6" data-style="Morning">
+    <div class="style-meta">
+      <div class="style-kicker">Style 06</div>
+      <h3>Morning <button class="star" aria-label="Shortlist Morning">☆</button></h3>
+      <p class="style-desc">Soft, warm, zero-guilt: rounded geometry, diffuse shadows, sage and sky on warm white. The gentlest read of the product — a daily ritual you keep, not a taskmaster. Calm without drifting into wellness-woo.</p>
+      <div class="keywords">gentle · habitual · warm · low-pressure</div>
+      <div class="cf"><b>cf.</b> Headspace (calmer), Rise, Balance</div>
+      <div class="swatches">
+        <div class="sw"><div class="sw-chip" style="background:#FAF7F2"></div><div class="sw-hex">FAF7F2</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#3B3833"></div><div class="sw-hex">3B3833</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#7C9473"></div><div class="sw-hex">7C9473</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#9DBBD3"></div><div class="sw-hex">9DBBD3</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#E9DFCE"></div><div class="sw-hex">E9DFCE</div></div>
+      </div>
+      <p class="voice"><b>Voice:</b> kind coach, zero guilt.</p>
+      <p class="pairs"><b>Wears well on:</b> Trellis, Cairn, Harbor, Kata</p>
+      <div class="typenote">Plus Jakarta Sans 700 headlines · 400 body · 18px radii, pill buttons</div>
+    </div>
+    <div class="style-stage">
+      <div class="wordmark-zone">
+        <span class="wordmark name-slot">Prisms</span>
+        <span class="tagline">Small steps, kept.</span>
+      </div>
+      <div class="mock"><div class="mock-card">
+        <div class="mock-brandrow"><span class="mock-logo"></span><span class="mock-brand name-slot">Prisms</span></div>
+        <div class="mock-title">My Day</div>
+        <div class="mock-task"><span class="mock-check"></span>Review sprint notes</div>
+        <div class="mock-task done"><span class="mock-check"></span>Morning pages</div>
+        <button class="mock-btn">Start focus</button>
+      </div></div>
+    </div>
+  </article>
+
+  <!-- S7 -->
+  <article class="style-card s7" data-style="Signal">
+    <div class="style-meta">
+      <div class="style-kicker">Style 07</div>
+      <h3>Signal <button class="star" aria-label="Shortlist Signal">☆</button></h3>
+      <p class="style-desc">Editorial and decisive: bone white, true black, one shot of signal orange, oversized uppercase type, square corners. The loudest option here — for positioning the product as the tool for people who decide fast.</p>
+      <div class="keywords">confident · decisive · high-contrast · modern</div>
+      <div class="cf"><b>cf.</b> Teenage Engineering, Nothing</div>
+      <div class="swatches">
+        <div class="sw"><div class="sw-chip" style="background:#F4F3EE"></div><div class="sw-hex">F4F3EE</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#101010"></div><div class="sw-hex">101010</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#FF4D00"></div><div class="sw-hex">FF4D00</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#8B8E94"></div><div class="sw-hex">8B8E94</div></div>
+      </div>
+      <p class="voice"><b>Voice:</b> imperative, short.</p>
+      <p class="pairs"><b>Wears well on:</b> Refract, Kata, Strata, Waypoint</p>
+      <div class="typenote">Archivo Black caps headlines · Inter 400 body · square corners, thick rules</div>
+    </div>
+    <div class="style-stage">
+      <div class="wordmark-zone">
+        <span class="wordmark name-slot">Prisms</span>
+        <span class="tagline">Decide. Do. Done.</span>
+      </div>
+      <div class="mock"><div class="mock-card">
+        <div class="mock-brandrow"><span class="mock-logo"></span><span class="mock-brand name-slot">Prisms</span></div>
+        <div class="mock-title">My Day</div>
+        <div class="mock-task"><span class="mock-check"></span>Review sprint notes</div>
+        <div class="mock-task done"><span class="mock-check"></span>Morning pages</div>
+        <button class="mock-btn">Start focus</button>
+      </div></div>
+    </div>
+  </article>
+
+  <!-- S8 -->
+  <article class="style-card s8" data-style="Nightwatch">
+    <div class="style-meta">
+      <div class="style-kicker">Style 08</div>
+      <h3>Nightwatch <button class="star" aria-label="Shortlist Nightwatch">☆</button></h3>
+      <p class="style-desc">The after-hours counterpart to Gridlight: near-black navy, moonlit grays, one amber signal. Positions the product around the evening shutdown ritual — and doubles as a ready-made dark mode.</p>
+      <div class="keywords">nocturnal · focused · velvet-dark · technical</div>
+      <div class="cf"><b>cf.</b> Raycast, Obsidian, Linear dark</div>
+      <div class="swatches">
+        <div class="sw"><div class="sw-chip" style="background:#0F1219"></div><div class="sw-hex">0F1219</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#E8EAF0"></div><div class="sw-hex">E8EAF0</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#8891A5"></div><div class="sw-hex">8891A5</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#F2A93B"></div><div class="sw-hex">F2A93B</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#262C3B"></div><div class="sw-hex">262C3B</div></div>
+      </div>
+      <p class="voice"><b>Voice:</b> dry, low-lit, precise.</p>
+      <p class="pairs"><b>Wears well on:</b> Vesper, Lumen, Meridian</p>
+      <div class="typenote">Space Grotesk 500 · IBM Plex Mono labels · amber on near-black</div>
+    </div>
+    <div class="style-stage">
+      <div class="wordmark-zone">
+        <span class="wordmark name-slot">Prisms</span>
+        <span class="tagline">Close the day properly.</span>
+      </div>
+      <div class="mock"><div class="mock-card">
+        <div class="mock-brandrow"><span class="mock-logo"></span><span class="mock-brand name-slot">Prisms</span></div>
+        <div class="mock-title">My Day</div>
+        <div class="mock-task"><span class="mock-check"></span>Review sprint notes</div>
+        <div class="mock-task done"><span class="mock-check"></span>Morning pages</div>
+        <button class="mock-btn">Start focus</button>
+      </div></div>
+    </div>
+  </article>
+
+  <!-- S9 -->
+  <article class="style-card s9" data-style="Broadsheet">
+    <div class="style-meta">
+      <div class="style-kicker">Style 09</div>
+      <h3>Broadsheet <button class="star" aria-label="Shortlist Broadsheet">☆</button></h3>
+      <p class="style-desc">Masthead energy: black on white, hairline and double rules, a dab of press red. Your day as the morning edition — dignified, dated, done by print deadline.</p>
+      <div class="keywords">editorial · trustworthy · daily · typographic</div>
+      <div class="cf"><b>cf.</b> The Economist, Monocle, NYT apps</div>
+      <div class="swatches">
+        <div class="sw"><div class="sw-chip" style="background:#FFFFFF"></div><div class="sw-hex">FFFFFF</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#141414"></div><div class="sw-hex">141414</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#B62B23"></div><div class="sw-hex">B62B23</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#6E6A61"></div><div class="sw-hex">6E6A61</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#D8D5CC"></div><div class="sw-hex">D8D5CC</div></div>
+      </div>
+      <p class="voice"><b>Voice:</b> reported, matter-of-fact.</p>
+      <p class="pairs"><b>Wears well on:</b> Daybook, Almanac, Folio, Strata</p>
+      <div class="typenote">Lora 600 masthead · Inter body · hairline + double rules</div>
+    </div>
+    <div class="style-stage">
+      <div class="wordmark-zone">
+        <span class="wordmark name-slot">Prisms</span>
+        <span class="tagline">All the day’s tasks, fit to print</span>
+      </div>
+      <div class="mock"><div class="mock-card">
+        <div class="mock-brandrow"><span class="mock-logo"></span><span class="mock-brand name-slot">Prisms</span></div>
+        <div class="mock-title">My Day</div>
+        <div class="mock-task"><span class="mock-check"></span>Review sprint notes</div>
+        <div class="mock-task done"><span class="mock-check"></span>Morning pages</div>
+        <button class="mock-btn">Start focus</button>
+      </div></div>
+    </div>
+  </article>
+
+  <!-- S10 -->
+  <article class="style-card s10" data-style="Terminal">
+    <div class="style-meta">
+      <div class="style-kicker">Style 10</div>
+      <h3>Terminal <button class="star" aria-label="Shortlist Terminal">☆</button></h3>
+      <p class="style-desc">Phosphor green on near-black, everything monospaced, a blinking cursor in the wordmark. Unapologetically for developers; the brand promise is speed and zero ceremony.</p>
+      <div class="keywords">hacker-native · fast · keyboard-first · no-chrome</div>
+      <div class="cf"><b>cf.</b> terminal.shop, GitHub dark, Vercel CLI</div>
+      <div class="swatches">
+        <div class="sw"><div class="sw-chip" style="background:#0C1210"></div><div class="sw-hex">0C1210</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#D7E4DC"></div><div class="sw-hex">D7E4DC</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#3FD068"></div><div class="sw-hex">3FD068</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#55655C"></div><div class="sw-hex">55655C</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#1F2B24"></div><div class="sw-hex">1F2B24</div></div>
+      </div>
+      <p class="voice"><b>Voice:</b> terse; reads like a man page.</p>
+      <p class="pairs"><b>Wears well on:</b> Kata, Refract, Waypoint</p>
+      <div class="typenote">JetBrains Mono everywhere · lowercase wordmark · blinking cursor</div>
+    </div>
+    <div class="style-stage">
+      <div class="wordmark-zone">
+        <span class="wordmark name-slot">Prisms</span>
+        <span class="tagline">plan --today &amp;&amp; review --week</span>
+      </div>
+      <div class="mock"><div class="mock-card">
+        <div class="mock-brandrow"><span class="mock-logo"></span><span class="mock-brand name-slot">Prisms</span></div>
+        <div class="mock-title">My Day</div>
+        <div class="mock-task"><span class="mock-check"></span>Review sprint notes</div>
+        <div class="mock-task done"><span class="mock-check"></span>Morning pages</div>
+        <button class="mock-btn">Start focus</button>
+      </div></div>
+    </div>
+  </article>
+
+  <!-- S11 -->
+  <article class="style-card s11" data-style="Bauhaus">
+    <div class="style-meta">
+      <div class="style-kicker">Style 11</div>
+      <h3>Bauhaus <button class="star" aria-label="Shortlist Bauhaus">☆</button></h3>
+      <p class="style-desc">Lowercase geometry and primary color-blocking on gallery cream. Playful-serious modernism that makes organizing a life feel like composing a poster.</p>
+      <div class="keywords">geometric · primary · modernist · playful-serious</div>
+      <div class="cf"><b>cf.</b> Bauhaus Dessau posters, Vitsœ</div>
+      <div class="swatches">
+        <div class="sw"><div class="sw-chip" style="background:#F7F3EA"></div><div class="sw-hex">F7F3EA</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#16161A"></div><div class="sw-hex">16161A</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#E63B2E"></div><div class="sw-hex">E63B2E</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#1D4ED8"></div><div class="sw-hex">1D4ED8</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#F2C230"></div><div class="sw-hex">F2C230</div></div>
+      </div>
+      <p class="voice"><b>Voice:</b> manifesto-short.</p>
+      <p class="pairs"><b>Wears well on:</b> Facet, Kata, Strata</p>
+      <div class="typenote">Archivo Black lowercase · Inter body · primary tricolor bar</div>
+    </div>
+    <div class="style-stage">
+      <div class="wordmark-zone">
+        <span class="wordmark name-slot">Prisms</span>
+        <span class="tagline">Form follows the to-do.</span>
+      </div>
+      <div class="mock"><div class="mock-card">
+        <div class="mock-brandrow"><span class="mock-logo"></span><span class="mock-brand name-slot">Prisms</span></div>
+        <div class="mock-title">My Day</div>
+        <div class="mock-task"><span class="mock-check"></span>Review sprint notes</div>
+        <div class="mock-task done"><span class="mock-check"></span>Morning pages</div>
+        <button class="mock-btn">Start focus</button>
+      </div></div>
+    </div>
+  </article>
+
+  <!-- S12 -->
+  <article class="style-card s12" data-style="Riso">
+    <div class="style-meta">
+      <div class="style-kicker">Style 12</div>
+      <h3>Riso <button class="star" aria-label="Shortlist Riso">☆</button></h3>
+      <p class="style-desc">Risograph print charm — two inks, visible grain, slightly off-register shadows. Warm, indie, hand-made-by-machine; the merch and stickers design themselves.</p>
+      <div class="keywords">printed · indie · charming · hand-made-by-machine</div>
+      <div class="cf"><b>cf.</b> risograph zines, indie print shops</div>
+      <div class="swatches">
+        <div class="sw"><div class="sw-chip" style="background:#FAF6EC"></div><div class="sw-hex">FAF6EC</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#223042"></div><div class="sw-hex">223042</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#2A66C4"></div><div class="sw-hex">2A66C4</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#FF5A1F"></div><div class="sw-hex">FF5A1F</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#FFFDF5"></div><div class="sw-hex">FFFDF5</div></div>
+      </div>
+      <p class="voice"><b>Voice:</b> friendly, hand-pulled.</p>
+      <p class="pairs"><b>Wears well on:</b> Cairn, Daybook, Refract</p>
+      <div class="typenote">Space Grotesk 700 · overprint shadow · dot grain</div>
+    </div>
+    <div class="style-stage">
+      <div class="wordmark-zone">
+        <span class="wordmark name-slot">Prisms</span>
+        <span class="tagline">Two inks, one day at a time.</span>
+      </div>
+      <div class="mock"><div class="mock-card">
+        <div class="mock-brandrow"><span class="mock-logo"></span><span class="mock-brand name-slot">Prisms</span></div>
+        <div class="mock-title">My Day</div>
+        <div class="mock-task"><span class="mock-check"></span>Review sprint notes</div>
+        <div class="mock-task done"><span class="mock-check"></span>Morning pages</div>
+        <button class="mock-btn">Start focus</button>
+      </div></div>
+    </div>
+  </article>
+
+  <!-- S13 -->
+  <article class="style-card s13" data-style="Atelier">
+    <div class="style-meta">
+      <div class="style-kicker">Style 13</div>
+      <h3>Atelier <button class="star" aria-label="Shortlist Atelier">☆</button></h3>
+      <p class="style-desc">Gallery-white luxury: one grand serif, letterspaced labels, a gold hairline and acres of restraint. Positions an ordered life as a quiet luxury good.</p>
+      <div class="keywords">refined · restrained · gallery-white · luxurious</div>
+      <div class="cf"><b>cf.</b> Aesop, Kinfolk, The Row</div>
+      <div class="swatches">
+        <div class="sw"><div class="sw-chip" style="background:#FFFFFF"></div><div class="sw-hex">FFFFFF</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#1A1A18"></div><div class="sw-hex">1A1A18</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#A98A4C"></div><div class="sw-hex">A98A4C</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#8A8578"></div><div class="sw-hex">8A8578</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#E5E2DA"></div><div class="sw-hex">E5E2DA</div></div>
+      </div>
+      <p class="voice"><b>Voice:</b> hushed, exact.</p>
+      <p class="pairs"><b>Wears well on:</b> Folio, Vesper, Meridian</p>
+      <div class="typenote">DM Serif Display · letterspaced caps labels · gold hairlines</div>
+    </div>
+    <div class="style-stage">
+      <div class="wordmark-zone">
+        <span class="wordmark name-slot">Prisms</span>
+        <span class="tagline">An ordered life, quietly kept</span>
+      </div>
+      <div class="mock"><div class="mock-card">
+        <div class="mock-brandrow"><span class="mock-logo"></span><span class="mock-brand name-slot">Prisms</span></div>
+        <div class="mock-title">My Day</div>
+        <div class="mock-task"><span class="mock-check"></span>Review sprint notes</div>
+        <div class="mock-task done"><span class="mock-check"></span>Morning pages</div>
+        <button class="mock-btn">Start focus</button>
+      </div></div>
+    </div>
+  </article>
+
+  <!-- S14 -->
+  <article class="style-card s14" data-style="Grove">
+    <div class="style-meta">
+      <div class="style-kicker">Style 14</div>
+      <h3>Grove <button class="star" aria-label="Shortlist Grove">☆</button></h3>
+      <p class="style-desc">Botanical calm — leaf greens and soil browns on warm stone, a bookish serif, a fern flourish. Growth-metaphor branding done with a straight face.</p>
+      <div class="keywords">rooted · patient · organic · quietly alive</div>
+      <div class="cf"><b>cf.</b> Terrain, Patagonia Provisions</div>
+      <div class="swatches">
+        <div class="sw"><div class="sw-chip" style="background:#F4F3EC"></div><div class="sw-hex">F4F3EC</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#23331F"></div><div class="sw-hex">23331F</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#5F7A4E"></div><div class="sw-hex">5F7A4E</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#7A5C3E"></div><div class="sw-hex">7A5C3E</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#DCDACB"></div><div class="sw-hex">DCDACB</div></div>
+      </div>
+      <p class="voice"><b>Voice:</b> patient, botanical.</p>
+      <p class="pairs"><b>Wears well on:</b> Trellis, Cairn, Harbor</p>
+      <div class="typenote">Lora 600 + italic · fern ornament · botanical greens</div>
+    </div>
+    <div class="style-stage">
+      <div class="wordmark-zone">
+        <span class="wordmark name-slot">Prisms</span>
+        <span class="tagline">Tend the days; they add up.</span>
+      </div>
+      <div class="mock"><div class="mock-card">
+        <div class="mock-brandrow"><span class="mock-logo"></span><span class="mock-brand name-slot">Prisms</span></div>
+        <div class="mock-title">My Day</div>
+        <div class="mock-task"><span class="mock-check"></span>Review sprint notes</div>
+        <div class="mock-task done"><span class="mock-check"></span>Morning pages</div>
+        <button class="mock-btn">Start focus</button>
+      </div></div>
+    </div>
+  </article>
+
+  <!-- S15 -->
+  <article class="style-card s15" data-style="Paper Cut">
+    <div class="style-meta">
+      <div class="style-kicker">Style 15</div>
+      <h3>Paper Cut <button class="star" aria-label="Shortlist Paper Cut">☆</button></h3>
+      <p class="style-desc">Construction-paper brights, hard cut shadows and chunky rounded type. The friendliest possible take: productivity as craft-table play, not performance.</p>
+      <div class="keywords">playful · crafty · tactile · optimistic</div>
+      <div class="cf"><b>cf.</b> Slack’s illustration era, cut-paper zines</div>
+      <div class="swatches">
+        <div class="sw"><div class="sw-chip" style="background:#FFF8EE"></div><div class="sw-hex">FFF8EE</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#2E2A26"></div><div class="sw-hex">2E2A26</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#E8503A"></div><div class="sw-hex">E8503A</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#F0B429"></div><div class="sw-hex">F0B429</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#2BA6A0"></div><div class="sw-hex">2BA6A0</div></div>
+      </div>
+      <p class="voice"><b>Voice:</b> bright, encouraging.</p>
+      <p class="pairs"><b>Wears well on:</b> Kata, Cairn, Facet</p>
+      <div class="typenote">Rubik 700 · hard paper-cut shadows · pill buttons</div>
+    </div>
+    <div class="style-stage">
+      <div class="wordmark-zone">
+        <span class="wordmark name-slot">Prisms</span>
+        <span class="tagline">Cut the day down to size.</span>
+      </div>
+      <div class="mock"><div class="mock-card">
+        <div class="mock-brandrow"><span class="mock-logo"></span><span class="mock-brand name-slot">Prisms</span></div>
+        <div class="mock-title">My Day</div>
+        <div class="mock-task"><span class="mock-check"></span>Review sprint notes</div>
+        <div class="mock-task done"><span class="mock-check"></span>Morning pages</div>
+        <button class="mock-btn">Start focus</button>
+      </div></div>
+    </div>
+  </article>
+
+  <!-- S16 -->
+  <article class="style-card s16" data-style="Blueprint">
+    <div class="style-meta">
+      <div class="style-kicker">Style 16</div>
+      <h3>Blueprint <button class="star" aria-label="Shortlist Blueprint">☆</button></h3>
+      <p class="style-desc">White line-work on drafting blue with a fine grid and plate labels. Your week as an engineering drawing — dimensioned, revised, approved.</p>
+      <div class="keywords">technical · exact · drafted · confident</div>
+      <div class="cf"><b>cf.</b> engineering drawings, DIN standards</div>
+      <div class="swatches">
+        <div class="sw"><div class="sw-chip" style="background:#103C77"></div><div class="sw-hex">103C77</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#EAF2FF"></div><div class="sw-hex">EAF2FF</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#9FBCE8"></div><div class="sw-hex">9FBCE8</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#4A79BE"></div><div class="sw-hex">4A79BE</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#FFD34D"></div><div class="sw-hex">FFD34D</div></div>
+      </div>
+      <p class="voice"><b>Voice:</b> annotated, to spec.</p>
+      <p class="pairs"><b>Wears well on:</b> Waypoint, Strata, Keel</p>
+      <div class="typenote">Barlow Condensed caps · Plex Mono plate labels · drafted grid</div>
+    </div>
+    <div class="style-stage">
+      <div class="wordmark-zone">
+        <span class="wordmark name-slot">Prisms</span>
+        <span class="tagline">Draw the week to scale.</span>
+      </div>
+      <div class="mock"><div class="mock-card">
+        <div class="mock-brandrow"><span class="mock-logo"></span><span class="mock-brand name-slot">Prisms</span></div>
+        <div class="mock-title">My Day</div>
+        <div class="mock-task"><span class="mock-check"></span>Review sprint notes</div>
+        <div class="mock-task done"><span class="mock-check"></span>Morning pages</div>
+        <button class="mock-btn">Start focus</button>
+      </div></div>
+    </div>
+  </article>
+
+  <!-- S17 -->
+  <article class="style-card s17" data-style="Zen Garden">
+    <div class="style-meta">
+      <div class="style-kicker">Style 17</div>
+      <h3>Zen Garden <button class="star" aria-label="Shortlist Zen Garden">☆</button></h3>
+      <p class="style-desc">Greige, thin wide-tracked type, one hand-drawn enso and a single vermillion accent. The most restrained direction here; whitespace is the identity.</p>
+      <div class="keywords">sparse · breathing-room · wabi-sabi · essential</div>
+      <div class="cf"><b>cf.</b> Muji, Kinto, iA</div>
+      <div class="swatches">
+        <div class="sw"><div class="sw-chip" style="background:#F2F0EB"></div><div class="sw-hex">F2F0EB</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#4A4742"></div><div class="sw-hex">4A4742</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#C93A2B"></div><div class="sw-hex">C93A2B</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#8B8680"></div><div class="sw-hex">8B8680</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#FAF9F6"></div><div class="sw-hex">FAF9F6</div></div>
+      </div>
+      <p class="voice"><b>Voice:</b> almost silent.</p>
+      <p class="pairs"><b>Wears well on:</b> Kata, Keel, Harbor</p>
+      <div class="typenote">Inter 300, wide tracking · enso mark · one vermillion accent</div>
+    </div>
+    <div class="style-stage">
+      <div class="wordmark-zone">
+        <span class="wordmark name-slot">Prisms</span>
+        <span class="tagline">Less, kept well.</span>
+      </div>
+      <div class="mock"><div class="mock-card">
+        <div class="mock-brandrow"><span class="mock-logo"></span><span class="mock-brand name-slot">Prisms</span></div>
+        <div class="mock-title">My Day</div>
+        <div class="mock-task"><span class="mock-check"></span>Review sprint notes</div>
+        <div class="mock-task done"><span class="mock-check"></span>Morning pages</div>
+        <button class="mock-btn">Start focus</button>
+      </div></div>
+    </div>
+  </article>
+
+  <!-- S18 -->
+  <article class="style-card s18" data-style="Transit">
+    <div class="style-meta">
+      <div class="style-kicker">Style 18</div>
+      <h3>Transit <button class="star" aria-label="Shortlist Transit">☆</button></h3>
+      <p class="style-desc">Municipal wayfinding: bold grotesk, route-line color bars, roundel badges. Borrows a century of subway-map trust — legible at a glance, impossible to get lost.</p>
+      <div class="keywords">wayfinding · municipal · legible · iconic</div>
+      <div class="cf"><b>cf.</b> NYC MTA, TfL, Vignelli</div>
+      <div class="swatches">
+        <div class="sw"><div class="sw-chip" style="background:#FFFFFF"></div><div class="sw-hex">FFFFFF</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#15181D"></div><div class="sw-hex">15181D</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#0039A6"></div><div class="sw-hex">0039A6</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#FF6319"></div><div class="sw-hex">FF6319</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#FCCC0A"></div><div class="sw-hex">FCCC0A</div></div>
+      </div>
+      <p class="voice"><b>Voice:</b> public-signage clear.</p>
+      <p class="pairs"><b>Wears well on:</b> Waypoint, Meridian, Cadence</p>
+      <div class="typenote">Inter 700 tight · route-line color bar · roundel logo</div>
+    </div>
+    <div class="style-stage">
+      <div class="wordmark-zone">
+        <span class="wordmark name-slot">Prisms</span>
+        <span class="tagline">Next stop · done</span>
+      </div>
+      <div class="mock"><div class="mock-card">
+        <div class="mock-brandrow"><span class="mock-logo"></span><span class="mock-brand name-slot">Prisms</span></div>
+        <div class="mock-title">My Day</div>
+        <div class="mock-task"><span class="mock-check"></span>Review sprint notes</div>
+        <div class="mock-task done"><span class="mock-check"></span>Morning pages</div>
+        <button class="mock-btn">Start focus</button>
+      </div></div>
+    </div>
+  </article>
+
+  <!-- S19 -->
+  <article class="style-card s19" data-style="Darkroom">
+    <div class="style-meta">
+      <div class="style-kicker">Style 19</div>
+      <h3>Darkroom <button class="star" aria-label="Shortlist Darkroom">☆</button></h3>
+      <p class="style-desc">Photographic black, safelight red, film-strip rules and mono captions. Built for the Aperture/Lumen family: the day develops in the dark, then you fix what matters.</p>
+      <div class="keywords">focused · monochrome · patient · precise</div>
+      <div class="cf"><b>cf.</b> Leica, contact sheets, safelight rooms</div>
+      <div class="swatches">
+        <div class="sw"><div class="sw-chip" style="background:#101010"></div><div class="sw-hex">101010</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#F2EFE8"></div><div class="sw-hex">F2EFE8</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#E0342C"></div><div class="sw-hex">E0342C</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#B9B4A8"></div><div class="sw-hex">B9B4A8</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#2E2E2E"></div><div class="sw-hex">2E2E2E</div></div>
+      </div>
+      <p class="voice"><b>Voice:</b> measured, exacting.</p>
+      <p class="pairs"><b>Wears well on:</b> Aperture, Lumen, Refract</p>
+      <div class="typenote">Space Grotesk 500 · Plex Mono captions · film-strip rule</div>
+    </div>
+    <div class="style-stage">
+      <div class="wordmark-zone">
+        <span class="wordmark name-slot">Prisms</span>
+        <span class="tagline">Develop the day. Fix what matters.</span>
+      </div>
+      <div class="mock"><div class="mock-card">
+        <div class="mock-brandrow"><span class="mock-logo"></span><span class="mock-brand name-slot">Prisms</span></div>
+        <div class="mock-title">My Day</div>
+        <div class="mock-task"><span class="mock-check"></span>Review sprint notes</div>
+        <div class="mock-task done"><span class="mock-check"></span>Morning pages</div>
+        <button class="mock-btn">Start focus</button>
+      </div></div>
+    </div>
+  </article>
+
+  <!-- S20 -->
+  <article class="style-card s20" data-style="Woodcut">
+    <div class="style-meta">
+      <div class="style-kicker">Style 20</div>
+      <h3>Woodcut <button class="star" aria-label="Shortlist Woodcut">☆</button></h3>
+      <p class="style-desc">Letterpress and almanac folklore — heavy serif, asterism ornaments, brick-red ink on aged cream. Feels like a tool your grandparents would have trusted.</p>
+      <div class="keywords">seasonal · sturdy · folkloric · time-tested</div>
+      <div class="cf"><b>cf.</b> Old Farmer’s Almanac, letterpress, Penguin clothbound</div>
+      <div class="swatches">
+        <div class="sw"><div class="sw-chip" style="background:#F3EBD8"></div><div class="sw-hex">F3EBD8</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#33251A"></div><div class="sw-hex">33251A</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#9E3B23"></div><div class="sw-hex">9E3B23</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#C7A96B"></div><div class="sw-hex">C7A96B</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#E4D6B4"></div><div class="sw-hex">E4D6B4</div></div>
+      </div>
+      <p class="voice"><b>Voice:</b> proverbial.</p>
+      <p class="pairs"><b>Wears well on:</b> Almanac, Daybook, Sundial</p>
+      <div class="typenote">Fraunces 700 · asterism ornament · letterpress borders</div>
+    </div>
+    <div class="style-stage">
+      <div class="wordmark-zone">
+        <span class="wordmark name-slot">Prisms</span>
+        <span class="tagline">For fair days and foul.</span>
+      </div>
+      <div class="mock"><div class="mock-card">
+        <div class="mock-brandrow"><span class="mock-logo"></span><span class="mock-brand name-slot">Prisms</span></div>
+        <div class="mock-title">My Day</div>
+        <div class="mock-task"><span class="mock-check"></span>Review sprint notes</div>
+        <div class="mock-task done"><span class="mock-check"></span>Morning pages</div>
+        <button class="mock-btn">Start focus</button>
+      </div></div>
+    </div>
+  </article>
+
+  <!-- S21 -->
+  <article class="style-card s21" data-style="Daybreak">
+    <div class="style-meta">
+      <div class="style-kicker">Style 21</div>
+      <h3>Daybreak <button class="star" aria-label="Shortlist Daybreak">☆</button></h3>
+      <p class="style-desc">Sunrise ambers on warm white with a rising-sun mark. The optimistic morning counterpart to Nightwatch — energy without the alarm-clock aggression.</p>
+      <div class="keywords">optimistic · warm · early · energizing</div>
+      <div class="cf"><b>cf.</b> golden-hour photography, Rise</div>
+      <div class="swatches">
+        <div class="sw"><div class="sw-chip" style="background:#FFF3DC"></div><div class="sw-hex">FFF3DC</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#402E1C"></div><div class="sw-hex">402E1C</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#FFB627"></div><div class="sw-hex">FFB627</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#E8890C"></div><div class="sw-hex">E8890C</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#FFFDF7"></div><div class="sw-hex">FFFDF7</div></div>
+      </div>
+      <p class="voice"><b>Voice:</b> bright-eyed, brisk.</p>
+      <p class="pairs"><b>Wears well on:</b> Sundial, Meridian, Lumen</p>
+      <div class="typenote">Space Grotesk 700 · rising-sun mark · amber ramp</div>
+    </div>
+    <div class="style-stage">
+      <div class="wordmark-zone">
+        <span class="wordmark name-slot">Prisms</span>
+        <span class="tagline">Up with the sun. Ahead by noon.</span>
+      </div>
+      <div class="mock"><div class="mock-card">
+        <div class="mock-brandrow"><span class="mock-logo"></span><span class="mock-brand name-slot">Prisms</span></div>
+        <div class="mock-title">My Day</div>
+        <div class="mock-task"><span class="mock-check"></span>Review sprint notes</div>
+        <div class="mock-task done"><span class="mock-check"></span>Morning pages</div>
+        <button class="mock-btn">Start focus</button>
+      </div></div>
+    </div>
+  </article>
+
+  <!-- S22 -->
+  <article class="style-card s22" data-style="Slate">
+    <div class="style-meta">
+      <div class="style-kicker">Style 22</div>
+      <h3>Slate <button class="star" aria-label="Shortlist Slate">☆</button></h3>
+      <p class="style-desc">Strict grayscale, monospaced caps, one black square. No accent color at all; the discipline is the brand.</p>
+      <div class="keywords">monochrome · rigorous · material · noiseless</div>
+      <div class="cf"><b>cf.</b> Vercel, Dieter Rams greys</div>
+      <div class="swatches">
+        <div class="sw"><div class="sw-chip" style="background:#EFEFED"></div><div class="sw-hex">EFEFED</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#1C1C1E"></div><div class="sw-hex">1C1C1E</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#6E6E73"></div><div class="sw-hex">6E6E73</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#C9C9CC"></div><div class="sw-hex">C9C9CC</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#FFFFFF"></div><div class="sw-hex">FFFFFF</div></div>
+      </div>
+      <p class="voice"><b>Voice:</b> minimal, declarative.</p>
+      <p class="pairs"><b>Wears well on:</b> Strata, Keel, Facet</p>
+      <div class="typenote">IBM Plex Mono caps, letterspaced · grayscale only</div>
+    </div>
+    <div class="style-stage">
+      <div class="wordmark-zone">
+        <span class="wordmark name-slot">Prisms</span>
+        <span class="tagline">No noise. Just the work.</span>
+      </div>
+      <div class="mock"><div class="mock-card">
+        <div class="mock-brandrow"><span class="mock-logo"></span><span class="mock-brand name-slot">Prisms</span></div>
+        <div class="mock-title">My Day</div>
+        <div class="mock-task"><span class="mock-check"></span>Review sprint notes</div>
+        <div class="mock-task done"><span class="mock-check"></span>Morning pages</div>
+        <button class="mock-btn">Start focus</button>
+      </div></div>
+    </div>
+  </article>
+
+  <!-- S23 -->
+  <article class="style-card s23" data-style="Retro OS">
+    <div class="style-meta">
+      <div class="style-kicker">Style 23</div>
+      <h3>Retro OS <button class="star" aria-label="Shortlist Retro OS">☆</button></h3>
+      <p class="style-desc">System-7 pinstripes, pixel wordmark, hard one-bit shadows. Nostalgic and witty — “it just runs” as both joke and promise.</p>
+      <div class="keywords">nostalgic · pixel-perfect · witty · dependable</div>
+      <div class="cf"><b>cf.</b> System 7, Poolsuite, Playdate</div>
+      <div class="swatches">
+        <div class="sw"><div class="sw-chip" style="background:#CDD2DA"></div><div class="sw-hex">CDD2DA</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#000000"></div><div class="sw-hex">000000</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#FFFFFF"></div><div class="sw-hex">FFFFFF</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#2A5CC4"></div><div class="sw-hex">2A5CC4</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#EDEDED"></div><div class="sw-hex">EDEDED</div></div>
+      </div>
+      <p class="voice"><b>Voice:</b> deadpan, charming.</p>
+      <p class="pairs"><b>Wears well on:</b> Kata, Daybook, Refract</p>
+      <div class="typenote">Silkscreen pixel wordmark · Plex Mono UI · hard shadows</div>
+    </div>
+    <div class="style-stage">
+      <div class="wordmark-zone">
+        <span class="wordmark name-slot">Prisms</span>
+        <span class="tagline">It just runs.</span>
+      </div>
+      <div class="mock"><div class="mock-card">
+        <div class="mock-brandrow"><span class="mock-logo"></span><span class="mock-brand name-slot">Prisms</span></div>
+        <div class="mock-title">My Day</div>
+        <div class="mock-task"><span class="mock-check"></span>Review sprint notes</div>
+        <div class="mock-task done"><span class="mock-check"></span>Morning pages</div>
+        <button class="mock-btn">Start focus</button>
+      </div></div>
+    </div>
+  </article>
+
+  <!-- S24 -->
+  <article class="style-card s24" data-style="Canyon">
+    <div class="style-meta">
+      <div class="style-kicker">Style 24</div>
+      <h3>Canyon <button class="star" aria-label="Shortlist Canyon">☆</button></h3>
+      <p class="style-desc">High-desert warmth: clay, sand, cactus green, slab-serif sturdiness and a serape stripe. Grounded and unhurried, built for the long haul.</p>
+      <div class="keywords">sunbaked · sturdy · warm · grounded</div>
+      <div class="cf"><b>cf.</b> Cotopaxi, Parks Project</div>
+      <div class="swatches">
+        <div class="sw"><div class="sw-chip" style="background:#EAD9C2"></div><div class="sw-hex">EAD9C2</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#4E3226"></div><div class="sw-hex">4E3226</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#B4552D"></div><div class="sw-hex">B4552D</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#5C7351"></div><div class="sw-hex">5C7351</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#F6EBDB"></div><div class="sw-hex">F6EBDB</div></div>
+      </div>
+      <p class="voice"><b>Voice:</b> plainspoken, warm.</p>
+      <p class="pairs"><b>Wears well on:</b> Cairn, Harbor, Trellis</p>
+      <div class="typenote">Zilla Slab 600 · serape stripe · clay + cactus</div>
+    </div>
+    <div class="style-stage">
+      <div class="wordmark-zone">
+        <span class="wordmark name-slot">Prisms</span>
+        <span class="tagline">Steady as stone.</span>
+      </div>
+      <div class="mock"><div class="mock-card">
+        <div class="mock-brandrow"><span class="mock-logo"></span><span class="mock-brand name-slot">Prisms</span></div>
+        <div class="mock-title">My Day</div>
+        <div class="mock-task"><span class="mock-check"></span>Review sprint notes</div>
+        <div class="mock-task done"><span class="mock-check"></span>Morning pages</div>
+        <button class="mock-btn">Start focus</button>
+      </div></div>
+    </div>
+  </article>
+
+  <!-- S25 -->
+  <article class="style-card s25" data-style="Regatta">
+    <div class="style-meta">
+      <div class="style-kicker">Style 25</div>
+      <h3>Regatta <button class="star" aria-label="Shortlist Regatta">☆</button></h3>
+      <p class="style-desc">Crisp maritime classicism — navy and signal red, flag-bar stripes, varsity slab caps. Ship-shape as a lifestyle.</p>
+      <div class="keywords">crisp · maritime · classic · trustworthy</div>
+      <div class="cf"><b>cf.</b> signal flags, America’s Cup graphics</div>
+      <div class="swatches">
+        <div class="sw"><div class="sw-chip" style="background:#FFFFFF"></div><div class="sw-hex">FFFFFF</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#12294B"></div><div class="sw-hex">12294B</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#D6402B"></div><div class="sw-hex">D6402B</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#C9A46A"></div><div class="sw-hex">C9A46A</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#E8EDF4"></div><div class="sw-hex">E8EDF4</div></div>
+      </div>
+      <p class="voice"><b>Voice:</b> crisp, seamanlike.</p>
+      <p class="pairs"><b>Wears well on:</b> Keel, Harbor, Waypoint</p>
+      <div class="typenote">Zilla Slab caps · signal-flag bar · navy/red/white</div>
+    </div>
+    <div class="style-stage">
+      <div class="wordmark-zone">
+        <span class="wordmark name-slot">Prisms</span>
+        <span class="tagline">Trim the sails, hold the course</span>
+      </div>
+      <div class="mock"><div class="mock-card">
+        <div class="mock-brandrow"><span class="mock-logo"></span><span class="mock-brand name-slot">Prisms</span></div>
+        <div class="mock-title">My Day</div>
+        <div class="mock-task"><span class="mock-check"></span>Review sprint notes</div>
+        <div class="mock-task done"><span class="mock-check"></span>Morning pages</div>
+        <button class="mock-btn">Start focus</button>
+      </div></div>
+    </div>
+  </article>
+
+  <!-- S26 -->
+  <article class="style-card s26" data-style="Marginalia">
+    <div class="style-meta">
+      <div class="style-kicker">Style 26</div>
+      <h3>Marginalia <button class="star" aria-label="Shortlist Marginalia">☆</button></h3>
+      <p class="style-desc">A ruled index card with handwriting in the margins. The product as your own annotated copy of the day — personal, candid, a little funny.</p>
+      <div class="keywords">annotated · personal · bookish · lived-in</div>
+      <div class="cf"><b>cf.</b> index cards, marked-up proofs</div>
+      <div class="swatches">
+        <div class="sw"><div class="sw-chip" style="background:#FBF8F1"></div><div class="sw-hex">FBF8F1</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#26313A"></div><div class="sw-hex">26313A</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#C0392B"></div><div class="sw-hex">C0392B</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#6B7683"></div><div class="sw-hex">6B7683</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#DCE6EC"></div><div class="sw-hex">DCE6EC</div></div>
+      </div>
+      <p class="voice"><b>Voice:</b> first-person, candid.</p>
+      <p class="pairs"><b>Wears well on:</b> Daybook, Folio, Vesper</p>
+      <div class="typenote">Lora 600 + Caveat annotations · ruled-card background</div>
+    </div>
+    <div class="style-stage">
+      <div class="wordmark-zone">
+        <span class="wordmark name-slot">Prisms</span>
+        <span class="tagline">notes to self, where you’ll see them</span>
+      </div>
+      <div class="mock"><div class="mock-card">
+        <div class="mock-brandrow"><span class="mock-logo"></span><span class="mock-brand name-slot">Prisms</span></div>
+        <div class="mock-title">My Day</div>
+        <div class="mock-task"><span class="mock-check"></span>Review sprint notes</div>
+        <div class="mock-task done"><span class="mock-check"></span>Morning pages</div>
+        <button class="mock-btn">Start focus</button>
+      </div></div>
+    </div>
+  </article>
+
+  <!-- S27 -->
+  <article class="style-card s27" data-style="Observatory">
+    <div class="style-meta">
+      <div class="style-kicker">Style 27</div>
+      <h3>Observatory <button class="star" aria-label="Shortlist Observatory">☆</button></h3>
+      <p class="style-desc">A star chart at midnight: gold asterisks, fine constellation marks, an elegant serif floating in deep navy. For the navigator names — steady, celestial, timeless.</p>
+      <div class="keywords">celestial · calm-dark · guiding · timeless</div>
+      <div class="cf"><b>cf.</b> star atlases, planetarium domes</div>
+      <div class="swatches">
+        <div class="sw"><div class="sw-chip" style="background:#0B1526"></div><div class="sw-hex">0B1526</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#EDE6D4"></div><div class="sw-hex">EDE6D4</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#D9B24A"></div><div class="sw-hex">D9B24A</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#93A0B8"></div><div class="sw-hex">93A0B8</div></div>
+        <div class="sw"><div class="sw-chip" style="background:#24344F"></div><div class="sw-hex">24344F</div></div>
+      </div>
+      <p class="voice"><b>Voice:</b> steady, celestial.</p>
+      <p class="pairs"><b>Wears well on:</b> Vesper, Meridian, Almanac</p>
+      <div class="typenote">DM Serif Display · star ornaments · gold on midnight</div>
+    </div>
+    <div class="style-stage">
+      <div class="wordmark-zone">
+        <span class="wordmark name-slot">Prisms</span>
+        <span class="tagline">Navigate by fixed stars.</span>
+      </div>
+      <div class="mock"><div class="mock-card">
+        <div class="mock-brandrow"><span class="mock-logo"></span><span class="mock-brand name-slot">Prisms</span></div>
+        <div class="mock-title">My Day</div>
+        <div class="mock-task"><span class="mock-check"></span>Review sprint notes</div>
+        <div class="mock-task done"><span class="mock-check"></span>Morning pages</div>
+        <button class="mock-btn">Start focus</button>
+      </div></div>
+    </div>
+  </article>
+
+  <div class="outro">
+    <b>Gut checks while you review.</b> Say the name in the sentence <i>“just put it in ___”</i> — that’s the daily-use test.
+    Try your favorite name in your <i>least</i> favorite style — a strong name survives bad clothes. And whichever style wins,
+    the wordmark stage above is roughly what the landing-page hero and the app topbar will feel like.
+  </div>
+
+  <footer>
+    Prisms brand exploration · generated 2026-07-06 · Blueprints/BRAND_EXPLORATION.html ·
+    fonts load from Google Fonts (offline = system fallbacks) · crowding notes are gut-checks, not trademark searches
+  </footer>
+</section>
+
+</main>
+
+<div class="tray">
+  <span>Previewing <b id="trayName">Prisms</b></span>
+  <button id="resetName" title="Reset preview to Prisms">↺</button>
+  <span class="sep">|</span>
+  <span id="trayCount">nothing starred yet</span>
+  <button id="copyBtn">Copy shortlist</button>
+</div>
+
+<script>
+(function(){
+  var KEY = 'prisms-brand-review-v1';
+  var state = { preview: 'Prisms', names: [], styles: [] };
+  try {
+    var saved = JSON.parse(localStorage.getItem(KEY));
+    if (saved && typeof saved === 'object') {
+      state.preview = saved.preview || 'Prisms';
+      state.names = Array.isArray(saved.names) ? saved.names : [];
+      state.styles = Array.isArray(saved.styles) ? saved.styles : [];
+    }
+  } catch (e) {}
+
+  function $(s){ return document.querySelector(s); }
+  function $$(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); }
+  function save(){ try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
+  function toggle(list, v){ var i = list.indexOf(v); if (i >= 0) list.splice(i, 1); else list.push(v); }
+
+  function render(){
+    $$('.name-slot').forEach(function(el){ el.textContent = state.preview; });
+    $$('.name-card').forEach(function(c){
+      var n = c.getAttribute('data-name');
+      var starred = state.names.indexOf(n) >= 0;
+      c.classList.toggle('active', n === state.preview);
+      var st = c.querySelector('.star');
+      st.classList.toggle('on', starred);
+      st.textContent = starred ? '★' : '☆';
+    });
+    $$('.style-card').forEach(function(c){
+      var n = c.getAttribute('data-style');
+      var starred = state.styles.indexOf(n) >= 0;
+      var st = c.querySelector('.star');
+      st.classList.toggle('on', starred);
+      st.textContent = starred ? '★' : '☆';
+    });
+    $('#trayName').textContent = state.preview;
+    var total = state.names.length + state.styles.length;
+    $('#trayCount').textContent = total
+      ? state.names.length + ' name' + (state.names.length === 1 ? '' : 's') + ' · ' +
+        state.styles.length + ' style' + (state.styles.length === 1 ? '' : 's') + ' starred'
+      : 'nothing starred yet';
+    save();
+  }
+
+  $$('.name-card').forEach(function(c){
+    c.addEventListener('click', function(e){
+      if (e.target.closest('.star')) return;
+      state.preview = c.getAttribute('data-name');
+      render();
+    });
+    c.querySelector('.star').addEventListener('click', function(e){
+      e.stopPropagation();
+      toggle(state.names, c.getAttribute('data-name'));
+      render();
+    });
+  });
+
+  $$('.style-card .star').forEach(function(st){
+    st.addEventListener('click', function(e){
+      var c = e.target.closest('.style-card');
+      toggle(state.styles, c.getAttribute('data-style'));
+      render();
+    });
+  });
+
+  $('#resetName').addEventListener('click', function(){ state.preview = 'Prisms'; render(); });
+
+  $('#copyBtn').addEventListener('click', function(){
+    var text = [
+      'Prisms — brand review shortlist',
+      'Names:  ' + (state.names.length ? state.names.join(', ') : '(none)'),
+      'Styles: ' + (state.styles.length ? state.styles.join(', ') : '(none)'),
+      'Last previewed wordmark: ' + state.preview
+    ].join('\n');
+    var done = function(ok){
+      var b = $('#copyBtn');
+      b.textContent = ok ? 'Copied ✓' : 'Copy failed';
+      setTimeout(function(){ b.textContent = 'Copy shortlist'; }, 1600);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function(){ done(true); }, function(){ fallback(); });
+    } else { fallback(); }
+    function fallback(){
+      try {
+        var t = document.createElement('textarea');
+        t.value = text; document.body.appendChild(t); t.select();
+        var ok = document.execCommand('copy'); t.remove(); done(ok);
+      } catch (e) { done(false); }
+    }
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>
