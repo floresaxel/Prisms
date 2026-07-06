@@ -19,6 +19,10 @@ export function Automations({ ctx }: { ctx: CommandContext }) {
   const [tab, select] = useHashTab(TABS, 'rules');
   return (
     <section>
+      <div className="px-page-head">
+        <h1>Automations</h1>
+        <span className="px-page-sub">rules spawn tasks; blockers gate them</span>
+      </div>
       <TabBar tabs={TABS} active={tab} onSelect={select} />
       {tab === 'rules' && <Rules ctx={ctx} />}
       {tab === 'blockers' && <Blockers ctx={ctx} />}

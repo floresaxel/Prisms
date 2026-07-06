@@ -52,11 +52,13 @@ test('encrypted export downloads, re-imports with the passphrase, and restores',
   expect(seed.ok()).toBeTruthy();
 
   await goto(page, 'settings');
+  await page.getByTestId('settings-tab-data').click();
   await expect(page.getByTestId('portability')).toBeVisible();
   // let the seed sync down so the export includes it
   await goto(page, 'myday');
   await expect(page.getByText('Task One')).toBeVisible({ timeout: 30_000 });
   await goto(page, 'settings');
+  await page.getByTestId('settings-tab-data').click();
 
   // --- DoD: encrypted export downloads ---
   await page.getByTestId('export-passphrase').fill('backup-pass-123');

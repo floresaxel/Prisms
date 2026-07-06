@@ -9,7 +9,7 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import { asEpochMillis, type Instant } from '@prisms/core';
-import { List, ListItem, Modal, useCommands, useFactContext, useHabits, useHabitsHydrated, useHabitTasks, useIsHydrated, useNodeTree, type CommandContext, type HabitView } from '@prisms/ui';
+import { Ic, List, ListItem, Modal, useCommands, useFactContext, useHabits, useHabitsHydrated, useHabitTasks, useIsHydrated, useNodeTree, type CommandContext, type HabitView } from '@prisms/ui';
 
 import { formatMinutes } from '../format';
 
@@ -161,44 +161,53 @@ export function Habits({ ctx }: { ctx: CommandContext }) {
         <button className="px-btn px-btn--primary" type="submit" data-testid="habit-add" disabled={selectedVision === ''}>Add</button>
       </form>
 
-      <div data-testid="habits" style={{ marginTop: 18 }}>
-        <List empty="No habits yet." loading={!habitsHydrated}>
-          {habits.map((view) => (
-            <ListItem
-              key={view.habit.id}
-              leading={<Ring view={view} />}
-              trailing={
-                <>
-                  <button
-                    className="px-btn px-btn--primary"
-                    data-testid={`habit-check-${view.habit.id}`}
-                    disabled={view.doneToday}
-                    onClick={() => void commands.checkOffHabit({ habitId: view.habit.id, occurrenceDate: fact.today(now) })}
-                  >
-                    {view.doneToday ? 'Done ✓' : 'Check off'}
-                  </button>
-                  <button className="px-btn" data-testid={`habit-edit-${view.habit.id}`} onClick={() => openEdit(view)}>Edit</button>
-                  <button className="px-btn px-btn--danger" aria-label="delete" data-testid={`habit-delete-${view.habit.id}`} onClick={() => void commands.deleteHabit(view.habit.id)}>×</button>
-                </>
-              }
-            >
-              <strong>{view.habit.title}</strong>
-              <div className="px-muted" data-testid={`habit-stats-${view.habit.id}`}>
-                <span data-testid={`streak-${view.habit.id}`}>🔥 {view.streak.current} ({view.habit.streak_mode}, best {view.streak.longest})</span>
+      <ul className="px-hb-grid" data-testid="habits">
+        {habits.length === 0 && <li className="px-card px-hb-card px-muted">{habitsHydrated ? 'No habits yet.' : 'Loading…'}</li>}
+        {habits.map((view) => {
+          const mastery = view.habit.mastery_target_hours;
+          const masteryPct = mastery ? Math.min(100, Math.round((view.practice.hours / mastery) * 100)) : 0;
+          const conf = view.tagConfirmation;
+          const confTotal = conf.yes + conf.no + conf.pending;
+          return (
+            <li className="px-card px-hb-card" key={view.habit.id}>
+              <div className="px-hb-top">
+                <Ring view={view} />
+                <b>{view.habit.title}</b>
+                <span className="px-streak" data-testid={`streak-${view.habit.id}`}><Ic name="flame" />{view.streak.current}</span>
+              </div>
+              <div className="px-hb-info" data-testid={`habit-stats-${view.habit.id}`}>
+                <span>{view.habit.streak_mode} · best {view.streak.longest}</span>
                 {view.dailyTargetMinutes != null && <span> · {formatMinutes(view.todayMinutes)}/{view.dailyTargetMinutes}m today</span>}
                 <PracticeLine view={view} />
-                {view.tagConfirmation.yes + view.tagConfirmation.no + view.tagConfirmation.pending > 0 && (
+                {confTotal > 0 && (
                   <span data-testid={`tagconf-${view.habit.id}`}>
-                    {' · '}✓ {view.tagConfirmation.yes}/{view.tagConfirmation.yes + view.tagConfirmation.no + view.tagConfirmation.pending}
-                    {view.tagConfirmation.pending > 0 && ` (${view.tagConfirmation.pending} pending)`}
+                    {' · '}✓ {conf.yes}/{confTotal}{conf.pending > 0 ? ` (${conf.pending} pending)` : ''}
                   </span>
                 )}
                 <span> · {view.serverComputedAt ? `synced ${new Date(view.serverComputedAt).toLocaleDateString()}` : 'live'}</span>
               </div>
-            </ListItem>
-          ))}
-        </List>
-      </div>
+              {mastery != null && (
+                <div className="px-mastery">
+                  <div className="px-cbar-lbl" style={{ fontSize: 11 }}><span>{view.practice.hours.toFixed(1)}h / {mastery}h mastery</span><span>{masteryPct}%</span></div>
+                  <div className="px-mastery-trk"><div className="px-mastery-fil" style={{ width: `${masteryPct}%` }} /></div>
+                </div>
+              )}
+              <div className="px-hb-foot">
+                <button
+                  className="px-btn px-btn--sm px-btn--primary"
+                  data-testid={`habit-check-${view.habit.id}`}
+                  disabled={view.doneToday}
+                  onClick={() => void commands.checkOffHabit({ habitId: view.habit.id, occurrenceDate: fact.today(now) })}
+                >
+                  {view.doneToday ? 'Done ✓' : 'Check off'}
+                </button>
+                <button className="px-btn px-btn--sm" data-testid={`habit-edit-${view.habit.id}`} onClick={() => openEdit(view)}>Edit</button>
+                <button className="px-btn px-btn--sm px-btn--danger" aria-label="delete" data-testid={`habit-delete-${view.habit.id}`} onClick={() => void commands.deleteHabit(view.habit.id)}>×</button>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
 
       {habitTasks.length > 0 && (
         <div data-testid="habit-tasks" style={{ marginTop: 24 }}>

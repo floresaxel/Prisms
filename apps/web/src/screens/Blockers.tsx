@@ -5,7 +5,8 @@
  */
 import { useState } from 'react';
 
-import { List, ListItem, useBlockers, useCommands, useIsHydrated, type CommandContext } from '@prisms/ui';
+import { asEpochMillis, type Instant } from '@prisms/core';
+import { useBlockedTasks, useBlockers, useCommands, useIsHydrated, type CommandContext } from '@prisms/ui';
 
 const FACTS = [
   { fact: 'weather.precip_prob', label: 'weather: rain probability', op: 'gt', value: '0.6' },
@@ -15,7 +16,9 @@ const FACTS = [
 ] as const;
 
 export function Blockers({ ctx }: { ctx: CommandContext }) {
+  const [now] = useState<Instant>(() => asEpochMillis(Date.now()));
   const blockers = useBlockers();
+  const blockedTasks = useBlockedTasks(now);
   const commands = useCommands(ctx);
   const hydrated = useIsHydrated();
 
@@ -36,8 +39,7 @@ export function Blockers({ ctx }: { ctx: CommandContext }) {
 
   return (
     <section>
-      <h1>Blocker rules</h1>
-      <p className="px-muted">Dynamic blockers driven by weather, graph position, phase, or title (§9.2). Scope: all tasks.</p>
+      <p className="px-muted" style={{ marginTop: 0 }}>Dynamic blockers driven by graph position, phase, or title (§9.2). Scope: all tasks.</p>
 
       <div className="px-rule-form" data-testid="blocker-form">
         <label className="px-field">Label
@@ -54,24 +56,33 @@ export function Blockers({ ctx }: { ctx: CommandContext }) {
         <button className="px-btn px-btn--primary" data-testid="blocker-add" onClick={() => void create()}>Create blocker</button>
       </div>
 
-      <div data-testid="blockers" style={{ marginTop: 18 }}>
-        <List empty="No blocker rules yet." loading={!hydrated}>
-          {blockers.map((b) => (
-            <ListItem
-              key={b.id}
-              leading={<span className={`px-badge${b.enabled ? ' px-badge--blocked' : ''}`}>{b.enabled ? 'on' : 'off'}</span>}
-              trailing={
-                <>
-                  <button className="px-btn" data-testid={`blocker-toggle-${b.id}`} onClick={() => void commands.toggleBlocker(b.id, !b.enabled)}>{b.enabled ? 'Disable' : 'Enable'}</button>
-                  <button className="px-btn px-btn--danger" aria-label="delete" onClick={() => void commands.deleteBlocker(b.id)}>×</button>
-                </>
-              }
-            >
-              <strong>{b.label}</strong>
-              <span className="px-muted"> · {JSON.stringify(b.predicate)}</span>
-            </ListItem>
-          ))}
-        </List>
+      <div className="px-rows" data-testid="blockers" style={{ marginTop: 14, maxWidth: 760 }}>
+        {blockers.length === 0 && <div className="px-trow px-muted">{hydrated ? 'No blocker rules yet.' : 'Loading…'}</div>}
+        {blockers.map((b) => {
+          const impact = b.enabled ? blockedTasks.filter((t) => t.blockedBy.includes(b.label)).length : 0;
+          return (
+            <div className="px-rule" key={b.id}>
+              <button
+                className={`px-toggle${b.enabled ? ' px-toggle--on' : ''}`}
+                data-testid={`blocker-toggle-${b.id}`}
+                aria-label={b.enabled ? 'disable blocker' : 'enable blocker'}
+                onClick={() => void commands.toggleBlocker(b.id, !b.enabled)}
+              />
+              <div className="px-rule-body">
+                <div className="px-rule-name">{b.label}</div>
+                <div className="px-flow">
+                  <span className="px-flow-step">blocks a task when</span>
+                  <span className="px-flow-arr">→</span>
+                  <span className="px-flow-step"><code>{JSON.stringify(b.predicate)}</code></span>
+                </div>
+                <div className="px-rule-impact" data-testid={`blocker-impact-${b.id}`}>
+                  {b.enabled ? `Currently blocking ${impact} task${impact === 1 ? '' : 's'}.` : 'Disabled — blocking nothing.'}
+                </div>
+              </div>
+              <button className="px-btn px-btn--sm px-btn--danger" aria-label="delete" onClick={() => void commands.deleteBlocker(b.id)}>×</button>
+            </div>
+          );
+        })}
       </div>
     </section>
   );

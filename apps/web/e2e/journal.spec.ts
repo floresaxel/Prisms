@@ -153,6 +153,7 @@ test('fresh-device lazy-load: a past-month note is NOT local until viewed; the .
   // The Settings `.md` archive is SERVER-sourced, so it INCLUDES the never-synced
   // past month (a local "export all" would have truncated it).
   await goto(page, 'settings');
+  await page.getByTestId('settings-tab-data').click();
   const [dl] = await Promise.all([page.waitForEvent('download'), page.getByTestId('journal-export-archive').click()]);
   expect(dl.suggestedFilename()).toMatch(/^prisms-journal_.*\.zip$/);
   const files = unzipSync(new Uint8Array(await readFile(await dl.path())));

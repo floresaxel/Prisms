@@ -8,7 +8,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import { usePowerSync } from '@powersync/react';
 import type { ImportReport } from '@prisms/core';
-import { subscribeHistory, useCommands, useUserSettings, type CommandContext, type StreamSubscriber } from '@prisms/ui';
+import { Ic, subscribeHistory, useCommands, useUserSettings, type CommandContext, type StreamSubscriber } from '@prisms/ui';
 
 import { isDesktop } from '../desktop';
 import { downloadExport, downloadJournalArchive, dryRunImport, fetchExport, readImportFile, restoreImport } from '../portability';
@@ -23,6 +23,7 @@ export function Settings({ ctx }: { ctx: CommandContext }) {
   const [hour, setHour] = useState(String(settings.dayResetHour));
   const [tz, setTz] = useState(settings.timezone);
   const [saved, setSaved] = useState(false);
+  const [tab, setTab] = useState<'general' | 'data' | 'account'>('general');
 
   // keep inputs in sync if settings arrive after mount
   useEffect(() => {
@@ -41,21 +42,57 @@ export function Settings({ ctx }: { ctx: CommandContext }) {
 
   return (
     <section>
-      <h1>Settings</h1>
-      <p className="px-muted">The day-reset hour and timezone define when your day flips (§7.2).</p>
+      <div className="px-page-head">
+        <h1>Settings</h1>
+        <span className="px-page-sub">workspace preferences, backup, and account</span>
+      </div>
 
-      <label className="px-field" style={{ maxWidth: 320 }}>
-        Day-reset hour (0–23)
-        <input className="px-input" type="number" min={0} max={23} data-testid="settings-hour" value={hour} onChange={(e) => setHour(e.target.value)} />
-      </label>
-      <label className="px-field" style={{ maxWidth: 320 }}>
-        Timezone (IANA)
-        <input className="px-input" data-testid="settings-tz" value={tz} onChange={(e) => setTz(e.target.value)} />
-      </label>
-      <button className="px-btn px-btn--primary" data-testid="settings-save" onClick={() => void save()}>Save</button>
-      {saved && <span className="px-muted" data-testid="settings-saved" style={{ marginLeft: 10 }}>Saved ✓</span>}
+      <div className="px-tabs" role="tablist">
+        <button role="tab" aria-selected={tab === 'general'} data-testid="settings-tab-general" className={`px-tab${tab === 'general' ? ' px-tab--on' : ''}`} onClick={() => setTab('general')}>
+          <Ic name="sliders" /> General
+        </button>
+        <button role="tab" aria-selected={tab === 'data'} data-testid="settings-tab-data" className={`px-tab${tab === 'data' ? ' px-tab--on' : ''}`} onClick={() => setTab('data')}>
+          <Ic name="down" /> Data &amp; portability
+        </button>
+        <button role="tab" aria-selected={tab === 'account'} data-testid="settings-tab-account" className={`px-tab${tab === 'account' ? ' px-tab--on' : ''}`} onClick={() => setTab('account')}>
+          <Ic name="lock" /> Account
+        </button>
+      </div>
 
-      <Portability />
+      {tab === 'general' && (
+        <div className="px-set-grid">
+          <div className="px-set-row">
+            <div className="px-set-lbl"><b>Day-reset hour</b><span>When your day flips for “today/daily” computations (§7.2). 0–23.</span></div>
+            <div className="px-set-ctl">
+              <input className="px-input" type="number" min={0} max={23} data-testid="settings-hour" value={hour} onChange={(e) => setHour(e.target.value)} style={{ width: 120 }} />
+            </div>
+          </div>
+          <div className="px-set-row">
+            <div className="px-set-lbl"><b>Timezone</b><span>IANA timezone name (e.g. America/New_York).</span></div>
+            <div className="px-set-ctl"><input className="px-input" data-testid="settings-tz" value={tz} onChange={(e) => setTz(e.target.value)} /></div>
+          </div>
+          <div className="px-set-row">
+            <div className="px-set-lbl" />
+            <div className="px-set-ctl">
+              <button className="px-btn px-btn--primary" data-testid="settings-save" onClick={() => void save()}>Save</button>
+              {saved && <span className="px-muted" data-testid="settings-saved" style={{ marginLeft: 10 }}>Saved ✓</span>}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {tab === 'data' && <Portability />}
+
+      {tab === 'account' && (
+        <div className="px-set-grid">
+          <div className="px-set-row">
+            <div className="px-set-lbl"><b>Account</b><span>This account&rsquo;s session on this device.</span></div>
+            <div className="px-set-ctl px-muted" style={{ lineHeight: 1.5 }}>
+              Sign out from the sidebar. On a shared device, signing out wipes this account&rsquo;s local replica and command queue so nothing survives for the next login (§13.2).
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

@@ -8,7 +8,7 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import { asEpochMillis, type BurndownValue, type Instant } from '@prisms/core';
-import { List, ListItem, useCommands, useDashboard, useDecisionBoards, useDecisionsHydrated, useHabits, useHabitsHydrated, useIsHydrated, useNodeTree, type CommandContext } from '@prisms/ui';
+import { Ic, useCommands, useDashboard, useDecisionBoards, useDecisionsHydrated, useHabits, useHabitsHydrated, useIsHydrated, useNodeTree, type CommandContext } from '@prisms/ui';
 
 function Burndown({ value }: { value: BurndownValue }) {
   const days = value.days;
@@ -56,78 +56,78 @@ export function Dashboard({ ctx }: { ctx: CommandContext }) {
 
   return (
     <section data-testid="dashboard">
-      <h1>Dashboard</h1>
-
-      {/* Vision angles (max 4, I2). New-vision doubles as the optimistic-
-          rollback demo until the S20 vision editor lands. */}
-      <div className="px-muted" style={{ marginBottom: 16 }} data-testid="visions">
-        Vision angles <span data-testid="vision-count">({visions.length})</span>: {visions.map((v) => v.title).join(', ') || 'none yet'}
-        <button className="px-btn" style={{ marginLeft: 10 }} data-testid="new-vision" onClick={() => void commands.createVision('New Angle')}>
-          New vision
-        </button>
-      </div>
-
-      <h2>Burndown</h2>
-      <Burndown value={data.burndown} />
-      <div className="px-muted" data-testid="projection">
-        Projected finish:{' '}
-        <strong>{proj.projectedFinishDate ?? '—'}</strong>
-        {' · '}{Math.round(proj.dailyVelocityMinutes)} min/day burn
-        {' · '}
-        <span data-testid="projection-freshness">
-          {data.projectionComputedAt ? `updated ${new Date(data.projectionComputedAt).toLocaleDateString()}` : 'live (client estimate)'}
+      <div className="px-page-head">
+        <h1>Dashboard</h1>
+        {/* Vision angles (max 4, I2). New-vision doubles as the optimistic-rollback demo. */}
+        <span className="px-page-sub" data-testid="visions">
+          Vision angles <span data-testid="vision-count">({visions.length})</span>: {visions.map((v) => v.title).join(', ') || 'none yet'}
         </span>
+        <div className="px-head-actions">
+          <button className="px-btn px-btn--sm" data-testid="new-vision" onClick={() => void commands.createVision('New Angle')}>New vision</button>
+        </div>
       </div>
 
-      <div className="px-dash-grid">
-        <div>
-          <h2>Project completion</h2>
-          <div data-testid="completion">
-            <List empty="No projects yet." loading={!sessionHydrated}>
-              {data.completion.map(({ project, value }) => (
-                <ListItem key={project.id} trailing={<span className="px-muted">{Math.round(value.percent)}%</span>}>
-                  {project.title}
-                  <div className="px-progress" style={{ marginTop: 6 }}>
-                    <div className="px-progress-fill" style={{ width: `${value.percent}%` }} />
-                  </div>
-                </ListItem>
-              ))}
-            </List>
+      <div className="px-dash">
+        <div className="px-card">
+          <div className="px-card-title">Burndown &amp; projection</div>
+          <div className="px-dash-pad">
+            <Burndown value={data.burndown} />
+            <div className="px-muted" data-testid="projection" style={{ marginTop: 10 }}>
+              Projected finish: <strong>{proj.projectedFinishDate ?? '—'}</strong>
+              {' · '}{Math.round(proj.dailyVelocityMinutes)} min/day burn{' · '}
+              <span data-testid="projection-freshness">
+                {data.projectionComputedAt ? `updated ${new Date(data.projectionComputedAt).toLocaleDateString()}` : 'live (client estimate)'}
+              </span>
+            </div>
           </div>
         </div>
 
-        <div>
-          <h2>Priority items</h2>
-          <div data-testid="priority-list">
-            <List empty="No decision board yet — create one to rank projects." loading={!boardsHydrated}>
-              {priority.map((r, i) => (
-                <ListItem key={r.project.id} leading={<span className="px-badge">{i + 1}</span>} trailing={<span className="px-muted">{r.priority.toFixed(1)}</span>}>
-                  <span data-testid={`priority-${r.project.id}`}>{r.project.title}</span>
-                </ListItem>
-              ))}
-            </List>
-          </div>
+        <div className="px-card">
+          <div className="px-card-title">Priority items</div>
+          <ul className="px-plist" data-testid="priority-list">
+            {priority.length === 0 && <li className="px-pli px-muted">{boardsHydrated ? 'No decision board yet.' : 'Loading…'}</li>}
+            {priority.map((r, i) => (
+              <li className="px-pli" key={r.project.id}>
+                <span className={`px-pli-rank${i === 0 ? ' px-pli-rank--1' : ''}`}>{i + 1}</span>
+                <span data-testid={`priority-${r.project.id}`}>{r.project.title}</span>
+                <span className="px-pli-prio">{r.priority.toFixed(1)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
 
-          <h2 style={{ marginTop: 24 }}>Streaks</h2>
-          <div data-testid="streak-summary">
-            <List empty="No habits yet." loading={!habitsHydrated}>
-              {habits.map((h) => {
-                const tc = h.tagConfirmation;
-                const total = tc.yes + tc.no + tc.pending;
-                return (
-                  <ListItem key={h.habit.id} trailing={<span className="px-muted">best {h.streak.longest}</span>}>
-                    🔥 {h.streak.current} · {h.habit.title}
-                    {total > 0 && (
-                      <span className="px-muted" data-testid={`tagconf-${h.habit.id}`}>
-                        {' · '}✓ {tc.yes}/{total}
-                        {tc.pending > 0 && ` (${tc.pending} pending)`}
-                      </span>
-                    )}
-                  </ListItem>
-                );
-              })}
-            </List>
+        <div className="px-card">
+          <div className="px-card-title">Project completion</div>
+          <div className="px-dash-pad" data-testid="completion">
+            {data.completion.length === 0 && <div className="px-muted">{sessionHydrated ? 'No projects yet.' : 'Loading…'}</div>}
+            {data.completion.map(({ project, value }) => (
+              <div className="px-cbar" key={project.id}>
+                <div className="px-cbar-lbl"><span>{project.title}</span><span>{Math.round(value.percent)}%</span></div>
+                <div className="px-cbar-trk"><div className="px-cbar-fil" style={{ width: `${value.percent}%` }} /></div>
+              </div>
+            ))}
           </div>
+        </div>
+
+        <div className="px-card">
+          <div className="px-card-title">Streaks</div>
+          <ul className="px-plist" data-testid="streak-summary">
+            {habits.length === 0 && <li className="px-pli px-muted">{habitsHydrated ? 'No habits yet.' : 'Loading…'}</li>}
+            {habits.map((h) => {
+              const tc = h.tagConfirmation;
+              const total = tc.yes + tc.no + tc.pending;
+              return (
+                <li className="px-pli" key={h.habit.id}>
+                  <span className="px-streak" style={{ marginLeft: 0 }}><Ic name="flame" />{h.streak.current}</span>
+                  <span>{h.habit.title}</span>
+                  {total > 0 && (
+                    <span className="px-muted" data-testid={`tagconf-${h.habit.id}`}>✓ {tc.yes}/{total}{tc.pending > 0 ? ` (${tc.pending} pending)` : ''}</span>
+                  )}
+                  <span className="px-pli-prio">best {h.streak.longest}</span>
+                </li>
+              );
+            })}
+          </ul>
         </div>
       </div>
     </section>
