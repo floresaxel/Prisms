@@ -37,6 +37,7 @@ import { Agenda } from './screens/Agenda';
 import { Automations } from './screens/Automations';
 import { Dashboard } from './screens/Dashboard';
 import { Habits } from './screens/Habits';
+import { Journal } from './screens/Journal';
 import { Login } from './screens/Login';
 import { MyDay } from './screens/MyDay';
 import { Projects } from './screens/Projects';
@@ -49,13 +50,14 @@ type Route =
   | '/tasks'
   | '/agenda'
   | '/habits'
+  | '/journal'
   | '/projects'
   | '/dashboard'
   | '/automations'
   | '/review'
   | '/settings';
 
-const ROUTES = new Set<Route>(['/', '/tasks', '/agenda', '/habits', '/projects', '/dashboard', '/automations', '/review', '/settings']);
+const ROUTES = new Set<Route>(['/', '/tasks', '/agenda', '/habits', '/journal', '/projects', '/dashboard', '/automations', '/review', '/settings']);
 
 // Old flat routes → new consolidated route (+ hub tab hash), applied once on boot
 // (D3) so bookmarks and mid-migration deep links never 404. The hub reads the
@@ -76,6 +78,7 @@ const CRUMBS: Record<Route, BreadcrumbSpec> = {
   '/tasks': { section: 'My work', page: 'Tasks' },
   '/agenda': { section: 'My work', page: 'Agenda' },
   '/habits': { section: 'My work', page: 'Habits & Skills' },
+  '/journal': { section: 'My work', page: 'Journal' },
   '/projects': { section: 'Plan', page: 'Projects' },
   '/dashboard': { section: 'Plan', page: 'Dashboard' },
   '/automations': { section: 'Automate', page: 'Automations' },
@@ -131,6 +134,7 @@ function Shell({
         { key: 'myday', label: 'My Day', href: '/', icon: 'sun' },
         { key: 'agenda', label: 'Agenda', href: '/agenda', icon: 'cal' },
         { key: 'habits', label: 'Habits & Skills', href: '/habits', icon: 'repeat' },
+        { key: 'journal', label: 'Journal', href: '/journal', icon: 'book' },
       ],
     },
     {
@@ -154,6 +158,7 @@ function Shell({
         '/tasks': <Tasks ctx={ctx} />,
         '/agenda': <Agenda ctx={ctx} />,
         '/habits': <Habits ctx={ctx} />,
+        '/journal': <Journal ctx={ctx} />,
         '/projects': <Projects ctx={ctx} />,
         '/dashboard': <Dashboard ctx={ctx} />,
         '/automations': <Automations ctx={ctx} />,

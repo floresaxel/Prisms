@@ -152,10 +152,21 @@ body {
 .px-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .px-btn:disabled:hover { border-color: var(--px-border); }
 
-/* agenda (§12.2): to-do panel + week calendar */
-.px-agenda { display: grid; grid-template-columns: 240px 1fr; gap: 20px; align-items: start; }
-.px-agenda-todo h2 { margin-top: 0; }
-.px-todo-item { display: flex; justify-content: space-between; gap: 8px; padding: 10px 12px; margin-bottom: 8px; background: var(--px-surface); border: 1px solid var(--px-border); border-radius: var(--px-radius); cursor: grab; user-select: none; }
+/* agenda (§12.2) — 3-panel re-skin: journal · week grid · to-schedule (W6) */
+.px-ag-bar { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin: 2px 0 14px; }
+.px-ag-legend { display: flex; gap: 14px; flex-wrap: wrap; margin-left: auto; font-size: 11px; color: var(--px-text-dim); }
+.px-ag-sw { width: 12px; height: 12px; border-radius: 3px; display: inline-block; border: 1px solid var(--px-border-2); flex: none; }
+.px-ag-sw--committed { background: var(--px-blue-bg); border-color: var(--px-blue-brd); }
+.px-ag-sw--anchored { background: var(--px-surface); border-color: var(--px-ok); }
+.px-ag-sw--suggested { background: var(--px-surface); border: 1.5px dashed var(--px-blue); }
+.px-ag-sw--novision { background: var(--px-slate-bg); border-color: var(--px-border-2); }
+.px-ag-sw--history { background: var(--px-surface-2); border: 1px dashed var(--px-border-2); }
+
+.px-agenda { display: grid; grid-template-columns: 264px minmax(0, 1fr) 232px; gap: 18px; align-items: start; }
+.px-agenda-journal, .px-agenda-todo { background: var(--px-surface); border: 1px solid var(--px-border); border-radius: 10px; padding: 12px 14px; box-shadow: var(--px-shadow); min-width: 0; }
+.px-agenda-journal h2, .px-agenda-todo h2 { margin-top: 0; font-size: 14px; }
+.px-drag-hint { font-size: 11px; margin: 10px 0 0; }
+.px-todo-item { display: flex; justify-content: space-between; gap: 8px; padding: 9px 11px; margin-bottom: 7px; background: var(--px-surface); border: 1px solid var(--px-border); border-radius: 8px; font-size: 12.5px; cursor: grab; user-select: none; box-shadow: var(--px-shadow); }
 .px-todo-item:hover { border-color: var(--px-accent); }
 
 .px-cal-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
@@ -449,3 +460,23 @@ body {
 .px-flow-node--project { border-color: var(--px-blue); background: var(--px-blue-bg); }
 .px-flow-node--milestone { border-color: var(--px-green); background: var(--px-green-bg); }
 .px-flow-node--task { border-color: var(--px-border-2); background: var(--px-surface); }
+
+/* ── Journal hub (W6) — lazy month list + day editor ── */
+.px-btn--icon { padding: 7px 9px; line-height: 0; }
+.px-jn-cols { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 18px; align-items: start; }
+.px-jn-months { background: var(--px-surface); border: 1px solid var(--px-border); border-radius: 10px; padding: 6px; box-shadow: var(--px-shadow); max-height: 74vh; overflow-y: auto; }
+.px-jn-m { border-bottom: 1px solid var(--px-border); }
+.px-jn-m:last-child { border-bottom: none; }
+.px-jn-mh { display: flex; align-items: center; gap: 8px; width: 100%; background: none; border: none; font: inherit; font-weight: 600; font-size: 13px; color: var(--px-text); padding: 9px 6px; cursor: pointer; text-align: left; }
+.px-jn-mh:hover { color: var(--px-accent); }
+.px-jn-mh .px-ic { width: 14px; height: 14px; color: var(--px-faint); flex: none; }
+.px-jn-mh-label { flex: 1; }
+.px-jn-days { display: flex; flex-direction: column; gap: 2px; padding: 0 4px 8px; }
+.px-jn-empty { font-size: 12px; padding: 2px 6px 6px; margin: 0; }
+.px-jn-d { display: flex; flex-direction: column; gap: 1px; align-items: flex-start; width: 100%; text-align: left; background: none; border: none; border-radius: 7px; padding: 6px 9px; cursor: pointer; font: inherit; color: var(--px-text); }
+.px-jn-d:hover { background: var(--px-surface-2); }
+.px-jn-d--sel { background: var(--px-blue-bg); }
+.px-jn-d-date { font-size: 11px; font-weight: 600; color: var(--px-text-dim); }
+.px-jn-d--sel .px-jn-d-date { color: var(--px-blue-deep); }
+.px-jn-d-title { font-size: 12.5px; color: var(--px-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.px-jn-editor { background: var(--px-surface); border: 1px solid var(--px-border); border-radius: 10px; padding: 4px 16px 16px; box-shadow: var(--px-shadow); min-width: 0; }

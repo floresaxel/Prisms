@@ -187,6 +187,52 @@ test('offline write shows immediately (overlay) and syncs on reconnect — one r
   expect(await localCount(page, today)).toBe(1); // exactly one row — no ghost duplicate
 });
 
+test('standalone Journal screen: lists the current month, opens a note, lazily loads a past month, archive downloads', async ({ page }) => {
+  await register(page, 'journal-screen');
+  const pastA = daysAgo(40); // always a prior month (day-of-month ≤ 31 < 40)
+  const monthA = pastA.slice(0, 7);
+  const pastContent = 'past month note 🗓️';
+  const seed = await page.request.post('/sync/upload', {
+    data: {
+      device_id: 'e2e-seed',
+      commands: [
+        cmd('journal.write', { id: randomUUID(), entry_date: today, content: '# Today\nstandup notes' }),
+        cmd('journal.write', { id: randomUUID(), entry_date: pastA, content: pastContent }),
+      ],
+    },
+  });
+  expect(seed.ok()).toBeTruthy();
+  expect(monthA).not.toBe(today.slice(0, 7)); // sanity: the seed really is a different month
+
+  await goto(page, 'journal');
+
+  // the current month opens expanded → today's note syncs down and lists (markdown
+  // heading stripped to a plain title).
+  await expect(page.getByTestId(`journal-day-${today}`)).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId(`journal-day-${today}`)).toContainText('Today');
+
+  // the past month renders as a header but COLLAPSED — its day is not listed yet.
+  await expect(page.getByTestId(`journal-month-${monthA}`)).toBeVisible();
+  await expect(page.getByTestId(`journal-day-${pastA}`)).toHaveCount(0);
+
+  // clicking today loads it in the shared day editor.
+  await page.getByTestId(`journal-day-${today}`).click();
+  await expect(page.getByTestId('journal-rich')).toContainText('standup notes', { timeout: 15_000 });
+
+  // expand the past month → its rows sync LAZILY (the day appears only now).
+  await page.getByTestId(`journal-month-${monthA}`).click();
+  await expect(page.getByTestId(`journal-day-${pastA}`)).toBeVisible({ timeout: 30_000 });
+  await page.getByTestId(`journal-day-${pastA}`).click();
+  await expect(page.getByTestId('journal-rich')).toContainText('past month note', { timeout: 15_000 });
+
+  // the archive is server-sourced, so it includes BOTH months (even the lazy one).
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.getByTestId('journal-archive').click()]);
+  expect(dl.suggestedFilename()).toMatch(/^prisms-journal_.*\.zip$/);
+  const files = unzipSync(new Uint8Array(await readFile(await dl.path())));
+  expect(strFromU8(files[`journal/${yearOf(pastA)}/${pastA}.md`]!)).toBe(pastContent);
+  expect(Object.keys(files)).toContain(`journal/${yearOf(today)}/${today}.md`);
+});
+
 test('J7 WYSIWYG: toolbar task list + an interactive checkbox round-trip to markdown', async ({ page }) => {
   await register(page, 'journal-wysiwyg');
   await goto(page, 'agenda');

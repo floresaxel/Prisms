@@ -10,7 +10,7 @@
  */
 import { createElement } from 'react';
 
-import { asEpochMillis, bucketDate } from '@prisms/core';
+import { addDays, asEpochMillis, bucketDate } from '@prisms/core';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { strFromU8, unzipSync } from 'fflate';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -160,20 +160,22 @@ describe('DayJournalPanel — editor', () => {
 
 describe('Agenda — journal integration', () => {
   const today = bucketDate(asEpochMillis(Date.now()), 0, 'UTC'); // days[0] of the visible week
+  const tomorrow = addDays(today, 1); // days[1]
 
-  it('shows a note dot on a day that has a note, and the header swaps in the journal panel', () => {
+  it('shows a note dot on a day with a note; the journal panel defaults to today and swaps on a day-header click', () => {
     state.months = [{ entry_date: today, content: 'has a note' }];
     state.entry = { id: 'j1', content: 'has a note', deleted_at: null };
     render(createElement(Agenda, { ctx: CTX }));
 
     // dot present for today's column
     expect(screen.getByTestId(`note-dot-${today}`)).toBeTruthy();
-    // no journal panel until a day is selected
-    expect(screen.queryByTestId(`journal-${today}`)).toBeNull();
-
-    fireEvent.click(screen.getByTestId('day-head-0'));
+    // W6: the journal panel shows today's note by DEFAULT (no click needed)
     expect(screen.getByTestId(`journal-${today}`)).toBeTruthy();
     expect((screen.getByTestId('journal-rich') as HTMLTextAreaElement).value).toBe('has a note');
+
+    // clicking another day header swaps the panel to that day
+    fireEvent.click(screen.getByTestId('day-head-1'));
+    expect(screen.getByTestId(`journal-${tomorrow}`)).toBeTruthy();
   });
 });
 
