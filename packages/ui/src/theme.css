@@ -137,15 +137,6 @@ body {
 .px-banner { margin: 0 0 14px; padding: 10px 14px; border-radius: var(--px-radius); background: var(--px-surface-2); border: 1px solid var(--px-border); color: var(--px-text-dim); font-size: 13px; }
 .px-banner--upgrade { background: var(--px-red-bg); border-color: var(--px-red-brd); color: var(--px-text); }
 
-/* task progress bar (§7.2) */
-.px-progress { height: 6px; border-radius: 999px; background: var(--px-surface-2); overflow: hidden; max-width: 320px; }
-.px-progress-fill { height: 100%; background: var(--px-accent); border-radius: 999px; transition: width 0.2s ease; }
-.px-progress-fill--over { background: var(--px-danger); }
-
-/* running-timer bar (I5: one global) */
-.px-timerbar { display: flex; align-items: center; gap: 12px; padding: 12px 16px; margin-bottom: 16px; background: var(--px-surface-2); border: 1px solid var(--px-accent); border-radius: var(--px-radius); }
-.px-timerbar-task { font-weight: 600; flex: 1; }
-.px-timerbar-elapsed { font-variant-numeric: tabular-nums; font-size: 18px; color: var(--px-accent); }
 
 /* form controls */
 .px-input, .px-select { font: inherit; padding: 8px 12px; border-radius: var(--px-radius); border: 1px solid var(--px-border); background: var(--px-surface); color: var(--px-text); }
@@ -169,7 +160,6 @@ body {
 .px-todo-item { display: flex; justify-content: space-between; gap: 8px; padding: 9px 11px; margin-bottom: 7px; background: var(--px-surface); border: 1px solid var(--px-border); border-radius: 8px; font-size: 12.5px; cursor: grab; user-select: none; box-shadow: var(--px-shadow); }
 .px-todo-item:hover { border-color: var(--px-accent); }
 
-.px-cal-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
 .px-cal-grid { display: grid; grid-template-columns: 48px repeat(7, 1fr); gap: 0; border: 1px solid var(--px-border); border-radius: var(--px-radius); overflow: hidden; }
 .px-cal-gutter { position: relative; border-right: 1px solid var(--px-border); margin-top: 28px; }
 .px-cal-hour-label { position: absolute; right: 6px; font-size: 10px; color: var(--px-text-dim); transform: translateY(-6px); }
@@ -224,7 +214,6 @@ body {
 .px-chart-bar { fill: rgba(70,192,138,0.28); }
 .px-chart-line { stroke: var(--px-accent); stroke-width: 2; }
 .px-chart-dot { fill: var(--px-accent); }
-.px-dash-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 12px; align-items: start; }
 
 /* flowchart (§12.1–12.2): React Flow canvas + nodes */
 .px-flow-canvas { height: 440px; border: 1px solid var(--px-border); border-radius: var(--px-radius); background: var(--px-bg); }
@@ -477,9 +466,6 @@ body {
 .px-dash { display: grid; grid-template-columns: 1.5fr 1fr; gap: 14px; align-items: start; margin-top: 14px; }
 .px-dash-pad { padding: 14px 16px; }
 .px-card-title { padding: 11px 14px; border-bottom: 1px solid var(--px-border); font-weight: 600; font-size: 13px; }
-.px-kv { display: flex; align-items: baseline; gap: 8px; }
-.px-kv b { font-size: 21px; font-weight: 660; }
-.px-kv span { color: var(--px-faint); font-size: 12px; }
 .px-cbar { margin: 9px 0; }
 .px-cbar-lbl { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 4px; }
 .px-cbar-lbl span:last-child { color: var(--px-text-dim); font-weight: 600; }
@@ -497,14 +483,11 @@ body {
 .px-hb-card { padding: 14px; display: flex; flex-direction: column; gap: 10px; }
 .px-hb-top { display: flex; align-items: center; gap: 8px; }
 .px-hb-top b { font-size: 13.5px; font-weight: 620; }
-.px-hb-mid { display: flex; align-items: center; gap: 12px; }
 .px-hb-info { font-size: 11.5px; color: var(--px-text-dim); line-height: 1.5; }
 .px-mastery { margin-top: 4px; }
 .px-mastery-trk { height: 4px; border-radius: 2px; background: var(--px-surface-2); }
 .px-mastery-fil { height: 4px; border-radius: 2px; background: var(--px-amber); }
 .px-hb-foot { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.px-hb-done { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--px-green); font-weight: 580; }
-.px-level { font-weight: 640; color: var(--px-amber); }
 
 /* automations — rule cards with flow pills + toggle */
 .px-rule { display: flex; gap: 12px; padding: 13px 16px; align-items: flex-start; }
@@ -529,6 +512,22 @@ body {
 .px-set-lbl b { display: block; font-size: 13px; font-weight: 600; margin-bottom: 3px; }
 .px-set-lbl span { font-size: 11.5px; color: var(--px-faint); line-height: 1.45; }
 .px-set-ctl { flex: 1; }
+
+/* ── W8 polish — keyboard focus-visible, reduced motion, desktop min-width ── */
+/* the shell is a desktop-first 3-column IA; below this it scrolls rather than collapsing. */
+.px-app { min-width: 1024px; }
+/* a visible focus ring for KEYBOARD navigation only (mouse clicks don't trigger it). */
+:focus-visible { outline: 2px solid var(--px-accent); outline-offset: 2px; }
+.px-navlink:focus-visible,
+.px-tab:focus-visible,
+.px-fchip:focus-visible,
+.px-rv-f:focus-visible,
+.px-toggle:focus-visible,
+.px-steps-tg:focus-visible { outline-offset: 1px; border-radius: 6px; }
+/* the run-banner pulse joins the timer-pill/skeleton in respecting reduced motion. */
+@media (prefers-reduced-motion: reduce) {
+  .px-run-banner .px-dot { animation: none; }
+}
 
 /* ── Journal hub (W6) — lazy month list + day editor ── */
 .px-btn--icon { padding: 7px 9px; line-height: 0; }
