@@ -13,7 +13,7 @@ const LABEL_W = 180;
 const DAY_W = 22;
 const ROW_H = 30;
 
-export function Gantt() {
+export function Gantt({ projectId }: { projectId?: string | null }) {
   const [now, setNow] = useState<Instant>(asEpochMillis(Date.now()));
   useEffect(() => {
     const t = setInterval(() => setNow(asEpochMillis(Date.now())), 60_000);
@@ -25,7 +25,7 @@ export function Gantt() {
     () => [...tree.byId.values()].filter((n) => n.node_type === 'project').sort((a, b) => (a.title < b.title ? -1 : 1)),
     [tree],
   );
-  const [projectId, setProjectId] = useState('');
+  // scope from the hub picker; "All projects" (null) falls back to the first project.
   const active = projectId || projects[0]?.id || '';
   const gantt = useGantt(active || null, now);
   const hydrated = useIsHydrated();
@@ -39,12 +39,6 @@ export function Gantt() {
 
   return (
     <section>
-      <h1>Gantt</h1>
-      <select className="px-select" data-testid="gantt-project" value={active} onChange={(e) => setProjectId(e.target.value)} style={{ marginBottom: 12 }}>
-        {projects.length === 0 && <option value="">{hydrated ? 'No projects yet' : 'Loading…'}</option>}
-        {projects.map((p) => <option key={p.id} value={p.id}>{p.title}</option>)}
-      </select>
-
       {gantt.bars.length === 0 ? (
         hydrated ? (
           <p className="px-muted">No dated tasks — schedule a block or set a due date to see bars.</p>
@@ -110,10 +104,17 @@ export function Gantt() {
         </div>
       )}
 
-      {gantt.criticalPathIds.length > 0 && (
-        <p className="px-muted" data-testid="gantt-critical">Critical path: {gantt.criticalPathIds.length} task(s)</p>
+      {gantt.bars.length > 0 && (
+        <div className="px-gantt-legend">
+          <span className="px-lg"><i className="px-gantt-sw-bar" />Task</span>
+          <span className="px-lg"><i className="px-gantt-sw-critical" />Critical path</span>
+          <span className="px-lg" style={{ marginLeft: 'auto' }}>
+            arrows = dependencies · critical path = longest chain of estimates
+            {gantt.criticalPathIds.length > 0 && <span data-testid="gantt-critical"> ({gantt.criticalPathIds.length})</span>}
+            {gantt.fromDate && ` · from ${gantt.fromDate}, ${gantt.days}-day window`}
+          </span>
+        </div>
       )}
-      {gantt.fromDate && <p className="px-muted">from {gantt.fromDate}, {gantt.days}-day window</p>}
     </section>
   );
 }

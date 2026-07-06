@@ -77,11 +77,11 @@ test('warm revisit: Decisions / Habits / Flowchart return prior rows with no emp
 
   // ── Flowchart (diagram_* screen-local + provider tree) ─────────────────────
   await goto(page, 'graph');
-  await page.getByTestId('diagram-root').selectOption(ids.p);
+  await page.getByTestId('projects-scope').selectOption(ids.p);
   await expect(page.getByTestId(`flow-node-${ids.t}`)).toBeVisible({ timeout: 30_000 });
   await goto(page, 'myday');
   await goto(page, 'graph');
-  await page.getByTestId('diagram-root').selectOption(ids.p);
+  await page.getByTestId('projects-scope').selectOption(ids.p);
   await expect(page.getByTestId(`flow-node-${ids.t}`)).toBeVisible();
   await expect(page.getByTestId('edge-skeleton')).toHaveCount(0);
 });

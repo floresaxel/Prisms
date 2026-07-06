@@ -56,7 +56,7 @@ test('flowchart: add an edge, a cycle is rejected with E_CYCLE, group + collapse
   expect(seed.ok()).toBeTruthy();
 
   await goto(page, 'graph');
-  await page.getByTestId('diagram-root').selectOption(ids.p);
+  await page.getByTestId('projects-scope').selectOption(ids.p);
   await expect(page.getByTestId(`flow-node-${ids.t1}`)).toBeVisible({ timeout: 30_000 });
 
   // add A → B
@@ -79,7 +79,7 @@ test('flowchart: add an edge, a cycle is rejected with E_CYCLE, group + collapse
   await expect(page.getByTestId(`collapse-${ids.t1}`)).toHaveText('expand');
 
   await page.reload();
-  await page.getByTestId('diagram-root').selectOption(ids.p);
+  await page.getByTestId('projects-scope').selectOption(ids.p);
   await expect(page.getByTestId('group-count')).toHaveText('1 group(s)', { timeout: 20_000 });
   await expect(page.getByTestId(`collapse-${ids.t1}`)).toHaveText('expand');
   await expect(page.getByTestId('edge-list')).toContainText('Dependencies (1)');
@@ -102,7 +102,7 @@ test('gantt: a dependency arrow matches the edge between two dated tasks', async
   expect(seed.ok()).toBeTruthy();
 
   await goto(page, 'timeline');
-  await page.getByTestId('gantt-project').selectOption(ids.p);
+  await page.getByTestId('projects-scope').selectOption(ids.p);
   await expect(page.getByTestId(`gantt-bar-${ids.t1}`)).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId(`gantt-bar-${ids.t2}`)).toBeVisible();
   // the arrow matches the seeded edge

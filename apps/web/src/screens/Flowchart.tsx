@@ -37,7 +37,7 @@ interface PrismNodeData extends Record<string, unknown> {
 
 function PrismNode({ data }: { data: PrismNodeData }) {
   return (
-    <div className={`px-flow-node${data.collapsed ? ' px-flow-node--collapsed' : ''}`} data-testid={`flow-node-${data.nodeId}`}>
+    <div className={`px-flow-node px-flow-node--${data.nodeType}${data.collapsed ? ' px-flow-node--collapsed' : ''}`} data-testid={`flow-node-${data.nodeId}`}>
       <Handle type="target" position={Position.Top} />
       <div className="px-flow-node-title">{data.label}</div>
       <div className="px-flow-node-type">{data.nodeType}{data.collapsed ? ' · collapsed' : ''}</div>
@@ -49,7 +49,7 @@ function PrismNode({ data }: { data: PrismNodeData }) {
 
 const nodeTypes = { prism: PrismNode };
 
-export function Flowchart({ ctx }: { ctx: CommandContext }) {
+export function Flowchart({ ctx, rootId }: { ctx: CommandContext; rootId?: string | null }) {
   const tree = useNodeTree();
   const commands = useCommands(ctx);
 
@@ -60,8 +60,8 @@ export function Flowchart({ ctx }: { ctx: CommandContext }) {
         .sort((a, b) => (a.title < b.title ? -1 : 1)),
     [tree],
   );
-  const [rootId, setRootId] = useState<string>('');
   const [mode, setMode] = useState<'dates' | 'nodates'>('nodates');
+  // scope from the hub picker (a project); "All" (null) falls back to the first root.
   const activeRoot = rootId || roots[0]?.id || '';
   const hydrated = useIsHydrated();
 
@@ -111,13 +111,7 @@ export function Flowchart({ ctx }: { ctx: CommandContext }) {
 
   return (
     <section>
-      <h1>Flowchart</h1>
-
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 10 }}>
-        <select className="px-select" data-testid="diagram-root" value={activeRoot} onChange={(e) => setRootId(e.target.value)}>
-          {roots.length === 0 && <option value="">{hydrated ? 'No diagrams yet' : 'Loading…'}</option>}
-          {roots.map((r) => <option key={r.id} value={r.id}>{r.title} ({r.node_type})</option>)}
-        </select>
         <button className="px-btn" data-testid="mode-toggle" onClick={() => setMode((m) => (m === 'dates' ? 'nodates' : 'dates'))}>
           {mode === 'dates' ? 'Dates' : 'No dates'}
         </button>

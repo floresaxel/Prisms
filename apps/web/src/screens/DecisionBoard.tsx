@@ -102,7 +102,6 @@ export function DecisionBoard({ ctx }: { ctx: CommandContext }) {
 
   return (
     <section>
-      <h1>Decision board</h1>
       <button className="px-btn" data-testid="new-board" onClick={() => void commands.createBoard('Priorities')} style={{ marginBottom: 16 }}>
         New board
       </button>

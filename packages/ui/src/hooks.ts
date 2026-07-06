@@ -857,8 +857,9 @@ export interface KanbanColumn {
  * Kanban by date (§1.2): non-done tasks grouped into a backlog (no due date)
  * plus `dayCount` day columns from today. Tasks due before the window land in
  * the first day column, after it in the last — so every card stays draggable.
+ * `projectId` (W5 scope picker) narrows to tasks under one project; null = all.
  */
-export function useKanban(now: Instant, dayCount = 5): KanbanColumn[] {
+export function useKanban(now: Instant, projectId?: string | null, dayCount = 5): KanbanColumn[] {
   const ctx = useFactContext();
   return useMemo(() => {
     const today = ctx.today(now);
@@ -870,6 +871,7 @@ export function useKanban(now: Instant, dayCount = 5): KanbanColumn[] {
     const dayCols = columns.slice(1);
     for (const node of ctx.tree.byId.values()) {
       if (node.node_type !== 'task' || node.completed_at !== null) continue;
+      if (projectId && ancestorsOf(ctx.tree, node.id).find((a) => a.node_type === 'project')?.id !== projectId) continue;
       if (node.due_date === null) {
         columns[0]!.cards.push(node);
         continue;
@@ -882,7 +884,7 @@ export function useKanban(now: Instant, dayCount = 5): KanbanColumn[] {
       col.cards.sort((a, b) => (a.sort_order < b.sort_order ? -1 : a.sort_order > b.sort_order ? 1 : a.id < b.id ? -1 : 1));
     }
     return columns;
-  }, [ctx, now, dayCount]);
+  }, [ctx, now, projectId, dayCount]);
 }
 
 export interface DecisionBoardView {
