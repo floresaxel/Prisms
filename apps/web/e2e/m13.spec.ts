@@ -14,6 +14,8 @@ import { randomUUID } from 'node:crypto';
 
 import { expect, test, type Page } from '@playwright/test';
 
+import { goto } from './util/nav';
+
 let seq = 0;
 const cmd = (name: string, payload: unknown) => ({
   id: randomUUID(),
@@ -49,12 +51,14 @@ test('encrypted export downloads, re-imports with the passphrase, and restores',
   });
   expect(seed.ok()).toBeTruthy();
 
-  await page.getByRole('link', { name: 'Settings' }).click();
+  await goto(page, 'settings');
+  await page.getByTestId('settings-tab-data').click();
   await expect(page.getByTestId('portability')).toBeVisible();
   // let the seed sync down so the export includes it
-  await page.getByRole('link', { name: 'Worklist' }).click();
+  await goto(page, 'myday');
   await expect(page.getByText('Task One')).toBeVisible({ timeout: 30_000 });
-  await page.getByRole('link', { name: 'Settings' }).click();
+  await goto(page, 'settings');
+  await page.getByTestId('settings-tab-data').click();
 
   // --- DoD: encrypted export downloads ---
   await page.getByTestId('export-passphrase').fill('backup-pass-123');

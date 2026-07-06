@@ -602,6 +602,10 @@ Graph editing is React-Flow/DOM-based and deliberately not ported to RN. Mobile 
 - Desktop: Tauri v2 loads the identical web bundle; SQLite via Tauri SQL plugin through the same PowerSync interface; OS notifications via Tauri plugin.
 - Mobile: `@powersync/react-native` + expo-sqlite; expo-notifications for local + push; background fetch only as best-effort (never load-bearing — server jobs are the guarantee).
 
+### 12.4 Web shell (2026 redesign)
+
+The web/desktop UI is a single light theme in a grouped-sidebar + topbar shell (`packages/ui` `Layout`, tokens/primitives in `packages/ui/theme.css`; `Blueprints/WEB_REDESIGN_PLAN.md` W0–W8): nav groups (Tasks/Review · My work · Plan · Automate · Settings) with count badges, a persistent HH:MM clock, the single global running-timer pill (I5) whose clock-out drives the focus-review modal from **any** screen, and a sync chip. Routes consolidate to `/`, `/tasks`, `/agenda`, `/habits`, `/journal`, `/projects`, `/dashboard`, `/automations`, `/review`, `/settings`; `Projects` (Board/Timeline/Graph/Decisions) and `Automations` (Rules/Blockers) host the old surfaces under hash tabs behind a shared scope picker, and old flat paths redirect on boot. My Day orders available items by decision-board priority; the Tasks view carries lightweight `task_steps` checklists (a separate synced table, never a node hierarchy — §6.0). The redesign is shell + styling: every screen is the same PowerSync-reactive selectors, so the data path is unchanged. Desktop (Tauri) loads the identical bundle and inherits it.
+
 ---
 
 ## 13. Security Model

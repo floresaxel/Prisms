@@ -269,6 +269,18 @@ export function buildOptimisticEffects(name: CommandName, payload: unknown, ctx:
     case 'journal.delete':
       return [del('journal_entries', id)];
 
+    // --- task steps (checklist on a task, W3/D4) ---------------------------
+    case 'step.add':
+      return [ins('task_steps', p['id'], { task_id: p['task_id'], title: p['title'], done: 0, sort_order: p['sort_order'] })];
+    case 'step.rename':
+      return [upd('task_steps', id, { title: p['title'] })];
+    case 'step.toggle':
+      return [upd('task_steps', id, { done: b(p['done']) })];
+    case 'step.reorder':
+      return [upd('task_steps', id, { sort_order: p['sort_order'] })];
+    case 'step.remove':
+      return [del('task_steps', id)];
+
     // --- automation & blocker rules ----------------------------------------
     case 'rule.create':
       return [

@@ -127,7 +127,13 @@ export {
   useJournalMonths,
   useJournalDay,
   useTimeBlocksForDay,
+  useTaskSteps,
+  useTaskStepsByTask,
+  useTasksByProject,
   useGroupedWorklist,
+  useMyDayAvailable,
+  useProjectPriorities,
+  useDoneToday,
   useBlockedTasks,
   useHabitTasks,
   // loading-aware read layer (1.4 §7.15, Fix C) — M12
@@ -140,6 +146,9 @@ export {
   clearReadCaches,
   type RowsRead,
   type WorklistItem,
+  type MyDayItem,
+  type DoneTodayItem,
+  type ProjectTasksGroup,
   type BlockedTask,
   type RunningTimer,
   type PromoteTarget,
@@ -169,6 +178,7 @@ export {
 export { groupWorklistBySchedule, type WorklistGroup } from './worklist-grouping';
 
 // design system
-export { Layout, type LayoutProps, type NavLinkSpec } from './components/Layout';
+export { Layout, type LayoutProps, type NavItemSpec, type NavGroupSpec, type BreadcrumbSpec } from './components/Layout';
+export { Ic, IconSprite, type IcProps, type IconName } from './components/icons';
 export { List, ListItem, Skeleton, ListSkeleton, type ListProps, type ListItemProps, type SkeletonProps } from './components/List';
 export { Modal, type ModalProps } from './components/Modal';

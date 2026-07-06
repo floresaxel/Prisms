@@ -230,6 +230,20 @@ export const journalWriteSchema = z.strictObject({
 });
 export const journalDeleteSchema = idOnly; // journal entry row id
 
+// --- task steps (checklist on a task, W3/D4) --------------------------------
+// A client-minted row id + the parent task + the fractional order (same scheme
+// as nodes); the parent-is-a-task + not-done gate is an invariant, not a shape.
+export const stepAddSchema = z.strictObject({
+  id: uuidSchema,
+  task_id: uuidSchema,
+  title: z.string(),
+  sort_order: z.string().min(1),
+});
+export const stepRenameSchema = z.strictObject({ id: uuidSchema, title: z.string() });
+export const stepToggleSchema = z.strictObject({ id: uuidSchema, done: z.boolean() });
+export const stepReorderSchema = z.strictObject({ id: uuidSchema, sort_order: z.string().min(1) });
+export const stepRemoveSchema = idOnly; // step row id
+
 // --- automation & blocker rules ---------------------------------------------
 
 export const ruleCreateSchema = z.strictObject({
@@ -364,6 +378,11 @@ export const COMMAND_SCHEMAS = {
   'tag.clear_answer': tagClearAnswerSchema,
   'journal.write': journalWriteSchema,
   'journal.delete': journalDeleteSchema,
+  'step.add': stepAddSchema,
+  'step.rename': stepRenameSchema,
+  'step.toggle': stepToggleSchema,
+  'step.reorder': stepReorderSchema,
+  'step.remove': stepRemoveSchema,
   'rule.create': ruleCreateSchema,
   'rule.update': ruleUpdateSchema,
   'rule.toggle': ruleToggleSchema,

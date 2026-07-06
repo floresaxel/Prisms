@@ -151,6 +151,19 @@ const journal_entries = new Table({
   deleted_at: column.text,
 });
 
+/** A checklist step under a task (§6.0, W3/D4). Always-on synced (the `active`
+ *  tier), so the whole set is local; `useTaskSteps` reads it per task. */
+const task_steps = new Table({
+  user_id: column.text,
+  task_id: column.text,
+  title: column.text,
+  done: column.integer,
+  sort_order: column.text,
+  created_at: column.text,
+  updated_at: column.text,
+  deleted_at: column.text,
+});
+
 const decision_boards = new Table({
   user_id: column.text,
   title: column.text,
@@ -309,6 +322,7 @@ const syncedTables = {
   tag_placements,
   tag_answers,
   journal_entries,
+  task_steps,
   decision_boards,
   decision_criteria,
   decision_scores,

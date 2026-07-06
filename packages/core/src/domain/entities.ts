@@ -517,6 +517,22 @@ export const journalEntrySchema = z.strictObject({
 });
 export type JournalEntry = z.infer<typeof journalEntrySchema>;
 
+/**
+ * A checklist step under a task (§6.0, W3/D4). A separate synced table — NOT a
+ * node type — so steps never enter the worklist, scheduler, StatusIndex, or
+ * burndown. Pure checklist: no status, schedule, or estimate. `sort_order` uses
+ * the same fractional index as nodes; `task_id`'s parent must be node_type='task'
+ * (dispatcher-enforced).
+ */
+export const taskStepSchema = z.strictObject({
+  ...baseRow,
+  task_id: uuidSchema,
+  title: z.string(),
+  done: z.boolean(),
+  sort_order: z.string(),
+});
+export type TaskStep = z.infer<typeof taskStepSchema>;
+
 // --- REGISTRY -------------------------------------------------------------------------------------
 
 /** Every §6.0 table, keyed by SQL table name (s03 asserts Drizzle parity against this). */

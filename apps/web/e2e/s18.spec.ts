@@ -14,6 +14,8 @@ import { randomUUID } from 'node:crypto';
 
 import { expect, test } from '@playwright/test';
 
+import { goto } from './util/nav';
+
 let seq = 0;
 const cmd = (name: string, payload: unknown) => ({
   id: randomUUID(),
@@ -57,18 +59,18 @@ test('daily-target ring fills during an offline clock-in on a skill task', async
   await expect(page.getByText('Practice')).toBeVisible({ timeout: 30_000 });
 
   // ring starts empty
-  await page.getByRole('link', { name: 'Habits' }).click();
+  await goto(page, 'habits');
   const ring = page.getByTestId(`ring-${ids.habit}`);
   await expect(ring).toHaveAttribute('data-fill', '0.000');
 
   // --- offline clock-in on the skill task ------------------------------
   await context.setOffline(true);
-  await page.getByRole('link', { name: 'Worklist' }).click();
+  await goto(page, 'myday');
   await page.getByTestId(`clock-in-${ids.task}`).click();
   await expect(page.getByTestId('running-timer')).toBeVisible();
 
   // back to habits — the ring fills live from the running timer
-  await page.getByRole('link', { name: 'Habits' }).click();
+  await goto(page, 'habits');
   await expect.poll(async () => Number(await page.getByTestId(`ring-${ids.habit}`).getAttribute('data-fill')), { timeout: 10_000 }).toBeGreaterThan(0);
 
   await context.setOffline(false);
@@ -84,7 +86,7 @@ test('habit CRUD: create, edit (daily target), delete through the UI', async ({ 
   });
   expect(seed.ok()).toBeTruthy();
 
-  await page.getByRole('link', { name: 'Habits' }).click();
+  await goto(page, 'habits');
   // wait for the vision to sync so the create form can attach to it
   await expect(page.getByTestId('habit-vision')).toContainText('Wellness', { timeout: 30_000 });
 
@@ -124,7 +126,7 @@ test('kanban: dragging a card to another day re-dates it and persists', async ({
   });
   expect(seed.ok()).toBeTruthy();
 
-  await page.getByRole('link', { name: 'Kanban' }).click();
+  await goto(page, 'board');
   const card = page.getByTestId(`kanban-card-${ids.task}`);
   await expect(card).toBeVisible({ timeout: 30_000 });
 

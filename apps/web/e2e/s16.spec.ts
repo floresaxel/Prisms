@@ -11,6 +11,8 @@ import { randomUUID } from 'node:crypto';
 
 import { expect, test } from '@playwright/test';
 
+import { goto } from './util/nav';
+
 let seq = 0;
 const cmd = (name: string, payload: unknown) => ({
   id: randomUUID(),
@@ -54,7 +56,7 @@ test('inbox → promote → clock in/out → review, offline then synced; double
   await context.setOffline(true);
 
   // create an activity in the inbox
-  await page.getByRole('link', { name: 'Inbox' }).click();
+  await goto(page, 'tasks');
   await page.getByTestId('activity-title').fill('Promoted Task');
   await page.getByTestId('activity-add').click();
   const inboxRow = page.getByTestId('inbox').locator('li', { hasText: 'Promoted Task' });
@@ -65,16 +67,17 @@ test('inbox → promote → clock in/out → review, offline then synced; double
   await expect(page.getByTestId('inbox')).not.toContainText('Promoted Task');
 
   // --- worklist: the promoted task is now an available task --------------
-  await page.getByRole('link', { name: 'Worklist' }).click();
+  await goto(page, 'myday');
   const promoted = page.getByTestId('worklist').locator('li', { hasText: 'Promoted Task' });
   await expect(promoted).toBeVisible();
-  await expect(promoted.locator('.px-badge')).toHaveText('available');
+  // available → it offers a Clock in button (My Day rows, W2)
+  await expect(promoted.getByRole('button', { name: 'Clock in' })).toBeVisible();
 
-  // clock in → ongoing + the single running-timer bar appears
+  // clock in → the task lifts into the run banner + the global running-timer pill
   await promoted.getByRole('button', { name: 'Clock in' }).click();
   await expect(page.getByTestId('running-timer')).toBeVisible();
   await expect(page.getByTestId('running-timer')).toContainText('Promoted Task');
-  await expect(promoted.locator('.px-badge')).toHaveText('ongoing');
+  await expect(page.getByTestId('run-banner')).toContainText('Promoted Task');
 
   // double-timer impossible: every other task's clock-in is disabled
   const existing = page.getByTestId('worklist').locator('li', { hasText: 'Existing Task' });

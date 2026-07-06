@@ -630,4 +630,88 @@ describe.skipIf(!adminUrl)('S11 command dispatcher (§8 pipeline, full catalog)'
     expect(spawn).toBeTruthy();
     expect(spawn!.table).toBe('nodes');
   });
+
+  describe('step.* — task checklist (W3/D4)', () => {
+    it('add → toggle → rename → reorder persist through the real pipeline', async () => {
+      const ids = await seedTree();
+      const s1 = randomUUID();
+      const s2 = randomUUID();
+      const added = await results(
+        [
+          cmd('step.add', { id: s1, task_id: ids.task, title: 'Prep', sort_order: 'a0' }),
+          cmd('step.add', { id: s2, task_id: ids.task, title: 'Ship', sort_order: 'a1' }),
+        ],
+        ids.user,
+      );
+      expect(added.every((r) => r.result === 'applied')).toBe(true);
+      const rows = await sql`SELECT title, done FROM task_steps WHERE task_id = ${ids.task} AND deleted_at IS NULL ORDER BY sort_order`;
+      expect(rows.map((r) => r['title'])).toEqual(['Prep', 'Ship']);
+      expect(rows.every((r) => r['done'] === false)).toBe(true);
+
+      await results(
+        [
+          cmd('step.toggle', { id: s1, done: true }),
+          cmd('step.rename', { id: s2, title: 'Publish' }),
+          cmd('step.reorder', { id: s2, sort_order: 'a0V' }),
+        ],
+        ids.user,
+      );
+      const [r1] = await sql`SELECT done FROM task_steps WHERE id = ${s1}`;
+      expect(r1!['done']).toBe(true);
+      const [r2] = await sql`SELECT title, sort_order FROM task_steps WHERE id = ${s2}`;
+      expect(r2).toMatchObject({ title: 'Publish', sort_order: 'a0V' });
+    });
+
+    it('rejects a step whose parent is not a task (E_HIERARCHY, I1)', async () => {
+      const ids = await seedTree();
+      const [r] = await results([cmd('step.add', { id: randomUUID(), task_id: ids.project, title: 'x', sort_order: 'a0' })], ids.user);
+      expect(r).toMatchObject({ result: 'rejected', reject_code: 'E_HIERARCHY' });
+    });
+
+    it('freezes the checklist once the parent task is done (E_DONE_IMMUTABLE, I8 spirit)', async () => {
+      const ids = await seedTree();
+      const s = randomUUID();
+      await results([cmd('step.add', { id: s, task_id: ids.task, title: 'a', sort_order: 'a0' })], ids.user);
+      await results([cmd('node.check_off', { id: ids.task, completed_at: '2026-06-13T10:00:00.000Z' })], ids.user);
+      const [add] = await results([cmd('step.add', { id: randomUUID(), task_id: ids.task, title: 'b', sort_order: 'a1' })], ids.user);
+      expect(add).toMatchObject({ result: 'rejected', reject_code: 'E_DONE_IMMUTABLE' });
+      const [toggle] = await results([cmd('step.toggle', { id: s, done: true })], ids.user);
+      expect(toggle).toMatchObject({ result: 'rejected', reject_code: 'E_DONE_IMMUTABLE' });
+    });
+
+    it('rejects touching another user’s step (E_OWNERSHIP)', async () => {
+      const ids = await seedTree();
+      const s = randomUUID();
+      await results([cmd('step.add', { id: s, task_id: ids.task, title: 'mine', sort_order: 'a0' })], ids.user);
+      const [r] = await results([cmd('step.rename', { id: s, title: 'hijack' })], OTHER);
+      expect(r).toMatchObject({ result: 'rejected', reject_code: 'E_OWNERSHIP' });
+    });
+
+    it('deleting the parent task soft-deletes its steps (D4 cascade)', async () => {
+      const ids = await seedTree();
+      const s = randomUUID();
+      await results([cmd('step.add', { id: s, task_id: ids.task, title: 'child', sort_order: 'a0' })], ids.user);
+      await results([cmd('node.soft_delete', { id: ids.task })], ids.user);
+      const [row] = await sql`SELECT deleted_at FROM task_steps WHERE id = ${s}`;
+      expect(row!['deleted_at']).not.toBeNull();
+    });
+
+    it('step.add is idempotent: replaying the command is a noop, a same-id convergence stays applied (§9.4)', async () => {
+      const ids = await seedTree();
+      const s = randomUUID();
+      // same COMMAND id replayed (offline retry) → command-log idempotency → noop
+      const add = cmd('step.add', { id: s, task_id: ids.task, title: 'once', sort_order: 'a0' });
+      const [first] = await results([add], ids.user);
+      const [replay] = await results([add], ids.user);
+      expect(first!.result).toBe('applied');
+      expect(replay!.result).toBe('noop');
+      // a DIFFERENT command minting the SAME step row id → convergeOrOwn no-op (applied), no overwrite
+      const [again] = await results([cmd('step.add', { id: s, task_id: ids.task, title: 'again', sort_order: 'a1' })], ids.user);
+      expect(again!.result).toBe('applied');
+      const rows = await sql`SELECT count(*)::int AS n FROM task_steps WHERE id = ${s}`;
+      expect(rows[0]!['n']).toBe(1);
+      const [row] = await sql`SELECT title FROM task_steps WHERE id = ${s}`;
+      expect(row!['title']).toBe('once'); // the converged no-op did not overwrite
+    });
+  });
 });

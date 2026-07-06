@@ -7,6 +7,7 @@ import { useEffect, useMemo, useSyncExternalStore } from 'react';
 import { usePowerSync, useQuery } from '@powersync/react';
 import {
   addDays,
+  ancestorsOf,
   asEpochMillis,
   bucketDate,
   buildEdgeIndex,
@@ -56,6 +57,7 @@ import {
   type Tag,
   type TagAnswerValue,
   type TaskStatus,
+  type TaskStep,
   type TimeEntry,
   type TreeIndex,
 } from '@prisms/core';
@@ -86,6 +88,7 @@ import {
   toTag,
   toTagAnswer,
   toTagPlacement,
+  toTaskStep,
   toTimeEntry,
   toUserSettings,
 } from './powersync/rows';
@@ -419,6 +422,80 @@ export function useBlockedTasks(now: Instant): BlockedTask[] {
     }
     return out.sort((a, b) => (a.task.title < b.task.title ? -1 : a.task.title > b.task.title ? 1 : a.task.id < b.task.id ? -1 : 1));
   }, [ctx, now]);
+}
+
+/**
+ * A task's checklist steps (W3/D4), ordered by sort_order then id. Screen-local
+ * overlay-merged read: `mergeTable` appends optimistic inserts regardless of the
+ * SQL filter, so re-filter by task_id + live here (the journal precedent).
+ */
+export function useTaskSteps(taskId: string): TaskStep[] {
+  const rows = useRows('SELECT * FROM task_steps WHERE task_id = ? AND deleted_at IS NULL', [taskId]);
+  return useMemo(
+    () =>
+      rows
+        .map(toTaskStep)
+        .filter((s) => s.task_id === taskId && s.deleted_at === null)
+        .sort((a, b) => (a.sort_order < b.sort_order ? -1 : a.sort_order > b.sort_order ? 1 : a.id < b.id ? -1 : 1)),
+    [rows, taskId],
+  );
+}
+
+export interface ProjectTasksGroup {
+  project: Node;
+  tasks: { task: Node; status: TaskStatus; blockedBy: string[] }[];
+}
+
+/**
+ * All non-done tasks grouped by their ancestor PROJECT (W4/D6 "By project"): the
+ * Tasks view mirrors the tree, so a task under a milestone rolls up to its
+ * project. Habit-parentless tasks (no project) are omitted here — they surface in
+ * the By-status view. Groups + tasks are in tree (sort_order) order.
+ */
+export function useTasksByProject(now: Instant): ProjectTasksGroup[] {
+  const ctx = useFactContext();
+  return useMemo(() => {
+    const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+    const byProject = new Map<string, { task: Node; status: TaskStatus; blockedBy: string[] }[]>();
+    for (const node of ctx.tree.byId.values()) {
+      if (node.node_type !== 'task' || node.deleted_at !== null || node.completed_at !== null) continue;
+      const project = ancestorsOf(ctx.tree, node.id).find((a) => a.node_type === 'project');
+      if (!project) continue;
+      const status = taskStatus(node, ctx, now);
+      const blockedBy = status === 'blocked' ? evaluateBlockerRules(node, ctx, now).blockedBy.map((r) => r.label) : [];
+      const list = byProject.get(project.id) ?? [];
+      list.push({ task: node, status, blockedBy });
+      byProject.set(project.id, list);
+    }
+    const projects = [...ctx.tree.byId.values()].filter((n) => n.node_type === 'project' && byProject.has(n.id));
+    projects.sort((a, b) => cmp(a.sort_order, b.sort_order) || cmp(a.id, b.id));
+    return projects.map((project) => ({
+      project,
+      tasks: byProject.get(project.id)!.sort((x, y) => cmp(x.task.sort_order, y.task.sort_order) || cmp(x.task.id, y.task.id)),
+    }));
+  }, [ctx, now]);
+}
+
+/**
+ * All live task_steps grouped by task_id (W4) — ONE overlay-merged subscription
+ * for the whole Tasks view, so each task row reads its steps (count + list) from
+ * the map without a per-row watch. Steps within a task are in sort_order.
+ */
+export function useTaskStepsByTask(): Map<string, TaskStep[]> {
+  const rows = useRows('SELECT * FROM task_steps WHERE deleted_at IS NULL');
+  return useMemo(() => {
+    const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+    const m = new Map<string, TaskStep[]>();
+    for (const r of rows) {
+      const s = toTaskStep(r);
+      if (s.deleted_at !== null) continue; // an overlay delete drops the row
+      const list = m.get(s.task_id) ?? [];
+      list.push(s);
+      m.set(s.task_id, list);
+    }
+    for (const list of m.values()) list.sort((a, b) => cmp(a.sort_order, b.sort_order) || cmp(a.id, b.id));
+    return m;
+  }, [rows]);
 }
 
 export interface HabitTasksView {
@@ -780,8 +857,9 @@ export interface KanbanColumn {
  * Kanban by date (§1.2): non-done tasks grouped into a backlog (no due date)
  * plus `dayCount` day columns from today. Tasks due before the window land in
  * the first day column, after it in the last — so every card stays draggable.
+ * `projectId` (W5 scope picker) narrows to tasks under one project; null = all.
  */
-export function useKanban(now: Instant, dayCount = 5): KanbanColumn[] {
+export function useKanban(now: Instant, projectId?: string | null, dayCount = 5): KanbanColumn[] {
   const ctx = useFactContext();
   return useMemo(() => {
     const today = ctx.today(now);
@@ -793,6 +871,7 @@ export function useKanban(now: Instant, dayCount = 5): KanbanColumn[] {
     const dayCols = columns.slice(1);
     for (const node of ctx.tree.byId.values()) {
       if (node.node_type !== 'task' || node.completed_at !== null) continue;
+      if (projectId && ancestorsOf(ctx.tree, node.id).find((a) => a.node_type === 'project')?.id !== projectId) continue;
       if (node.due_date === null) {
         columns[0]!.cards.push(node);
         continue;
@@ -805,7 +884,7 @@ export function useKanban(now: Instant, dayCount = 5): KanbanColumn[] {
       col.cards.sort((a, b) => (a.sort_order < b.sort_order ? -1 : a.sort_order > b.sort_order ? 1 : a.id < b.id ? -1 : 1));
     }
     return columns;
-  }, [ctx, now, dayCount]);
+  }, [ctx, now, projectId, dayCount]);
 }
 
 export interface DecisionBoardView {
@@ -852,6 +931,89 @@ export function useDecisionBoards(): DecisionBoardView[] {
       })
       .sort((a, b) => (a.board.created_at < b.board.created_at ? -1 : a.board.created_at > b.board.created_at ? 1 : 0));
   }, [tree, boardRows, criterionRows, scoreRows]);
+}
+
+/**
+ * Parent-project priority for My Day ordering (W2/D5). Uses the FIRST decision
+ * board (earliest created — useDecisionBoards sorts boards by created_at) as the
+ * canonical priority source; its live weighted ranking maps each project →
+ * {priority, rank} (rank 1 = highest). Empty when there is no board. A weight or
+ * score edit reorders it (and My Day) instantly and offline.
+ */
+export function useProjectPriorities(): Map<string, { priority: number; rank: number }> {
+  const boards = useDecisionBoards();
+  return useMemo(() => {
+    const map = new Map<string, { priority: number; rank: number }>();
+    const board = boards[0];
+    if (!board) return map;
+    board.ranking.forEach((r, i) => map.set(r.project.id, { priority: r.priority, rank: i + 1 }));
+    return map;
+  }, [boards]);
+}
+
+export interface MyDayItem extends WorklistItem {
+  projectId: string | null;
+  projectTitle: string | null;
+  /** Parent-project priority from the decision board, or null when unscored. */
+  priority: number | null;
+}
+
+/**
+ * The My Day "Available now" list (W2/D5): the actionable worklist enriched with
+ * each task's parent project + its decision-board priority, sorted by priority
+ * DESC, tie-broken by due date (earliest first, undated last) then sort_order.
+ */
+export function useMyDayAvailable(now: Instant): MyDayItem[] {
+  const items = useWorklist(now);
+  const ctx = useFactContext();
+  const priorities = useProjectPriorities();
+  return useMemo(() => {
+    const enriched: MyDayItem[] = items.map((it) => {
+      const project = ancestorsOf(ctx.tree, it.task.id).find((a) => a.node_type === 'project') ?? null;
+      const p = project ? priorities.get(project.id) : undefined;
+      return { ...it, projectId: project?.id ?? null, projectTitle: project?.title ?? null, priority: p?.priority ?? null };
+    });
+    return enriched.sort((a, b) => {
+      const pa = a.priority ?? -Infinity;
+      const pb = b.priority ?? -Infinity;
+      if (pb !== pa) return pb - pa;
+      const da = a.task.due_date ?? '~'; // '~' > any ISO date → undated sorts last
+      const db = b.task.due_date ?? '~';
+      if (da !== db) return da < db ? -1 : 1;
+      return a.task.sort_order < b.task.sort_order ? -1 : a.task.sort_order > b.task.sort_order ? 1 : 0;
+    });
+  }, [items, ctx, priorities]);
+}
+
+export interface DoneTodayItem {
+  task: Node;
+  /** Minutes logged against the task from time entries (merged, §7.10b). */
+  consumedMinutes: number;
+}
+
+/**
+ * Tasks completed since the day-reset (W2/D5 "Done today"), most-recent first,
+ * each with the minutes logged against it. Done tasks are excluded from the
+ * worklist, so this is a separate read; it also drives the "Done N" header chip.
+ */
+export function useDoneToday(now: Instant): DoneTodayItem[] {
+  const { factContext: ctx, rows } = usePrismsData();
+  const entryRows = rows.time_entries;
+  return useMemo(() => {
+    const entries = entryRows.map(toTimeEntry);
+    const today = ctx.today(now);
+    const out: DoneTodayItem[] = [];
+    for (const node of ctx.tree.byId.values()) {
+      if (node.node_type !== 'task' || node.completed_at === null) continue;
+      if (bucketDate(isoToEpochMillis(node.completed_at), ctx.dayResetHour, ctx.timezone) !== today) continue;
+      out.push({ task: node, consumedMinutes: canonicalProgress(node, entries).consumedMinutes });
+    }
+    return out.sort((a, b) => {
+      const ca = a.task.completed_at ?? '';
+      const cb = b.task.completed_at ?? '';
+      return cb < ca ? -1 : cb > ca ? 1 : 0; // most-recent completion first
+    });
+  }, [ctx, entryRows, now]);
 }
 
 export interface ProjectCompletion {

@@ -30,6 +30,16 @@ export function rejectionMessage(code: string | undefined): string {
   }
 }
 
+/** Stable per-project accent (the mock tints each project) derived from its id. */
+const DOT_TONES = ['teal', 'blue', 'amber', 'green'] as const;
+export type DotTone = (typeof DOT_TONES)[number];
+export function projectTone(projectId: string | null): DotTone {
+  if (!projectId) return 'blue';
+  let h = 0;
+  for (let i = 0; i < projectId.length; i++) h = (h * 31 + projectId.charCodeAt(i)) >>> 0;
+  return DOT_TONES[h % DOT_TONES.length]!;
+}
+
 /** A signed minute count → human duration, e.g. `1h 30m`, `45m`, `−20m` (over). */
 export function formatMinutes(min: number): string {
   const sign = min < 0 ? '−' : '';

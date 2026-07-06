@@ -30,6 +30,8 @@ import { addDays, asEpochMillis, bucketDate } from '@prisms/core';
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { strFromU8, unzipSync } from 'fflate';
 
+import { goto } from './util/nav';
+
 const TZ = 'America/New_York'; // a fresh account's default day-reset timezone
 const today = bucketDate(asEpochMillis(Date.now()), 0, TZ);
 const daysAgo = (n: number): string => addDays(today, -n);
@@ -89,7 +91,7 @@ const serverContent = async (page: Page, entryDate: string): Promise<string | un
 
 test('create → reload → edit → delete (WYSIWYG) with emoji; day Export .md downloads it', async ({ page }) => {
   await register(page, 'journal-crud');
-  await page.getByRole('link', { name: 'Agenda' }).click();
+  await goto(page, 'agenda');
   await page.getByTestId('day-head-0').click(); // day-head-0 == today
 
   await expect(page.getByTestId('journal-rich')).toBeVisible();
@@ -109,7 +111,7 @@ test('create → reload → edit → delete (WYSIWYG) with emoji; day Export .md
 
   // reload → the note survives (came back from the server) and renders in the editor.
   await page.reload();
-  await page.getByRole('link', { name: 'Agenda' }).click();
+  await goto(page, 'agenda');
   await page.getByTestId('day-head-0').click();
   await expect(page.getByTestId('journal-rich')).toContainText('Standup notes', { timeout: 30_000 });
 
@@ -142,7 +144,7 @@ test('fresh-device lazy-load: a past-month note is NOT local until viewed; the .
   expect(seed.ok()).toBeTruthy();
 
   // Open the Agenda: it subscribes the CURRENT week's month(s) only.
-  await page.getByRole('link', { name: 'Agenda' }).click();
+  await goto(page, 'agenda');
   // today's note syncs down (current month subscribed) …
   await expect.poll(() => localCount(page, today), { timeout: 30_000 }).toBe(1);
   // … but the PAST month's note is NOT local (its month was never subscribed).
@@ -150,7 +152,8 @@ test('fresh-device lazy-load: a past-month note is NOT local until viewed; the .
 
   // The Settings `.md` archive is SERVER-sourced, so it INCLUDES the never-synced
   // past month (a local "export all" would have truncated it).
-  await page.getByRole('link', { name: 'Settings' }).click();
+  await goto(page, 'settings');
+  await page.getByTestId('settings-tab-data').click();
   const [dl] = await Promise.all([page.waitForEvent('download'), page.getByTestId('journal-export-archive').click()]);
   expect(dl.suggestedFilename()).toMatch(/^prisms-journal_.*\.zip$/);
   const files = unzipSync(new Uint8Array(await readFile(await dl.path())));
@@ -158,7 +161,7 @@ test('fresh-device lazy-load: a past-month note is NOT local until viewed; the .
   expect(Object.keys(files)).toContain(`journal/${yearOf(today)}/${today}.md`);
 
   // Now VIEW the past month on the Agenda (6 weeks back) → its rows sync lazily.
-  await page.getByRole('link', { name: 'Agenda' }).click();
+  await goto(page, 'agenda');
   for (let i = 0; i < 6; i++) await page.getByTestId('week-prev').click();
   await expect(page.getByTestId(`note-dot-${pastA}`)).toBeVisible({ timeout: 30_000 });
   await expect.poll(() => localCount(page, pastA), { timeout: 30_000 }).toBe(1); // NOW local (asserted)
@@ -167,7 +170,7 @@ test('fresh-device lazy-load: a past-month note is NOT local until viewed; the .
 
 test('offline write shows immediately (overlay) and syncs on reconnect — one row, no ghost', async ({ page, context }) => {
   await register(page, 'journal-offline');
-  await page.getByRole('link', { name: 'Agenda' }).click();
+  await goto(page, 'agenda');
 
   await context.setOffline(true);
   await page.getByTestId('day-head-0').click();
@@ -179,15 +182,61 @@ test('offline write shows immediately (overlay) and syncs on reconnect — one r
   await expect.poll(() => serverDays(page), { timeout: 30_000 }).toEqual([today]); // synced on reconnect
 
   await page.reload();
-  await page.getByRole('link', { name: 'Agenda' }).click();
+  await goto(page, 'agenda');
   await page.getByTestId('day-head-0').click();
   await expect(page.getByTestId('journal-rich')).toContainText('written offline', { timeout: 30_000 });
   expect(await localCount(page, today)).toBe(1); // exactly one row — no ghost duplicate
 });
 
+test('standalone Journal screen: lists the current month, opens a note, lazily loads a past month, archive downloads', async ({ page }) => {
+  await register(page, 'journal-screen');
+  const pastA = daysAgo(40); // always a prior month (day-of-month ≤ 31 < 40)
+  const monthA = pastA.slice(0, 7);
+  const pastContent = 'past month note 🗓️';
+  const seed = await page.request.post('/sync/upload', {
+    data: {
+      device_id: 'e2e-seed',
+      commands: [
+        cmd('journal.write', { id: randomUUID(), entry_date: today, content: '# Today\nstandup notes' }),
+        cmd('journal.write', { id: randomUUID(), entry_date: pastA, content: pastContent }),
+      ],
+    },
+  });
+  expect(seed.ok()).toBeTruthy();
+  expect(monthA).not.toBe(today.slice(0, 7)); // sanity: the seed really is a different month
+
+  await goto(page, 'journal');
+
+  // the current month opens expanded → today's note syncs down and lists (markdown
+  // heading stripped to a plain title).
+  await expect(page.getByTestId(`journal-day-${today}`)).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId(`journal-day-${today}`)).toContainText('Today');
+
+  // the past month renders as a header but COLLAPSED — its day is not listed yet.
+  await expect(page.getByTestId(`journal-month-${monthA}`)).toBeVisible();
+  await expect(page.getByTestId(`journal-day-${pastA}`)).toHaveCount(0);
+
+  // clicking today loads it in the shared day editor.
+  await page.getByTestId(`journal-day-${today}`).click();
+  await expect(page.getByTestId('journal-rich')).toContainText('standup notes', { timeout: 15_000 });
+
+  // expand the past month → its rows sync LAZILY (the day appears only now).
+  await page.getByTestId(`journal-month-${monthA}`).click();
+  await expect(page.getByTestId(`journal-day-${pastA}`)).toBeVisible({ timeout: 30_000 });
+  await page.getByTestId(`journal-day-${pastA}`).click();
+  await expect(page.getByTestId('journal-rich')).toContainText('past month note', { timeout: 15_000 });
+
+  // the archive is server-sourced, so it includes BOTH months (even the lazy one).
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.getByTestId('journal-archive').click()]);
+  expect(dl.suggestedFilename()).toMatch(/^prisms-journal_.*\.zip$/);
+  const files = unzipSync(new Uint8Array(await readFile(await dl.path())));
+  expect(strFromU8(files[`journal/${yearOf(pastA)}/${pastA}.md`]!)).toBe(pastContent);
+  expect(Object.keys(files)).toContain(`journal/${yearOf(today)}/${today}.md`);
+});
+
 test('J7 WYSIWYG: toolbar task list + an interactive checkbox round-trip to markdown', async ({ page }) => {
   await register(page, 'journal-wysiwyg');
-  await page.getByRole('link', { name: 'Agenda' }).click();
+  await goto(page, 'agenda');
   await page.getByTestId('day-head-0').click();
   const editor = page.getByTestId('journal-rich');
   await expect(editor).toBeVisible();
@@ -208,7 +257,7 @@ test('J7 WYSIWYG: toolbar task list + an interactive checkbox round-trip to mark
 
   // reload → the checkbox comes back CHECKED (state persisted through markdown, not DOM).
   await page.reload();
-  await page.getByRole('link', { name: 'Agenda' }).click();
+  await goto(page, 'agenda');
   await page.getByTestId('day-head-0').click();
   await expect(page.getByTestId('journal-rich').getByRole('checkbox').first()).toBeChecked({ timeout: 30_000 });
 });

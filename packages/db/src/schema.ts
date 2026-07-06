@@ -638,6 +638,26 @@ export const journal_entries = pgTable(
   ],
 );
 
+/**
+ * A checklist step under a task (§6.0, W3/D4). Separate synced table — NOT a
+ * node type — so steps never enter the worklist/scheduler/StatusIndex/burndown.
+ * `task_id`'s parent must be node_type='task' (dispatcher-enforced); `sort_order`
+ * is the same fractional index as nodes. Deleting a task soft-deletes its steps.
+ */
+export const task_steps = pgTable(
+  'task_steps',
+  {
+    ...baseColumns,
+    task_id: uuid('task_id')
+      .notNull()
+      .references(() => nodes.id),
+    title: text('title').notNull(),
+    done: boolean('done').notNull().default(false),
+    sort_order: text('sort_order').notNull(),
+  },
+  (t) => [index('task_steps_task_idx').on(t.user_id, t.task_id).where(sql`${t.deleted_at} IS NULL`)],
+);
+
 // --- COMMAND LOG (audit; written server-side on every applied mutation) -----------------
 
 export const command_log = pgTable(
@@ -756,6 +776,7 @@ export const tables = {
   schedule_suggestion_batches,
   sync_review_items,
   journal_entries,
+  task_steps,
   command_log,
   user_settings,
 } as const;

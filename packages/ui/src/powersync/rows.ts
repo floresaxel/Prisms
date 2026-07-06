@@ -26,6 +26,7 @@ import {
   type Tag,
   type TagAnswer,
   type TagPlacement,
+  type TaskStep,
   type TimeEntry,
   type UserSettings,
 } from '@prisms/core';
@@ -75,6 +76,19 @@ export const toNode = (r: Row): Node => ({
   completed_in_block_id: str(r['completed_in_block_id']),
   habit_id: str(r['habit_id']),
   attributes: json(r['attributes'], {}),
+  created_at: String(r['created_at'] ?? ''),
+  updated_at: String(r['updated_at'] ?? ''),
+  deleted_at: str(r['deleted_at']),
+  ...syncFields(r),
+});
+
+export const toTaskStep = (r: Row): TaskStep => ({
+  id: String(r['id']),
+  user_id: String(r['user_id']),
+  task_id: String(r['task_id']),
+  title: String(r['title'] ?? ''),
+  done: bool(r['done']),
+  sort_order: String(r['sort_order'] ?? ''),
   created_at: String(r['created_at'] ?? ''),
   updated_at: String(r['updated_at'] ?? ''),
   deleted_at: str(r['deleted_at']),

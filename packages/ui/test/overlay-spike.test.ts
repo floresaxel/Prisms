@@ -125,9 +125,10 @@ describe('schema: overlay tables are local-only and out of appSchema (R15)', () 
     }
     // §7.13: the review inbox is server-owned and streams down, so it IS synced.
     expect(names(appSchema)).toContain('sync_review_items');
-    // J3: journal_entries is the 23rd synced table.
+    // J3: journal_entries is synced; W3/D4: task_steps is the 24th synced table.
     expect(names(appSchema)).toContain('journal_entries');
-    expect(appSchema.tables).toHaveLength(23);
+    expect(names(appSchema)).toContain('task_steps');
+    expect(appSchema.tables).toHaveLength(24);
   });
 
   it('clientSchema includes the overlay tables and marks ONLY those local-only', () => {

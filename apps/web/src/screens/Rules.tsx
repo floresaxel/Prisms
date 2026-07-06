@@ -8,7 +8,7 @@
 import { useState } from 'react';
 
 import { validateAutomationRule } from '@prisms/core';
-import { List, ListItem, useCommands, useRules, useRulesHydrated, type CommandContext } from '@prisms/ui';
+import { useCommands, useRules, useRulesHydrated, type CommandContext } from '@prisms/ui';
 
 type Trigger = 'task_completed' | 'task_created';
 
@@ -54,8 +54,7 @@ export function Rules({ ctx }: { ctx: CommandContext }) {
 
   return (
     <section>
-      <h1>Automation rules</h1>
-      <p className="px-muted">When a task is created/completed and matches, spawn templated tasks (§9).</p>
+      <p className="px-muted" style={{ marginTop: 0 }}>When a task is created/completed and matches, spawn templated tasks (§9).</p>
 
       {toast && <div className="px-error" data-testid="rule-toast" onClick={() => setToast(null)}>Rejected: {toast} (click to dismiss)</div>}
 
@@ -78,24 +77,31 @@ export function Rules({ ctx }: { ctx: CommandContext }) {
         <button className="px-btn px-btn--primary" data-testid="rule-add" onClick={() => void create()}>Create rule</button>
       </div>
 
-      <div data-testid="rules" style={{ marginTop: 18 }}>
-        <List empty="No automation rules yet." loading={!hydrated}>
-          {rules.map((r) => (
-            <ListItem
-              key={r.id}
-              leading={<span className={`px-badge${r.enabled ? ' px-badge--scheduled' : ''}`}>{r.enabled ? 'on' : 'off'}</span>}
-              trailing={
-                <>
-                  <button className="px-btn" data-testid={`rule-toggle-${r.id}`} onClick={() => void commands.toggleRule(r.id, !r.enabled)}>{r.enabled ? 'Disable' : 'Enable'}</button>
-                  <button className="px-btn px-btn--danger" aria-label="delete" onClick={() => void commands.deleteRule(r.id)}>×</button>
-                </>
-              }
-            >
-              <strong>{r.trigger}</strong>
-              <span className="px-muted"> · {JSON.stringify(r.conditions)} → {Array.isArray(r.actions) ? `${r.actions.length} spawn(s)` : '—'}</span>
-            </ListItem>
-          ))}
-        </List>
+      <div className="px-rows" data-testid="rules" style={{ marginTop: 14, maxWidth: 760 }}>
+        {rules.length === 0 && <div className="px-trow px-muted">{hydrated ? 'No automation rules yet.' : 'Loading…'}</div>}
+        {rules.map((r) => {
+          const spawns = Array.isArray(r.actions) ? r.actions.length : 0;
+          return (
+            <div className="px-rule" key={r.id}>
+              <button
+                className={`px-toggle${r.enabled ? ' px-toggle--on' : ''}`}
+                data-testid={`rule-toggle-${r.id}`}
+                aria-label={r.enabled ? 'disable rule' : 'enable rule'}
+                onClick={() => void commands.toggleRule(r.id, !r.enabled)}
+              />
+              <div className="px-rule-body">
+                <div className="px-rule-name">{r.trigger === 'task_completed' ? 'On task completed' : 'On task created'}</div>
+                <div className="px-flow">
+                  <span className="px-flow-step">when <code>{r.trigger}</code></span>
+                  <span className="px-flow-arr">→</span>
+                  <span className="px-flow-step">spawn {spawns} task{spawns === 1 ? '' : 's'}</span>
+                </div>
+                <div className="px-rule-impact">Fires whenever a matching task is {r.trigger === 'task_completed' ? 'completed' : 'created'}{r.enabled ? '' : ' — currently disabled'}.</div>
+              </div>
+              <button className="px-btn px-btn--sm px-btn--danger" aria-label="delete" onClick={() => void commands.deleteRule(r.id)}>×</button>
+            </div>
+          );
+        })}
       </div>
     </section>
   );

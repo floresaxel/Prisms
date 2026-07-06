@@ -13,7 +13,7 @@ import { describe, expect, it } from 'vitest';
 import { COMMAND_SCHEMAS, mergeTable, type CommandName, type OverlayEffect } from '@prisms/core';
 
 import { buildAcceptSuggestionEffects, buildOptimisticEffects, type AcceptSuggestionBlock, type EffectSpec } from '../src/powersync/effects';
-import { toAutomationRule, toNode, toTimeEntry } from '../src/powersync/rows';
+import { toAutomationRule, toNode, toTaskStep, toTimeEntry } from '../src/powersync/rows';
 
 const ctx = { userId: 'u1', deviceId: 'dev-1', now: '2026-06-28T00:00:00.000Z' };
 
@@ -121,6 +121,19 @@ describe('buildOptimisticEffects — special cases', () => {
     expect(effs).toEqual([
       { table: 'schedule_blocks', row_id: 'b1', op: 'update', fields: { status: 'committed', suggestion_reason: null, suggestion_batch_id: null, replaces_block_id: null, superseded_at: null } },
     ]);
+  });
+
+  it('step.* — checklist: add seeds done=0, toggle→done=1, rename minimal, remove→delete; round-trips to toTaskStep (W3/D4)', () => {
+    const [add] = buildOptimisticEffects('step.add', { id: 'st1', task_id: 't1', title: 'Prep', sort_order: 'a0' }, ctx);
+    expect(add).toMatchObject({ table: 'task_steps', row_id: 'st1', op: 'insert' });
+    expect(add!.fields).toMatchObject({ id: 'st1', task_id: 't1', title: 'Prep', done: 0, sort_order: 'a0' }); // boolean stored as 0/1
+    expect(buildOptimisticEffects('step.toggle', { id: 'st1', done: true }, ctx)).toEqual([{ table: 'task_steps', row_id: 'st1', op: 'update', fields: { done: 1 } }]);
+    expect(buildOptimisticEffects('step.rename', { id: 'st1', title: 'Ship' }, ctx)).toEqual([{ table: 'task_steps', row_id: 'st1', op: 'update', fields: { title: 'Ship' } }]);
+    expect(buildOptimisticEffects('step.reorder', { id: 'st1', sort_order: 'a0V' }, ctx)).toEqual([{ table: 'task_steps', row_id: 'st1', op: 'update', fields: { sort_order: 'a0V' } }]);
+    expect(buildOptimisticEffects('step.remove', { id: 'st1' }, ctx)).toEqual([{ table: 'task_steps', row_id: 'st1', op: 'delete', fields: {} }]);
+    // an overlay-only add survives merge → toTaskStep (integer 0 → boolean false)
+    const merged = mergeTable([], stamp(buildOptimisticEffects('step.add', { id: 'st2', task_id: 't1', title: 'X', sort_order: 'a1' }, ctx)));
+    expect(toTaskStep(merged[0]!)).toMatchObject({ id: 'st2', task_id: 't1', title: 'X', done: false, sort_order: 'a1' });
   });
 });
 

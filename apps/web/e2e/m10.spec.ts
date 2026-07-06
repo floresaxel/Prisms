@@ -16,6 +16,8 @@ import { randomUUID } from 'node:crypto';
 import { expect, test, type Page } from '@playwright/test';
 import postgres from 'postgres';
 
+import { goto } from './util/nav';
+
 const DB_URL = process.env.PRISMS_DB_TEST_URL ?? 'postgresql://prisms:prisms_dev_password@localhost:5434/prisms';
 
 let seq = 0;
@@ -94,7 +96,7 @@ test('review inbox: a synced rejection shows; resolve + dismiss close items (§7
 
     // closes persist across a reload (they synced down as resolved/dismissed).
     await page.reload();
-    await page.getByRole('link', { name: 'Review' }).click();
+    await goto(page, 'review');
     await expect(page.getByTestId('review-empty')).toBeVisible({ timeout: 30_000 });
   } finally {
     await sql.end({ timeout: 5 });
@@ -106,7 +108,7 @@ test('dashboard: the projection freshness label reflects the server aggregate co
   try {
     const userId = await register(page, 'm10-fresh');
 
-    await page.getByRole('link', { name: 'Dashboard' }).click();
+    await goto(page, 'dashboard');
     // before any server aggregate, the projection is a live client estimate.
     await expect(page.getByTestId('projection-freshness')).toContainText('live', { timeout: 30_000 });
 
