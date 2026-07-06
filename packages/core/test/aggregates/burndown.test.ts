@@ -204,4 +204,19 @@ describe('burndown series (§7.2)', () => {
       { numRuns: 50 },
     );
   });
+
+  it('projection: a symmetric (net-flat) series projects null instead of overflowing the Date range', () => {
+    // Remaining curve symmetric about its midpoint → least-squares slope is 0 in
+    // exact arithmetic but a few ×1e-16 after rounding; that negligible negative
+    // slope used to imply a ~1e15-day finish and throw "Invalid time value" from
+    // addDays. It must read as flat (no projection), not crash. (CI regression,
+    // seed -1335584711.)
+    const days = [1, 1, 1, 192, 192, 192, 1, 1, 1].map((remainingMinutes, i) => ({
+      date: addDays('2026-06-01', i),
+      remainingMinutes,
+      scheduledMinutes: 0,
+    }));
+    const projection = projectFinish(days);
+    expect(projection.projectedFinishDate).toBeNull();
+  });
 });

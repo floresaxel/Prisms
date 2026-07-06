@@ -14,9 +14,13 @@
 import type { Node, ScheduleBlock } from '../domain/entities';
 import type { IsoDate } from '../domain/primitives';
 import { bucketDate } from '../time/bucket';
-import { addDays, daysBetween } from '../time/dates';
+import { addDays, daysBetween, isoDateToUtcMs } from '../time/dates';
 import { minutesBetween } from '../time/duration';
 import { isoToEpochMillis } from '../time/instant';
+
+const MS_PER_DAY = 86_400_000;
+/** JS `Date` is valid within ±8.64e15 ms of the epoch; beyond it `toISOString()` throws. */
+const MAX_DATE_MS = 8_640_000_000_000_000;
 
 export interface BurndownDay {
   date: IsoDate;
@@ -75,7 +79,18 @@ export function projectFinish(days: readonly BurndownDay[]): BurndownProjection 
       dailyVelocityMinutes: Math.max(0, -slope),
     };
   }
+  // A series that is flat in exact arithmetic (e.g. a symmetric remaining curve
+  // whose least-squares slope is exactly 0) can read as a slope of a few ×1e-16
+  // after floating-point rounding. That negligible negative slope implies an
+  // astronomically distant finish — `remaining / -slope` ≈ 1e15 days — which
+  // overflows the Date range and makes addDays throw (Invalid time value). When
+  // the finish falls outside the representable range the series is effectively
+  // flat, so report no projection rather than crash.
   const daysToZero = Math.ceil(last.remainingMinutes / -slope);
+  const finishMs = isoDateToUtcMs(last.date) + daysToZero * MS_PER_DAY;
+  if (!Number.isFinite(finishMs) || Math.abs(finishMs) > MAX_DATE_MS) {
+    return { projectedFinishDate: null, dailyVelocityMinutes: Math.max(0, -slope) };
+  }
   return {
     projectedFinishDate: addDays(last.date, daysToZero),
     dailyVelocityMinutes: -slope,
