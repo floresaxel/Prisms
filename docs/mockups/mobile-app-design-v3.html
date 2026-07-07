@@ -1,0 +1,815 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prisms — mobile v3 “Mission Control” (preview)</title>
+<style>
+/* ================= v3 tokens: ink + tint blocks + hard shadows ================= */
+:root{
+  --bg:#fbfaf6; --panel:#ffffff; --ink:#101113; --ink-2:#4d5157; --ink-3:#9094999e;
+  --ink-3s:#909499;
+  --line:#101113;                 /* borders are ink, 2px */
+  --sky:#d8ecff; --lemon:#ffefc2; --mint:#d9f5df; --peach:#ffe3cf; --paperc:#f3f1ea;
+  --go:#16a34a; --go-soft:#d9f5df; --hold:#e03131; --hold-soft:#ffe3e3;
+  /* validated categorical (same set as ALT — validate_palette.js PASS ×4) */
+  --garden:#2f9e44; --prisms:#1f6feb; --marathon:#0891b2; --violin:#c47f17;
+  --mono:ui-monospace,"Cascadia Mono",Consolas,"Roboto Mono",monospace;
+  --hs:3px 3px 0 var(--ink);      /* hard shadow */
+  --hs-sm:2px 2px 0 var(--ink);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  font-family:"Inter","Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;
+  background:#f0ede4;color:var(--ink);min-height:100vh;-webkit-font-smoothing:antialiased;
+}
+button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
+input{font:inherit;color:inherit}
+.num{font-variant-numeric:tabular-nums}
+.mono{font-family:var(--mono)}
+.ic{width:16px;height:16px;flex:none;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.ic.sm{width:13px;height:13px}.ic.xs{width:11px;height:11px;stroke-width:2.4}
+.hide{display:none!important}
+
+/* ================= page chrome ================= */
+.hd{max-width:1200px;margin:0 auto;padding:44px 28px 4px}
+.hd .brand{display:flex;align-items:center;gap:12px;font-size:22px;font-weight:800;letter-spacing:-.4px}
+.hd .logo{width:36px;height:36px;border-radius:10px;background:var(--ink);color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:var(--hs);border:2px solid var(--ink)}
+.hd .logo svg{width:20px;height:20px;stroke-width:2.3}
+.hd .vtag{font-size:11px;font-weight:800;letter-spacing:1.4px;background:var(--lemon);border:2px solid var(--ink);border-radius:7px;padding:3px 9px;box-shadow:var(--hs-sm)}
+.hd p{margin-top:13px;color:#3f4248;font-size:14px;max-width:680px;line-height:1.6}
+.lineup{max-width:1200px;margin:18px auto 0;padding:0 28px;display:flex;gap:10px;flex-wrap:wrap}
+.lineup .lu{font-size:12px;background:#fff;border:2px solid var(--ink);border-radius:10px;padding:7px 12px;box-shadow:var(--hs-sm)}
+.lineup .lu b{font-weight:800}
+.lineup .lu.on{background:var(--sky)}
+.gallery{max-width:1200px;margin:34px auto 80px;padding:0 24px;display:flex;flex-wrap:wrap;gap:48px 40px;justify-content:center}
+.frame{width:342px}
+.caption{margin-top:16px;padding:0 4px}
+.caption b{font-size:14px;font-weight:800;color:var(--ink)}
+.caption span{display:block;margin-top:4px;font-size:12px;color:#55585e;line-height:1.55}
+
+/* ================= device ================= */
+.device{width:342px;height:722px;background:#0b0d12;border-radius:46px;padding:11px;
+  box-shadow:0 30px 60px -22px rgba(20,18,10,.55),0 0 0 2px #05060a,inset 0 0 0 2px #23262e}
+.screen{position:relative;width:100%;height:100%;background:var(--bg);border-radius:36px;
+  overflow:hidden;display:flex;flex-direction:column;color:var(--ink)}
+.sbar{height:44px;flex:none;display:flex;align-items:center;justify-content:space-between;
+  padding:0 22px 0 26px;font-size:14px;font-weight:700;position:relative;z-index:5}
+.sbar .island{position:absolute;left:50%;top:9px;transform:translateX(-50%);width:82px;height:24px;background:#0b0d12;border-radius:13px}
+.sbar .sbr{display:flex;align-items:center;gap:6px}
+.sbar .sbr svg{fill:currentColor}
+.scroll{flex:1;overflow-y:auto;padding:8px 14px 108px}
+.scroll::-webkit-scrollbar{width:0}
+
+/* dock */
+.dock{position:absolute;left:50%;transform:translateX(-50%);bottom:16px;display:flex;gap:10px;z-index:8}
+.dock button{display:flex;align-items:center;gap:7px;padding:11px 18px;border:2px solid var(--ink);border-radius:16px;
+  background:#fff;font-size:12.5px;font-weight:800;letter-spacing:.4px;box-shadow:var(--hs)}
+.dock button.cap{background:var(--ink);color:#fff}
+.dock button:active{transform:translate(2px,2px);box-shadow:1px 1px 0 var(--ink)}
+.backbtn{position:absolute;top:52px;left:14px;z-index:8;width:38px;height:38px;border:2px solid var(--ink);border-radius:13px;
+  background:#fff;display:flex;align-items:center;justify-content:center;box-shadow:var(--hs-sm)}
+
+/* labels */
+.zl{font-size:9.5px;font-weight:800;letter-spacing:1.3px;text-transform:uppercase;color:var(--ink-2)}
+.h1{font-size:26px;font-weight:800;letter-spacing:-.9px;line-height:1.05}
+
+/* ================= widgets (home) ================= */
+.wgrid{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-top:8px}
+.wg{border:2px solid var(--ink);border-radius:16px;background:var(--panel);box-shadow:var(--hs);padding:12px;position:relative;overflow:hidden}
+.wg.span{grid-column:1/-1}
+.wg .wl{display:flex;align-items:center;gap:6px;font-size:9.5px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-2)}
+.wg .wl .go2{margin-left:auto;color:var(--ink-3s)}
+/* NOW hero */
+.wg.now{background:var(--sky)}
+.now .task{font-size:19px;font-weight:800;letter-spacing:-.4px;margin-top:8px;line-height:1.15}
+.whychain{display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin-top:8px;font-size:10.5px;font-weight:600;color:var(--ink-2)}
+.whychain .wc{background:#fff;border:1.5px solid var(--ink);border-radius:7px;padding:2px 7px}
+.whychain svg{width:10px;height:10px}
+.gobtn{display:flex;align-items:center;justify-content:center;gap:9px;margin-top:12px;width:100%;padding:13px;
+  background:var(--go);border:2px solid var(--ink);border-radius:14px;color:#fff;font-size:15px;font-weight:800;letter-spacing:.6px;box-shadow:var(--hs)}
+.gobtn:active{transform:translate(2px,2px);box-shadow:1px 1px 0 var(--ink)}
+.now .meta{display:flex;gap:10px;margin-top:9px;font-size:11px;font-weight:600;color:var(--ink-2)}
+/* queue mini */
+.tk{display:flex;align-items:center;gap:9px;padding:8px 0;border-top:2px dashed #d7d3c7}
+.tk:first-of-type{border-top:none}
+.tk .no{font-family:var(--mono);font-size:13px;font-weight:700;width:22px;height:22px;border:2px solid var(--ink);border-radius:7px;display:flex;align-items:center;justify-content:center;background:#fff;flex:none}
+.tk .tt{flex:1;min-width:0;font-size:12.5px;font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tk .pd{width:8px;height:8px;border-radius:3px;flex:none}
+.tk .est{font-size:10.5px;color:var(--ink-2);font-weight:600}
+/* today strip */
+.strip{display:flex;gap:4px;margin-top:9px;height:34px;align-items:stretch}
+.strip .sb3{flex:1;border:2px solid var(--ink);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;overflow:hidden;white-space:nowrap}
+.strip .done2{background:#fff;color:var(--ink-3s);text-decoration:line-through}
+.strip .live{background:var(--sky)}
+.strip .free{border-style:dashed;border-color:#b9b5a8;color:#8d8a7f}
+.strip .anch{background:var(--paperc)}
+.strip .hab{background:var(--mint)}
+/* mini widgets */
+.bignum{font-family:var(--mono);font-size:26px;font-weight:700;letter-spacing:-1px;margin-top:7px}
+.wg .sub{font-size:10.5px;color:var(--ink-2);font-weight:600;margin-top:2px}
+.wg.lemon{background:var(--lemon)} .wg.mint{background:var(--mint)} .wg.peach{background:var(--peach)}
+.punchmini{display:flex;gap:4px;margin-top:9px}
+.punchmini i{width:13px;height:13px;border:2px solid var(--ink);border-radius:50%}
+.punchmini i.on{background:var(--ink)}
+.jprompt{font-family:var(--mono);font-size:11.5px;color:var(--ink-2);margin-top:8px;line-height:1.5}
+
+/* capture overlay */
+.capov{position:absolute;inset:0;background:var(--bg);z-index:9;display:flex;flex-direction:column;padding:56px 16px 20px}
+.capov .zl{margin-bottom:10px}
+.capline{display:flex;align-items:center;gap:8px;border:2px solid var(--ink);border-radius:14px;background:#fff;box-shadow:var(--hs);padding:13px 14px;font-family:var(--mono);font-size:13.5px}
+.capline .cur{width:8px;height:18px;background:var(--ink);animation:blink 1s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
+.filechips{display:flex;flex-wrap:wrap;gap:7px;margin-top:14px}
+.filechips button{border:2px solid var(--ink);border-radius:10px;background:#fff;padding:7px 12px;font-size:12px;font-weight:700;box-shadow:var(--hs-sm)}
+.filechips button.on{background:var(--ink);color:#fff}
+.capov .hint2{margin-top:auto;text-align:center;font-size:11px;color:var(--ink-2)}
+
+/* ================= now (running) ================= */
+.runscreen{background:var(--ink);color:#fdfcf7;border:none;flex:1;display:flex;flex-direction:column;padding:10px 18px 108px}
+.runscreen .zl{color:#b8bbc0}
+.bigtimer{font-family:var(--mono);font-size:57px;font-weight:700;letter-spacing:-2px;margin-top:10px;line-height:1}
+.bigtimer .s{color:#6f7379}
+.runtask{font-size:20px;font-weight:800;margin-top:12px;letter-spacing:-.3px}
+.runchain{display:flex;flex-wrap:wrap;gap:4px;margin-top:9px;font-size:10.5px;color:#b8bbc0;font-weight:600;align-items:center}
+.runchain .wc{border:1.5px solid #4a4e55;border-radius:7px;padding:2px 7px}
+.segbar{display:flex;gap:4px;margin-top:16px}
+.segbar i{flex:1;height:12px;border:2px solid #fdfcf7;border-radius:4px}
+.segbar i.f{background:#fdfcf7}
+.segbar i.h{background:repeating-linear-gradient(135deg,#fdfcf7 0 3px,transparent 3px 6px)}
+.runmeta{display:flex;justify-content:space-between;font-size:11px;color:#b8bbc0;font-weight:600;margin-top:7px}
+.runbtns{display:flex;gap:10px;margin-top:auto}
+.runbtns button{flex:1;padding:14px;border-radius:14px;font-size:14px;font-weight:800;letter-spacing:.5px;border:2px solid #fdfcf7}
+.runbtns .stop{background:transparent;color:#fdfcf7}
+.runbtns .done3{background:var(--go);border-color:var(--go);color:#fff}
+.focusrow{display:flex;align-items:center;gap:8px;margin-top:16px;font-size:11px;color:#b8bbc0;font-weight:600}
+.focusrow .fd{display:flex;gap:5px;margin-left:auto}
+.focusrow .fd b{width:26px;height:26px;border:2px solid #4a4e55;border-radius:9px;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:11px;color:#b8bbc0}
+.focusrow .fd b.on{border-color:#fdfcf7;color:#fdfcf7;background:#22252a}
+
+/* ================= queue ================= */
+.qfilter{display:flex;gap:6px;margin:10px 0 12px;overflow-x:auto}
+.qfilter::-webkit-scrollbar{height:0}
+.qf{flex:none;border:2px solid var(--ink);border-radius:10px;background:#fff;padding:5px 11px;font-size:11.5px;font-weight:700;box-shadow:var(--hs-sm)}
+.qf.on{background:var(--ink);color:#fff}
+.qf .pd{display:inline-block;width:7px;height:7px;border-radius:2px;margin-right:5px}
+.ticket{display:flex;gap:0;border:2px solid var(--ink);border-radius:14px;background:#fff;box-shadow:var(--hs);margin-bottom:11px;overflow:hidden}
+.ticket .stub{width:44px;flex:none;border-right:2px dashed var(--ink);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;background:var(--paperc)}
+.ticket .stub .qno{font-family:var(--mono);font-size:17px;font-weight:700}
+.ticket .stub .qsc{font-size:8.5px;font-weight:800;color:var(--ink-2)}
+.ticket .tb2{flex:1;min-width:0;padding:10px 12px}
+.ticket .tt2{font-size:13.5px;font-weight:750}
+.ticket .tm2{display:flex;align-items:center;gap:8px;font-size:10.5px;color:var(--ink-2);font-weight:600;margin-top:4px;flex-wrap:wrap}
+.ticket .tm2 .pd{width:8px;height:8px;border-radius:3px}
+.ticket .act2{display:flex;align-items:center;padding-right:11px}
+.ticket .gomini{border:2px solid var(--ink);background:var(--go);color:#fff;border-radius:11px;padding:8px 13px;font-size:11.5px;font-weight:800;box-shadow:var(--hs-sm)}
+.ticket.first{background:var(--sky)}
+.ticket.holdt{opacity:.75}
+.ticket.holdt .stub{background:var(--hold-soft)}
+.ticket.holdt .tt2{color:var(--ink-2)}
+.holdstamp{font-size:9px;font-weight:800;letter-spacing:1px;color:var(--hold);border:2px solid var(--hold);border-radius:6px;padding:1px 6px;transform:rotate(-4deg)}
+
+/* ================= schedule ================= */
+.daypager{display:flex;align-items:center;gap:10px;margin:8px 0 12px}
+.daypager .pgbtn{width:36px;height:36px;border:2px solid var(--ink);border-radius:12px;background:#fff;display:flex;align-items:center;justify-content:center;box-shadow:var(--hs-sm)}
+.daypager .dt{flex:1;text-align:center}
+.daypager .dt b{font-size:16px;font-weight:800}
+.daypager .dt span{display:block;font-size:10px;font-weight:700;color:var(--ink-2);letter-spacing:1px;text-transform:uppercase}
+.sched{position:relative;padding-left:44px}
+.sched .tmark{position:absolute;left:0;width:36px;text-align:right;font-family:var(--mono);font-size:10px;color:var(--ink-2);font-weight:600}
+.brick{border:2px solid var(--ink);border-radius:12px;padding:9px 12px;margin-bottom:9px;box-shadow:var(--hs-sm);position:relative}
+.brick b{font-size:13px;font-weight:750;display:block}
+.brick .bm2{font-size:10.5px;font-weight:600;color:var(--ink-2);margin-top:2px;display:flex;gap:8px;align-items:center}
+.brick.done4{background:#fff;box-shadow:none;border-color:#c9c5b8;color:var(--ink-3s)}
+.brick.done4 b{text-decoration:line-through;color:var(--ink-3s)}
+.brick.live2{background:var(--sky)}
+.brick.anch2{background:var(--paperc)}
+.brick.hab2{background:var(--mint)}
+.brick.sugg2{border-style:dashed;box-shadow:none;background:transparent}
+.brick .stamp{position:absolute;top:8px;right:10px;font-size:9px;font-weight:800;letter-spacing:.8px;border:2px solid currentColor;border-radius:6px;padding:1px 6px;transform:rotate(3deg)}
+.brick .takeskip{display:flex;gap:7px;margin-top:8px}
+.brick .takeskip .tsk{border:2px solid var(--ink);border-radius:9px;padding:5px 12px;font-size:11px;font-weight:800;background:var(--ink);color:#fff}
+.brick .takeskip .skp{border:2px solid var(--ink);border-radius:9px;padding:5px 12px;font-size:11px;font-weight:700;background:#fff}
+.gapline{display:flex;align-items:center;gap:8px;color:#8d8a7f;font-size:10.5px;font-weight:700;margin:12px 0;letter-spacing:.6px}
+.gapline::before,.gapline::after{content:"";flex:1;border-top:2px dashed #d0ccbf}
+
+/* ================= habits punch card ================= */
+.punch{border:2px solid var(--ink);border-radius:16px;background:#fff;box-shadow:var(--hs);overflow:hidden;margin-top:12px}
+.punch table{width:100%;border-collapse:collapse;font-size:11px}
+.punch th{font-size:9px;font-weight:800;letter-spacing:.8px;color:var(--ink-2);padding:9px 4px 7px;border-bottom:2px solid var(--ink);text-transform:uppercase}
+.punch th:first-child{text-align:left;padding-left:12px}
+.punch td{text-align:center;padding:8px 4px;border-top:1.5px dashed #e2ded2}
+.punch td:first-child{text-align:left;padding-left:12px;font-weight:700;font-size:12px;white-space:nowrap}
+.punch td .hh{display:block;font-size:9.5px;color:var(--ink-2);font-weight:600;margin-top:1px}
+.pch{width:17px;height:17px;border:2px solid var(--ink);border-radius:50%;display:inline-flex;cursor:pointer;vertical-align:middle}
+.pch.on{background:var(--ink);box-shadow:inset 0 0 0 2.5px #fff}
+.pch.miss{border-color:#cfcbbf;background:#f1eee6}
+.punch .todaycol{background:var(--lemon)}
+.skillrow{display:flex;align-items:center;gap:11px;border:2px solid var(--ink);border-radius:14px;background:#fff;box-shadow:var(--hs-sm);padding:11px 13px;margin-top:10px}
+.skillrow .sn2{flex:1}
+.skillrow .sn2 b{font-size:13.5px;font-weight:750}
+.skillrow .sn2 span{display:block;font-size:10.5px;color:var(--ink-2);font-weight:600;margin-top:1px}
+.lvlmeter{display:flex;gap:3px}
+.lvlmeter i{width:9px;height:16px;border:2px solid var(--ink);border-radius:4px}
+.lvlmeter i.f{background:var(--violin)}
+.lvl{font-family:var(--mono);font-size:11px;font-weight:700;border:2px solid var(--ink);border-radius:8px;padding:2px 7px;background:var(--lemon)}
+
+/* ================= projects folders ================= */
+.folder{border:2px solid var(--ink);border-radius:0 14px 14px 14px;background:#fff;box-shadow:var(--hs);margin-top:22px;padding:12px;position:relative}
+.folder .ftab{position:absolute;top:-14px;left:-2px;height:16px;border:2px solid var(--ink);border-bottom:none;border-radius:9px 9px 0 0;padding:0 12px;font-size:8px;font-weight:800;letter-spacing:1px;color:#fff;display:flex;align-items:center;text-transform:uppercase}
+.folder .fh{display:flex;align-items:center;gap:8px}
+.folder .fh b{font-size:15px;font-weight:800;flex:1}
+.folder .fh .sc2{font-family:var(--mono);font-size:12px;font-weight:700;border:2px solid var(--ink);border-radius:8px;padding:2px 7px;background:var(--paperc)}
+.meter{display:flex;gap:3px;margin-top:10px}
+.meter i{flex:1;height:11px;border:2px solid var(--ink);border-radius:4px}
+.folder .fnext{font-size:11.5px;color:var(--ink-2);font-weight:600;margin-top:9px}
+.folder .fnext b{color:var(--ink);font-weight:750}
+.mlist{margin-top:10px;border-top:2px dashed #e2ded2;padding-top:8px}
+.mrow2{display:flex;align-items:center;gap:9px;padding:6px 0;font-size:12.5px}
+.mrow2 .ck2{width:18px;height:18px;border:2px solid var(--ink);border-radius:6px;flex:none;display:flex;align-items:center;justify-content:center;color:#fff;background:#fff}
+.mrow2 .ck2 svg{width:10px;height:10px;stroke-width:3.4;opacity:0}
+.mrow2 .ck2.on{background:var(--ink)}
+.mrow2 .ck2.on svg{opacity:1}
+.mrow2.don .mt2{text-decoration:line-through;color:var(--ink-3s)}
+.mrow2 .mt2{flex:1;font-weight:650}
+.mrow2 .est2{font-size:10px;color:var(--ink-2);font-weight:700}
+.mrow2 .stepchip{font-size:9.5px;font-weight:800;border:2px solid var(--ink);border-radius:7px;padding:1px 7px;background:var(--paperc)}
+.substeps2{margin:2px 0 4px 27px;padding-left:11px;border-left:2px dashed #d0ccbf}
+.ss2{display:flex;align-items:center;gap:8px;font-size:11.5px;padding:4px 0;font-weight:600}
+.ss2 .sq2{width:14px;height:14px;border:2px solid var(--ink);border-radius:4px;flex:none;background:#fff;display:flex;align-items:center;justify-content:center;color:#fff}
+.ss2 .sq2 svg{width:8px;height:8px;stroke-width:3.6;opacity:0}
+.ss2 .sq2.on{background:var(--ink)}
+.ss2 .sq2.on svg{opacity:1}
+.ss2.don span:last-of-type{text-decoration:line-through;color:var(--ink-3s)}
+.addst{font-size:10.5px;color:var(--ink-2);font-weight:700;padding:4px 0 0;display:flex;gap:7px;align-items:center}
+.addst i{width:14px;height:14px;border:2px dashed var(--ink-3s);border-radius:4px;display:inline-flex;align-items:center;justify-content:center;font-style:normal;font-size:10px}
+
+/* ================= faders (priorities) ================= */
+.desk{display:flex;gap:12px;margin-top:14px;justify-content:space-between}
+.fader{flex:1;border:2px solid var(--ink);border-radius:14px;background:#fff;box-shadow:var(--hs);padding:12px 8px 10px;text-align:center}
+.fader .fn2{font-size:11px;font-weight:800;letter-spacing:.4px}
+.fader .fs{font-size:9px;color:var(--ink-2);font-weight:600;margin-top:1px}
+.ftrack{position:relative;height:130px;margin:12px auto 8px;width:34px}
+.ftrack::before{content:"";position:absolute;left:50%;top:0;bottom:0;width:2px;background:var(--ink);transform:translateX(-50%)}
+.ftrack .notch{position:absolute;left:50%;width:12px;height:2px;background:#c9c5b8;transform:translateX(-50%)}
+.fthumb{position:absolute;left:50%;transform:translateX(-50%);width:34px;height:22px;border:2px solid var(--ink);border-radius:8px;background:var(--lemon);box-shadow:var(--hs-sm);display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:11px;font-weight:700;cursor:pointer}
+.rank3{display:flex;align-items:center;gap:11px;border:2px solid var(--ink);border-radius:13px;background:#fff;box-shadow:var(--hs-sm);padding:10px 13px;margin-top:9px;font-size:13.5px;font-weight:700}
+.rank3 .rn{font-family:var(--mono);font-size:16px;width:20px;text-align:center}
+.rank3.top{background:var(--lemon)}
+.rank3 .pd{width:9px;height:9px;border-radius:3px}
+.rank3 .sc3{margin-left:auto;font-family:var(--mono);font-size:13px}
+
+/* ================= journal index card ================= */
+.jcard{border:2px solid var(--ink);border-radius:16px;background:var(--lemon);box-shadow:var(--hs);padding:15px 15px 13px;margin-top:12px}
+.jcard .jst{display:flex;align-items:center;gap:8px}
+.jcard .jst .datestamp{font-family:var(--mono);font-size:10.5px;font-weight:700;border:2px solid var(--ink);border-radius:7px;padding:2px 8px;background:#fff;transform:rotate(-2deg)}
+.jcard .jst .strk2{margin-left:auto;font-size:10px;font-weight:800;color:var(--ink-2)}
+.jtx{font-family:var(--mono);font-size:12.5px;line-height:1.75;margin-top:12px}
+.jtx p{margin:0 0 10px}
+.jck{cursor:pointer;font-weight:700}
+.jck.don{text-decoration:line-through;color:#8a8672}
+.jrule{border-top:2px dashed rgba(16,17,19,.25);margin:10px 0}
+.jfoot{display:flex;align-items:center;gap:8px;font-size:10px;font-weight:700;color:var(--ink-2);margin-top:10px}
+.jfoot .dot2{width:7px;height:7px;border-radius:50%;background:var(--go)}
+.daytabs{display:flex;gap:6px;margin-top:10px}
+.daytabs button{flex:1;border:2px solid var(--ink);border-radius:10px;background:#fff;padding:7px 0;font-family:var(--mono);font-size:11px;font-weight:700;box-shadow:var(--hs-sm)}
+.daytabs button.on{background:var(--ink);color:#fff}
+
+/* ================= review log ================= */
+.rvv{border:2px solid var(--ink);border-radius:14px;background:#fff;box-shadow:var(--hs);margin-top:12px;overflow:hidden;position:relative}
+.rvv .rtag{display:inline-flex;font-size:9px;font-weight:800;letter-spacing:1px;padding:3px 9px;border-bottom:2px solid var(--ink);border-right:2px solid var(--ink);border-radius:0 0 9px 0;text-transform:uppercase}
+.rvv .rbody{padding:10px 13px 13px}
+.rvv h4{font-size:14px;font-weight:800;letter-spacing:-.2px}
+.rvv .rwhy{font-size:11.5px;color:var(--ink-2);font-weight:550;line-height:1.5;margin-top:4px}
+.rvv .racts{display:flex;gap:8px;margin-top:11px}
+.rvv .racts button{border:2px solid var(--ink);border-radius:10px;padding:7px 13px;font-size:11.5px;font-weight:800;background:#fff;box-shadow:var(--hs-sm)}
+.rvv .racts button.pri{background:var(--ink);color:#fff}
+.rvv.reso .rbody,.rvv.reso .rtag{opacity:.35}
+.resostamp{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none}
+.resostamp span{font-size:19px;font-weight:800;letter-spacing:2px;color:var(--go);border:3px solid var(--go);border-radius:10px;padding:5px 16px;transform:rotate(-9deg);background:rgba(255,255,255,.82)}
+</style>
+</head>
+<body>
+
+<svg style="display:none" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="i-prism" viewBox="0 0 24 24"><path d="M12 3 3 20h18Z"/><path d="M12 3v17"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="m4 12 5 5L20 7"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 5v14l12-7Z"/></symbol>
+  <symbol id="i-chevr" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
+  <symbol id="i-chevl" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></symbol>
+  <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></symbol>
+  <symbol id="i-flame" viewBox="0 0 24 24"><path d="M12 3c1.5 3.5 5 4.5 6 8 .8 2.8-.5 8-6 8s-6.8-5.2-6-8c1-3.5 4.5-4.5 6-8z"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17v.01"/></symbol>
+</svg>
+
+<!-- ===== page header ===== -->
+<div class="hd">
+  <div class="brand"><span class="logo"><svg><use href="#i-prism"/></svg></span>Prisms — Mobile <span class="vtag">V3 · MISSION CONTROL</span></div>
+  <p>Third philosophy: <b>glance + go</b>. Home is a widget board that answers “what now?” in one look — the next best action with its full why-chain, your queue as numbered tickets, today as a strip. Every screen is one tap deep, no tab bar — a dock with <b>Home</b> and <b>Capture</b>. The priority engine gets physical: deli-counter tickets, mixing-desk faders, punch-card habits. Ink borders, solid tints, hard shadows — light, loud, zero gradients.</p>
+</div>
+<div class="lineup">
+  <span class="lu"><b>v1</b> · browse — feature tabs</span>
+  <span class="lu"><b>ALT</b> · live — one day feed</span>
+  <span class="lu on"><b>v3</b> · glance + go — widget hub, one tap deep</span>
+</div>
+
+<div class="gallery">
+
+  <!-- ============ 1 · HOME (mission control) ============ -->
+  <div class="frame">
+    <div class="device"><div class="screen">
+      <div class="sbar"><span class="js-clock">9:41</span><span class="island"></span><span class="sbr"></span></div>
+      <div class="scroll">
+        <div style="display:flex;align-items:baseline;gap:10px;margin-top:4px">
+          <div class="h1">Sunday</div>
+          <span class="zl" style="margin-left:auto">Jul 5 · Wk 27</span>
+        </div>
+
+        <div class="wgrid">
+          <div class="wg now span">
+            <div class="wl">Next best action <span class="go2 zl">engine · prio 7.5</span></div>
+            <div class="task">Water the seedlings</div>
+            <div class="whychain">
+              <span class="wc">15m task</span><svg class="ic xs"><use href="#i-chevr"/></svg>
+              <span class="wc">Irrigation live</span><svg class="ic xs"><use href="#i-chevr"/></svg>
+              <span class="wc">Garden renovation</span><svg class="ic xs"><use href="#i-chevr"/></svg>
+              <span class="wc" style="background:var(--mint)">Self-sufficient home</span>
+            </div>
+            <button class="gobtn"><svg class="ic"><use href="#i-play"/></svg>CLOCK IN</button>
+            <div class="meta"><span>fits the 11:30 gap</span><span>·</span><span>5h 20m left today</span></div>
+          </div>
+
+          <div class="wg span">
+            <div class="wl">Queue <span class="go2 zl">4 ready · 2 held</span></div>
+            <div style="margin-top:6px">
+              <div class="tk"><span class="no num">2</span><span class="pd" style="background:var(--garden)"></span><span class="tt">Mix soil for the raised beds</span><span class="est">45m</span></div>
+              <div class="tk"><span class="no num">3</span><span class="pd" style="background:var(--prisms)"></span><span class="tt">Fix sync retry backoff</span><span class="est">2h</span></div>
+              <div class="tk"><span class="no num">4</span><span class="pd" style="background:var(--violin)"></span><span class="tt">Order strings &amp; fittings</span><span class="est">20m</span></div>
+            </div>
+          </div>
+
+          <div class="wg span">
+            <div class="wl">Today <span class="go2 zl">3h 45m planned</span></div>
+            <div class="strip">
+              <span class="sb3 done2">RUN</span>
+              <span class="sb3 live">CARVE · now</span>
+              <span class="sb3 free">+</span>
+              <span class="sb3 anch">CALL 🔒</span>
+              <span class="sb3 free">+</span>
+              <span class="sb3 hab">VIOLIN</span>
+            </div>
+          </div>
+
+          <div class="wg mint">
+            <div class="wl">Habits</div>
+            <div class="bignum num">2/4</div>
+            <div class="punchmini"><i class="on"></i><i class="on"></i><i></i><i></i></div>
+            <div class="sub">stretch ✓ · run ✓</div>
+          </div>
+          <div class="wg peach">
+            <div class="wl">Streak</div>
+            <div class="bignum num">21<span style="font-size:14px">d</span></div>
+            <div class="sub">violin practice — longest alive</div>
+          </div>
+          <div class="wg lemon">
+            <div class="wl">Journal</div>
+            <div class="jprompt">“Jointed the plates before lunch —”</div>
+            <div class="sub" style="margin-top:6px">continue tonight →</div>
+          </div>
+          <div class="wg">
+            <div class="wl">Needs your call</div>
+            <div class="bignum num" style="color:var(--hold)">3</div>
+            <div class="sub">1 conflict · 2 notices</div>
+          </div>
+        </div>
+      </div>
+      <div class="dock"><button><svg class="ic sm"><use href="#i-grid"/></svg>HOME</button><button class="cap" data-cap="cap1"><svg class="ic sm"><use href="#i-plus"/></svg>CAPTURE</button></div>
+
+      <div class="capov hide" id="cap1">
+        <div class="zl">Quick capture · goes to Inbox unless filed</div>
+        <div class="capline">sharpen the gouges<span class="cur"></span></div>
+        <div class="filechips">
+          <button class="on">Inbox</button>
+          <button><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:var(--violin);margin-right:6px"></span>Violin #2</button>
+          <button><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:var(--garden);margin-right:6px"></span>Garden</button>
+          <button>+20m est</button>
+        </div>
+        <div class="hint2">↵ save · tap anywhere to dismiss</div>
+      </div>
+    </div></div>
+    <div class="caption"><b>Home — the whole app in one look</b><span>A widget board: the engine's next best action with its full why-chain up to the vision, the queue as tickets, today as a strip, habits/streaks/journal/review as glanceable modules. Dock = Home + Capture; every widget is one tap from its screen.</span></div>
+  </div>
+
+  <!-- ============ 2 · NOW RUNNING ============ -->
+  <div class="frame">
+    <div class="device"><div class="screen" style="background:var(--ink)">
+      <div class="sbar" style="color:#fdfcf7"><span class="js-clock">9:41</span><span class="island"></span><span class="sbr"></span></div>
+      <div class="runscreen">
+        <div class="zl">On the clock · started 9:03</div>
+        <div class="bigtimer num js-timer">00:42:13</div>
+        <div class="runtask">Carve the scroll</div>
+        <div class="runchain">
+          <span class="wc">Violin #2 build</span><svg class="ic xs"><use href="#i-chevr"/></svg>
+          <span class="wc">2026 instruments</span><svg class="ic xs"><use href="#i-chevr"/></svg>
+          <span class="wc">Master luthiery</span>
+        </div>
+        <div class="segbar"><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i><i class="h"></i><i></i><i></i><i></i><i></i></div>
+        <div class="runmeta"><span>1.9h logged of 3h est</span><span class="num">63%</span></div>
+        <div class="focusrow">focus factor at clock-out<span class="fd"><b>.5</b><b>.7</b><b class="on">.9</b><b>1</b></span></div>
+        <div class="runbtns">
+          <button class="stop">CLOCK OUT</button>
+          <button class="done3">DONE ✓</button>
+        </div>
+      </div>
+      <div class="dock"><button><svg class="ic sm"><use href="#i-grid"/></svg>HOME</button><button class="cap"><svg class="ic sm"><use href="#i-plus"/></svg>CAPTURE</button></div>
+    </div></div>
+    <div class="caption"><b>Now — a focus instrument</b><span>Clocked-in flips the screen to ink: giant mono digits, the why-chain, a segmented progress meter, and the focus-factor dial ready for clock-out. One timer in the whole app (I5), so this screen is unambiguous.</span></div>
+  </div>
+
+  <!-- ============ 3 · QUEUE ============ -->
+  <div class="frame">
+    <div class="device"><div class="screen">
+      <div class="sbar"><span class="js-clock">9:41</span><span class="island"></span><span class="sbr"></span></div>
+      <button class="backbtn"><svg class="ic sm"><use href="#i-chevl"/></svg></button>
+      <div class="scroll" style="padding-top:44px">
+        <div class="h1">Queue</div>
+        <div class="zl" style="margin-top:3px">Priority order — scores from your decision board</div>
+        <div class="qfilter" data-qf="1">
+          <button class="qf on" data-proj="all">All</button>
+          <button class="qf" data-proj="garden"><span class="pd" style="background:var(--garden)"></span>Garden</button>
+          <button class="qf" data-proj="prisms"><span class="pd" style="background:var(--prisms)"></span>Prisms</button>
+          <button class="qf" data-proj="violin"><span class="pd" style="background:var(--violin)"></span>Violin</button>
+        </div>
+        <div id="qList">
+          <div class="ticket first" data-proj="garden">
+            <div class="stub"><span class="qno num">1</span><span class="qsc num">7.5</span></div>
+            <div class="tb2"><div class="tt2">Water the seedlings</div>
+              <div class="tm2"><span class="pd" style="background:var(--garden)"></span>Garden · 15m · fits 11:30 gap</div></div>
+            <div class="act2"><button class="gomini">GO</button></div>
+          </div>
+          <div class="ticket" data-proj="garden">
+            <div class="stub"><span class="qno num">2</span><span class="qsc num">7.5</span></div>
+            <div class="tb2"><div class="tt2">Mix soil for the raised beds</div>
+              <div class="tm2"><span class="pd" style="background:var(--garden)"></span>Garden · 45m · due Tue</div></div>
+          </div>
+          <div class="ticket" data-proj="prisms">
+            <div class="stub"><span class="qno num">3</span><span class="qsc num">7.0</span></div>
+            <div class="tb2"><div class="tt2">Fix sync retry backoff</div>
+              <div class="tm2"><span class="pd" style="background:var(--prisms)"></span>Prisms · 2h · 38% logged</div></div>
+          </div>
+          <div class="ticket" data-proj="violin">
+            <div class="stub"><span class="qno num">4</span><span class="qsc num">6.3</span></div>
+            <div class="tb2"><div class="tt2">Order strings &amp; fittings</div>
+              <div class="tm2"><span class="pd" style="background:var(--violin)"></span>Violin #2 · 20m · due Mon</div></div>
+          </div>
+        </div>
+        <div class="zl" style="margin:14px 0 4px;color:var(--hold)">Held — not in the queue</div>
+        <div class="ticket holdt" data-proj="garden">
+          <div class="stub"><span class="qno">–</span></div>
+          <div class="tb2"><div class="tt2">Prune the apple trees</div>
+            <div class="tm2">rain 82% today · Rainy-day guard</div></div>
+          <div class="act2"><span class="holdstamp">HOLD</span></div>
+        </div>
+        <div class="ticket holdt" data-proj="violin">
+          <div class="stub"><span class="qno">–</span></div>
+          <div class="tb2"><div class="tt2">Assemble the violin body</div>
+            <div class="tm2">2 predecessors unfinished</div></div>
+          <div class="act2"><span class="holdstamp">HOLD</span></div>
+        </div>
+      </div>
+      <div class="dock"><button><svg class="ic sm"><use href="#i-grid"/></svg>HOME</button><button class="cap"><svg class="ic sm"><use href="#i-plus"/></svg>CAPTURE</button></div>
+    </div></div>
+    <div class="caption"><b>Queue — take a ticket</b><span>The worklist as numbered stubs: rank and score on the tear-off, GO on the front of the line. Held work sits below the fold, stamped with its reason — never silently hidden.</span></div>
+  </div>
+
+  <!-- ============ 4 · SCHEDULE ============ -->
+  <div class="frame">
+    <div class="device"><div class="screen">
+      <div class="sbar"><span class="js-clock">9:41</span><span class="island"></span><span class="sbr"></span></div>
+      <button class="backbtn"><svg class="ic sm"><use href="#i-chevl"/></svg></button>
+      <div class="scroll" style="padding-top:44px">
+        <div class="daypager">
+          <button class="pgbtn"><svg class="ic sm"><use href="#i-chevl"/></svg></button>
+          <div class="dt"><span>Today</span><b>Sunday, Jul 5</b></div>
+          <button class="pgbtn"><svg class="ic sm"><use href="#i-chevr"/></svg></button>
+        </div>
+        <div class="sched">
+          <span class="tmark" style="top:8px">7:00</span>
+          <div class="brick done4"><b>Long run 25 km</b><div class="bm2">2h 12m logged</div><span class="stamp" style="color:var(--go)">DONE</span></div>
+          <span class="tmark" style="top:86px">9:00</span>
+          <div class="brick live2"><b>Carve the scroll</b><div class="bm2"><span class="num js-timer">00:42:13</span> · until 11:00</div><span class="stamp" style="color:#1971c2">LIVE</span></div>
+          <div class="gapline">45M FREE</div>
+          <div class="brick sugg2"><b>Water the seedlings — fits here</b><div class="bm2">15m · queue #1</div>
+            <div class="takeskip"><button class="tsk sg-take">TAKE 11:30</button><button class="skp sg-skip">SKIP</button></div></div>
+          <span class="tmark" style="top:302px">14:00</span>
+          <div class="brick anch2"><b>Family call <svg class="ic xs" style="vertical-align:-1px"><use href="#i-lock"/></svg></b><div class="bm2">anchored — drags bounce off</div></div>
+          <span class="tmark" style="top:376px">17:30</span>
+          <div class="brick hab2"><b>Violin practice</b><div class="bm2">45m target · streak 21</div></div>
+          <div class="gapline">EVENING FREE</div>
+        </div>
+      </div>
+      <div class="dock"><button><svg class="ic sm"><use href="#i-grid"/></svg>HOME</button><button class="cap"><svg class="ic sm"><use href="#i-plus"/></svg>CAPTURE</button></div>
+    </div></div>
+    <div class="caption"><b>Schedule — bricks and gaps</b><span>One day per page. Blocks are solid bricks — done gets a stamp, live gets the tint, anchored is immovable — and free time is announced, with the queue's #1 offered right inside the gap.</span></div>
+  </div>
+
+  <!-- ============ 5 · HABITS PUNCH CARD ============ -->
+  <div class="frame">
+    <div class="device"><div class="screen">
+      <div class="sbar"><span class="js-clock">9:41</span><span class="island"></span><span class="sbr"></span></div>
+      <button class="backbtn"><svg class="ic sm"><use href="#i-chevl"/></svg></button>
+      <div class="scroll" style="padding-top:44px">
+        <div class="h1">Habits</div>
+        <div class="zl" style="margin-top:3px">Week 27 punch card — stamp today, keep the row alive</div>
+        <div class="punch">
+          <table>
+            <tr><th>Habit</th><th>M</th><th>T</th><th>W</th><th>T</th><th>F</th><th>S</th><th class="todaycol">S</th></tr>
+            <tr>
+              <td>Stretch<span class="hh">daily · 🔥12</span></td>
+              <td><span class="pch on"></span></td><td><span class="pch on"></span></td><td><span class="pch on"></span></td>
+              <td><span class="pch on"></span></td><td><span class="pch on"></span></td><td><span class="pch on"></span></td>
+              <td class="todaycol"><span class="pch on"></span></td>
+            </tr>
+            <tr>
+              <td>Run<span class="hh">3×/wk · 🔥5</span></td>
+              <td><span class="pch on"></span></td><td><span class="pch miss"></span></td><td><span class="pch on"></span></td>
+              <td><span class="pch miss"></span></td><td><span class="pch miss"></span></td><td><span class="pch on"></span></td>
+              <td class="todaycol"><span class="pch on"></span></td>
+            </tr>
+            <tr>
+              <td>Read 30m<span class="hh">daily · 🔥5</span></td>
+              <td><span class="pch on"></span></td><td><span class="pch on"></span></td><td><span class="pch on"></span></td>
+              <td><span class="pch on"></span></td><td><span class="pch on"></span></td><td><span class="pch miss"></span></td>
+              <td class="todaycol"><span class="pch"></span></td>
+            </tr>
+            <tr>
+              <td>Weekly review<span class="hh">weekly · 🔥8w</span></td>
+              <td colspan="6" style="font-size:10px;color:var(--ink-2);font-weight:700">due by tonight</td>
+              <td class="todaycol"><span class="pch"></span></td>
+            </tr>
+          </table>
+        </div>
+
+        <div class="zl" style="margin:16px 0 2px">Skills — time levels them up</div>
+        <div class="skillrow">
+          <div class="sn2"><b>Violin practice</b><span>128h · 15/45m today · 🔥21</span></div>
+          <div class="lvlmeter"><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i><i></i><i></i></div>
+          <span class="lvl">L4</span>
+        </div>
+        <div class="skillrow">
+          <div class="sn2"><b>Wood carving</b><span>34h practiced · 🔥4</span></div>
+          <div class="lvlmeter"><i class="f"></i><i class="f"></i><i></i><i></i><i></i><i></i></div>
+          <span class="lvl">L2</span>
+        </div>
+      </div>
+      <div class="dock"><button><svg class="ic sm"><use href="#i-grid"/></svg>HOME</button><button class="cap"><svg class="ic sm"><use href="#i-plus"/></svg>CAPTURE</button></div>
+    </div></div>
+    <div class="caption"><b>Habits — a punch card</b><span>The week as a card you physically stamp (tap today's circle). Misses stay visible — the row tells the truth. Skills carry level meters that fill from logged practice time.</span></div>
+  </div>
+
+  <!-- ============ 6 · PROJECTS ============ -->
+  <div class="frame">
+    <div class="device"><div class="screen">
+      <div class="sbar"><span class="js-clock">9:41</span><span class="island"></span><span class="sbr"></span></div>
+      <button class="backbtn"><svg class="ic sm"><use href="#i-chevl"/></svg></button>
+      <div class="scroll" style="padding-top:44px">
+        <div class="h1">Projects</div>
+        <div class="zl" style="margin-top:3px">Folders in priority order · meters by estimate</div>
+
+        <div class="folder">
+          <span class="ftab" style="background:var(--garden)">Rank 1 · Garden</span>
+          <div class="fh"><b>Garden renovation</b><span class="sc2 num">7.5</span></div>
+          <div class="meter"><i style="background:var(--garden)"></i><i style="background:var(--garden)"></i><i style="background:var(--garden)"></i><i style="background:var(--garden)"></i><i style="background:var(--garden)"></i><i style="background:var(--garden)"></i><i></i><i></i><i></i><i></i></div>
+          <div class="fnext">next · <b>Water the seedlings</b> · queue #1</div>
+        </div>
+
+        <div class="folder">
+          <span class="ftab" style="background:var(--violin)">Rank 4 · Violin</span>
+          <div class="fh"><b>Violin #2 build</b><span class="sc2 num">6.3</span></div>
+          <div class="meter"><i style="background:var(--violin)"></i><i style="background:var(--violin)"></i><i style="background:var(--violin)"></i><i style="background:var(--violin)"></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+          <div class="mlist">
+            <div class="mrow2 don"><span class="ck2 on"><svg><use href="#i-check"/></svg></span><span class="mt2">Joint the plates</span><span class="est2">1h40</span></div>
+            <div class="mrow2"><span class="ck2"><svg><use href="#i-check"/></svg></span><span class="mt2">Carve the scroll</span><span class="est2" style="color:#1971c2">LIVE</span></div>
+            <div class="mrow2"><span class="ck2"><svg><use href="#i-check"/></svg></span><span class="mt2">Order strings &amp; fittings</span><button class="stepchip steps-tg" data-steps="v3s1">2 STEPS</button></div>
+            <div class="substeps2 hide" id="v3s1">
+              <div class="ss2 don"><span class="sq2 on"><svg><use href="#i-check"/></svg></span><span>Compare string gauges</span></div>
+              <div class="ss2"><span class="sq2"><svg><use href="#i-check"/></svg></span><span>Place the order</span></div>
+              <div class="addst"><i>+</i>ADD A STEP</div>
+            </div>
+            <div class="mrow2" style="opacity:.6"><span class="ck2" style="border-style:dashed"></span><span class="mt2">Assemble the body</span><span class="holdstamp">HOLD</span></div>
+          </div>
+        </div>
+
+        <div class="folder">
+          <span class="ftab" style="background:var(--prisms)">Rank 2 · Prisms</span>
+          <div class="fh"><b>Prisms v1.4</b><span class="sc2 num">7.0</span></div>
+          <div class="meter"><i style="background:var(--prisms)"></i><i style="background:var(--prisms)"></i><i style="background:var(--prisms)"></i><i style="background:var(--prisms)"></i><i style="background:var(--prisms)"></i><i style="background:var(--prisms)"></i><i style="background:var(--prisms)"></i><i style="background:var(--prisms)"></i><i></i><i></i></div>
+          <div class="fnext">next · <b>Fix sync retry backoff</b> · queue #3</div>
+        </div>
+      </div>
+      <div class="dock"><button><svg class="ic sm"><use href="#i-grid"/></svg>HOME</button><button class="cap"><svg class="ic sm"><use href="#i-plus"/></svg>CAPTURE</button></div>
+    </div></div>
+    <div class="caption"><b>Projects — folders with meters</b><span>Each project is a tabbed folder: segmented progress meter, score, and its next queue ticket. Open one to work the checklist — substeps expand inline, held tasks wear their stamp.</span></div>
+  </div>
+
+  <!-- ============ 7 · PRIORITIES (faders) ============ -->
+  <div class="frame">
+    <div class="device"><div class="screen">
+      <div class="sbar"><span class="js-clock">9:41</span><span class="island"></span><span class="sbr"></span></div>
+      <button class="backbtn"><svg class="ic sm"><use href="#i-chevl"/></svg></button>
+      <div class="scroll" style="padding-top:44px">
+        <div class="h1">The desk</div>
+        <div class="zl" style="margin-top:3px">Weigh the criteria — the queue re-ranks live, offline</div>
+
+        <div class="desk">
+          <div class="fader" data-w="3">
+            <div class="fn2">IMPACT</div><div class="fs">moves a vision</div>
+            <div class="ftrack">
+              <span class="notch" style="top:0"></span><span class="notch" style="top:25%"></span><span class="notch" style="top:50%"></span><span class="notch" style="top:75%"></span><span class="notch" style="bottom:0"></span>
+              <span class="fthumb num" style="top:26%">3</span>
+            </div>
+          </div>
+          <div class="fader" data-w="2">
+            <div class="fn2">EFFORT⁻¹</div><div class="fs">light lifts rank</div>
+            <div class="ftrack">
+              <span class="notch" style="top:0"></span><span class="notch" style="top:25%"></span><span class="notch" style="top:50%"></span><span class="notch" style="top:75%"></span><span class="notch" style="bottom:0"></span>
+              <span class="fthumb num" style="top:46%">2</span>
+            </div>
+          </div>
+          <div class="fader" data-w="1">
+            <div class="fn2">JOY</div><div class="fs">you'll show up</div>
+            <div class="ftrack">
+              <span class="notch" style="top:0"></span><span class="notch" style="top:25%"></span><span class="notch" style="top:50%"></span><span class="notch" style="top:75%"></span><span class="notch" style="bottom:0"></span>
+              <span class="fthumb num" style="top:66%">1</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="zl" style="margin:18px 0 2px">Resulting order</div>
+        <div class="rank3 top"><span class="rn num">1</span><span class="pd" style="background:var(--garden)"></span>Garden renovation<span class="sc3 num">7.5</span></div>
+        <div class="rank3"><span class="rn num">2</span><span class="pd" style="background:var(--prisms)"></span>Prisms v1.4<span class="sc3 num">7.0</span></div>
+        <div class="rank3"><span class="rn num">3</span><span class="pd" style="background:var(--marathon)"></span>Marathon prep<span class="sc3 num">6.8</span></div>
+        <div class="rank3"><span class="rn num">4</span><span class="pd" style="background:var(--violin)"></span>Violin #2 build<span class="sc3 num">6.3</span></div>
+        <div class="zl" style="margin-top:12px;color:var(--ink-2);text-transform:none;letter-spacing:.2px;font-size:10.5px">Σ weight × score ÷ Σ weight — same math as the web decision board. Tap a fader track to nudge.</div>
+      </div>
+      <div class="dock"><button><svg class="ic sm"><use href="#i-grid"/></svg>HOME</button><button class="cap"><svg class="ic sm"><use href="#i-plus"/></svg>CAPTURE</button></div>
+    </div></div>
+    <div class="caption"><b>Priorities — a mixing desk</b><span>Criteria become faders you slide; the ranked output sits right under your hands. What the deli tickets and the "next best action" all trace back to.</span></div>
+  </div>
+
+  <!-- ============ 8 · JOURNAL ============ -->
+  <div class="frame">
+    <div class="device"><div class="screen">
+      <div class="sbar"><span class="js-clock">9:41</span><span class="island"></span><span class="sbr"></span></div>
+      <button class="backbtn"><svg class="ic sm"><use href="#i-chevl"/></svg></button>
+      <div class="scroll" style="padding-top:44px">
+        <div class="h1">Journal</div>
+        <div class="daytabs">
+          <button>JUL 02</button><button>JUL 03</button><button>JUL 04</button><button class="on">JUL 05</button>
+        </div>
+        <div class="jcard">
+          <div class="jst"><span class="datestamp">SUN · JUL 05 · 2026</span><span class="strk2">day 128 of journaling</span></div>
+          <div class="jtx">
+            <p>Jointed the plates before lunch — the centre seam came out invisible. Glue cured faster than expected in the heat; note for next time: clamp lighter, check squeeze-out at 20 min.</p>
+            <div class="jrule"></div>
+            <p><span class="jck don">[x] Glue the centre seam</span><br>
+               <span class="jck don">[x] Long run 25 km — 2:12, felt strong</span><br>
+               <span class="jck">[ ] Order strings &amp; fittings</span></p>
+            <div class="jrule"></div>
+            <p>Rain pushed the pruning to next week. Moved it without guilt — the blocker did its job.</p>
+          </div>
+          <div class="jfoot"><span class="dot2"></span>SAVED · ONE .MD PER DAY · MONTHS LOAD ON OPEN</div>
+        </div>
+        <div class="zl" style="margin-top:14px;text-transform:none;letter-spacing:.2px;font-size:10.5px;color:var(--ink-2)">Tap a [ ] to toggle it — checkboxes live in the text, exactly like the markdown file they save to.</div>
+      </div>
+      <div class="dock"><button><svg class="ic sm"><use href="#i-grid"/></svg>HOME</button><button class="cap"><svg class="ic sm"><use href="#i-plus"/></svg>CAPTURE</button></div>
+    </div></div>
+    <div class="caption"><b>Journal — an index card</b><span>One typewritten card per day on lemon stock: date stamp, plain-text checkboxes that toggle in place, and the promise kept visible — it's just a markdown file.</span></div>
+  </div>
+
+  <!-- ============ 9 · REVIEW LOG ============ -->
+  <div class="frame">
+    <div class="device"><div class="screen">
+      <div class="sbar"><span class="js-clock">9:41</span><span class="island"></span><span class="sbr"></span></div>
+      <button class="backbtn"><svg class="ic sm"><use href="#i-chevl"/></svg></button>
+      <div class="scroll" style="padding-top:44px">
+        <div class="h1">Needs your call</div>
+        <div class="zl" style="margin-top:3px">3 open — deciding stamps the log, offline</div>
+
+        <div class="rvv" id="rv1">
+          <span class="rtag" style="background:var(--hold-soft);color:var(--hold)">Conflict · 09:58</span>
+          <div class="rbody">
+            <h4>“Water the seedlings” — two edits</h4>
+            <div class="rwhy">This phone set <b>15m · today</b> at 09:58; the desktop set 30m · Tue at 09:41. Newer is currently kept.</div>
+            <div class="racts"><button class="pri rv-ok">KEEP NEWER</button><button class="rv-ok">RESTORE OTHER</button></div>
+          </div>
+        </div>
+        <div class="rvv" id="rv2">
+          <span class="rtag" style="background:var(--lemon)">Warning · restore</span>
+          <div class="rbody">
+            <h4>2 rows skipped during import</h4>
+            <div class="rwhy">Unknown node type “okr” in the backup. Everything else imported cleanly.</div>
+            <div class="racts"><button class="pri rv-ok">ACCEPT</button><button class="rv-ok">DOWNLOAD ROWS</button></div>
+          </div>
+        </div>
+        <div class="rvv" id="rv3">
+          <span class="rtag" style="background:var(--sky)">Notice · automation</span>
+          <div class="rbody">
+            <h4>“Order follow-ups” ran server-side</h4>
+            <div class="rwhy">Spawned <b>Follow-up: Order tonewood</b> while this phone was offline, Jul 3.</div>
+            <div class="racts"><button class="pri rv-ok">GOT IT</button></div>
+          </div>
+        </div>
+      </div>
+      <div class="dock"><button><svg class="ic sm"><use href="#i-grid"/></svg>HOME</button><button class="cap"><svg class="ic sm"><use href="#i-plus"/></svg>CAPTURE</button></div>
+    </div></div>
+    <div class="caption"><b>Review — decide and stamp</b><span>Each item states its case and takes one tap to resolve — the card gets a RESOLVED stamp and stays as a log entry (try it). Works offline; the server reconciles later.</span></div>
+  </div>
+
+</div>
+
+<script>
+// status-bar right icons
+const SBR = '<svg width="17" height="11" viewBox="0 0 17 11"><rect x="0" y="7" width="3" height="4" rx="1"/><rect x="4.6" y="5" width="3" height="6" rx="1"/><rect x="9.2" y="2.5" width="3" height="8.5" rx="1"/><rect x="13.8" y="0" width="3" height="11" rx="1"/></svg>'
+  + '<svg width="16" height="11" viewBox="0 0 16 11"><path d="M8 2.4c2.6 0 5 1 6.8 2.8l-1.4 1.4A7.6 7.6 0 0 0 8 4.3 7.6 7.6 0 0 0 2.6 6.6L1.2 5.2A9.6 9.6 0 0 1 8 2.4Zm0 3.5c1.4 0 2.7.6 3.7 1.5l-1.5 1.5A3 3 0 0 0 8 8.2a3 3 0 0 0-2.2.7L4.3 7.4A5.2 5.2 0 0 1 8 5.9Zm0 3.2 1.5 1.5L8 11 6.5 9.6Z"/></svg>'
+  + '<svg width="25" height="12" viewBox="0 0 25 12"><rect x="1" y="1" width="21" height="10" rx="3" fill="none" stroke="currentColor" stroke-width="1" opacity=".4"/><rect x="2.6" y="2.6" width="15.5" height="6.8" rx="1.5"/><rect x="23" y="4" width="1.6" height="4" rx="1"/></svg>';
+document.querySelectorAll('.sbr').forEach(el => el.innerHTML = SBR);
+
+// clock + timer
+function tick(){
+  const d = new Date(), h = d.getHours(), m = String(d.getMinutes()).padStart(2,'0');
+  document.querySelectorAll('.js-clock').forEach(el => el.textContent = (h%12||12) + ':' + m);
+}
+tick(); setInterval(tick, 10000);
+let secs = 42*60+13; const p2 = n => String(n).padStart(2,'0');
+setInterval(() => { secs++;
+  const s = p2(secs/3600|0)+':'+p2((secs/60|0)%60)+':'+p2(secs%60);
+  document.querySelectorAll('.js-timer').forEach(el => el.textContent = s);
+}, 1000);
+
+// interactions
+document.addEventListener('click', e => {
+  // capture overlay
+  const capBtn = e.target.closest('[data-cap]');
+  if (capBtn){ document.getElementById(capBtn.dataset.cap)?.classList.remove('hide'); return; }
+  const ov = e.target.closest('.capov');
+  if (ov && !e.target.closest('.capline') && !e.target.closest('.filechips')){ ov.classList.add('hide'); return; }
+  const fchip = e.target.closest('.filechips button');
+  if (fchip){ fchip.parentElement.querySelectorAll('button').forEach(b => b.classList.toggle('on', b===fchip)); return; }
+
+  // punch card stamps
+  const pch = e.target.closest('.pch:not(.miss)');
+  if (pch){ pch.classList.toggle('on'); return; }
+
+  // checks + substeps
+  const ck = e.target.closest('.ck2, .sq2');
+  if (ck){ ck.classList.toggle('on');
+    const host = ck.closest('.mrow2, .ss2'); if (host) host.classList.toggle(host.classList.contains('mrow2')?'don':'don', ck.classList.contains('on')); return; }
+  const tg = e.target.closest('.steps-tg');
+  if (tg){ document.getElementById(tg.dataset.steps)?.classList.toggle('hide'); return; }
+
+  // journal text checkboxes
+  const jck = e.target.closest('.jck');
+  if (jck){ jck.classList.toggle('don');
+    jck.textContent = (jck.classList.contains('don') ? '[x]' : '[ ]') + jck.textContent.slice(3); return; }
+
+  // queue filter
+  const qf = e.target.closest('.qf');
+  if (qf){ qf.parentElement.querySelectorAll('.qf').forEach(x => x.classList.toggle('on', x===qf));
+    document.querySelectorAll('#qList .ticket, .ticket.holdt').forEach(t =>
+      t.classList.toggle('hide', !(qf.dataset.proj==='all' || t.dataset.proj===qf.dataset.proj)));
+    return; }
+
+  // schedule take/skip
+  const take = e.target.closest('.sg-take');
+  if (take){ const b = take.closest('.brick');
+    b.classList.remove('sugg2'); b.style.background='var(--sky)'; b.style.boxShadow='var(--hs-sm)'; b.style.borderStyle='solid';
+    b.innerHTML = '<b>Water the seedlings</b><div class="bm2">11:30 – 11:45 · committed from queue #1</div>'; return; }
+  const skip = e.target.closest('.sg-skip');
+  if (skip){ const b = skip.closest('.brick'); b.outerHTML = '<div class="gapline">45M FREE — KEPT</div>'; return; }
+
+  // faders: click upper/lower half of track nudges ±1 (0..5)
+  const trk = e.target.closest('.ftrack');
+  if (trk){ const th = trk.querySelector('.fthumb'); let v = +th.textContent;
+    const r = trk.getBoundingClientRect();
+    v = Math.max(0, Math.min(5, v + (e.clientY < r.top + r.height/2 ? 1 : -1)));
+    th.textContent = v; th.style.top = (86 - v*16) + '%'; return; }
+
+  // review resolve -> stamp
+  const rv = e.target.closest('.rv-ok');
+  if (rv){ const card = rv.closest('.rvv');
+    if (!card.classList.contains('reso')){
+      card.classList.add('reso');
+      const st = document.createElement('div'); st.className = 'resostamp'; st.innerHTML = '<span>RESOLVED ✓</span>';
+      card.appendChild(st);
+    } return; }
+
+  // day tabs (journal)
+  const dt = e.target.closest('.daytabs button');
+  if (dt){ dt.parentElement.querySelectorAll('button').forEach(b => b.classList.toggle('on', b===dt)); return; }
+});
+</script>
+</body>
+</html>
