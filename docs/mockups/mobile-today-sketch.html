@@ -10,9 +10,10 @@
   --bg:#f7f8fa; --card:#ffffff;
   --ink:#18202b; --dim:#5f6b7a; --faint:#98a1ae;
   --hair:#e6e8ec; --hair-2:#d9dde3;
-  --blue:#2563eb; --blue-deep:#1d4ed8;
+  --blue:#2563eb; --blue-deep:#1d4ed8; --blue-bg:#e9f0fe;
   --live:#d97706; --live-soft:#fdf1dd;
-  --red:#dc2626; --grey:#98a1ae;
+  --red:#dc2626; --red-bg:#fdecec;
+  --grey:#98a1ae; --grey-bg:#edf0f4;
   --mono:ui-monospace,"Cascadia Mono",Consolas,"Roboto Mono",monospace;
 }
 *{box-sizing:border-box;margin:0;padding:0}
@@ -27,11 +28,12 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
 .hide{display:none!important}
 
 /* page chrome */
-.hd{max-width:640px;padding:38px 24px 6px;text-align:center}
+.hd{max-width:660px;padding:38px 24px 6px;text-align:center}
 .hd .brand{display:inline-flex;align-items:center;gap:10px;font-size:18px;font-weight:800;letter-spacing:-.3px}
 .hd .logo{width:30px;height:30px;border-radius:9px;background:var(--blue);color:#fff;display:flex;align-items:center;justify-content:center}
 .hd .logo svg{width:16px;height:16px;stroke-width:2.3}
-.hd p{margin-top:8px;color:var(--dim);font-size:12.5px;line-height:1.55;max-width:460px}
+.hd p{margin-top:8px;color:var(--dim);font-size:12.5px;line-height:1.55;max-width:500px}
+.hd p b{color:var(--ink)}
 .gallery{margin:22px auto 60px}
 
 /* ================= device ================= */
@@ -49,17 +51,52 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
 .hdr{flex:none;padding:6px 20px 12px;border-bottom:1px solid var(--hair);z-index:5;background:var(--bg)}
 .hdr h1{font-size:22px;font-weight:800;letter-spacing:-.5px}
 
-/* content column (rail spans this whole area, like the sketch's bracket) */
-.content{position:relative;flex:1;min-height:0;display:flex;flex-direction:column;padding-right:14px}
-.rail{position:absolute;right:7px;top:10px;bottom:88px;width:4px;border-radius:2px;background:var(--hair)}
-.rail .thumb{position:absolute;left:0;right:0;top:6%;height:20%;border-radius:2px;background:var(--blue)}
-.rail .now{position:absolute;left:50%;top:31%;transform:translate(-50%,0)}
-.rail .now .nd{width:9px;height:9px;border-radius:50%;background:var(--live);display:block;margin:0 auto;box-shadow:0 0 0 2px var(--bg)}
-.rail .now .nl{display:block;width:13px;height:2.5px;border-radius:2px;background:var(--red);margin:2px auto 0}
+/* content column */
+.content{position:relative;flex:1;min-height:0;display:flex;flex-direction:column;padding-right:34px}
+
+/* ================= day bar (the whole day, mapped) ================= */
+.daybar{position:absolute;right:9px;top:8px;bottom:86px;width:14px;z-index:5;cursor:pointer;touch-action:none}
+.daybar .lane{position:absolute;left:3px;right:3px;top:0;bottom:0;background:var(--card);border:1px solid var(--hair-2);border-radius:8px}
+.daybar .htick{position:absolute;left:4px;right:4px;height:1px;background:var(--hair)}
+.daybar .seg{position:absolute;left:4px;right:4px;border-radius:4px}
+.daybar .seg.livep{animation:pulse 1.6s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.45}}
+.daybar .nowl{position:absolute;left:0;right:0;height:2.5px;border-radius:2px;background:var(--red);box-shadow:0 0 0 1.5px rgba(255,255,255,.85)}
+.daybar .nowl::before{content:"";position:absolute;left:-4px;top:-2.2px;width:7px;height:7px;border-radius:50%;background:var(--red)}
+
+/* ================= expanded day calendar (swipe from right) ================= */
+.scrim{position:absolute;inset:0;z-index:7;background:rgba(24,32,43,.28);opacity:0;pointer-events:none;transition:opacity .22s}
+.screen.cal-open .scrim{opacity:1;pointer-events:auto}
+.daypanel{position:absolute;top:0;bottom:0;right:0;width:224px;z-index:8;background:var(--card);
+  border-left:1px solid var(--hair);box-shadow:-14px 0 34px rgba(16,24,40,.16);
+  transform:translateX(calc(100% + 12px));transition:transform .24s cubic-bezier(.3,.9,.3,1);
+  display:flex;flex-direction:column;touch-action:none}
+.daypanel.dragging{transition:none}
+.screen.cal-open .daypanel{transform:translateX(0)}
+.daypanel .ph{flex:none;display:flex;align-items:center;gap:8px;padding:14px 14px 10px;border-bottom:1px solid var(--hair)}
+.daypanel .ph b{font-size:13.5px;font-weight:800;letter-spacing:-.2px}
+.daypanel .ph span{font-size:10px;color:var(--faint);font-weight:600;margin-left:auto}
+.daypanel .grab{position:absolute;left:5px;top:50%;transform:translateY(-50%);width:4px;height:44px;border-radius:2px;background:var(--hair-2)}
+.ptrackwrap{flex:1;position:relative;margin:6px 4px 10px 0}
+.ptrack{position:absolute;left:0;right:10px;top:8px;bottom:8px}
+.ptrack .hline{position:absolute;left:40px;right:0;height:1px;background:var(--hair)}
+.ptrack .hlbl{position:absolute;left:0;width:34px;text-align:right;font-family:var(--mono);font-size:9px;font-weight:600;color:var(--faint);transform:translateY(-50%)}
+.pblk{position:absolute;left:44px;right:2px;border-radius:9px;padding:5px 8px;overflow:hidden}
+.pblk b{display:block;font-size:11px;font-weight:750;letter-spacing:-.1px;line-height:1.2;white-space:nowrap;text-overflow:ellipsis;overflow:hidden}
+.pblk .pm{font-size:9px;font-weight:600;opacity:.85;margin-top:1px;display:block;white-space:nowrap}
+.pblk.done{background:var(--blue);color:#fff}
+.pblk.done b{text-decoration:line-through}
+.pblk.livebk{background:#fff;border:2px solid var(--live);color:#a3580a}
+.pblk.greyb{background:var(--grey-bg);border:1.5px solid var(--hair-2);color:var(--dim)}
+.pblk.blueb{background:var(--blue-bg);border:1.5px solid #c8d9fb;color:var(--blue-deep)}
+.pblk.redb{background:var(--red-bg);border:1.5px solid #f5c6c6;color:var(--red)}
+.ptrack .pnow{position:absolute;left:36px;right:0;height:2px;background:var(--red);z-index:3}
+.ptrack .pnow::before{content:"";position:absolute;left:-5px;top:-3px;width:8px;height:8px;border-radius:50%;background:var(--red)}
+.ptrack .pnow .nlbl{position:absolute;left:-38px;top:-6px;font-family:var(--mono);font-size:8.5px;font-weight:800;color:var(--red)}
 
 /* ================= timeline (scroll + fades) ================= */
 .tlwrap{position:relative;flex:none;height:396px;min-height:0}
-.tl{height:100%;overflow-y:auto;padding:14px 6px 22px 16px;scrollbar-width:none}
+.tl{height:100%;overflow-y:auto;padding:14px 2px 22px 16px;scrollbar-width:none}
 .tl::-webkit-scrollbar{width:0}
 .fade{position:absolute;left:0;right:0;height:26px;pointer-events:none;z-index:4}
 .fade.top{top:0;background:linear-gradient(var(--bg),rgba(247,248,250,0))}
@@ -68,14 +105,12 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
 .trow{display:flex;align-items:flex-start;gap:10px;padding:13px 2px;border-bottom:1px solid var(--hair)}
 .trow:last-child{border-bottom:none}
 .trow .time{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--dim);width:42px;flex:none;text-align:right;padding-top:3px}
-.mark{width:22px;height:22px;flex:none;display:flex;align-items:center;justify-content:center;margin-top:0}
+.mark{width:22px;height:22px;flex:none;display:flex;align-items:center;justify-content:center}
 .mark .dot{width:11px;height:11px;border-radius:50%}
-.mark.done{color:#fff}
-.mark.done .ckc{width:20px;height:20px;border-radius:50%;background:var(--blue);display:flex;align-items:center;justify-content:center;cursor:pointer}
+.mark.done .ckc{width:20px;height:20px;border-radius:50%;background:var(--blue);display:flex;align-items:center;justify-content:center;color:#fff;cursor:pointer}
 .mark.done .ckc svg{width:11px;height:11px;stroke-width:3.2}
 .mark.live{color:var(--live);animation:pulse 1.6s ease-in-out infinite}
 .mark.live svg{width:19px;height:19px;stroke-width:2.2}
-@keyframes pulse{50%{opacity:.45}}
 .t-body{flex:1;min-width:0}
 .t-title{font-size:15px;font-weight:650;letter-spacing:-.2px;line-height:1.25}
 .trow.don .t-title{text-decoration:line-through;color:var(--faint)}
@@ -85,11 +120,11 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
 .mtxt{font-size:11px;color:var(--faint);font-weight:600;display:inline-flex;align-items:center;gap:4px}
 .mtxt .ic{width:12px;height:12px}
 .mtxt.liveel{color:var(--live)}
-.more{flex:none;color:var(--faint);padding:3px 2px;letter-spacing:1px;font-weight:800;font-size:13px;margin-top:1px}
+.more{flex:none;color:var(--faint);padding:3px 2px;letter-spacing:1px;font-weight:800;font-size:13px}
 
 /* ================= all tasks ================= */
-.alltasks{flex:1;min-height:0;padding:12px 6px 0 20px;overflow:hidden;display:flex;flex-direction:column}
-.at-h{display:inline-flex;align-items:center;gap:7px;font-size:13.5px;font-weight:750;color:var(--ink);padding:2px 0 4px}
+.alltasks{flex:1;min-height:0;padding:12px 2px 0 20px;overflow:hidden;display:flex;flex-direction:column}
+.at-h{display:inline-flex;align-items:center;gap:7px;font-size:13.5px;font-weight:750;padding:2px 0 4px}
 .at-h .cv{width:14px;height:14px;color:var(--dim);transition:transform .15s}
 .at-h.closed .cv{transform:rotate(-90deg)}
 .at-list{overflow-y:auto;padding:2px 0 14px;scrollbar-width:none}
@@ -106,7 +141,7 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
 .abar{position:absolute;left:0;right:0;bottom:0;padding:12px 24px 22px;display:flex;justify-content:space-between;z-index:6;
   background:linear-gradient(rgba(247,248,250,0),var(--bg) 55%)}
 .abtn{width:58px;height:54px;border-radius:17px;background:var(--card);border:1.5px solid var(--hair-2);
-  display:flex;align-items:center;justify-content:center;color:var(--ink);box-shadow:0 4px 14px rgba(16,24,40,.08)}
+  display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(16,24,40,.08)}
 .abtn svg{width:23px;height:23px;stroke-width:2}
 .abtn.plus{color:var(--blue)}
 .abtn.plus svg{stroke-width:2.4}
@@ -127,11 +162,11 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
 
 <div class="hd">
   <div class="brand"><span class="logo"><svg><use href="#i-prism"/></svg></span>Prisms — “Today”</div>
-  <p>Single screen, built 1:1 from the sketch: fading scrollable timeline, unscheduled <b>All Tasks</b> below, right-edge rail with a now-marker, journal + capture buttons. Checkboxes, the timer and the All&nbsp;Tasks fold are live.</p>
+  <p>Updated per the second sketch: the right bar is now a <b>map of the whole day</b> — every scheduled event as a colour-matched segment at its true time and length, with the red now-line. <b>Drag it leftward</b> (or tap it) and the full day calendar slides out with labelled blocks; drag right or tap away to close.</p>
 </div>
 
 <div class="gallery">
-  <div class="device"><div class="screen">
+  <div class="device"><div class="screen" id="screen">
     <div class="sbar"><span class="js-clock">9:41</span><span class="island"></span><span class="sbr"></span></div>
 
     <div class="hdr"><h1>Today</h1></div>
@@ -206,9 +241,17 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
         </div>
       </div>
 
-      <!-- right rail (the sketch's bracket): scroll thumb + now-marker -->
-      <div class="rail"><span class="thumb"></span><span class="now"><span class="nd"></span><span class="nl"></span></span></div>
+      <!-- day bar: the whole day 6:00–22:00, events as colour segments (built by JS) -->
+      <div class="daybar" id="daybar" title="Day at a glance — drag left to expand"><span class="lane"></span></div>
     </div>
+
+    <!-- expanded day calendar -->
+    <div class="scrim" id="scrim"></div>
+    <aside class="daypanel" id="daypanel">
+      <span class="grab"></span>
+      <div class="ph"><b>Sunday</b><span>6:00 – 22:00</span></div>
+      <div class="ptrackwrap"><div class="ptrack" id="ptrack"></div></div>
+    </aside>
 
     <!-- bottom actions -->
     <div class="abar">
@@ -232,23 +275,134 @@ function tick(){
 }
 tick(); setInterval(tick, 10000);
 
-// running timer on the live block (1hr 37min and counting)
-let secs = 1*3600 + 37*60;
+/* ================= the day model (6:00–22:00) ================= */
+const DAY0 = 6*60, DAY1 = 22*60, SPAN = DAY1 - DAY0;
+const pct = min => ((min - DAY0) / SPAN * 100);
+const EVENTS = [
+  {t0: 7*60,      t1: 8*60+30,  name:'Long Run',      kind:'done',   col:'var(--blue)'},
+  {t0: 9*60,      t1: 11*60,    name:'Carve Scroll',  kind:'livebk', col:'var(--live)'},
+  {t0: 14*60,     t1: 14*60+45, name:'Family Call',   kind:'greyb',  col:'var(--grey)'},
+  {t0: 17*60,     t1: 19*60,    name:'Violin Practice',kind:'blueb', col:'var(--blue)'},
+  {t0: 20*60,     t1: 22*60,    name:'Gym',           kind:'redb',   col:'var(--red)'},
+];
+let elapsed = 1*3600 + 37*60;                 // carve started at 9:00
+const nowMin = () => 9*60 + Math.floor(elapsed/60);
+
+// ---- mini day bar: hour ticks + colour-matched segments + now line ----
+const daybar = document.getElementById('daybar');
+for (let h = 8; h < 22; h += 2){
+  const t = document.createElement('span');
+  t.className = 'htick';
+  t.style.top = pct(h*60) + '%';
+  daybar.appendChild(t);
+}
+EVENTS.forEach(ev => {
+  const s = document.createElement('span');
+  s.className = 'seg' + (ev.kind === 'livebk' ? ' livep' : '');
+  s.style.top = pct(ev.t0) + '%';
+  s.style.height = ((ev.t1 - ev.t0) / SPAN * 100) + '%';
+  s.style.background = ev.col;
+  daybar.appendChild(s);
+});
+const nowl = document.createElement('span');
+nowl.className = 'nowl';
+daybar.appendChild(nowl);
+
+// ---- expanded panel: hour grid + labelled blocks + now line ----
+const ptrack = document.getElementById('ptrack');
+for (let h = 6; h <= 22; h += 2){
+  const ln = document.createElement('span');
+  ln.className = 'hline'; ln.style.top = pct(h*60) + '%';
+  const lb = document.createElement('span');
+  lb.className = 'hlbl num'; lb.style.top = pct(h*60) + '%';
+  lb.textContent = h + ':00';
+  ptrack.append(ln, lb);
+}
+EVENTS.forEach(ev => {
+  const b = document.createElement('div');
+  b.className = 'pblk ' + ev.kind;
+  b.style.top = pct(ev.t0) + '%';
+  b.style.height = 'calc(' + ((ev.t1 - ev.t0) / SPAN * 100) + '% - 3px)';
+  const meta = ev.kind === 'done' ? '✓ 1hr 30min'
+    : ev.kind === 'livebk' ? '<span class="js-timer num">1hr 37min</span> · until 11:00'
+    : (ev.t1 - ev.t0 >= 60 ? ((ev.t1-ev.t0)/60) + 'hrs est.' : (ev.t1-ev.t0) + ' min est.');
+  b.innerHTML = '<b>' + ev.name + '</b><span class="pm">' + meta + '</span>';
+  ptrack.appendChild(b);
+});
+const pnow = document.createElement('div');
+pnow.className = 'pnow';
+pnow.innerHTML = '<span class="nlbl num" id="pnowlbl"></span>';
+ptrack.appendChild(pnow);
+
+function placeNow(){
+  const p = Math.min(100, Math.max(0, pct(nowMin()))) + '%';
+  nowl.style.top = p;
+  pnow.style.top = p;
+  const m = nowMin();
+  document.getElementById('pnowlbl').textContent = Math.floor(m/60) + ':' + String(m%60).padStart(2,'0');
+}
+placeNow();
+
+// running timer (updates row, panel block, and the now lines)
 setInterval(() => {
-  secs++;
-  const h = Math.floor(secs/3600), m = Math.floor(secs/60)%60;
+  elapsed++;
+  const h = Math.floor(elapsed/3600), m = Math.floor(elapsed/60)%60;
   document.querySelectorAll('.js-timer').forEach(el => el.textContent = h + 'hr ' + m + 'min');
+  if (elapsed % 30 === 0) placeNow();
 }, 1000);
 
-// interactions
+/* ================= swipe-open calendar panel ================= */
+const screen = document.getElementById('screen');
+const panel = document.getElementById('daypanel');
+const scrim = document.getElementById('scrim');
+const PANELW = 224 + 12;
+let drag = null;
+
+function setOpen(open){ screen.classList.toggle('cal-open', open); }
+
+function px(open){ return open ? 0 : PANELW; }
+function startDrag(x, fromOpen){
+  drag = {x0: x, base: px(fromOpen), fromOpen, moved: false};
+  panel.classList.add('dragging');
+}
+function moveDrag(x){
+  if (!drag) return;
+  const dx = x - drag.x0;
+  if (Math.abs(dx) > 5) drag.moved = true;
+  const t = Math.min(PANELW, Math.max(0, drag.base + dx));
+  panel.style.transform = 'translateX(' + t + 'px)';
+  scrim.style.opacity = (1 - t/PANELW) * 1;
+  scrim.style.pointerEvents = t < PANELW ? 'auto' : 'none';
+  drag.t = t;
+}
+function endDrag(){
+  if (!drag) return;
+  panel.classList.remove('dragging');
+  panel.style.transform = ''; scrim.style.opacity = ''; scrim.style.pointerEvents = '';
+  const wasTap = !drag.moved;
+  const open = wasTap ? !drag.fromOpen : (drag.t ?? px(drag.fromOpen)) < PANELW * 0.55;
+  setOpen(open);
+  drag = null;
+}
+// drag from the day bar (opens) — also a plain tap toggles
+daybar.addEventListener('pointerdown', e => { daybar.setPointerCapture(e.pointerId); startDrag(e.clientX, false); });
+daybar.addEventListener('pointermove', e => moveDrag(e.clientX));
+daybar.addEventListener('pointerup', endDrag);
+daybar.addEventListener('pointercancel', endDrag);
+// drag the open panel (closes)
+panel.addEventListener('pointerdown', e => { panel.setPointerCapture(e.pointerId); startDrag(e.clientX, true); });
+panel.addEventListener('pointermove', e => moveDrag(e.clientX));
+panel.addEventListener('pointerup', endDrag);
+panel.addEventListener('pointercancel', endDrag);
+// tap outside closes
+scrim.addEventListener('click', () => setOpen(false));
+
+/* ================= existing toys ================= */
 document.addEventListener('click', e => {
-  // timeline done-check toggles
   const tck = e.target.closest('.tck');
   if (tck){ tck.closest('.trow').classList.toggle('don'); return; }
-  // all-tasks checkboxes
   const ck = e.target.closest('.at .ck');
   if (ck){ ck.classList.toggle('don'); ck.closest('.at').classList.toggle('don', ck.classList.contains('don')); return; }
-  // all-tasks fold
   const h = e.target.closest('#atHead');
   if (h){ h.classList.toggle('closed'); document.getElementById('atList').classList.toggle('hide', h.classList.contains('closed')); return; }
 });
