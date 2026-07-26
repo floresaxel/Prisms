@@ -57,6 +57,7 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
 /* ================= day bar (the whole day, mapped) ================= */
 .daybar{position:absolute;right:9px;top:8px;bottom:86px;width:14px;z-index:5;cursor:pointer;touch-action:none}
 .daybar .lane{position:absolute;left:3px;right:3px;top:0;bottom:0;background:var(--card);border:1px solid var(--hair-2);border-radius:8px}
+.daybar .inact{position:absolute;left:4px;right:4px;background:#e7ebef}
 .daybar .htick{position:absolute;left:4px;right:4px;height:1px;background:var(--hair)}
 .daybar .seg{position:absolute;left:4px;right:4px;border-radius:4px}
 .daybar .seg.livep{animation:pulse 1.6s ease-in-out infinite}
@@ -81,7 +82,8 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
 .ptrack{position:absolute;left:0;right:10px;top:8px;bottom:8px}
 .ptrack .hline{position:absolute;left:40px;right:0;height:1px;background:var(--hair)}
 .ptrack .hlbl{position:absolute;left:0;width:34px;text-align:right;font-family:var(--mono);font-size:9px;font-weight:600;color:var(--faint);transform:translateY(-50%)}
-.pblk{position:absolute;left:44px;right:2px;border-radius:9px;padding:5px 8px;overflow:hidden}
+.ptrack .pinact{position:absolute;left:40px;right:0;background:#eff2f6;border-radius:7px}
+.pblk{position:absolute;left:44px;right:2px;border-radius:9px;padding:3px 8px;min-height:15px;overflow:hidden}
 .pblk b{display:block;font-size:11px;font-weight:750;letter-spacing:-.1px;line-height:1.2;white-space:nowrap;text-overflow:ellipsis;overflow:hidden}
 .pblk .pm{font-size:9px;font-weight:600;opacity:.85;margin-top:1px;display:block;white-space:nowrap}
 .pblk.done{background:var(--blue);color:#fff}
@@ -95,7 +97,7 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
 .ptrack .pnow .nlbl{position:absolute;left:-38px;top:-6px;font-family:var(--mono);font-size:8.5px;font-weight:800;color:var(--red)}
 
 /* ================= timeline (scroll + fades) ================= */
-.tlwrap{position:relative;flex:none;height:396px;min-height:0}
+.tlwrap{position:relative;flex:none;height:352px;min-height:0}
 .tl{height:100%;overflow-y:auto;padding:14px 2px 22px 16px;scrollbar-width:none}
 .tl::-webkit-scrollbar{width:0}
 .fade{position:absolute;left:0;right:0;height:26px;pointer-events:none;z-index:4}
@@ -106,11 +108,14 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
 .trow:last-child{border-bottom:none}
 .trow .time{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--dim);width:42px;flex:none;text-align:right;padding-top:3px}
 .mark{width:22px;height:22px;flex:none;display:flex;align-items:center;justify-content:center}
-.mark .dot{width:11px;height:11px;border-radius:50%}
-.mark.done .ckc{width:20px;height:20px;border-radius:50%;background:var(--blue);display:flex;align-items:center;justify-content:center;color:#fff;cursor:pointer}
-.mark.done .ckc svg{width:11px;height:11px;stroke-width:3.2}
-.mark.live{color:var(--live);animation:pulse 1.6s ease-in-out infinite}
-.mark.live svg{width:19px;height:19px;stroke-width:2.2}
+.mark .dot{width:14px;height:14px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff}
+.mark .dot svg{width:9px;height:9px;stroke-width:3.6}
+.mark .dot.ckd{background:var(--blue);cursor:pointer}
+.mark .dot.livd{background:var(--live);animation:blinkdot 1.5s ease-in-out infinite}
+@keyframes blinkdot{
+  0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(217,119,6,.45)}
+  50%{opacity:.5;box-shadow:0 0 0 6px rgba(217,119,6,0)}
+}
 .t-body{flex:1;min-width:0}
 .t-title{font-size:15px;font-weight:650;letter-spacing:-.2px;line-height:1.25}
 .trow.don .t-title{text-decoration:line-through;color:var(--faint)}
@@ -127,7 +132,7 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
 .at-h{display:inline-flex;align-items:center;gap:7px;font-size:13.5px;font-weight:750;padding:2px 0 4px}
 .at-h .cv{width:14px;height:14px;color:var(--dim);transition:transform .15s}
 .at-h.closed .cv{transform:rotate(-90deg)}
-.at-list{overflow-y:auto;padding:2px 0 14px;scrollbar-width:none}
+.at-list{overflow-y:auto;padding:2px 0 98px;scrollbar-width:none}
 .at-list::-webkit-scrollbar{width:0}
 .at{display:flex;align-items:center;gap:11px;padding:8px 2px;font-size:14.5px;font-weight:550}
 .at .ck{width:20px;height:20px;border:2px solid var(--hair-2);border-radius:50%;flex:none;background:var(--card);
@@ -162,7 +167,7 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
 
 <div class="hd">
   <div class="brand"><span class="logo"><svg><use href="#i-prism"/></svg></span>Prisms — “Today”</div>
-  <p>Updated per the second sketch: the right bar is now a <b>map of the whole day</b> — every scheduled event as a colour-matched segment at its true time and length, with the red now-line. <b>Drag it leftward</b> (or tap it) and the full day calendar slides out with labelled blocks; drag right or tap away to close.</p>
+  <p>The right bar now maps the <b>full 24 hours</b> — non-active hours (before 6:00, after 22:00) greyed out, every event a colour-matched segment at its true time, red now-line ticking. <b>Drag it leftward</b> (or tap) for the full day calendar. Itinerary markers are uniform dots — the clocked-in one pulses — and the task list sits higher, scrolling beneath the bottom gradient.</p>
 </div>
 
 <div class="gallery">
@@ -177,7 +182,7 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
         <div class="tl">
           <div class="trow don">
             <span class="time num">7:00</span>
-            <span class="mark done"><span class="ckc tck"><svg><use href="#i-check"/></svg></span></span>
+            <span class="mark"><span class="dot ckd tck"><svg><use href="#i-check"/></svg></span></span>
             <div class="t-body">
               <div class="t-title">Long Run 25 Km</div>
               <div class="t-meta"><span class="chip">HEALTH</span><span class="mtxt">1hr 30min</span></div>
@@ -187,7 +192,7 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
 
           <div class="trow">
             <span class="time num">9:00</span>
-            <span class="mark live"><svg><use href="#i-sun"/></svg></span>
+            <span class="mark"><span class="dot livd"></span></span>
             <div class="t-body">
               <div class="t-title">Carve the Scroll</div>
               <div class="t-meta"><span class="chip">WELLNESS</span><span class="mtxt liveel"><svg class="ic"><use href="#i-clock"/></svg><span class="num js-timer">1hr 37min</span></span></div>
@@ -238,6 +243,9 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
           <div class="at"><span class="ck"><svg><use href="#i-check"/></svg></span><span class="at-t">Make food</span></div>
           <div class="at"><span class="ck"><svg><use href="#i-check"/></svg></span><span class="at-t">Do Groceries</span></div>
           <div class="at"><span class="ck"><svg><use href="#i-check"/></svg></span><span class="at-t">Clean Room</span></div>
+          <div class="at"><span class="ck"><svg><use href="#i-check"/></svg></span><span class="at-t">Water the plants</span></div>
+          <div class="at"><span class="ck"><svg><use href="#i-check"/></svg></span><span class="at-t">Email accountant</span></div>
+          <div class="at"><span class="ck"><svg><use href="#i-check"/></svg></span><span class="at-t">Sharpen chisels</span></div>
         </div>
       </div>
 
@@ -249,7 +257,7 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
     <div class="scrim" id="scrim"></div>
     <aside class="daypanel" id="daypanel">
       <span class="grab"></span>
-      <div class="ph"><b>Sunday</b><span>6:00 – 22:00</span></div>
+      <div class="ph"><b>Sunday</b><span>24 hrs · active 6:00–22:00</span></div>
       <div class="ptrackwrap"><div class="ptrack" id="ptrack"></div></div>
     </aside>
 
@@ -275,8 +283,9 @@ function tick(){
 }
 tick(); setInterval(tick, 10000);
 
-/* ================= the day model (6:00–22:00) ================= */
-const DAY0 = 6*60, DAY1 = 22*60, SPAN = DAY1 - DAY0;
+/* ================= the day model (full 24 h; 6:00–22:00 active) ================= */
+const DAY0 = 0, DAY1 = 24*60, SPAN = DAY1 - DAY0;
+const ACT0 = 6*60, ACT1 = 22*60;             // outside this window = greyed out
 const pct = min => ((min - DAY0) / SPAN * 100);
 const EVENTS = [
   {t0: 7*60,      t1: 8*60+30,  name:'Long Run',      kind:'done',   col:'var(--blue)'},
@@ -288,9 +297,17 @@ const EVENTS = [
 let elapsed = 1*3600 + 37*60;                 // carve started at 9:00
 const nowMin = () => 9*60 + Math.floor(elapsed/60);
 
-// ---- mini day bar: hour ticks + colour-matched segments + now line ----
+// ---- mini day bar: greyed inactive hours + hour ticks + segments + now line ----
 const daybar = document.getElementById('daybar');
-for (let h = 8; h < 22; h += 2){
+[[DAY0, ACT0], [ACT1, DAY1]].forEach(([a, b], i) => {
+  const z = document.createElement('span');
+  z.className = 'inact';
+  z.style.top = pct(a) + '%';
+  z.style.height = ((b - a) / SPAN * 100) + '%';
+  z.style.borderRadius = i === 0 ? '7px 7px 0 0' : '0 0 7px 7px';
+  daybar.appendChild(z);
+});
+for (let h = 3; h < 24; h += 3){
   const t = document.createElement('span');
   t.className = 'htick';
   t.style.top = pct(h*60) + '%';
@@ -308,9 +325,16 @@ const nowl = document.createElement('span');
 nowl.className = 'nowl';
 daybar.appendChild(nowl);
 
-// ---- expanded panel: hour grid + labelled blocks + now line ----
+// ---- expanded panel: greyed inactive hours + hour grid + labelled blocks + now line ----
 const ptrack = document.getElementById('ptrack');
-for (let h = 6; h <= 22; h += 2){
+[[DAY0, ACT0], [ACT1, DAY1]].forEach(([a, b]) => {
+  const z = document.createElement('div');
+  z.className = 'pinact';
+  z.style.top = pct(a) + '%';
+  z.style.height = ((b - a) / SPAN * 100) + '%';
+  ptrack.appendChild(z);
+});
+for (let h = 0; h <= 24; h += 3){
   const ln = document.createElement('span');
   ln.className = 'hline'; ln.style.top = pct(h*60) + '%';
   const lb = document.createElement('span');
