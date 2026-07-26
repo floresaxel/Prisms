@@ -151,6 +151,31 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
 .abtn.plus{color:var(--blue)}
 .abtn.plus svg{stroke-width:2.4}
 .abtn:active{background:var(--bg)}
+
+/* ================= bottom sheets: day note + new task ================= */
+.sheetcatch{position:absolute;inset:0;z-index:7}
+.upsheet{position:absolute;left:10px;right:26px;bottom:0;z-index:8;background:var(--card);
+  border:1px solid var(--hair);border-bottom:none;border-radius:20px 20px 0 0;
+  box-shadow:0 -12px 32px rgba(16,24,40,.18);display:flex;flex-direction:column;
+  transform:translateY(103%);transition:transform .26s cubic-bezier(.3,.9,.3,1)}
+.upsheet.open{transform:translateY(0)}
+.grab7{width:38px;height:4px;border-radius:2px;background:var(--hair-2);margin:9px auto 6px;flex:none}
+.sh-h{flex:none;display:flex;align-items:center;gap:7px;padding:0 16px 8px;font-size:10px;font-weight:800;letter-spacing:1.2px;color:var(--faint)}
+.sh-h .dotg{width:7px;height:7px;border-radius:50%;background:#2f9e44;margin-left:auto}
+.notewrap{flex:1;position:relative;min-height:0}
+.notepad{height:100%;overflow-y:auto;outline:none;padding:0 16px 24px;font-size:14px;line-height:28px;
+  background-image:repeating-linear-gradient(transparent 0 27px,var(--hair) 27px 28px);
+  background-attachment:local;scrollbar-width:none;caret-color:var(--blue)}
+.notepad::-webkit-scrollbar{width:0}
+.notepad:empty::before{content:"Write about today…";color:var(--faint)}
+.notewrap .nfade{position:absolute;left:1px;right:1px;top:0;height:16px;background:linear-gradient(var(--card),rgba(255,255,255,0));pointer-events:none}
+.ntitle{border:none;outline:none;background:transparent;font-size:17px;font-weight:750;letter-spacing:-.2px;padding:2px 16px 10px;caret-color:var(--blue)}
+.ntitle::placeholder{color:var(--faint);font-weight:650}
+.prow{display:flex;align-items:center;gap:9px;padding:0 16px 12px;flex-wrap:wrap}
+.plbl{font-size:12.5px;font-weight:650;color:var(--dim)}
+.pchip{border:1.5px dashed var(--hair-2);border-radius:10px;padding:6px 12px;font-size:12px;font-weight:650;color:var(--dim);background:transparent}
+.pchip.on{border-style:solid;border-color:var(--blue);background:var(--blue-bg);color:var(--blue-deep)}
+.thint{margin-top:auto;padding:10px 16px 16px;font-size:10.5px;color:var(--faint);font-weight:600;line-height:1.5}
 </style>
 </head>
 <body>
@@ -261,10 +286,26 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
       <div class="ptrackwrap"><div class="ptrack" id="ptrack"></div></div>
     </aside>
 
+    <!-- bottom sheets: day note + new task -->
+    <div class="sheetcatch hide" id="sheetCatch"></div>
+    <section class="upsheet" id="noteSheet">
+      <div class="grab7"></div>
+      <div class="sh-h">DAY NOTE — SUNDAY, JUL 5 <span class="dotg" title="saved · one .md per day"></span></div>
+      <div class="notewrap"><div class="notepad" id="notepad" contenteditable="true" spellcheck="false"></div><div class="nfade"></div></div>
+    </section>
+    <section class="upsheet" id="taskSheet">
+      <div class="grab7"></div>
+      <input class="ntitle" id="ntInput" placeholder="New Task" autocomplete="off">
+      <div class="prow"><button class="pchip">Project</button><button class="pchip">Habit</button></div>
+      <div class="prow"><span class="plbl">Duration:</span><button class="pchip" id="durChip">30 min</button></div>
+      <div class="prow"><button class="pchip">Due Date</button><button class="pchip">Predecessor</button></div>
+      <div class="thint">↵ adds it to All Tasks · dashed = optional — picking a Project gives it a “why”.</div>
+    </section>
+
     <!-- bottom actions -->
     <div class="abar">
-      <button class="abtn" title="Journal"><svg class="ic"><use href="#i-note"/></svg></button>
-      <button class="abtn plus" title="Add"><svg class="ic"><use href="#i-plus"/></svg></button>
+      <button class="abtn" id="noteBtn" title="Day note"><svg class="ic"><use href="#i-note"/></svg></button>
+      <button class="abtn plus" id="addBtn" title="New task"><svg class="ic"><use href="#i-plus"/></svg></button>
     </div>
   </div></div>
 </div>
@@ -420,6 +461,55 @@ panel.addEventListener('pointerup', endDrag);
 panel.addEventListener('pointercancel', endDrag);
 // tap outside closes
 scrim.addEventListener('click', () => setOpen(false));
+
+/* ================= bottom sheets (journal note + new task) ================= */
+const noteSheet = document.getElementById('noteSheet');
+const taskSheet = document.getElementById('taskSheet');
+const sheetCatch = document.getElementById('sheetCatch');
+function sheetTop(el, rowIdx){
+  const scr = document.getElementById('screen').getBoundingClientRect();
+  const row = document.querySelectorAll('.tl .trow')[rowIdx].getBoundingClientRect();
+  el.style.top = Math.round(row.bottom - scr.top + 4) + 'px';
+}
+function openSheet(which){
+  if (which === 'note') sheetTop(noteSheet, 0);   // header + first row stay visible
+  if (which === 'task') sheetTop(taskSheet, 3);   // itinerary visible down to 17:00
+  noteSheet.classList.toggle('open', which === 'note');
+  taskSheet.classList.toggle('open', which === 'task');
+  sheetCatch.classList.toggle('hide', !which);
+  if (which === 'task') setTimeout(() => document.getElementById('ntInput').focus(), 260);
+  if (which === 'note') setTimeout(() => document.getElementById('notepad').focus(), 260);
+}
+document.getElementById('noteBtn').addEventListener('click', () => openSheet('note'));
+document.getElementById('addBtn').addEventListener('click', () => openSheet('task'));
+sheetCatch.addEventListener('click', () => openSheet(null));
+document.addEventListener('keydown', e => { if (e.key === 'Escape') openSheet(null); });
+// dashed property chips: tap to set; duration cycles
+const DURS = ['15 min','30 min','45 min','1 hr','2 hrs'];
+document.addEventListener('click', e => {
+  const chip = e.target.closest('.pchip');
+  if (!chip) return;
+  if (chip.id === 'durChip'){
+    chip.textContent = DURS[(DURS.indexOf(chip.textContent) + 1) % DURS.length];
+    chip.classList.add('on');
+    return;
+  }
+  chip.classList.toggle('on');
+});
+// Enter files the new task into All Tasks
+document.getElementById('ntInput').addEventListener('keydown', e => {
+  if (e.key !== 'Enter') return;
+  const v = e.target.value.trim();
+  if (!v) return;
+  const d = document.createElement('div');
+  d.className = 'at';
+  d.innerHTML = '<span class="ck"><svg><use href="#i-check"/></svg></span><span class="at-t"></span>';
+  d.querySelector('.at-t').textContent = v;
+  const list = document.getElementById('atList');
+  list.insertBefore(d, list.firstChild);
+  e.target.value = '';
+  openSheet(null);
+});
 
 /* ================= existing toys ================= */
 document.addEventListener('click', e => {
