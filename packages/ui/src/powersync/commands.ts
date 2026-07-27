@@ -150,6 +150,14 @@ export function createCommands(store: OverlayStore, ctx: CommandContext, deps: E
       if (Object.keys(payload).length === 1) return;
       await run('node.set_dates', payload);
     },
+    /**
+     * Set (or clear) a task's estimate after creation. `node.create` carries an
+     * estimate, but only the project path goes through it — an inbox capture or
+     * a habit promotion needs this to get one.
+     */
+    async setEstimate(taskId: string, minutes: number | null): Promise<void> {
+      await run('node.set_estimate', { id: taskId, estimate_minutes: minutes });
+    },
 
     // --- habits & skills (§1.2, §7.2) ---------------------------------------
     async createHabit(input: {

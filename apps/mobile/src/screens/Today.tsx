@@ -24,12 +24,16 @@ import {
   formatWallTime,
   useBlockTags,
   useCommands,
+  useHabits,
   useIsHydrated,
   useMyDayAvailable,
+  useNodeTree,
+  usePromoteTargets,
   useRunningTimer,
   useTimeBlocksForDay,
   useTodayItinerary,
   useUserSettings,
+  useWorklist,
   type CommandContext,
   type ItineraryRow,
   type MyDayItem,
@@ -42,12 +46,15 @@ import { DayMapBar } from '../components/DayMapBar';
 import { DayPanel } from '../components/DayPanel';
 import { Dot } from '../components/Dot';
 import { FadeEdge } from '../components/FadeEdge';
+import { NewTaskSheet } from '../components/NewTaskSheet';
 import { SectionFold } from '../components/SectionFold';
 import { useDayPanel } from '../components/useDayPanel';
 import { formatDurationLong, formatElapsed } from '../format';
 import { theme } from '../ui';
 
 const MINUTE = 60_000;
+/** Keep in step with `s.list`'s paddingTop. */
+const LIST_PADDING_TOP = 8;
 
 export function Today({ ctx }: { ctx: CommandContext }) {
   // Coarse clock: the reads only need to notice a new minute (and the day-reset).
@@ -82,6 +89,28 @@ export function Today({ ctx }: { ctx: CommandContext }) {
   // navigator keeps a visited screen mounted.
   const [allTasksOpen, setAllTasksOpen] = useState(true);
   const [actionRequest, setActionRequest] = useState<ActionRequest | null>(null);
+  const [newTaskOpen, setNewTaskOpen] = useState(false);
+  // Measured from the rendered itinerary, like the mock measures rects: the
+  // sheet lands under the 4th row, or under the last one when there are fewer.
+  const [sheetTop, setSheetTop] = useState(320);
+  const [headerHeight, setHeaderHeight] = useState(0);
+  const [rowHeight, setRowHeight] = useState(0);
+
+  // #30: the sheets stop under the 4th row (or the last, when there are fewer),
+  // so the day being added to stays visible behind them. Derived from ONE
+  // measured row rather than the anchor row's own layout: rows that arrive
+  // after their first layout never re-fire onLayout, so waiting for a
+  // particular index leaves the sheet stuck wherever the list was mid-hydration.
+  useEffect(() => {
+    if (rowHeight === 0 || headerHeight === 0) return;
+    const rows = Math.min(4, Math.max(1, itinerary.rows.length));
+    setSheetTop(Math.round(headerHeight + LIST_PADDING_TOP + rowHeight * rows + 4));
+  }, [rowHeight, headerHeight, itinerary.rows.length]);
+
+  const tree = useNodeTree();
+  const promoteTargets = usePromoteTargets();
+  const habits = useHabits(coarseNow);
+  const worklist = useWorklist(coarseNow);
 
   // #18: actionable but not yet on the clock, in decision-board priority — the
   // same ordering the web My Day uses, so the two agree for one account.
@@ -163,7 +192,10 @@ export function Today({ ctx }: { ctx: CommandContext }) {
 
   return (
     <View style={s.screen} testID="today">
-      <View style={[s.header, { paddingTop: insets.top + 6 }]}>
+      <View
+        style={[s.header, { paddingTop: insets.top + 6 }]}
+        onLayout={(e) => setHeaderHeight(e.nativeEvent.layout.height)}
+      >
         <Text style={s.h1}>Today</Text>
         <Text style={s.headerDate} testID="today-date">{header}</Text>
       </View>
@@ -185,14 +217,20 @@ export function Today({ ctx }: { ctx: CommandContext }) {
               </Text>
             ) : null
           }
-          renderItem={({ item }) => (
-            <ItineraryItem
-              row={item}
-              timezone={settings.timezone}
-              runningSince={item.state === 'live' ? running?.entry.started_at : undefined}
-              onToggleDone={toggleDone}
-              onOpenMenu={openMenu}
-            />
+          renderItem={({ item, index }) => (
+            <View
+              onLayout={(e) => {
+                if (index === 0) setRowHeight(e.nativeEvent.layout.height);
+              }}
+            >
+              <ItineraryItem
+                row={item}
+                timezone={settings.timezone}
+                runningSince={item.state === 'live' ? running?.entry.started_at : undefined}
+                onToggleDone={toggleDone}
+                onOpenMenu={openMenu}
+              />
+            </View>
           )}
         />
         <FadeEdge placement="bottom" height={18} />
@@ -234,6 +272,34 @@ export function Today({ ctx }: { ctx: CommandContext }) {
         controller={dayPanel}
         onAccept={(blockId) => void commands.acceptSuggestion(blockId)}
         onReject={(blockId) => void commands.rejectSuggestion(blockId)}
+      />
+
+      {/* #31: the action bar floats over the content on its own gradient. */}
+      <View style={s.actionBar} pointerEvents="box-none">
+        <FadeEdge placement="bottom" height={90} />
+        <Pressable
+          onPress={() => setNewTaskOpen(true)}
+          accessibilityRole="button"
+          accessibilityLabel="New task"
+          testID="new-task-button"
+          style={({ pressed }) => [s.actionBtn, s.actionBtnPlus, pressed && s.actionBtnPressed]}
+        >
+          <Text style={s.actionPlus}>＋</Text>
+        </Pressable>
+      </View>
+
+      <NewTaskSheet
+        open={newTaskOpen}
+        onClose={() => setNewTaskOpen(false)}
+        // #30: the sheet stops just under the rows, so the day it is being
+        // added to stays visible behind it.
+        top={sheetTop}
+        today={itinerary.today}
+        tree={tree}
+        commands={commands}
+        projects={promoteTargets}
+        habits={habits}
+        candidates={worklist}
       />
 
       <ActionList request={actionRequest} onDismiss={() => setActionRequest(null)} />
@@ -554,6 +620,26 @@ const s = StyleSheet.create({
   atCheckPressed: { backgroundColor: theme.accentBg, borderColor: theme.accent },
   atTitle: { color: theme.text, fontSize: 14.5, fontWeight: '500', flexShrink: 1 },
   atProject: { color: theme.faint, fontSize: 11, fontWeight: '600', marginLeft: 'auto' },
+
+  actionBar: { position: 'absolute', left: 0, right: 34, bottom: 0, paddingHorizontal: 24, paddingBottom: 22, paddingTop: 12, alignItems: 'flex-end', zIndex: 6 },
+  actionBtn: {
+    width: 58,
+    height: 54,
+    borderRadius: 17,
+    backgroundColor: theme.surface,
+    borderWidth: 1.5,
+    borderColor: theme.border2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#101828',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 14,
+    elevation: 4,
+  },
+  actionBtnPlus: {},
+  actionBtnPressed: { backgroundColor: theme.bg },
+  actionPlus: { color: theme.accent, fontSize: 26, fontWeight: '500', lineHeight: 30 },
 
   row: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: theme.border },
   time: { color: theme.dim, fontSize: 12, fontWeight: '700', width: 42, textAlign: 'right', paddingTop: 3 },
