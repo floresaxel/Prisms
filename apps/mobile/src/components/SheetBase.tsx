@@ -13,7 +13,7 @@
  * drag-down on the grab bar, and Android's hardware back button.
  */
 import { useEffect, useRef, useState } from 'react';
-import { Animated, BackHandler, Easing, PanResponder, Pressable, StyleSheet, View } from 'react-native';
+import { Animated, BackHandler, Easing, Keyboard, PanResponder, Pressable, StyleSheet, View } from 'react-native';
 
 import type { ReactNode } from 'react';
 
@@ -42,6 +42,20 @@ export function SheetBase({
 }) {
   const reduceMotion = useReduceMotion();
   const [height, setHeight] = useState(0);
+
+  // Sit above the keyboard rather than behind it. These sheets are anchored
+  // top..bottom, so without this the footer — where the action lives — is
+  // exactly what the keyboard covers, and the sheet looks like it has no
+  // way to submit.
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  useEffect(() => {
+    const shown = Keyboard.addListener('keyboardDidShow', (e) => setKeyboardHeight(e.endCoordinates.height));
+    const hidden = Keyboard.addListener('keyboardDidHide', () => setKeyboardHeight(0));
+    return () => {
+      shown.remove();
+      hidden.remove();
+    };
+  }, []);
 
   // Read by the pan handlers, which are created once and would otherwise
   // capture the first render's values.
@@ -124,7 +138,13 @@ export function SheetBase({
         accessibilityElementsHidden={!open}
         importantForAccessibility={open ? 'yes' : 'no-hide-descendants'}
         accessibilityLabel={accessibilityLabel}
-        style={[s.sheet, { top, opacity: fade, transform: [{ translateY: ty }] }]}
+        style={[
+          s.sheet,
+          // Slide the whole box up by the keyboard height rather than shrinking
+          // it: this sheet is anchored top..bottom, so raising only `bottom`
+          // collapses it to nothing.
+          { top: Math.max(0, top - keyboardHeight), bottom: keyboardHeight, opacity: fade, transform: [{ translateY: ty }] },
+        ]}
       >
         <View {...pan.panHandlers} style={s.grabArea} accessible={false}>
           <View style={s.grab} />
