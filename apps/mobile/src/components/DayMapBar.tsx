@@ -10,8 +10,9 @@
  * Presentational: it takes a `DayMap` and reports taps. T3 adds the drag.
  */
 import { useEffect, useRef } from 'react';
-import { Animated, Easing, Pressable, StyleSheet, View } from 'react-native';
+import { Animated, Easing, StyleSheet, View } from 'react-native';
 
+import type { GestureResponderHandlers } from 'react-native';
 import type { DayMap, DayMapSegment } from '@prisms/ui';
 
 import { theme, toneColor } from '../ui';
@@ -20,7 +21,18 @@ import { useReduceMotion } from './motion';
 /** Ticks every 3 h, matching the mock — enough to read the scale, few enough to stay quiet. */
 const TICK_HOURS = [3, 6, 9, 12, 15, 18, 21];
 
-export function DayMapBar({ map, onPress, testID }: { map: DayMap; onPress?: () => void; testID?: string }) {
+export function DayMapBar({
+  map,
+  onPress,
+  panHandlers,
+  testID,
+}: {
+  map: DayMap;
+  onPress?: () => void;
+  /** T3's drag: spread here so a leftward pull opens the day calendar. */
+  panHandlers?: GestureResponderHandlers;
+  testID?: string;
+}) {
   const reduceMotion = useReduceMotion();
   const hasLive = map.segments.some((s) => s.state === 'live');
   const pulse = useRef(new Animated.Value(1)).current;
@@ -41,14 +53,18 @@ export function DayMapBar({ map, onPress, testID }: { map: DayMap; onPress?: () 
   }, [hasLive, reduceMotion, pulse]);
 
   return (
-    <Pressable
-      onPress={onPress}
+    <View
+      // The pan responder owns BOTH tap and drag (see `useDayPanel`), so there
+      // is no Pressable here to contend with it. Screen readers activate it
+      // through `onAccessibilityTap`, which never reaches the responder.
+      {...panHandlers}
       style={s.bar}
       testID={testID}
-      // Only claim to be a button once T3 gives it something to open.
+      accessible
       accessibilityRole={onPress === undefined ? 'image' : 'button'}
       accessibilityLabel={`Day map, ${map.segments.length} event${map.segments.length === 1 ? '' : 's'}`}
-      accessibilityHint={onPress === undefined ? undefined : 'Opens the full day calendar'}
+      accessibilityHint={onPress === undefined ? undefined : 'Drag left or tap to open the full day calendar'}
+      onAccessibilityTap={onPress}
     >
       <View style={s.lane} />
 
@@ -73,7 +89,7 @@ export function DayMapBar({ map, onPress, testID }: { map: DayMap; onPress?: () 
           <View style={s.nowKnob} />
         </View>
       )}
-    </Pressable>
+    </View>
   );
 }
 

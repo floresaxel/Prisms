@@ -48,6 +48,19 @@ export const toneColor: Record<DotTone | 'grey', string> = {
   grey: '#98a1ae',
 };
 
+/**
+ * The same tones as a filled chip — a tint, a hairline and readable text. The
+ * day panel draws upcoming blocks with these, so a block's project is legible
+ * at a glance without the label having to say it.
+ */
+export const toneTint: Record<DotTone | 'grey', { bg: string; border: string; text: string }> = {
+  teal: { bg: '#e3f5f2', border: '#b4e3da', text: '#0b7268' },
+  blue: { bg: '#e9f0fe', border: '#c8d9fb', text: '#1d4ed8' },
+  amber: { bg: '#fdf1dd', border: '#f2d8a4', text: '#a3580a' },
+  green: { bg: '#e7f6ec', border: '#bfe5cb', text: '#15803d' },
+  grey: { bg: '#edf0f4', border: '#d9dde3', text: '#5f6b7a' },
+};
+
 export function Screen({ children, testID }: { children: ReactNode; testID?: string }) {
   return (
     <ScrollView style={s.screen} contentContainerStyle={s.screenContent} testID={testID} keyboardShouldPersistTaps="handled">

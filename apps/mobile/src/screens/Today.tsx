@@ -14,7 +14,7 @@
  * section below this; T7 retires Worklist once its flows all live here.
  */
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
-import { ActionSheetIOS, Alert, FlatList, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActionSheetIOS, Alert, BackHandler, FlatList, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { asEpochMillis, type Instant } from '@prisms/core';
 import {
@@ -32,7 +32,9 @@ import {
 
 import { ChipPill } from '../components/ChipPill';
 import { DayMapBar } from '../components/DayMapBar';
+import { DayPanel } from '../components/DayPanel';
 import { Dot } from '../components/Dot';
+import { useDayPanel } from '../components/useDayPanel';
 import { formatDurationLong, formatElapsed } from '../format';
 import { theme } from '../ui';
 
@@ -51,6 +53,17 @@ export function Today({ ctx }: { ctx: CommandContext }) {
   const commands = useCommands(ctx);
   const settings = useUserSettings();
   const hydrated = useIsHydrated();
+  const dayPanel = useDayPanel();
+
+  // Android back closes the day calendar rather than leaving the screen.
+  useEffect(() => {
+    if (!dayPanel.open) return;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      dayPanel.close();
+      return true;
+    });
+    return () => sub.remove();
+  }, [dayPanel]);
 
   const [review, setReview] = useState<{ entryId: string; taskId: string; taskTitle: string } | null>(null);
 
@@ -112,7 +125,7 @@ export function Today({ ctx }: { ctx: CommandContext }) {
 
       {/* The bar overlays the content column; `s.list` keeps its right padding
           clear of the lane so nothing ever sits underneath it. */}
-      <DayMapBar map={itinerary.dayMap} testID="day-map" />
+      <DayMapBar map={itinerary.dayMap} onPress={dayPanel.toggle} panHandlers={dayPanel.barPanHandlers} testID="day-map" />
 
       <FlatList
         data={itinerary.rows}
@@ -134,6 +147,14 @@ export function Today({ ctx }: { ctx: CommandContext }) {
             onOpenMenu={openMenu}
           />
         )}
+      />
+
+      <DayPanel
+        map={itinerary.dayMap}
+        heading={weekdayOf(itinerary.today)}
+        controller={dayPanel}
+        onAccept={(blockId) => void commands.acceptSuggestion(blockId)}
+        onReject={(blockId) => void commands.rejectSuggestion(blockId)}
       />
 
       <FocusReview
@@ -369,15 +390,30 @@ function FocusReview({
   );
 }
 
+const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/**
+ * The day string is ALREADY the account's local day, so it is read and
+ * formatted as UTC — running it through the device's zone would shift it.
+ */
+function dayPartsOf(isoDate: string): Date | null {
+  const [y, m, d] = isoDate.split('-').map(Number);
+  if (y === undefined || m === undefined || d === undefined) return null;
+  return new Date(Date.UTC(y, m - 1, d));
+}
+
 /** `2026-07-26` → `Sunday, Jul 26` (the mock's header line). */
 function formatDayHeading(isoDate: string): string {
-  const [y, m, d] = isoDate.split('-').map(Number);
-  if (y === undefined || m === undefined || d === undefined) return isoDate;
-  // Read as UTC and format as UTC: the string is already the account's local day.
-  const at = new Date(Date.UTC(y, m - 1, d));
-  const day = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][at.getUTCDay()];
-  const month = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][at.getUTCMonth()];
-  return `${day}, ${month} ${at.getUTCDate()}`;
+  const at = dayPartsOf(isoDate);
+  if (at === null) return isoDate;
+  return `${WEEKDAYS[at.getUTCDay()]}, ${MONTHS[at.getUTCMonth()]} ${at.getUTCDate()}`;
+}
+
+/** `2026-07-26` → `Sunday` — the day panel's header. */
+function weekdayOf(isoDate: string): string {
+  const at = dayPartsOf(isoDate);
+  return at === null ? isoDate : (WEEKDAYS[at.getUTCDay()] as string);
 }
 
 const s = StyleSheet.create({

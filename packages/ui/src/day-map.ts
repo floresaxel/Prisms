@@ -49,6 +49,12 @@ export interface DayMap {
   segments: DayMapSegment[];
   /** Hours outside the scheduler windows, greyed out. */
   inactive: DayMapZone[];
+  /**
+   * The scheduler windows themselves, merged, in minutes — the day panel labels
+   * its header with them ("active 8:00–20:00"). Already computed to derive
+   * `inactive`, so it is exposed rather than re-derived from percentages.
+   */
+  active: { startMin: number; endMin: number }[];
   /** Where the red now-line sits, or null when `now` is not inside the day shown. */
   nowPct: number | null;
 }
@@ -169,5 +175,5 @@ export function buildDayMap(args: {
   const nowMin = minutesFromMidnight(args.now, midnight);
   const nowPct = nowMin >= 0 && nowMin <= DAY_MINUTES ? toPct(nowMin) : null;
 
-  return { segments, inactive, nowPct };
+  return { segments, inactive, active: active.map(([startMin, endMin]) => ({ startMin, endMin })), nowPct };
 }

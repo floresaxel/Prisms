@@ -88,6 +88,25 @@ describe('buildDayMap — inactive zones are the window complement (D4)', () => 
     });
     expect(map.inactive).toHaveLength(2);
   });
+
+  it('reports the active ranges in minutes, for the day panel header', () => {
+    expect(build().active).toEqual([{ startMin: 480, endMin: 1200 }]);
+    expect(build({ windows: [] }).active).toEqual([]);
+  });
+
+  it('reports two active ranges for a split day, and they complement the grey zones', () => {
+    const map = build({
+      windows: [
+        { windowId: 'am', start: at(9), end: at(12) },
+        { windowId: 'pm', start: at(14), end: at(18) },
+      ],
+    });
+    expect(map.active).toEqual([
+      { startMin: 540, endMin: 720 },
+      { startMin: 840, endMin: 1080 },
+    ]);
+    expect(map.inactive).toHaveLength(3); // before 9, the 12–14 gap, after 18
+  });
 });
 
 describe('buildDayMap — segments', () => {
