@@ -9,7 +9,7 @@ import { Alert, Text, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 
-import { NavigationContainer, DarkTheme } from '@react-navigation/native';
+import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { PowerSyncContext } from '@powersync/react';
 import type { PowerSyncDatabase } from '@powersync/react-native';
@@ -32,9 +32,11 @@ import { Worklist } from './src/screens/Worklist';
 
 const Tab = createBottomTabNavigator();
 
+// T0/D1: rebased on the light `DefaultTheme` — react-navigation styles the tab
+// bar, headers and press ripples from this, so it must agree with `theme`.
 const navTheme = {
-  ...DarkTheme,
-  colors: { ...DarkTheme.colors, background: theme.bg, card: theme.surface, border: theme.border, primary: theme.accent, text: theme.text },
+  ...DefaultTheme,
+  colors: { ...DefaultTheme.colors, background: theme.bg, card: theme.surface, border: theme.border, primary: theme.accent, text: theme.text },
 };
 
 function AuthedApp({ user, onSignOut }: { user: SessionUser; onSignOut: () => void }) {
@@ -178,7 +180,7 @@ export function App() {
 
   return (
     <SafeAreaProvider>
-      <StatusBar style="light" />
+      <StatusBar style="dark" />
       {loading ? (
         <View style={{ flex: 1, backgroundColor: theme.bg, justifyContent: 'center', alignItems: 'center' }}>
           <Text style={{ color: theme.dim }} testID="loading">Loading…</Text>

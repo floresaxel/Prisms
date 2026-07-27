@@ -11,7 +11,7 @@ import { asEpochMillis, type Instant } from '@prisms/core';
 import { useCommands, useDayTimeLeft, useIsHydrated, useNextBlockMinutes, useRunningTimer, useWorklist, type CommandContext } from '@prisms/ui';
 
 import { formatElapsed, formatMinutes } from '../format';
-import { Badge, Btn, Card, H1, Meter, Muted, Row, Screen, Skeleton, Txt } from '../ui';
+import { Badge, Btn, Card, H1, Meter, Muted, Row, Screen, Skeleton, theme, Txt } from '../ui';
 
 interface ReviewTarget { entryId: string; taskId: string; taskTitle: string }
 const FACTORS = [0.5, 0.75, 1.0];
@@ -95,7 +95,7 @@ export function Worklist({ ctx }: { ctx: CommandContext }) {
       ))}
 
       <Modal visible={review !== null} transparent animationType="fade" onRequestClose={() => setReview(null)}>
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', padding: 24 }}>
+        <View style={{ flex: 1, backgroundColor: theme.scrim, justifyContent: 'center', padding: 24 }}>
           <Card testID="review-modal">
             <H1>Session review</H1>
             <Muted>{review?.taskTitle}</Muted>

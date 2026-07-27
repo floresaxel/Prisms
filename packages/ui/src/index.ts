@@ -64,6 +64,7 @@ export {
   type MarkdownAction,
   type MarkdownEdit,
 } from './markdown';
+export { projectTone, type DotTone } from './format';
 
 // two-layer client store (1.3 §7.2, R15) — M0 spike
 export {

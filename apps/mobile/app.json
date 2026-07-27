@@ -5,7 +5,7 @@
     "version": "0.1.0",
     "orientation": "portrait",
     "scheme": "prisms",
-    "userInterfaceStyle": "dark",
+    "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "ios": { "supportsTablet": true, "bundleIdentifier": "com.prisms.app" },
     "android": { "package": "com.prisms.app" },

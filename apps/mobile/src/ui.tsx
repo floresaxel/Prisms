@@ -1,17 +1,51 @@
-/** Base RN design system — the dark-theme primitives every screen builds on. */
+/**
+ * Base RN design system — the primitives every screen builds on.
+ *
+ * T0 (MOBILE_TODAY_PLAN D1): these values are the *only* place the palette
+ * lives, so flipping them re-themes every screen at once — the same trick the
+ * web redesign used in W0. The values mirror `packages/ui/src/theme.css`
+ * (`--px-*`) so phone and browser read as one product.
+ */
 import type { ReactNode } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import type { DotTone } from '@prisms/ui';
+
 export const theme = {
-  bg: '#0f1115',
-  surface: '#171a21',
-  surface2: '#1f2430',
-  border: '#2a3140',
-  text: '#e6e9ef',
-  dim: '#98a2b3',
-  accent: '#5b8cff',
-  danger: '#ff6b6b',
-  ok: '#46c08a',
+  bg: '#f6f7f9',
+  surface: '#ffffff',
+  surface2: '#f2f4f7',
+  border: '#e6e8ec',
+  /** The heavier hairline — chip outlines, check circles, grab bars. */
+  border2: '#d9dde3',
+  text: '#18202b',
+  dim: '#5f6b7a',
+  /** Third-level text: metadata, hour labels, struck-through titles. */
+  faint: '#98a1ae',
+  accent: '#2563eb',
+  accentDeep: '#1d4ed8',
+  accentBg: '#e9f0fe',
+  danger: '#dc2626',
+  ok: '#16a34a',
+  /** A clocked-in task: the pulsing marker, the ticking elapsed, the live block. */
+  live: '#d97706',
+  liveSoft: '#fdf1dd',
+  redBg: '#fdecec',
+  greyBg: '#edf0f4',
+  /** Behind sheets and the day panel — light-theme scrim, not black. */
+  scrim: 'rgba(24,32,43,0.28)',
+};
+
+/**
+ * `projectTone` (shared with web) → this platform's hex. `grey` is the
+ * no-project fallback the day map uses.
+ */
+export const toneColor: Record<DotTone | 'grey', string> = {
+  teal: '#0d9488',
+  blue: '#2563eb',
+  amber: '#d97706',
+  green: '#16a34a',
+  grey: '#98a1ae',
 };
 
 export function Screen({ children, testID }: { children: ReactNode; testID?: string }) {
