@@ -16,6 +16,8 @@
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { ActionSheetIOS, Alert, BackHandler, FlatList, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
 import { asEpochMillis, type Instant } from '@prisms/core';
 import {
   explainProvenance,
@@ -54,6 +56,9 @@ export function Today({ ctx }: { ctx: CommandContext }) {
   const settings = useUserSettings();
   const hydrated = useIsHydrated();
   const dayPanel = useDayPanel();
+  // This screen hides the navigator header (it draws its own), so it owns the
+  // status-bar inset that the header would otherwise have provided.
+  const insets = useSafeAreaInsets();
 
   // Android back closes the day calendar rather than leaving the screen.
   useEffect(() => {
@@ -118,7 +123,7 @@ export function Today({ ctx }: { ctx: CommandContext }) {
 
   return (
     <View style={s.screen} testID="today">
-      <View style={s.header}>
+      <View style={[s.header, { paddingTop: insets.top + 6 }]}>
         <Text style={s.h1}>Today</Text>
         <Text style={s.headerDate} testID="today-date">{header}</Text>
       </View>

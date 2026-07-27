@@ -103,7 +103,9 @@ function AuthedApp({ user, onSignOut }: { user: SessionUser; onSignOut: () => vo
             {/* D2: Today is the home tab. Worklist stays alongside it until T7,
                 when every flow it owns has a home here — so nothing regresses
                 mid-branch. */}
-            <Tab.Screen name="Today">{() => <Today ctx={ctx} />}</Tab.Screen>
+            {/* Today draws its own "Today / <date>" header (the mock has exactly
+                one), so the navigator's would be a duplicate. */}
+            <Tab.Screen name="Today" options={{ headerShown: false }}>{() => <Today ctx={ctx} />}</Tab.Screen>
             <Tab.Screen name="Worklist">{() => <Worklist ctx={ctx} />}</Tab.Screen>
             <Tab.Screen name="Agenda">{() => <Agenda ctx={ctx} />}</Tab.Screen>
             <Tab.Screen name="Kanban">{() => <Kanban ctx={ctx} />}</Tab.Screen>
