@@ -28,6 +28,7 @@ import { Habits } from './src/screens/Habits';
 import { Kanban } from './src/screens/Kanban';
 import { Login } from './src/screens/Login';
 import { Review } from './src/screens/Review';
+import { Today } from './src/screens/Today';
 import { Worklist } from './src/screens/Worklist';
 
 const Tab = createBottomTabNavigator();
@@ -99,6 +100,10 @@ function AuthedApp({ user, onSignOut }: { user: SessionUser; onSignOut: () => vo
         )}
         <NavigationContainer theme={navTheme}>
           <Tab.Navigator screenOptions={{ headerStyle: { backgroundColor: theme.surface }, headerTintColor: theme.text }}>
+            {/* D2: Today is the home tab. Worklist stays alongside it until T7,
+                when every flow it owns has a home here — so nothing regresses
+                mid-branch. */}
+            <Tab.Screen name="Today">{() => <Today ctx={ctx} />}</Tab.Screen>
             <Tab.Screen name="Worklist">{() => <Worklist ctx={ctx} />}</Tab.Screen>
             <Tab.Screen name="Agenda">{() => <Agenda ctx={ctx} />}</Tab.Screen>
             <Tab.Screen name="Kanban">{() => <Kanban ctx={ctx} />}</Tab.Screen>

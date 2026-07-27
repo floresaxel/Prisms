@@ -135,6 +135,7 @@ export {
   useMyDayAvailable,
   useProjectPriorities,
   useDoneToday,
+  useTodayItinerary,
   useBlockedTasks,
   useHabitTasks,
   // loading-aware read layer (1.4 §7.15, Fix C) — M12
@@ -175,8 +176,17 @@ export {
   type ReviewItemView,
   type JournalMonthsRead,
   type JournalDayRead,
+  type TodayItinerary,
 } from './hooks';
 export { groupWorklistBySchedule, type WorklistGroup } from './worklist-grouping';
+export {
+  buildItinerary,
+  loggedMinutesByTask,
+  minutesOfDay,
+  formatWallTime,
+  type ItineraryRow,
+  type ItineraryState,
+} from './today-itinerary';
 
 // design system
 export { Layout, type LayoutProps, type NavItemSpec, type NavGroupSpec, type BreadcrumbSpec } from './components/Layout';
