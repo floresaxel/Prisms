@@ -10,6 +10,7 @@
  * where a proposal becomes a commitment (§7.5 accept) or goes away (reject).
  */
 import { Animated, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { DayMap, DayMapSegment } from '@prisms/ui';
 
@@ -35,6 +36,9 @@ export function DayPanel({
   onReject: (blockId: string) => void;
 }) {
   const { open, close, translateX, scrimOpacity, panelOpacity, panelPanHandlers } = controller;
+  // The panel spans the full height, so its own header sits under the status
+  // bar unless it takes the inset.
+  const insets = useSafeAreaInsets();
 
   return (
     <>
@@ -57,7 +61,7 @@ export function DayPanel({
       >
         <View style={s.grab} />
 
-        <View style={s.header}>
+        <View style={[s.header, { paddingTop: insets.top + 14 }]}>
           <Text style={s.headerDay}>{heading}</Text>
           <Text style={s.headerMeta}>{activeLabel(map)}</Text>
         </View>

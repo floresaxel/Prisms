@@ -14,7 +14,7 @@
  * section below this; T7 retires Worklist once its flows all live here.
  */
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
-import { ActionSheetIOS, Alert, BackHandler, FlatList, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, BackHandler, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -25,17 +25,24 @@ import {
   useBlockTags,
   useCommands,
   useIsHydrated,
+  useMyDayAvailable,
   useRunningTimer,
+  useTimeBlocksForDay,
   useTodayItinerary,
   useUserSettings,
   type CommandContext,
   type ItineraryRow,
+  type MyDayItem,
+  type TimeBlockOption,
 } from '@prisms/ui';
 
+import { ActionList, type ActionItem, type ActionRequest } from '../components/ActionList';
 import { ChipPill } from '../components/ChipPill';
 import { DayMapBar } from '../components/DayMapBar';
 import { DayPanel } from '../components/DayPanel';
 import { Dot } from '../components/Dot';
+import { FadeEdge } from '../components/FadeEdge';
+import { SectionFold } from '../components/SectionFold';
 import { useDayPanel } from '../components/useDayPanel';
 import { formatDurationLong, formatElapsed } from '../format';
 import { theme } from '../ui';
@@ -71,6 +78,36 @@ export function Today({ ctx }: { ctx: CommandContext }) {
   }, [dayPanel]);
 
   const [review, setReview] = useState<{ entryId: string; taskId: string; taskTitle: string } | null>(null);
+  // Local state is enough for the fold to survive a tab switch: the tab
+  // navigator keeps a visited screen mounted.
+  const [allTasksOpen, setAllTasksOpen] = useState(true);
+  const [actionRequest, setActionRequest] = useState<ActionRequest | null>(null);
+
+  // #18: actionable but not yet on the clock, in decision-board priority — the
+  // same ordering the web My Day uses, so the two agree for one account.
+  const available = useMyDayAvailable(coarseNow);
+  const unscheduled = useMemo(() => available.filter((item) => !item.scheduled), [available]);
+  const blocksToday = useTimeBlocksForDay(coarseNow);
+
+  const checkOffUnscheduled = useCallback(
+    (item: MyDayItem) => {
+      // #19: an unscheduled task has no block to attribute to, so ask which one
+      // it belonged to — the same choice the web My Day offers.
+      if (blocksToday.length === 0) {
+        void commands.checkOff(item.task.id, { disposition: 'completed', completedInBlockId: null });
+        return;
+      }
+      setActionRequest(
+        buildBlockPicker({
+          title: item.task.title,
+          blocks: blocksToday,
+          timezone: settings.timezone,
+          onPick: (blockId) => void commands.checkOff(item.task.id, { disposition: 'completed', completedInBlockId: blockId }),
+        }),
+      );
+    },
+    [blocksToday, commands, settings.timezone],
+  );
 
   const toggleDone = useCallback(
     async (row: ItineraryRow) => {
@@ -104,17 +141,20 @@ export function Today({ ctx }: { ctx: CommandContext }) {
           new Date(row.startsAt + minutes * MINUTE).toISOString(),
           new Date(row.endsAt + minutes * MINUTE).toISOString(),
         );
-      presentRowMenu({
-        row,
-        // I5: only one timer runs at a time.
-        canClockIn: running === null,
-        onClockIn: () => void commands.clockIn(row.taskId),
-        onClockOut: () => void stopTimer(row),
-        onShiftLater: () => shift(30),
-        onShiftEarlier: () => shift(-30),
-        onToggleAnchor: () => void commands.setBlockAnchor(row.blockId, row.anchored ? 'none' : 'start'),
-        onUnschedule: () => void commands.deleteBlock(row.blockId),
-      });
+      setActionRequest(
+        buildRowMenu({
+          row,
+          // I5: only one timer runs at a time.
+          canClockIn: running === null,
+          onClockIn: () => void commands.clockIn(row.taskId),
+          onClockOut: () => void stopTimer(row),
+          onShiftLater: () => shift(30),
+          onShiftEarlier: () => shift(-30),
+          onToggleAnchor: () => void commands.setBlockAnchor(row.blockId, row.anchored ? 'none' : 'start'),
+          onUnschedule: () => void commands.deleteBlock(row.blockId),
+          onExplain: (title, body) => Alert.alert(title, body.length > 0 ? body : undefined),
+        }),
+      );
     },
     [commands, running, stopTimer],
   );
@@ -132,27 +172,61 @@ export function Today({ ctx }: { ctx: CommandContext }) {
           clear of the lane so nothing ever sits underneath it. */}
       <DayMapBar map={itinerary.dayMap} onPress={dayPanel.toggle} panHandlers={dayPanel.barPanHandlers} testID="day-map" />
 
-      <FlatList
-        data={itinerary.rows}
-        keyExtractor={(row) => row.blockId}
-        contentContainerStyle={s.list}
-        ListEmptyComponent={
-          hydrated ? (
-            <Text style={s.empty} testID="today-empty">
-              Nothing scheduled today.
-            </Text>
-          ) : null
-        }
-        renderItem={({ item }) => (
-          <ItineraryItem
-            row={item}
-            timezone={settings.timezone}
-            runningSince={item.state === 'live' ? running?.entry.started_at : undefined}
-            onToggleDone={toggleDone}
-            onOpenMenu={openMenu}
-          />
+      <View style={[s.itineraryWrap, allTasksOpen && s.itineraryShared]}>
+        <FlatList
+          data={itinerary.rows}
+          keyExtractor={(row) => row.blockId}
+          contentContainerStyle={s.list}
+          showsVerticalScrollIndicator={false}
+          ListEmptyComponent={
+            hydrated ? (
+              <Text style={s.empty} testID="today-empty">
+                Nothing scheduled — pull something up from All Tasks.
+              </Text>
+            ) : null
+          }
+          renderItem={({ item }) => (
+            <ItineraryItem
+              row={item}
+              timezone={settings.timezone}
+              runningSince={item.state === 'live' ? running?.entry.started_at : undefined}
+              onToggleDone={toggleDone}
+              onOpenMenu={openMenu}
+            />
+          )}
+        />
+        <FadeEdge placement="bottom" height={18} />
+      </View>
+
+      {/* #18–#19: what is NOT on the clock yet, in decision-board priority. */}
+      <View style={[s.allTasks, allTasksOpen && s.allTasksOpen]}>
+        <SectionFold
+          title="All Tasks"
+          open={allTasksOpen}
+          count={unscheduled.length}
+          onToggle={() => setAllTasksOpen((v) => !v)}
+          testID="all-tasks-fold"
+        />
+        {allTasksOpen && (
+          <View style={s.allTasksListWrap}>
+            <FlatList
+              data={unscheduled}
+              keyExtractor={(item) => item.task.id}
+              contentContainerStyle={s.allTasksList}
+              showsVerticalScrollIndicator={false}
+              ListEmptyComponent={
+                hydrated ? (
+                  <Text style={s.empty} testID="all-tasks-empty">
+                    Nothing waiting — everything is scheduled, done or blocked.
+                  </Text>
+                ) : null
+              }
+              renderItem={({ item }) => <AllTaskRow item={item} onCheckOff={checkOffUnscheduled} />}
+            />
+            <FadeEdge placement="bottom" height={26} />
+          </View>
         )}
-      />
+      </View>
 
       <DayPanel
         map={itinerary.dayMap}
@@ -161,6 +235,8 @@ export function Today({ ctx }: { ctx: CommandContext }) {
         onAccept={(blockId) => void commands.acceptSuggestion(blockId)}
         onReject={(blockId) => void commands.rejectSuggestion(blockId)}
       />
+
+      <ActionList request={actionRequest} onDismiss={() => setActionRequest(null)} />
 
       <FocusReview
         target={review}
@@ -243,6 +319,60 @@ const ItineraryItem = memo(function ItineraryItem({
 });
 
 /**
+ * One All-Tasks row (#19): a check circle and a title. Deliberately quieter
+ * than an itinerary row — these are candidates, not commitments.
+ */
+const AllTaskRow = memo(function AllTaskRow({
+  item,
+  onCheckOff,
+}: {
+  item: MyDayItem;
+  onCheckOff: (item: MyDayItem) => void;
+}) {
+  return (
+    <View style={s.atRow} testID={`all-task-${item.task.id}`}>
+      <Pressable
+        onPress={() => onCheckOff(item)}
+        hitSlop={10}
+        accessibilityRole="checkbox"
+        accessibilityState={{ checked: false }}
+        accessibilityLabel={`Complete ${item.task.title}`}
+        testID={`all-task-check-${item.task.id}`}
+        style={({ pressed }) => [s.atCheck, pressed && s.atCheckPressed]}
+      />
+      <Text style={s.atTitle} numberOfLines={1}>
+        {item.task.title}
+      </Text>
+      {item.projectTitle !== null && (
+        <Text style={s.atProject} numberOfLines={1}>
+          {item.projectTitle}
+        </Text>
+      )}
+    </View>
+  );
+});
+
+/** "Which block did this belong to?" — the unscheduled check-off flow (#19). */
+function buildBlockPicker(opts: {
+  title: string;
+  blocks: readonly TimeBlockOption[];
+  timezone: string;
+  onPick: (blockId: string | null) => void;
+}): ActionRequest {
+  return {
+    title: opts.title,
+    message: 'Which block did this happen in?',
+    actions: [
+      ...opts.blocks.map((b) => ({
+        label: `${formatWallTime(b.startsAt, opts.timezone)} · ${b.title}`,
+        onPress: () => opts.onPick(b.id),
+      })),
+      { label: 'No block', onPress: () => opts.onPick(null) },
+    ],
+  };
+}
+
+/**
  * The ONLY thing on this screen that ticks every second. It owns its own interval
  * and derives elapsed from the entry's start, so no parent state changes.
  */
@@ -267,7 +397,7 @@ function LiveElapsed({ startedAt, testID }: { startedAt: string; testID?: string
  * with the same choices — neither needs a dependency, and T3's `SheetBase`
  * is for content, not for a short list of verbs.
  */
-function presentRowMenu(opts: {
+function buildRowMenu(opts: {
   row: ItineraryRow;
   canClockIn: boolean;
   onClockIn: () => void;
@@ -276,48 +406,29 @@ function presentRowMenu(opts: {
   onShiftEarlier: () => void;
   onToggleAnchor: () => void;
   onUnschedule: () => void;
-}): void {
+  onExplain: (title: string, body: string) => void;
+}): ActionRequest {
   const { row } = opts;
-  const actions: { label: string; run: () => void; destructive?: boolean }[] = [];
+  const actions: ActionItem[] = [];
 
-  if (row.state === 'live') actions.push({ label: 'Clock out', run: opts.onClockOut });
-  else if (opts.canClockIn) actions.push({ label: 'Clock in', run: opts.onClockIn });
+  if (row.state === 'live') actions.push({ label: 'Clock out', onPress: opts.onClockOut });
+  else if (opts.canClockIn) actions.push({ label: 'Clock in', onPress: opts.onClockIn });
 
   actions.push(
-    { label: 'Move 30 min later', run: opts.onShiftLater },
-    { label: 'Move 30 min earlier', run: opts.onShiftEarlier },
-    { label: row.anchored ? 'Unlock (allow rescheduling)' : 'Lock to this time', run: opts.onToggleAnchor },
+    { label: 'Move 30 min later', onPress: opts.onShiftLater },
+    { label: 'Move 30 min earlier', onPress: opts.onShiftEarlier },
+    { label: row.anchored ? 'Unlock (allow rescheduling)' : 'Lock to this time', onPress: opts.onToggleAnchor },
     {
       label: 'Why is this here?',
-      run: () => {
+      onPress: () => {
         const why = explainProvenance(row.provenance);
-        Alert.alert(why.summary, why.detail.join('\n\n') || undefined);
+        opts.onExplain(why.summary, why.detail.join('\n\n'));
       },
     },
-    { label: 'Unschedule', run: opts.onUnschedule, destructive: true },
+    { label: 'Unschedule', onPress: opts.onUnschedule, destructive: true },
   );
 
-  if (Platform.OS === 'ios') {
-    ActionSheetIOS.showActionSheetWithOptions(
-      {
-        title: row.title,
-        options: [...actions.map((a) => a.label), 'Cancel'],
-        cancelButtonIndex: actions.length,
-        destructiveButtonIndex: actions.findIndex((a) => a.destructive === true),
-      },
-      (index) => actions[index]?.run(),
-    );
-    return;
-  }
-
-  Alert.alert(row.title, undefined, [
-    ...actions.map((a) => ({
-      text: a.label,
-      style: a.destructive === true ? ('destructive' as const) : ('default' as const),
-      onPress: a.run,
-    })),
-    { text: 'Cancel', style: 'cancel' as const },
-  ]);
+  return { title: row.title, actions };
 }
 
 const FACTORS = [0.5, 0.75, 1.0];
@@ -427,8 +538,22 @@ const s = StyleSheet.create({
   h1: { color: theme.text, fontSize: 22, fontWeight: '800', letterSpacing: -0.5 },
   headerDate: { color: theme.dim, fontSize: 12.5, fontWeight: '600', marginTop: 2 },
   // 34 px on the right: the 14 px lane at right:9, plus breathing room.
-  list: { paddingLeft: 16, paddingRight: 34, paddingTop: 8, paddingBottom: 28 },
+  list: { paddingLeft: 16, paddingRight: 34, paddingTop: 8, paddingBottom: 20 },
   empty: { color: theme.faint, fontSize: 13, fontWeight: '600', paddingVertical: 24 },
+
+  // The itinerary takes what it needs until All Tasks is open, then the two
+  // share the screen the way the mock splits them.
+  itineraryWrap: { flexShrink: 1 },
+  itineraryShared: { flex: 1.4 },
+  allTasks: { paddingLeft: 20, paddingRight: 34 },
+  allTasksOpen: { flex: 1, minHeight: 0 },
+  allTasksListWrap: { flex: 1, minHeight: 0 },
+  allTasksList: { paddingTop: 2, paddingBottom: 28 },
+  atRow: { flexDirection: 'row', alignItems: 'center', gap: 11, paddingVertical: 8 },
+  atCheck: { width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: theme.border2, backgroundColor: theme.surface },
+  atCheckPressed: { backgroundColor: theme.accentBg, borderColor: theme.accent },
+  atTitle: { color: theme.text, fontSize: 14.5, fontWeight: '500', flexShrink: 1 },
+  atProject: { color: theme.faint, fontSize: 11, fontWeight: '600', marginLeft: 'auto' },
 
   row: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: theme.border },
   time: { color: theme.dim, fontSize: 12, fontWeight: '700', width: 42, textAlign: 'right', paddingTop: 3 },
