@@ -21,10 +21,12 @@ import {
   DEFAULT_WINDOWS,
   descendantsOf,
   evaluateBlockerRules,
+  expandWindows,
   habitTaskIds,
   habitTodayMinutes,
   isJustified,
   isoToEpochMillis,
+  localInstant,
   mergeTable,
   minutesLeftInDay,
   minutesLeftInTask,
@@ -67,7 +69,8 @@ import { usePrismsData, toOverlayEffect } from './powersync/data-provider';
 import { createSqlOverlayStore, type SqlExecutor } from './powersync/overlay-store';
 import { createJournalMonthSubscriptions, type JournalMonthSubscriptions, type StreamSubscriber } from './powersync/streams';
 import { type ProvenanceFields } from './provenance';
-import { buildItinerary, loggedMinutesByTask, type ItineraryRow } from './today-itinerary';
+import { buildDayMap, type DayMap } from './day-map';
+import { blocksForDay, buildItinerary, loggedMinutesByTask, type ItineraryRow } from './today-itinerary';
 import { groupWorklistBySchedule, type WorklistGroup } from './worklist-grouping';
 import {
   toAutomationRule,
@@ -1021,7 +1024,14 @@ export interface TodayItinerary {
   /** The day bucket being shown (day-reset aware, not civil midnight). */
   today: IsoDate;
   rows: ItineraryRow[];
-  /** Minutes logged per task today — T2's day map renders from the same map. */
+  /**
+   * The same day as percentages, for the 24 h bar (T2) and the swipe-out
+   * calendar (T3). Built here rather than in a second hook so both surfaces
+   * share one agenda read and one pass over the tree — and so a block cannot
+   * possibly be in one and missing from the other.
+   */
+  dayMap: DayMap;
+  /** Minutes logged per task today. */
   loggedMinutes: ReadonlyMap<string, number>;
   /** The task the single global timer is on (I5), or null. */
   runningTaskId: string | null;
@@ -1078,7 +1088,22 @@ export function useTodayItinerary(now: Instant): TodayItinerary {
       dayResetHour: ctx.dayResetHour,
     });
 
-    return { today, rows, loggedMinutes: logged, runningTaskId };
+    // D4: active hours ARE the scheduler windows, so the greyed zones come from
+    // the account's own window config — no second setting to keep in sync.
+    const dayStart = localInstant(today, 0, ctx.timezone);
+    const dayMap = buildDayMap({
+      blocks: blocksForDay(agenda.blocks, { today, timezone: ctx.timezone, dayResetHour: ctx.dayResetHour }),
+      loggedMinutesByTask: logged,
+      projectIdByTask,
+      windows: expandWindows(agenda.input.windows, ctx.timezone, { from: dayStart, to: localInstant(today, 24, ctx.timezone) }),
+      runningTaskId,
+      doneTaskIds,
+      now,
+      today,
+      timezone: ctx.timezone,
+    });
+
+    return { today, rows, dayMap, loggedMinutes: logged, runningTaskId };
   }, [ctx, agenda, runningTaskId, now]);
 }
 

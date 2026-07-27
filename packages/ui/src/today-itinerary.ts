@@ -67,15 +67,27 @@ export interface ItineraryRow {
   provenance: ProvenanceFields;
 }
 
+/** The day a block belongs to (day-reset aware). One definition, used by the list and the bar. */
+export interface DayBucketOptions {
+  today: IsoDate;
+  timezone: string;
+  dayResetHour: number;
+}
+
+/**
+ * The blocks belonging to `today`'s bucket — committed AND suggested. The
+ * itinerary then drops the suggestions; the day map keeps them.
+ */
+export function blocksForDay(blocks: readonly AgendaBlock[], opts: DayBucketOptions): AgendaBlock[] {
+  return blocks.filter((b) => bucketDate(b.startsAt, opts.dayResetHour, opts.timezone) === opts.today);
+}
+
 /**
  * Minutes logged per task within today's bucket. Entries are clipped to the
  * bucket, so a session that runs across the day-reset counts only the part that
  * belongs to the day being shown.
  */
-export function loggedMinutesByTask(
-  entries: readonly AgendaEntry[],
-  opts: { today: IsoDate; timezone: string; dayResetHour: number },
-): Map<string, number> {
+export function loggedMinutesByTask(entries: readonly AgendaEntry[], opts: DayBucketOptions): Map<string, number> {
   const out = new Map<string, number>();
   for (const e of entries) {
     if (bucketDate(e.startsAt, opts.dayResetHour, opts.timezone) !== opts.today) continue;
@@ -103,12 +115,12 @@ export function buildItinerary(args: {
   dayResetHour: number;
 }): ItineraryRow[] {
   const rows: ItineraryRow[] = [];
+  const today = blocksForDay(args.blocks, args);
 
-  for (const block of args.blocks) {
+  for (const block of today) {
     // Suggestions are not part of the itinerary — they live in the day panel
     // (T3), where they can be accepted or rejected.
     if (block.status !== 'committed') continue;
-    if (bucketDate(block.startsAt, args.dayResetHour, args.timezone) !== args.today) continue;
 
     const projectId = args.projectIdByTask.get(block.taskId) ?? null;
     const blockMinutes = Math.max(0, Math.round((block.endsAt - block.startsAt) / 60_000));

@@ -31,6 +31,7 @@ import {
 } from '@prisms/ui';
 
 import { ChipPill } from '../components/ChipPill';
+import { DayMapBar } from '../components/DayMapBar';
 import { Dot } from '../components/Dot';
 import { formatDurationLong, formatElapsed } from '../format';
 import { theme } from '../ui';
@@ -108,6 +109,10 @@ export function Today({ ctx }: { ctx: CommandContext }) {
         <Text style={s.h1}>Today</Text>
         <Text style={s.headerDate} testID="today-date">{header}</Text>
       </View>
+
+      {/* The bar overlays the content column; `s.list` keeps its right padding
+          clear of the lane so nothing ever sits underneath it. */}
+      <DayMapBar map={itinerary.dayMap} testID="day-map" />
 
       <FlatList
         data={itinerary.rows}
@@ -380,7 +385,8 @@ const s = StyleSheet.create({
   header: { paddingHorizontal: 20, paddingTop: 6, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: theme.border },
   h1: { color: theme.text, fontSize: 22, fontWeight: '800', letterSpacing: -0.5 },
   headerDate: { color: theme.dim, fontSize: 12.5, fontWeight: '600', marginTop: 2 },
-  list: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 28 },
+  // 34 px on the right: the 14 px lane at right:9, plus breathing room.
+  list: { paddingLeft: 16, paddingRight: 34, paddingTop: 8, paddingBottom: 28 },
   empty: { color: theme.faint, fontSize: 13, fontWeight: '600', paddingVertical: 24 },
 
   row: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: theme.border },

@@ -180,13 +180,22 @@ export {
 } from './hooks';
 export { groupWorklistBySchedule, type WorklistGroup } from './worklist-grouping';
 export {
+  blocksForDay,
   buildItinerary,
   loggedMinutesByTask,
   minutesOfDay,
   formatWallTime,
+  type DayBucketOptions,
   type ItineraryRow,
   type ItineraryState,
 } from './today-itinerary';
+export {
+  buildDayMap,
+  type DayMap,
+  type DayMapSegment,
+  type DayMapState,
+  type DayMapZone,
+} from './day-map';
 
 // design system
 export { Layout, type LayoutProps, type NavItemSpec, type NavGroupSpec, type BreadcrumbSpec } from './components/Layout';
