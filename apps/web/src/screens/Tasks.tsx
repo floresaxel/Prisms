@@ -23,7 +23,7 @@ import {
   usePromoteTargets,
   useTaskStepsByTask,
   useTasksByProject,
-  type Commands,
+  type PrismsCommands,
   type CommandContext,
   type MyDayItem,
   type PromoteTarget,
@@ -164,7 +164,7 @@ export function Tasks({ ctx }: { ctx: CommandContext }) {
   );
 }
 
-function InboxRow({ activity, targets, commands }: { activity: Node; targets: PromoteTarget[]; commands: Commands }) {
+function InboxRow({ activity, targets, commands }: { activity: Node; targets: PromoteTarget[]; commands: PrismsCommands }) {
   const [parentId, setParentId] = useState('');
   const selected = parentId || targets[0]?.id || '';
   return (
@@ -211,7 +211,7 @@ function AvailableStatusRow({ item, onCheck }: { item: MyDayItem; onCheck: () =>
   );
 }
 
-function TaskRow({ task, status, blockedBy, steps, commands }: { task: Node; status: TaskStatus; blockedBy: string[]; steps: TaskStep[]; commands: Commands }) {
+function TaskRow({ task, status, blockedBy, steps, commands }: { task: Node; status: TaskStatus; blockedBy: string[]; steps: TaskStep[]; commands: PrismsCommands }) {
   const [open, setOpen] = useState(false);
   const isBlocked = status === 'blocked';
   const doneCount = steps.filter((s) => s.done).length;
@@ -242,7 +242,7 @@ function TaskRow({ task, status, blockedBy, steps, commands }: { task: Node; sta
   );
 }
 
-function SubstepPanel({ taskId, steps, commands }: { taskId: string; steps: TaskStep[]; commands: Commands }) {
+function SubstepPanel({ taskId, steps, commands }: { taskId: string; steps: TaskStep[]; commands: PrismsCommands }) {
   const [draft, setDraft] = useState('');
   async function add() {
     const t = draft.trim();
@@ -275,7 +275,7 @@ function SubstepPanel({ taskId, steps, commands }: { taskId: string; steps: Task
   );
 }
 
-function SubstepRow({ step, commands }: { step: TaskStep; commands: Commands }) {
+function SubstepRow({ step, commands }: { step: TaskStep; commands: PrismsCommands }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(step.title);
   async function commit() {

@@ -374,4 +374,11 @@ export function createCommands(store: OverlayStore, ctx: CommandContext, deps: E
   };
 }
 
-export type Commands = ReturnType<typeof createCommands>;
+/**
+ * NOT named `Commands`: React Native's codegen babel plugin reserves that
+ * export name for `codegenNativeCommands` results and throws on any other
+ * module that exports it — which silently made the whole mobile app
+ * un-bundlable (dev *and* prod), since @prisms/ui is in its graph.
+ * `apps/mobile/test/hermes-compat.test.ts` guards the name.
+ */
+export type PrismsCommands = ReturnType<typeof createCommands>;

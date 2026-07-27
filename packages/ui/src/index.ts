@@ -15,7 +15,7 @@ export {
   type CommandUploadOptions,
   type WatchableDb,
 } from './powersync/connector';
-export { createCommands, type Commands, type CommandContext } from './powersync/commands';
+export { createCommands, type PrismsCommands, type CommandContext } from './powersync/commands';
 export {
   newId,
   createHlc,
