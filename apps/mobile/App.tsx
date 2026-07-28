@@ -29,7 +29,6 @@ import { Kanban } from './src/screens/Kanban';
 import { Login } from './src/screens/Login';
 import { Review } from './src/screens/Review';
 import { Today } from './src/screens/Today';
-import { Worklist } from './src/screens/Worklist';
 
 const Tab = createBottomTabNavigator();
 
@@ -100,13 +99,13 @@ function AuthedApp({ user, onSignOut }: { user: SessionUser; onSignOut: () => vo
         )}
         <NavigationContainer theme={navTheme}>
           <Tab.Navigator screenOptions={{ headerStyle: { backgroundColor: theme.surface }, headerTintColor: theme.text }}>
-            {/* D2: Today is the home tab. Worklist stays alongside it until T7,
-                when every flow it owns has a home here — so nothing regresses
-                mid-branch. */}
+            {/* D2 (completed at T7): Today IS the worklist now — clock in/out
+                with the focus review, check-off with the block picker, and
+                delete all live on it, for scheduled rows and unscheduled ones
+                alike — so the old Worklist tab is gone rather than duplicated. */}
             {/* Today draws its own "Today / <date>" header (the mock has exactly
                 one), so the navigator's would be a duplicate. */}
             <Tab.Screen name="Today" options={{ headerShown: false }}>{() => <Today ctx={ctx} />}</Tab.Screen>
-            <Tab.Screen name="Worklist">{() => <Worklist ctx={ctx} />}</Tab.Screen>
             <Tab.Screen name="Agenda">{() => <Agenda ctx={ctx} />}</Tab.Screen>
             <Tab.Screen name="Kanban">{() => <Kanban ctx={ctx} />}</Tab.Screen>
             <Tab.Screen name="Habits">{() => <Habits ctx={ctx} />}</Tab.Screen>

@@ -126,9 +126,31 @@ function Block({
         : { backgroundColor: tint.bg, borderColor: tint.border };
   const textColor = done ? '#ffffff' : live ? '#a3580a' : tint.text;
 
+  // One node per block: title, when, and what state it is in — read as a
+  // sentence rather than as a title followed by a stray duration.
+  const label = [
+    segment.title,
+    segment.anchored ? 'locked' : null,
+    `${minutesLabel(segment.startMin)} to ${minutesLabel(segment.endMin)}`,
+    done ? `done, ${formatDurationLong(segment.loggedMinutes)} logged` : live ? 'running now' : suggested ? 'suggested' : null,
+  ]
+    .filter((part): part is string => part !== null)
+    .join(', ');
+
   return (
-    <View style={[s.block, box, { top, height }]} testID={`day-panel-block-${segment.blockId}`}>
-      <Text style={[s.blockTitle, { color: textColor }, done && s.blockTitleDone]} numberOfLines={1}>
+    <View
+      style={[s.block, box, { top, height }]}
+      testID={`day-panel-block-${segment.blockId}`}
+      // Suggested blocks hold Accept/Reject buttons, which must stay reachable;
+      // grouping the node would swallow them.
+      accessible={!suggested}
+      accessibilityLabel={suggested ? undefined : label}
+    >
+      <Text
+        style={[s.blockTitle, { color: textColor }, done && s.blockTitleDone]}
+        numberOfLines={1}
+        accessibilityLabel={suggested ? label : undefined}
+      >
         {segment.anchored ? '🔒 ' : ''}
         {segment.title}
       </Text>

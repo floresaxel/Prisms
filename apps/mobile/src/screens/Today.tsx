@@ -157,12 +157,12 @@ export function Today({ ctx }: { ctx: CommandContext }) {
   );
 
   const stopTimer = useCallback(
-    async (row: ItineraryRow) => {
+    async (taskId: string, taskTitle: string) => {
       const entry = running?.entry;
       if (entry === undefined) return;
       await commands.clockOut(entry.id);
       // D9: clocking out always asks for the focus factor (I5 parity with web).
-      setReview({ entryId: entry.id, taskId: row.taskId, taskTitle: row.title });
+      setReview({ entryId: entry.id, taskId, taskTitle });
     },
     [commands, running],
   );
@@ -181,12 +181,31 @@ export function Today({ ctx }: { ctx: CommandContext }) {
           // I5: only one timer runs at a time.
           canClockIn: running === null,
           onClockIn: () => void commands.clockIn(row.taskId),
-          onClockOut: () => void stopTimer(row),
+          onClockOut: () => void stopTimer(row.taskId, row.title),
           onShiftLater: () => shift(30),
           onShiftEarlier: () => shift(-30),
           onToggleAnchor: () => void commands.setBlockAnchor(row.blockId, row.anchored ? 'none' : 'start'),
           onUnschedule: () => void commands.deleteBlock(row.blockId),
+          onDelete: () => void commands.softDelete(row.taskId),
           onExplain: (title, body) => Alert.alert(title, body.length > 0 ? body : undefined),
+        }),
+      );
+    },
+    [commands, running, stopTimer],
+  );
+
+  // T7/D2: the two things Worklist could do to a task that is NOT on the
+  // itinerary — put it on the clock, and throw it away. Without these, retiring
+  // that tab would strand an unscheduled running timer with no way to stop it.
+  const openTaskMenu = useCallback(
+    (item: MyDayItem) => {
+      setActionRequest(
+        buildTaskMenu({
+          item,
+          canClockIn: running === null,
+          onClockIn: () => void commands.clockIn(item.task.id),
+          onClockOut: () => void stopTimer(item.task.id, item.task.title),
+          onDelete: () => void commands.softDelete(item.task.id),
         }),
       );
     },
@@ -215,12 +234,17 @@ export function Today({ ctx }: { ctx: CommandContext }) {
           keyExtractor={(row) => row.blockId}
           contentContainerStyle={s.list}
           showsVerticalScrollIndicator={false}
+          // #32: an empty list before the replica has hydrated is not an empty
+          // day — it is a day nobody has read yet, and saying otherwise is a lie
+          // the user acts on.
           ListEmptyComponent={
             hydrated ? (
               <Text style={s.empty} testID="today-empty">
                 Nothing scheduled — pull something up from All Tasks.
               </Text>
-            ) : null
+            ) : (
+              <LoadingRows count={4} testID="today-skeleton" />
+            )
           }
           renderItem={({ item, index }) => (
             <View
@@ -262,9 +286,18 @@ export function Today({ ctx }: { ctx: CommandContext }) {
                   <Text style={s.empty} testID="all-tasks-empty">
                     Nothing waiting — everything is scheduled, done or blocked.
                   </Text>
-                ) : null
+                ) : (
+                  <LoadingRows count={3} testID="all-tasks-skeleton" />
+                )
               }
-              renderItem={({ item }) => <AllTaskRow item={item} onCheckOff={checkOffUnscheduled} />}
+              renderItem={({ item }) => (
+                <AllTaskRow
+                  item={item}
+                  runningSince={item.openEntryId === undefined ? undefined : running?.entry.started_at}
+                  onCheckOff={checkOffUnscheduled}
+                  onOpenMenu={openTaskMenu}
+                />
+              )}
             />
             <FadeEdge placement="bottom" height={26} />
           </View>
@@ -363,9 +396,30 @@ const ItineraryItem = memo(function ItineraryItem({
   const tags = useBlockTags(row.blockId);
   const done = row.state === 'done';
 
+  // One node for the whole row body, so a screen reader reads a sentence
+  // instead of five fragments. The ticking elapsed is deliberately NOT in it:
+  // a label that changes every second announces every second.
+  const label = [
+    formatWallTime(row.startsAt, timezone),
+    row.title,
+    row.anchored ? 'locked to this time' : null,
+    ...tags.map((t) => t.tag.label),
+    row.isHabit ? 'habit' : null,
+    row.state === 'live'
+      ? 'running now'
+      : done
+        ? `done, ${formatDurationLong(row.loggedMinutes)} logged`
+        : `${formatDurationLong(row.plannedMinutes)} estimated`,
+  ]
+    .filter((part): part is string => part !== null)
+    .join(', ');
+
   return (
     <View style={s.row} testID={`today-row-${row.blockId}`}>
-      <Text style={s.time}>{formatWallTime(row.startsAt, timezone)}</Text>
+      {/* The time is spoken as part of the body label below. */}
+      <Text style={s.time} importantForAccessibility="no" accessibilityElementsHidden>
+        {formatWallTime(row.startsAt, timezone)}
+      </Text>
 
       <Dot
         tone={row.tone}
@@ -376,7 +430,7 @@ const ItineraryItem = memo(function ItineraryItem({
         testID={`today-dot-${row.blockId}`}
       />
 
-      <View style={s.body}>
+      <View style={s.body} accessible accessibilityLabel={label}>
         <Text style={[s.title, done && s.titleDone]} numberOfLines={2}>
           {row.anchored ? '🔒 ' : ''}
           {row.title}
@@ -416,11 +470,19 @@ const ItineraryItem = memo(function ItineraryItem({
  */
 const AllTaskRow = memo(function AllTaskRow({
   item,
+  runningSince,
   onCheckOff,
+  onOpenMenu,
 }: {
   item: MyDayItem;
+  runningSince: string | undefined;
   onCheckOff: (item: MyDayItem) => void;
+  onOpenMenu: (item: MyDayItem) => void;
 }) {
+  const label = [item.task.title, item.projectTitle, runningSince === undefined ? null : 'running now']
+    .filter((part): part is string => part !== null && part !== undefined)
+    .join(', ');
+
   return (
     <View style={s.atRow} testID={`all-task-${item.task.id}`}>
       <Pressable
@@ -432,17 +494,53 @@ const AllTaskRow = memo(function AllTaskRow({
         testID={`all-task-check-${item.task.id}`}
         style={({ pressed }) => [s.atCheck, pressed && s.atCheckPressed]}
       />
-      <Text style={s.atTitle} numberOfLines={1}>
-        {item.task.title}
-      </Text>
-      {item.projectTitle !== null && (
-        <Text style={s.atProject} numberOfLines={1}>
-          {item.projectTitle}
+      <View style={s.atBody} accessible accessibilityLabel={label}>
+        <Text style={[s.atTitle, runningSince !== undefined && s.atTitleLive]} numberOfLines={1}>
+          {item.task.title}
         </Text>
-      )}
+        {runningSince !== undefined ? (
+          <LiveElapsed startedAt={runningSince} testID={`all-task-elapsed-${item.task.id}`} />
+        ) : (
+          item.projectTitle !== null && (
+            <Text style={s.atProject} numberOfLines={1}>
+              {item.projectTitle}
+            </Text>
+          )
+        )}
+      </View>
+      {/* T7: an unscheduled task still needs the clock and the bin — the two
+          verbs the retired Worklist tab owned. */}
+      <Pressable
+        onPress={() => onOpenMenu(item)}
+        hitSlop={12}
+        accessibilityRole="button"
+        accessibilityLabel={`Options for ${item.task.title}`}
+        testID={`all-task-menu-${item.task.id}`}
+        style={({ pressed }) => [s.more, pressed && s.pressed]}
+      >
+        <Text style={s.moreGlyph}>•••</Text>
+      </Pressable>
     </View>
   );
 });
+
+/**
+ * #32: what a list shows before the replica has hydrated. Grey bars rather than
+ * an empty state, because "nothing here" and "not read yet" are different
+ * facts and the user plans their day on the difference.
+ */
+function LoadingRows({ count, testID }: { count: number; testID: string }) {
+  return (
+    <View testID={testID} accessible accessibilityLabel="Loading">
+      {Array.from({ length: count }, (_, i) => (
+        <View key={i} style={s.skeletonRow}>
+          <View style={[s.skeletonBar, { width: `${70 - i * 8}%` }]} />
+          <View style={[s.skeletonBar, s.skeletonBarSmall]} />
+        </View>
+      ))}
+    </View>
+  );
+}
 
 /** "Which block did this belong to?" — the unscheduled check-off flow (#19). */
 function buildBlockPicker(opts: {
@@ -498,6 +596,7 @@ function buildRowMenu(opts: {
   onShiftEarlier: () => void;
   onToggleAnchor: () => void;
   onUnschedule: () => void;
+  onDelete: () => void;
   onExplain: (title: string, body: string) => void;
 }): ActionRequest {
   const { row } = opts;
@@ -518,9 +617,28 @@ function buildRowMenu(opts: {
       },
     },
     { label: 'Unschedule', onPress: opts.onUnschedule, destructive: true },
+    { label: 'Delete task', onPress: opts.onDelete, destructive: true },
   );
 
   return { title: row.title, actions };
+}
+
+/**
+ * The All-Tasks row menu (T7). Short on purpose: an unscheduled task has no
+ * block to move, lock or explain — only the two verbs Worklist owned.
+ */
+function buildTaskMenu(opts: {
+  item: MyDayItem;
+  canClockIn: boolean;
+  onClockIn: () => void;
+  onClockOut: () => void;
+  onDelete: () => void;
+}): ActionRequest {
+  const actions: ActionItem[] = [];
+  if (opts.item.openEntryId !== undefined) actions.push({ label: 'Clock out', onPress: opts.onClockOut });
+  else if (opts.canClockIn) actions.push({ label: 'Clock in', onPress: opts.onClockIn });
+  actions.push({ label: 'Delete task', onPress: opts.onDelete, destructive: true });
+  return { title: opts.item.task.title, actions };
 }
 
 const FACTORS = [0.5, 0.75, 1.0];
@@ -548,7 +666,9 @@ function FocusReview({
   if (target === null) return null;
 
   return (
-    <View style={s.reviewScrim} testID="today-review">
+    // Not a Modal, but it behaves as one: without this a screen reader walks
+    // straight past it into the itinerary underneath.
+    <View style={s.reviewScrim} testID="today-review" accessibilityViewIsModal>
       <View style={s.reviewCard}>
         <Text style={s.reviewTitle}>Session review</Text>
         <Text style={s.reviewTask}>{target.taskTitle}</Text>
@@ -644,8 +764,14 @@ const s = StyleSheet.create({
   atRow: { flexDirection: 'row', alignItems: 'center', gap: 11, paddingVertical: 8 },
   atCheck: { width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: theme.border2, backgroundColor: theme.surface },
   atCheckPressed: { backgroundColor: theme.accentBg, borderColor: theme.accent },
+  atBody: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 8 },
   atTitle: { color: theme.text, fontSize: 14.5, fontWeight: '500', flexShrink: 1 },
+  atTitleLive: { color: theme.live, fontWeight: '600' },
   atProject: { color: theme.faint, fontSize: 11, fontWeight: '600', marginLeft: 'auto' },
+
+  skeletonRow: { paddingVertical: 13, gap: 7 },
+  skeletonBar: { height: 10, borderRadius: 5, backgroundColor: theme.greyBg },
+  skeletonBarSmall: { width: '32%', height: 8 },
 
   actionBar: { position: 'absolute', left: 0, right: 34, bottom: 0, paddingHorizontal: 24, paddingBottom: 22, paddingTop: 12, flexDirection: 'row', justifyContent: 'flex-end', gap: 10, zIndex: 6 },
   actionBtn: {

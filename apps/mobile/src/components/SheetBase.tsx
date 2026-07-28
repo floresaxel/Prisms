@@ -169,6 +169,11 @@ const s = StyleSheet.create({
     borderBottomWidth: 0,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
+    // The box is anchored top..bottom, so when the keyboard is taller than the
+    // measured `top` the sheet cannot keep its height and the content is taller
+    // than the card. Clipping keeps the card honest — reaching the rest is the
+    // content's job (both sheets scroll).
+    overflow: 'hidden',
     zIndex: 8,
     shadowColor: '#101828',
     shadowOffset: { width: 0, height: -12 },

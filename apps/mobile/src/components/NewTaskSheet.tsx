@@ -16,8 +16,8 @@
  * carries neither. Invariant failures (a cycle, a bad parent) surface through
  * the app's existing rejection banner.
  */
-import { useCallback, useMemo, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { addDays, childrenOf, initialSortOrder, sortOrderBetween, type IsoDate, type Node, type TreeIndex } from '@prisms/core';
 import type { HabitView, PrismsCommands, PromoteTarget, WorklistItem } from '@prisms/ui';
@@ -61,6 +61,16 @@ export function NewTaskSheet({
   const [predecessor, setPredecessor] = useState<Node | null>(null);
   const [picker, setPicker] = useState<ActionRequest | null>(null);
   const [busy, setBusy] = useState(false);
+
+  // The sheet stays mounted while closed, so `autoFocus` — read once, at mount,
+  // when `open` was still false — never fires. The wait lets the slide finish
+  // before the keyboard animates in on top of it.
+  const input = useRef<TextInput>(null);
+  useEffect(() => {
+    if (!open) return;
+    const t = setTimeout(() => input.current?.focus(), 280);
+    return () => clearTimeout(t);
+  }, [open]);
 
   const reset = useCallback(() => {
     setTitle('');
@@ -176,65 +186,69 @@ export function NewTaskSheet({
   return (
     <>
       <SheetBase open={open} onClose={onClose} top={top} accessibilityLabel="New task" testID="new-task-sheet">
-        <TextInput
-          style={s.title}
-          value={title}
-          onChangeText={setTitle}
-          placeholder="New Task"
-          placeholderTextColor={theme.faint}
-          selectionColor={theme.accent}
-          autoFocus={open}
-          returnKeyType="done"
-          onSubmitEditing={() => void submit()}
-          testID="new-task-title"
-        />
-
-        <View style={s.row}>
-          <ChipPill label={project?.title ?? 'Project'} variant="option" selected={project !== null} onPress={openProjectPicker} testID="chip-project" />
-          <ChipPill label={habit?.habit.title ?? 'Habit'} variant="option" selected={habit !== null} onPress={openHabitPicker} testID="chip-habit" />
-        </View>
-
-        <View style={s.row}>
-          <Text style={s.label}>Duration:</Text>
-          <ChipPill
-            label={duration === null ? 'Any' : formatDurationLong(duration)}
-            variant="option"
-            selected={duration !== null}
-            onPress={() => setDuration((d) => (d === null ? DURATIONS[0]! : (DURATIONS[DURATIONS.indexOf(d) + 1] ?? null)))}
-            testID="chip-duration"
+        {/* Scrolls because the sheet is anchored top..bottom: a tall keyboard on
+            a short phone leaves less room than the chips and the button need. */}
+        <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+          <TextInput
+            ref={input}
+            style={s.title}
+            value={title}
+            onChangeText={setTitle}
+            placeholder="New Task"
+            placeholderTextColor={theme.faint}
+            selectionColor={theme.accent}
+            returnKeyType="done"
+            onSubmitEditing={() => void submit()}
+            testID="new-task-title"
           />
-        </View>
 
-        <View style={s.row}>
-          <ChipPill label={dueLabel} variant="option" selected={dueDate !== null} onPress={openDuePicker} testID="chip-due" />
-          <ChipPill
-            label={predecessor?.title ?? 'Predecessor'}
-            variant="option"
-            selected={predecessor !== null}
-            onPress={openPredecessorPicker}
-            testID="chip-predecessor"
-          />
-        </View>
+          <View style={s.row}>
+            <ChipPill label={project?.title ?? 'Project'} variant="option" selected={project !== null} onPress={openProjectPicker} testID="chip-project" />
+            <ChipPill label={habit?.habit.title ?? 'Habit'} variant="option" selected={habit !== null} onPress={openHabitPicker} testID="chip-habit" />
+          </View>
 
-        <View style={s.footer}>
-          <Text style={s.hint}>
-            {project === null && habit === null
-              ? 'No “why” yet — this waits in the Inbox. Pick a Project or Habit to put it in the worklist.'
-              : 'Adds it to All Tasks.'}
-          </Text>
-          {/* The mock files on ↵, and that still works — but Android IMEs do not
-              reliably deliver the "done" action, so the affordance is explicit. */}
-          <Pressable
-            onPress={() => void submit()}
-            disabled={title.trim() === '' || busy}
-            accessibilityRole="button"
-            accessibilityLabel="Add task"
-            testID="new-task-submit"
-            style={({ pressed }) => [s.submit, (title.trim() === '' || busy) && s.submitDisabled, pressed && s.submitPressed]}
-          >
-            <Text style={s.submitText}>Add task</Text>
-          </Pressable>
-        </View>
+          <View style={s.row}>
+            <Text style={s.label}>Duration:</Text>
+            <ChipPill
+              label={duration === null ? 'Any' : formatDurationLong(duration)}
+              variant="option"
+              selected={duration !== null}
+              onPress={() => setDuration((d) => (d === null ? DURATIONS[0]! : (DURATIONS[DURATIONS.indexOf(d) + 1] ?? null)))}
+              testID="chip-duration"
+            />
+          </View>
+
+          <View style={s.row}>
+            <ChipPill label={dueLabel} variant="option" selected={dueDate !== null} onPress={openDuePicker} testID="chip-due" />
+            <ChipPill
+              label={predecessor?.title ?? 'Predecessor'}
+              variant="option"
+              selected={predecessor !== null}
+              onPress={openPredecessorPicker}
+              testID="chip-predecessor"
+            />
+          </View>
+
+          <View style={s.footer}>
+            <Text style={s.hint}>
+              {project === null && habit === null
+                ? 'No “why” yet — this waits in the Inbox. Pick a Project or Habit to put it in the worklist.'
+                : 'Adds it to All Tasks.'}
+            </Text>
+            {/* The mock files on ↵, and that still works — but Android IMEs do not
+                reliably deliver the "done" action, so the affordance is explicit. */}
+            <Pressable
+              onPress={() => void submit()}
+              disabled={title.trim() === '' || busy}
+              accessibilityRole="button"
+              accessibilityLabel="Add task"
+              testID="new-task-submit"
+              style={({ pressed }) => [s.submit, (title.trim() === '' || busy) && s.submitDisabled, pressed && s.submitPressed]}
+            >
+              <Text style={s.submitText}>Add task</Text>
+            </Pressable>
+          </View>
+        </ScrollView>
       </SheetBase>
 
       <ActionList request={picker} onDismiss={() => setPicker(null)} />
