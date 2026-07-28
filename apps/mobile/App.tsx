@@ -98,7 +98,22 @@ function AuthedApp({ user, onSignOut }: { user: SessionUser; onSignOut: () => vo
           </View>
         )}
         <NavigationContainer theme={navTheme}>
-          <Tab.Navigator screenOptions={{ headerStyle: { backgroundColor: theme.surface }, headerTintColor: theme.text }}>
+          <Tab.Navigator
+            screenOptions={{
+              headerStyle: { backgroundColor: theme.surface },
+              headerTintColor: theme.text,
+              // react-navigation substitutes a `MissingIcon` placeholder for any
+              // tab without a `tabBarIcon` — which drew a tofu square above all
+              // eight labels. No icon set is a dependency here (D8 budgeted one
+              // new package, and it went to the gradients), so the bar is
+              // label-only on purpose: the slot is removed rather than filled
+              // with a glyph that means nothing. Real icons need react-native-svg
+              // or an icon font — the mock already has the symbol set.
+              tabBarIcon: () => null,
+              tabBarIconStyle: { display: 'none' },
+              tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
+            }}
+          >
             {/* D2 (completed at T7): Today IS the worklist now — clock in/out
                 with the focus review, check-off with the block picker, and
                 delete all live on it, for scheduled rows and unscheduled ones

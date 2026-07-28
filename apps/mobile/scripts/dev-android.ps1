@@ -113,7 +113,12 @@ if ($booted -notmatch '1') {
     try { $booted = (& $adb shell getprop sys.boot_completed 2>$null) -join '' } catch { $booted = '' }
   } until ($booted -match '1' -or (Get-Date) -gt $deadline)
   if ($booted -notmatch '1') { throw "Emulator did not finish booting — see $env:TEMP\prisms-emu.log" }
-  # A fresh boot can still throw system ANR dialogs for a minute; taps land oddly until it settles.
+  # This AVD reliably throws "System UI isn't responding" for a while after a
+  # cold boot — it is emulator slowness, not the app, but the dialog sits on
+  # top and swallows the first taps aimed at the app. Suppressing error
+  # dialogs is emulator hygiene, and it does not hide app crashes: those still
+  # land in logcat and, in debug, on RN's own red screen.
+  & $adb shell settings put global hide_error_dialogs 1 *> $null
   Start-Sleep -Seconds 10
 }
 
