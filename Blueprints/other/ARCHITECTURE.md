@@ -577,7 +577,7 @@ Notifications are dual-path: server push for closed-app delivery; clients also s
 | View | Web | Desktop (Tauri) | Mobile |
 |---|---|---|---|
 | Dashboard (burndown, progress, priority list, streaks) | ✔ | ✔ | ✔ |
-| Worklist (clock-in / check-off / delete) + activity inbox | ✔ | ✔ | ✔ |
+| Worklist (clock-in / check-off / delete) + activity inbox | ✔ | ✔ | ✔ (inside Today — §12.5) |
 | Agenda: calendar + to-do side panel, drag-drop with window hints | ✔ | ✔ | ✔ (tap-to-place assist) |
 | Kanban by date | ✔ | ✔ | ✔ |
 | Habit tracker (rings, streaks, levels) | ✔ | ✔ | ✔ |
@@ -605,6 +605,20 @@ Graph editing is React-Flow/DOM-based and deliberately not ported to RN. Mobile 
 ### 12.4 Web shell (2026 redesign)
 
 The web/desktop UI is a single light theme in a grouped-sidebar + topbar shell (`packages/ui` `Layout`, tokens/primitives in `packages/ui/theme.css`; `Blueprints/WEB_REDESIGN_PLAN.md` W0–W8): nav groups (Tasks/Review · My work · Plan · Automate · Settings) with count badges, a persistent HH:MM clock, the single global running-timer pill (I5) whose clock-out drives the focus-review modal from **any** screen, and a sync chip. Routes consolidate to `/`, `/tasks`, `/agenda`, `/habits`, `/journal`, `/projects`, `/dashboard`, `/automations`, `/review`, `/settings`; `Projects` (Board/Timeline/Graph/Decisions) and `Automations` (Rules/Blockers) host the old surfaces under hash tabs behind a shared scope picker, and old flat paths redirect on boot. My Day orders available items by decision-board priority; the Tasks view carries lightweight `task_steps` checklists (a separate synced table, never a node hierarchy — §6.0). The redesign is shell + styling: every screen is the same PowerSync-reactive selectors, so the data path is unchanged. Desktop (Tauri) loads the identical bundle and inherits it.
+
+### 12.5 Mobile home: the Today screen (2026)
+
+Mobile's home tab is **Today** (`apps/mobile/src/screens/Today.tsx`; `Blueprints/MOBILE_TODAY_PLAN.md` T0–T7), a light-theme re-skin of the same tokens as web. It **replaces the Worklist tab**, which was retired once every flow it owned had a home here: clock-in/out with the focus-review sheet (I5/D9), check-off with the block picker, and delete — for scheduled and unscheduled tasks alike. Tab order is Today · Agenda · Kanban · Habits · Graph · Dashboard · Review · Account.
+
+The screen is three reads and no new tables:
+
+- **Itinerary** — today's *committed* blocks in clock order, from `useTodayItinerary(now)` (`packages/ui/src/today-itinerary.ts`): a project-toned marker (`projectTone`, shared with web), the placed tags as category chips, a synthetic HABIT chip, and either logged or estimated minutes. Two clocks on purpose: reads move once a minute, and only the clocked-in row's elapsed ticks each second.
+- **24 h day map** — a 14 px lane down the right edge plus a swipe-out calendar, both rendered from one pure `buildDayMap(...)` (`packages/ui/src/day-map.ts`), so a block cannot be one state in the bar and another in the panel. Greyed hours are the complement of the account's **scheduler windows** — active hours are not a new setting. Suggested blocks appear only in the panel, where accept/reject turn a proposal into a commitment (§7.5).
+- **All Tasks** — actionable, unscheduled items in decision-board priority (`useMyDayAvailable`), the same ordering web My Day uses.
+
+Two bottom sheets share one slot: **New Task** (three honest create paths — `createTask` under a project, `createActivity`+`promoteActivity` for a habit, or `createActivity` alone into the Inbox — with `setDates`/`createEdge` follow-ups) and the **day note**, which is `useJournalDay` + debounced `writeJournal` on the same row the web journal edits (§ journal D3), not a second store.
+
+`buildDayMap` and `buildItinerary` are pure and unit-tested, and are the intended serialisation source for a future wrist snapshot (`Blueprints/WEARABLES_PLAN.md`).
 
 ---
 
