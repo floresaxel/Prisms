@@ -10,8 +10,9 @@
  * clock into `useTodayItinerary` would rebuild the agenda, the ancestry walk
  * and the entry sums sixty times a minute to animate one label.
  *
- * T2–T4 add the day-map bar, the swipe-out day calendar and the All Tasks
- * section below this; T7 retires Worklist once its flows all live here.
+ * Around it: the day-map bar and its swipe-out calendar (T2/T3), the All Tasks
+ * section (T4) and the two bottom sheets — New Task (T5) and the day note
+ * (T6) — which share one slot, so opening either closes the other.
  */
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, BackHandler, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -43,6 +44,7 @@ import {
 import { ActionList, type ActionItem, type ActionRequest } from '../components/ActionList';
 import { ChipPill } from '../components/ChipPill';
 import { DayMapBar } from '../components/DayMapBar';
+import { DayNoteSheet } from '../components/DayNoteSheet';
 import { DayPanel } from '../components/DayPanel';
 import { Dot } from '../components/Dot';
 import { FadeEdge } from '../components/FadeEdge';
@@ -89,22 +91,25 @@ export function Today({ ctx }: { ctx: CommandContext }) {
   // navigator keeps a visited screen mounted.
   const [allTasksOpen, setAllTasksOpen] = useState(true);
   const [actionRequest, setActionRequest] = useState<ActionRequest | null>(null);
-  const [newTaskOpen, setNewTaskOpen] = useState(false);
+  // Only one sheet is ever up: they occupy the same slot, and the mock's two
+  // buttons read as a toggle between them rather than two stacking panels.
+  const [sheet, setSheet] = useState<'note' | 'task' | null>(null);
   // Measured from the rendered itinerary, like the mock measures rects: the
-  // sheet lands under the 4th row, or under the last one when there are fewer.
-  const [sheetTop, setSheetTop] = useState(320);
+  // task sheet lands under the 4th row, the note under the 1st.
+  const [sheetTop, setSheetTop] = useState({ note: 200, task: 320 });
   const [headerHeight, setHeaderHeight] = useState(0);
   const [rowHeight, setRowHeight] = useState(0);
 
-  // #30: the sheets stop under the 4th row (or the last, when there are fewer),
-  // so the day being added to stays visible behind them. Derived from ONE
-  // measured row rather than the anchor row's own layout: rows that arrive
-  // after their first layout never re-fire onLayout, so waiting for a
+  // #30: the sheets stop under a row (the 4th for New Task, the 1st for the day
+  // note), so the day being written about stays visible behind them. Derived
+  // from ONE measured row rather than the anchor row's own layout: rows that
+  // arrive after their first layout never re-fire onLayout, so waiting for a
   // particular index leaves the sheet stuck wherever the list was mid-hydration.
   useEffect(() => {
     if (rowHeight === 0 || headerHeight === 0) return;
-    const rows = Math.min(4, Math.max(1, itinerary.rows.length));
-    setSheetTop(Math.round(headerHeight + LIST_PADDING_TOP + rowHeight * rows + 4));
+    const under = (n: number) =>
+      Math.round(headerHeight + LIST_PADDING_TOP + rowHeight * Math.min(n, Math.max(1, itinerary.rows.length)) + 4);
+    setSheetTop({ note: under(1), task: under(4) });
   }, [rowHeight, headerHeight, itinerary.rows.length]);
 
   const tree = useNodeTree();
@@ -278,22 +283,43 @@ export function Today({ ctx }: { ctx: CommandContext }) {
       <View style={s.actionBar} pointerEvents="box-none">
         <FadeEdge placement="bottom" height={90} />
         <Pressable
-          onPress={() => setNewTaskOpen(true)}
+          onPress={() => setSheet((v) => (v === 'note' ? null : 'note'))}
+          accessibilityRole="button"
+          accessibilityLabel="Day note"
+          accessibilityState={{ expanded: sheet === 'note' }}
+          testID="day-note-button"
+          style={({ pressed }) => [s.actionBtn, sheet === 'note' && s.actionBtnOn, pressed && s.actionBtnPressed]}
+        >
+          <Text style={s.actionNote}>▤</Text>
+        </Pressable>
+        <Pressable
+          onPress={() => setSheet((v) => (v === 'task' ? null : 'task'))}
           accessibilityRole="button"
           accessibilityLabel="New task"
+          accessibilityState={{ expanded: sheet === 'task' }}
           testID="new-task-button"
-          style={({ pressed }) => [s.actionBtn, s.actionBtnPlus, pressed && s.actionBtnPressed]}
+          style={({ pressed }) => [s.actionBtn, sheet === 'task' && s.actionBtnOn, pressed && s.actionBtnPressed]}
         >
           <Text style={s.actionPlus}>＋</Text>
         </Pressable>
       </View>
 
+      {/* #28: the journal, reached from the day it is about. */}
+      <DayNoteSheet
+        open={sheet === 'note'}
+        onClose={() => setSheet(null)}
+        top={sheetTop.note}
+        date={itinerary.today}
+        heading={header}
+        commands={commands}
+      />
+
       <NewTaskSheet
-        open={newTaskOpen}
-        onClose={() => setNewTaskOpen(false)}
+        open={sheet === 'task'}
+        onClose={() => setSheet(null)}
         // #30: the sheet stops just under the rows, so the day it is being
         // added to stays visible behind it.
-        top={sheetTop}
+        top={sheetTop.task}
         today={itinerary.today}
         tree={tree}
         commands={commands}
@@ -621,7 +647,7 @@ const s = StyleSheet.create({
   atTitle: { color: theme.text, fontSize: 14.5, fontWeight: '500', flexShrink: 1 },
   atProject: { color: theme.faint, fontSize: 11, fontWeight: '600', marginLeft: 'auto' },
 
-  actionBar: { position: 'absolute', left: 0, right: 34, bottom: 0, paddingHorizontal: 24, paddingBottom: 22, paddingTop: 12, alignItems: 'flex-end', zIndex: 6 },
+  actionBar: { position: 'absolute', left: 0, right: 34, bottom: 0, paddingHorizontal: 24, paddingBottom: 22, paddingTop: 12, flexDirection: 'row', justifyContent: 'flex-end', gap: 10, zIndex: 6 },
   actionBtn: {
     width: 58,
     height: 54,
@@ -637,9 +663,10 @@ const s = StyleSheet.create({
     shadowRadius: 14,
     elevation: 4,
   },
-  actionBtnPlus: {},
+  actionBtnOn: { borderColor: theme.accent, backgroundColor: theme.accentBg },
   actionBtnPressed: { backgroundColor: theme.bg },
   actionPlus: { color: theme.accent, fontSize: 26, fontWeight: '500', lineHeight: 30 },
+  actionNote: { color: theme.dim, fontSize: 21, lineHeight: 26 },
 
   row: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: theme.border },
   time: { color: theme.dim, fontSize: 12, fontWeight: '700', width: 42, textAlign: 'right', paddingTop: 3 },
