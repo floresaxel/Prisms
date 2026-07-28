@@ -8,7 +8,7 @@
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "ios": { "supportsTablet": true, "bundleIdentifier": "com.prisms.app" },
-    "android": { "package": "com.prisms.app" },
+    "android": { "package": "com.prisms.app", "softwareKeyboardLayoutMode": "resize" },
     "plugins": ["expo-notifications"]
   }
 }

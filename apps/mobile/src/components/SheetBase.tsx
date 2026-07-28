@@ -13,7 +13,7 @@
  * drag-down on the grab bar, and Android's hardware back button.
  */
 import { useEffect, useRef, useState } from 'react';
-import { Animated, BackHandler, Easing, Keyboard, PanResponder, Pressable, StyleSheet, View } from 'react-native';
+import { Animated, BackHandler, Easing, Keyboard, PanResponder, Platform, Pressable, StyleSheet, View } from 'react-native';
 
 import type { ReactNode } from 'react';
 
@@ -47,8 +47,15 @@ export function SheetBase({
   // top..bottom, so without this the footer — where the action lives — is
   // exactly what the keyboard covers, and the sheet looks like it has no
   // way to submit.
+  //
+  // Android does it for us: `softwareKeyboardLayoutMode: 'resize'` (app.json →
+  // windowSoftInputMode=adjustResize) shrinks the window to the visible area,
+  // so this container's own bottom IS the top of the keyboard. Subtracting the
+  // keyboard again there counts it TWICE — which halved the open sheet and
+  // left the closed one parked inside the visible screen instead of below it.
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   useEffect(() => {
+    if (Platform.OS === 'android') return;
     const shown = Keyboard.addListener('keyboardDidShow', (e) => setKeyboardHeight(e.endCoordinates.height));
     const hidden = Keyboard.addListener('keyboardDidHide', () => setKeyboardHeight(0));
     return () => {

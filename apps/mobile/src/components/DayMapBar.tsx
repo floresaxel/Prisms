@@ -57,13 +57,22 @@ export function DayMapBar({
       // The pan responder owns BOTH tap and drag (see `useDayPanel`), so there
       // is no Pressable here to contend with it. Screen readers activate it
       // through `onAccessibilityTap`, which never reaches the responder.
+      //
+      // ⚠️ The leftward drag is best-effort on Android: the lane sits 9–23 dp
+      // from the right edge, inside the system back-gesture inset, so a drag
+      // that starts on it is usually swallowed by the navigation gesture before
+      // the app sees it (verified on the emulator — it backgrounds the app).
+      // TAP is the affordance that always works, so that is what the hint says.
+      // Widening the touch target leftwards is not a fix: the strip would sit
+      // over the rows' ••• buttons and, being an overlay, would swallow their
+      // taps even while declining them itself.
       {...panHandlers}
       style={s.bar}
       testID={testID}
       accessible
       accessibilityRole={onPress === undefined ? 'image' : 'button'}
       accessibilityLabel={`Day map, ${map.segments.length} event${map.segments.length === 1 ? '' : 's'}`}
-      accessibilityHint={onPress === undefined ? undefined : 'Drag left or tap to open the full day calendar'}
+      accessibilityHint={onPress === undefined ? undefined : 'Tap to open the full day calendar'}
       onAccessibilityTap={onPress}
     >
       <View style={s.lane} />

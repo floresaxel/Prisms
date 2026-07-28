@@ -27,11 +27,11 @@ const SAVE_DEBOUNCE_MS = 800;
 /** Rule spacing = the input's line height, so the text sits ON the lines. */
 const RULE_STEP = 28;
 /**
- * Where the first rule goes. A line of text is drawn with its baseline near the
- * bottom of its `lineHeight` box, so the rule belongs at the END of the box —
- * one step down from the padding, not at the top of it.
+ * Where the first rule goes, relative to the end of the first line box. Zero:
+ * the text's `lineHeight` box bottom IS the rule, exactly as the mock's
+ * `repeating-linear-gradient(transparent 0 27px, hair 27px 28px)` draws it.
  */
-const RULE_OFFSET = 4;
+const RULE_OFFSET = 0;
 
 type SaveState = 'saved' | 'dirty';
 
