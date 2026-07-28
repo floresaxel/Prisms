@@ -139,12 +139,72 @@ session:** `pnpm turbo lint typecheck test` plus `@prisms/core test:coverage`
 
 ## Tracker
 
-| Session | Status | Commit |
-|---------|--------|--------|
-| SEC-1 | ⬜ | |
-| SEC-2 | ⬜ | |
-| SEC-3 | ⬜ | |
-| SEC-4 | ⬜ | |
-| SEC-5 | ⬜ | |
-| SEC-6 | ⬜ | |
-| SEC-7 | ⬜ | |
+| Session | Status | Commit | Notes |
+|---------|--------|--------|-------|
+| SEC-1 | ✅ | `ab171dc` | .env out of the image; strict numeric env; dev-secret hatch loopback-only; API non-root |
+| SEC-2 | ✅ | `fd32f00` | XFF overwrite + pinned IP header + fail-closed credential throttle; sign-up policy |
+| SEC-3 | ✅ | `78f2d48` | depends_on/node_ids caps; text ceilings; bounded JSON; manifest bounds |
+| SEC-4 | ✅ | `d29884f` | linear-time-safe regex subset; RRULE frequency allowlist + occurrence cap |
+| SEC-5 | ✅ | `f676f82` | connect-src 'self'; Tauri prod/dev CSP split; HSTS via X-Forwarded-Proto |
+| SEC-6 | ✅ | `ffa36cc` | per-user job isolation; limiter eviction; Web Push endpoint allowlist |
+| SEC-7 | ✅ | *(this commit)* | habit_id ownership; esbuild advisory noted; close-out |
+
+## Verification performed
+
+- **Unit/integration:** server suite green vs live Postgres (189 + 7 new
+  ownership cases); core 613 green; 5 new test files, 80+ new cases. Every High
+  and Medium fix carries a REGRESSION test that replays the actual attack
+  (rotating `X-Forwarded-For`, `(a+)+$`, `FREQ=SECONDLY`, mid-batch job failure).
+- **Config:** `infra/nginx/web.conf` validated with `nginx -t` against
+  `nginx:1.27-alpine` — syntax OK.
+- **Gate:** `turbo typecheck lint` 14/14; core coverage 90.73% statements
+  (floor 90).
+- Known flake, unrelated: `packages/core/test/architecture-lint.test.ts` times out
+  at 30 s under full concurrency (it shells out to ESLint); 15/15 in isolation.
+
+## Residual risk — deliberately NOT changed
+
+These are real but were not safe to change blind from this environment. Each is
+documented where an operator will meet it:
+
+1. **Tauri `connect-src https: wss:`** (`apps/desktop`) — still scheme-wide,
+   because the operator's server origin is a build-time input this repo cannot
+   know. Production/dev policies were split so packaged builds no longer reach
+   arbitrary localhost ports, and the desktop README documents pinning the origin
+   before distribution. *A packaged build with an unpinned CSP retains an
+   exfiltration channel.*
+2. **nginx runs as root (master)** — the stock image's behaviour (workers drop to
+   `nginx`). Going rootless needs `nginxinc/nginx-unprivileged`, a listen-port
+   move and a compose remap: a deployment-topology change with no way to
+   end-to-end test it here.
+3. **`sslmode: disable` PowerSync↔Postgres** — acceptable only while both stay on
+   the private compose bridge. `powersync.prod.yaml` now states what must change
+   (`verify-full` + mounted CA) if Postgres ever moves off-host.
+4. **PowerSync JWT is HS256 with a shared symmetric secret** — API and sync
+   service hold the same key, so there is no rotation path and compromise of
+   either forges tokens for any `sub`. The standing TODO (RS256 + API-served
+   JWKS) remains the right fix; it is a protocol change, not a hardening tweak.
+5. **`esbuild@0.18.20`** reaches the tree transitively via
+   `drizzle-kit → @esbuild-kit/esm-loader → @esbuild-kit/core-utils`
+   (GHSA-67mh-4wv8-2f99: the dev server accepts cross-origin requests). It is a
+   **devDependency of `@prisms/db` only**, used by `db:generate`/`db:migrate` —
+   never installed in the production API image and never serving. Real fix is
+   upstream (drizzle-kit dropped `@esbuild-kit/*` in later releases); revisit on
+   the next drizzle-kit bump.
+6. **Account enumeration via sign-up** — better-auth's exact response for a
+   duplicate email was not verified end to end, so no claim is made that it is
+   fixed. `PRISMS_DISABLE_SIGNUP=1` removes the surface entirely for a
+   provisioned deployment.
+7. **Rate limiting is per-process, in-memory.** Correct for the single-node v1
+   deployment; a second API replica would give each its own buckets. Moving to
+   Postgres/Redis is a topology decision, not a patch.
+
+## Follow-ups worth scheduling
+
+- Adopt RS256 + JWKS for PowerSync tokens (residual 4) — the largest remaining
+  structural item.
+- Re-run the adversarial verification phase that the usage limit cut short; the
+  finder output for `infra-deploy`, `jwt-crypto` and `supply-chain` was never
+  independently verified, and the completeness critic never ran.
+- Add an e2e assertion that the shipped CSP header matches the intended policy,
+  so a future nginx edit cannot silently loosen it.

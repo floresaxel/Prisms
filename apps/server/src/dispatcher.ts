@@ -219,6 +219,15 @@ export function createDispatcher(
   const nowIso = options.nowIso ?? (() => new Date().toISOString());
 
   const one = async <T>(rows: Promise<T[]>): Promise<T | undefined> => (await rows)[0];
+  /**
+   * SEC-7/F13: ownership-check an OPTIONAL habit reference. null/undefined is a
+   * legitimate "no habit" and passes; a named habit must exist and belong to the
+   * command's user. Returns a rejection, or null when the reference is fine.
+   */
+  const ownHabitRef = async (tx: Tx, habitId: string | null | undefined, userId: string): Promise<HandlerRejected | null> => {
+    if (habitId === null || habitId === undefined) return null;
+    return ownershipReject('habit', habitId, await one(tx.select().from(habits).where(eq(habits.id, habitId)).limit(1)), userId);
+  };
   const loadNodeRow = (tx: Tx, id: string) => one(tx.select().from(nodes).where(eq(nodes.id, id)).limit(1));
   const loadStepRow = (tx: Tx, id: string) => one(tx.select().from(task_steps).where(eq(task_steps.id, id)).limit(1));
   const loadDecisionScoreByPair = (tx: Tx, criterionId: string, projectId: string) =>
@@ -572,6 +581,12 @@ export function createDispatcher(
         if (conv) return conv;
         const bad = fromCheck(checkNodeCreate(await batchCtx.tree(tx, userId), p));
         if (bad) return bad;
+        // SEC-7/F13: a referenced habit must exist and be OURS. `nodes.habit_id`
+        // carries no FK, and I3 justification only tests `habit_id !== null` —
+        // so any uuid satisfied "this task traces to a real habit". Same check
+        // tag.create already performs before writing its own habit_id.
+        const ownHabit = await ownHabitRef(tx, p.habit_id, userId);
+        if (ownHabit) return ownHabit;
         await tx.insert(nodes).values({
           id: p.id,
           user_id: userId,
@@ -699,6 +714,10 @@ export function createDispatcher(
         if (own) return own;
         const bad = fromCheck(checkActivityPromote(await batchCtx.tree(tx, userId), p));
         if (bad) return bad;
+        // SEC-7/F13: as in node.create — promoting "via habit" must name a habit
+        // we own, or the I3 justification it satisfies is fictional.
+        const ownHabit = await ownHabitRef(tx, p.habit_id, userId);
+        if (ownHabit) return ownHabit;
         const win = await lwwFields(tx, hlc, userId, 'nodes', p.id, { node_type: 'task' as const, parent_id: p.parent_id ?? null, habit_id: p.habit_id ?? null });
         if (Object.keys(win).length > 0) {
           await tx.update(nodes).set({ ...win, ...sys }).where(eq(nodes.id, p.id));
