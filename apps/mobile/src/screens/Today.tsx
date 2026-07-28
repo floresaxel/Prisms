@@ -773,7 +773,9 @@ const s = StyleSheet.create({
   skeletonBar: { height: 10, borderRadius: 5, backgroundColor: theme.greyBg },
   skeletonBarSmall: { width: '32%', height: 8 },
 
-  actionBar: { position: 'absolute', left: 0, right: 34, bottom: 0, paddingHorizontal: 24, paddingBottom: 22, paddingTop: 12, flexDirection: 'row', justifyContent: 'flex-end', gap: 10, zIndex: 6 },
+  // The mock spreads the two buttons to the screen's edges (space-between):
+  // note far left, ＋ far right.
+  actionBar: { position: 'absolute', left: 0, right: 34, bottom: 0, paddingHorizontal: 24, paddingBottom: 22, paddingTop: 12, flexDirection: 'row', justifyContent: 'space-between', zIndex: 6 },
   actionBtn: {
     width: 58,
     height: 54,
