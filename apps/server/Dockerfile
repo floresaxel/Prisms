@@ -39,5 +39,12 @@ ENV NODE_ENV=production
 ENV PORT=3001
 EXPOSE 3001
 
+# SEC-1/F14: drop root. The API needs no privileged port (3001) and writes
+# nothing outside the container, so a container escape or an RCE in a dependency
+# should not land as uid 0. `node` (uid 1000) ships with the base image; it owns
+# /app so pnpm can still resolve the workspace at start.
+RUN chown -R node:node /app
+USER node
+
 # Apply forward-only migrations, then serve the API + start pg-boss jobs.
 CMD ["sh", "-c", "pnpm --filter @prisms/db db:migrate && pnpm --filter @prisms/server start"]
