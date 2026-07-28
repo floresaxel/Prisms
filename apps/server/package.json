@@ -29,7 +29,7 @@
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
-    "@types/node": "^24.13.2",
+    "@types/node": "^26.1.2",
     "@types/web-push": "^3.6.4",
     "better-sqlite3": "^12.10.0",
     "eslint": "^10.4.1",

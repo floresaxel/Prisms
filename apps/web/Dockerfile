@@ -2,7 +2,7 @@
 # /api, /sync → api and /powersync → powersync) with nginx. Built from the repo
 # root context so the pnpm workspace resolves.
 # syntax=docker/dockerfile:1
-FROM node:24-bookworm-slim AS build
+FROM node:26-bookworm-slim AS build
 WORKDIR /app
 RUN npm install -g pnpm@11.5.3
 COPY . .

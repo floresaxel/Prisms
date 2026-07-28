@@ -60,7 +60,8 @@ services:
   api:
     # Placeholder until apps/server exists (s10); answers /health so the
     # service topology and healthcheck wiring can be exercised today.
-    image: node:20-alpine
+    # Kept on the same Node major as the rest of the repo (.nvmrc / engines).
+    image: node:26-alpine
     restart: unless-stopped
     command:
       - node
