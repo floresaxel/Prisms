@@ -1,0 +1,1794 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prisms — Wear OS mockups (25 directions)</title>
+<style>
+/* ============================================================================
+   Page chrome — light, matching docs/mockups/watchos-app-design.html so the two
+   sets can be read side by side.
+
+   The watch screens are ROUND. That is not a skin difference: a circle has no
+   corners to put a button in, full-width rows get clipped at the top and bottom,
+   and the platform's answer — ScalingLazyColumn, curved TimeText, a curved
+   position indicator, stadium-shaped chips — shapes every direction below.
+   ========================================================================= */
+:root{
+  --pg:#e9ecf0; --card:#fff; --ink:#18202b; --dim:#5f6b7a; --faint:#98a1ae;
+  --hair:#e6e8ec; --hair2:#d9dde3; --blue:#2563eb; --blue-bg:#e9f0fe;
+  --mono:ui-monospace,"Cascadia Mono",Consolas,"Roboto Mono",monospace;
+
+  /* Material 3 dark roles, Wear OS defaults (pure black background — Wear OS
+     never uses an elevated surface as the window background, for the same OLED
+     reason watchOS doesn't). */
+  --m-bg:#000;
+  --m-surf:#131314; --m-surf-c:#1e1f20; --m-surf-hi:#282a2c; --m-surf-hi2:#35373a;
+  --m-on:#e3e3e3; --m-on-var:#c4c7c5; --m-outline:#8e918f; --m-outline-d:#444746;
+  --m-primary:#a8c7fa; --m-on-primary:#062e6f;
+  --m-prim-c:#0842a0; --m-on-prim-c:#d3e3fd;
+  --m-error:#f2b8b5;
+
+  /* Prisms project tones, same values as the watchOS set so a direction can be
+     compared across platforms without a colour shift confusing the read. */
+  --t-blue:#4c8dff; --t-teal:#2dd4bf; --t-green:#30d158; --t-amber:#ff9f0a;
+  --t-grey:#98989f; --t-red:#ff453a; --t-purple:#bf5af2;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  font-family:"Inter","Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;
+  background:var(--pg);color:var(--ink);-webkit-font-smoothing:antialiased;padding-bottom:80px;
+}
+.num{font-variant-numeric:tabular-nums}
+svg.ic{width:16px;height:16px;flex:none;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+
+/* ---------- header ---------- */
+header{max-width:960px;margin:0 auto;padding:44px 24px 0;text-align:center}
+.brand{display:inline-flex;align-items:center;gap:10px;font-size:19px;font-weight:800;letter-spacing:-.4px}
+.brand .logo{width:32px;height:32px;border-radius:10px;background:var(--blue);color:#fff;display:flex;align-items:center;justify-content:center}
+.brand .logo svg{width:17px;height:17px;stroke-width:2.3}
+header h1{margin-top:16px;font-size:30px;font-weight:800;letter-spacing:-.9px}
+header .sub{margin-top:9px;color:var(--dim);font-size:13.5px;line-height:1.6;max-width:660px;margin:9px auto 0}
+header .sub b{color:var(--ink)}
+header .sub code{font-family:var(--mono);font-size:12.5px;background:var(--hair);padding:1px 5px;border-radius:5px}
+
+/* scope + platform notes */
+.scope{max-width:960px;margin:26px auto 0;padding:0 24px;display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.scope .box{background:var(--card);border:1px solid var(--hair);border-radius:14px;padding:14px 16px;text-align:left}
+.scope .box h3{font-size:11px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:var(--faint);margin-bottom:8px}
+.scope .box.in h3{color:#15803d}
+.scope .box.out h3{color:#b42318}
+.scope ul{list-style:none;display:flex;flex-wrap:wrap;gap:6px}
+.scope li{font-size:12px;font-weight:600;padding:4px 9px;border-radius:7px;background:var(--hair);color:var(--dim)}
+.scope .box.in li{background:#e7f6ec;color:#15803d}
+.scope .box.out li{background:#fdecec;color:#b42318;text-decoration:line-through;text-decoration-color:rgba(180,35,24,.4)}
+@media(max-width:760px){.scope{grid-template-columns:1fr}}
+.platnote{max-width:960px;margin:14px auto 0;padding:0 24px}
+.platnote .inner{background:var(--card);border:1px solid var(--hair);border-radius:14px;padding:14px 17px;text-align:left}
+.platnote h3{font-size:11px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:var(--blue);margin-bottom:9px}
+.platnote dl{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font-size:12.5px;line-height:1.5}
+.platnote dt{font-weight:750;color:var(--ink);white-space:nowrap}
+.platnote dd{color:var(--dim)}
+
+/* ---------- jump nav ---------- */
+nav.jump{max-width:1000px;margin:22px auto 0;padding:0 24px;display:flex;flex-wrap:wrap;gap:6px;justify-content:center}
+nav.jump a{font-size:11.5px;font-weight:700;padding:5px 9px;border-radius:7px;background:var(--card);
+  border:1px solid var(--hair);color:var(--dim);text-decoration:none}
+nav.jump a:hover{border-color:var(--blue);color:var(--blue)}
+nav.jump a b{color:var(--faint);margin-right:4px}
+nav.jump a:hover b{color:var(--blue)}
+
+/* ---------- variant cards ---------- */
+main{max-width:1680px;margin:0 auto;padding:34px 24px 0;
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(790px,1fr));gap:22px}
+@media(max-width:860px){main{grid-template-columns:1fr;padding:34px 12px 0}}
+.vcard{background:var(--card);border:1px solid var(--hair);border-radius:20px;padding:20px 20px 24px;scroll-margin-top:16px}
+.vhead{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:3px}
+.vnum{font-family:var(--mono);font-size:12px;font-weight:700;color:#fff;background:var(--ink);border-radius:6px;padding:3px 7px;letter-spacing:.4px}
+.vhead h2{font-size:19px;font-weight:800;letter-spacing:-.45px}
+.vhead .tagline{font-size:12px;font-weight:650;color:var(--blue);background:var(--blue-bg);padding:3px 8px;border-radius:6px}
+.vdesc{font-size:13px;line-height:1.6;color:var(--dim);max-width:700px}
+.vdesc b{color:var(--ink);font-weight:650}
+.frames{display:flex;gap:20px;flex-wrap:wrap;justify-content:center;margin-top:18px}
+.verdict{margin-top:18px;display:flex;gap:14px;flex-wrap:wrap;font-size:12.2px;line-height:1.5}
+.verdict div{flex:1 1 280px}
+.verdict .k{font-weight:800;font-size:10.5px;letter-spacing:.5px;text-transform:uppercase;display:block;margin-bottom:3px}
+.verdict .good .k{color:#15803d}
+.verdict .bad .k{color:#b42318}
+.verdict p{color:var(--dim)}
+
+/* ============================================================================
+   The watch.
+   Pixel Watch 3 45 mm is 456 × 456 px at 2.0 density = 228 × 228 dp. Everything
+   below is that, × 1.5 — so a 16 px label here is a real 10.7 dp on the wrist,
+   and the screen is a 342 px circle.
+   ========================================================================= */
+.wf{display:flex;flex-direction:column;align-items:center;gap:10px}
+.wf .cap{font-size:10.5px;font-weight:800;letter-spacing:.7px;text-transform:uppercase;color:var(--faint)}
+.case{position:relative;width:372px;height:372px;border-radius:50%;padding:15px;
+  background:linear-gradient(150deg,#5d616a,#2c2f36 40%,#16181d 72%,#484c54);
+  box-shadow:0 24px 46px -20px rgba(16,24,40,.62),inset 0 0 0 1px rgba(255,255,255,.14)}
+.screen{position:relative;width:342px;height:342px;border-radius:50%;background:var(--m-bg);
+  overflow:hidden;color:var(--m-on);isolation:isolate;
+  font-family:"Roboto","Google Sans","Inter","Segoe UI",system-ui,sans-serif}
+/* domed glass — a whisper, never enough to fight the content */
+.screen::after{content:"";position:absolute;inset:0;border-radius:50%;pointer-events:none;z-index:9;
+  background:radial-gradient(120% 90% at 30% 6%,rgba(255,255,255,.09),rgba(255,255,255,0) 46%)}
+/* crown at 3 o'clock, side button up at ~1:30 — Pixel Watch layout */
+.crown{position:absolute;right:-7px;top:50%;transform:translateY(-50%);width:12px;height:42px;border-radius:6px;
+  background:linear-gradient(90deg,#7d818a,#2e3036);box-shadow:inset 0 0 0 1px rgba(255,255,255,.16)}
+.crown::after{content:"";position:absolute;inset:4px 3px;border-radius:3px;
+  background:repeating-linear-gradient(180deg,rgba(255,255,255,.16) 0 1px,transparent 1px 3px)}
+.sbtn{position:absolute;left:50%;top:50%;width:9px;height:26px;border-radius:4px;margin-left:-4.5px;
+  background:linear-gradient(90deg,#6a6e77,#282a30);transform-origin:0 0;transform:rotate(56deg) translateY(-192px)}
+/* Galaxy-style rotating bezel */
+.case.bezel{padding:22px;background:linear-gradient(150deg,#9498a2,#41454d 38%,#1e2127 70%,#71757e)}
+.case.bezel::before{content:"";position:absolute;inset:11px;border-radius:50%;
+  background:repeating-conic-gradient(from 0deg,rgba(255,255,255,.34) 0deg .7deg,rgba(0,0,0,0) .7deg 7.5deg)}
+.case.bezel::after{content:"";position:absolute;inset:19px;border-radius:50%;box-shadow:inset 0 0 0 1.5px rgba(0,0,0,.6)}
+
+/* ---------- Wear OS chrome ---------- */
+/* Curved TimeText hugging the top arc. `textPath path=` is SVG 2 and needs no
+   id, which matters when the page holds fifty of these. */
+svg.chrome{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:7}
+svg.chrome text{font-family:"Roboto","Inter",system-ui,sans-serif;font-size:16px;font-weight:600;
+  fill:var(--m-on-var);letter-spacing:.4px}
+svg.chrome text.tint{fill:var(--m-primary)}
+svg.chrome text.small{font-size:13px;font-weight:700;letter-spacing:1.3px}
+.vig-t,.vig-b{position:absolute;left:0;right:0;height:44px;z-index:6;pointer-events:none}
+.vig-t{top:0;background:linear-gradient(#000 6%,rgba(0,0,0,0))}
+.vig-b{bottom:0;background:linear-gradient(rgba(0,0,0,0),#000 94%)}
+
+/* The content well. Wear OS centres its list on the middle item rather than
+   top-aligning it — that is what makes a round screen readable. */
+.wbody{position:absolute;inset:0;z-index:3;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:6px;padding:0 24px}
+.wbody.tight{padding:0 18px}
+/* `wide` still has to clear the rim: a full-width box at the top or bottom of the
+   list has corners further from the centre than its own edge midpoint. */
+.wbody.wide{padding:0 21px}
+
+/* ---------- Material 3 atoms ---------- */
+.tn-blue{--tone:var(--t-blue)} .tn-teal{--tone:var(--t-teal)} .tn-green{--tone:var(--t-green)}
+.tn-amber{--tone:var(--t-amber)} .tn-grey{--tone:var(--t-grey)} .tn-purple{--tone:var(--t-purple)}
+
+/* The Wear Material Chip: stadium, leading circle, primary + secondary label. */
+.wchip{display:flex;align-items:center;gap:11px;width:100%;background:var(--m-surf-c);
+  border-radius:26px;padding:9px 15px 9px 11px;position:relative;overflow:hidden;flex:none;
+  transition:transform .2s,opacity .2s}
+.wchip .lead{width:28px;height:28px;border-radius:50%;background:var(--tone,var(--t-grey));flex:none;
+  display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:#08090b;letter-spacing:-.2px}
+.wchip .lead svg{width:15px;height:15px;stroke:#08090b;stroke-width:2.6;fill:none}
+.wchip .txt{min-width:0;flex:1}
+.wchip .ti{font-size:16px;font-weight:600;letter-spacing:-.1px;line-height:1.2;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wchip .sub{font-size:12.5px;font-weight:500;color:var(--m-on-var);margin-top:1px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wchip.done{opacity:.42}
+.wchip.done .ti{text-decoration:line-through}
+.wchip.now{background:var(--m-surf-hi);box-shadow:inset 0 0 0 1.6px var(--t-amber)}
+.wchip.prim{background:var(--m-prim-c);color:var(--m-on-prim-c)}
+.wchip.prim .lead{background:var(--m-on-prim-c)}
+.wchip.prim .sub{color:rgba(211,227,253,.75)}
+.wchip.outline{background:transparent;box-shadow:inset 0 0 0 1.5px var(--m-outline-d)}
+/* ScalingLazyColumn: items shrink and fade as they approach the round edge. */
+.s95{transform:scale(.95);opacity:.85}
+.s88{transform:scale(.88);opacity:.66}
+.s78{transform:scale(.78);opacity:.44}
+.s68{transform:scale(.68);opacity:.26}
+
+.wbtn{display:flex;align-items:center;justify-content:center;gap:8px;height:44px;border-radius:22px;
+  background:var(--m-surf-hi);font-size:15.5px;font-weight:600;flex:none;width:100%;letter-spacing:-.1px}
+.wbtn.prim{background:var(--m-primary);color:var(--m-on-primary);font-weight:700}
+.wbtn.ok{background:var(--t-green);color:#07200e;font-weight:700}
+.wbtn svg{width:18px;height:18px;stroke:currentColor;stroke-width:2.4;fill:none}
+.fabr{width:52px;height:52px;border-radius:50%;background:var(--m-primary);color:var(--m-on-primary);
+  display:flex;align-items:center;justify-content:center;flex:none}
+.fabr svg{width:24px;height:24px;stroke:currentColor;stroke-width:2.6;fill:none}
+.wfield{width:100%;background:var(--m-surf-c);border-radius:20px;padding:10px 15px;font-size:16px;
+  font-weight:500;flex:none;text-align:left;letter-spacing:-.1px}
+.caret{display:inline-block;width:2px;height:16px;background:var(--m-primary);vertical-align:-3px;
+  margin-left:1px;animation:blink 1.05s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
+@keyframes pulse{50%{opacity:.35}}
+.mchips{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;flex:none}
+.mchip{font-size:13px;font-weight:600;padding:5px 12px;border-radius:14px;background:var(--m-surf-c);color:var(--m-on-var)}
+.mchip.on{background:var(--m-prim-c);color:var(--m-on-prim-c)}
+.mchip.dash{background:transparent;box-shadow:inset 0 0 0 1.3px var(--m-outline-d);color:var(--m-outline)}
+.wdot{width:9px;height:9px;border-radius:50%;background:var(--tone,var(--t-grey));flex:none}
+.whint{font-size:12px;color:var(--m-outline);text-align:center;line-height:1.35;flex:none}
+.wlabel{font-size:11px;font-weight:800;letter-spacing:1px;color:var(--m-on-var);flex:none}
+.mono{font-family:var(--mono)}
+/* position indicator — presentation attributes can't take var(), so the stroke
+   colours live here as classes */
+svg.chrome .pi-track{stroke:rgba(255,255,255,.13);stroke-width:3.5;fill:none;stroke-linecap:round}
+svg.chrome .pi-thumb{stroke:var(--m-primary);stroke-width:3.5;fill:none;stroke-linecap:round}
+svg.chrome .dial-track{stroke:rgba(255,255,255,.07);fill:none}
+svg.chrome .hand{stroke:var(--t-red);stroke-width:3;fill:none;stroke-linecap:round}
+svg.chrome .handbg{stroke:#000;stroke-width:6;fill:none;stroke-linecap:round}
+
+/* 03 — Now card */
+.v3 .big{font-size:27px;font-weight:700;letter-spacing:-.75px;line-height:1.09;text-align:center}
+.v3 .rng{font-size:14px;font-weight:600;color:var(--m-on-var);font-variant-numeric:tabular-nums}
+.v3 .prog{width:150px;height:6px;border-radius:3px;background:var(--m-surf-hi);overflow:hidden;flex:none}
+.v3 .prog i{display:block;height:100%;border-radius:3px;background:var(--t-amber)}
+.v3 .nowpill{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:800;letter-spacing:.9px;
+  padding:3px 10px;border-radius:11px;background:var(--t-amber);color:#1c1200}
+.v3 .nextchip{display:flex;align-items:center;gap:8px;background:var(--m-surf-c);border-radius:20px;
+  padding:6px 14px 6px 8px;font-size:14px;font-weight:600;flex:none;max-width:220px}
+.v3 .nextchip .t{color:var(--m-on-var);font-size:12.5px;font-weight:600;font-variant-numeric:tabular-nums}
+
+/* 04 — Radial 12 h dial */
+.v4 .dialctr{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  text-align:center;gap:2px;z-index:4;padding:0 74px}
+.v4 .dialctr .k{font-size:10.5px;font-weight:800;letter-spacing:1px;color:var(--t-amber)}
+.v4 .dialctr .n{font-size:19px;font-weight:700;letter-spacing:-.5px;line-height:1.1}
+.v4 .dialctr .s{font-size:12.5px;font-weight:600;color:var(--m-on-var);font-variant-numeric:tabular-nums}
+.v4 .dialctr .k.p{color:var(--m-primary)}
+.v4 .hourlbl{font-family:var(--mono);font-size:10.5px;font-weight:700;fill:var(--m-outline)}
+
+/* 05 — Rotating bezel */
+.v5 .pip{position:absolute;width:15px;height:15px;border-radius:50%;background:var(--tone,var(--m-surf-hi));z-index:4}
+.v5 .pip.done{background:var(--m-outline-d)}
+.v5 .pip.sel{width:23px;height:23px;box-shadow:0 0 0 3px #000,0 0 0 5.5px var(--m-primary)}
+.v5 .selmark{position:absolute;left:50%;top:16px;transform:translateX(-50%);z-index:5;
+  border-left:8px solid transparent;border-right:8px solid transparent;border-top:10px solid var(--m-primary)}
+.v5 .ctr{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  text-align:center;gap:4px;z-index:4;padding:0 78px}
+.v5 .ctr .t{font-size:13.5px;font-weight:700;color:var(--tone);font-variant-numeric:tabular-nums}
+.v5 .ctr .n{font-size:21px;font-weight:700;letter-spacing:-.55px;line-height:1.1}
+/* half-chord at this height is ~119 px, so the box stops well short of the rim */
+.v5 .bezhint{position:absolute;left:52px;right:52px;bottom:34px;text-align:center;z-index:5;
+  font-size:10.5px;font-weight:800;letter-spacing:1px;color:var(--m-outline)}
+/* 06 — Curved text */
+.v6 svg.chrome text.curv{font-size:15px;font-weight:650;fill:var(--m-on-var);letter-spacing:.3px}
+.v6 svg.chrome text.curv.dim{fill:var(--m-outline);font-size:13.5px;letter-spacing:1.1px;font-weight:700}
+.v6 svg.chrome text.curv.tone{fill:var(--t-green)}
+.v6 svg.chrome text.curv.prim{fill:var(--m-primary);font-weight:700;letter-spacing:1.2px;font-size:13.5px}
+.v6 .mid{text-align:center;display:flex;flex-direction:column;align-items:center;gap:5px}
+.v6 .mid .k{font-size:10.5px;font-weight:800;letter-spacing:1.1px;color:var(--t-amber)}
+.v6 .mid .n{font-size:25px;font-weight:700;letter-spacing:-.7px;line-height:1.08}
+.v6 .mid .s{font-size:13px;font-weight:600;color:var(--m-on-var);font-variant-numeric:tabular-nums}
+
+/* 07 — Tiles */
+.v7 .tilehd{display:flex;align-items:center;gap:7px;font-size:11.5px;font-weight:800;letter-spacing:.7px;
+  color:var(--m-on-var);flex:none;margin-bottom:2px}
+.v7 .tilehd .ico{width:17px;height:17px;border-radius:5px;background:var(--m-primary);flex:none}
+.v7 .trow{display:flex;align-items:center;gap:9px;width:100%;flex:none;padding:4px 0}
+.v7 .trow .t{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--m-outline);width:36px;flex:none}
+.v7 .trow .n{font-size:15.5px;font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.v7 .trow.live .n{color:var(--t-amber);font-weight:700}
+.v7 .trow.done .n{text-decoration:line-through;color:var(--m-outline)}
+.v7 .tiledots{position:absolute;left:0;right:0;bottom:17px;display:flex;gap:5px;justify-content:center;z-index:6}
+.v7 .tiledots i{width:5px;height:5px;border-radius:50%;background:rgba(255,255,255,.28)}
+.v7 .tiledots i.on{background:#fff}
+.v7 .qgrid{display:grid;grid-template-columns:1fr 1fr;gap:7px;width:100%;flex:none}
+.v7 .q{background:var(--m-surf-c);border-radius:16px;padding:8px 10px;font-size:13.5px;font-weight:600;
+  text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.v7 .q.prim{background:var(--m-prim-c);color:var(--m-on-prim-c);grid-column:1/-1}
+
+/* 08 — Edge-hugging buttons (M3 Expressive). The circular clip does the curve:
+   a full-width bar flush against the top is cut into an arc for free. */
+.v8 .hug{position:absolute;left:0;right:0;z-index:5;background:var(--m-surf-hi);display:flex;
+  align-items:center;justify-content:center;gap:8px;font-size:15px;font-weight:650;letter-spacing:-.1px}
+.v8 .hug.t{top:0;padding:46px 0 13px;border-radius:0 0 36px 36px}
+.v8 .hug.b{bottom:0;padding:13px 0 46px;border-radius:36px 36px 0 0;
+  background:var(--m-primary);color:var(--m-on-primary);font-weight:700}
+.v8 .hug svg{width:18px;height:18px;stroke:currentColor;stroke-width:2.5;fill:none}
+.v8 .wbody{padding:0 30px}
+
+/* 09 — Day progress ring */
+.v9 svg.chrome .ring-bg{stroke:rgba(255,255,255,.09);stroke-width:6;fill:none}
+.v9 svg.chrome .ring-fg{stroke:var(--t-amber);stroke-width:6;fill:none;stroke-linecap:round}
+.v9 svg.chrome .ring-fg.p{stroke:var(--m-primary)}
+.v9 .wbody{padding:0 40px}
+.v9 .capline{font-size:10.5px;font-weight:800;letter-spacing:1px;color:var(--m-outline);flex:none}
+
+/* 10 — Inscribed grid. A square inside a 342 circle is 242 on a side, so that is
+   exactly how wide the grid is allowed to be. */
+.v10 .igrid{width:242px;height:242px;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:8px}
+.v10 .itile{background:var(--m-surf-c);border-radius:24px;padding:11px 13px;display:flex;flex-direction:column;
+  justify-content:space-between;overflow:hidden;position:relative}
+.v10 .itile .t{font-size:12.5px;font-weight:800;color:var(--tone);font-variant-numeric:tabular-nums;letter-spacing:.3px}
+.v10 .itile .n{font-size:15px;font-weight:650;letter-spacing:-.25px;line-height:1.16}
+.v10 .itile.done{opacity:.36}
+.v10 .itile.done .n{text-decoration:line-through}
+.v10 .itile.now{background:var(--m-surf-hi);box-shadow:inset 0 0 0 1.6px var(--t-amber)}
+.v10 .itile.prim{background:var(--m-prim-c);color:var(--m-on-prim-c);align-items:center;justify-content:center;gap:5px}
+.v10 .itile.prim svg{width:24px;height:24px;stroke:var(--m-on-prim-c);stroke-width:2.5;fill:none}
+.v10 .itile.sel{box-shadow:inset 0 0 0 2px var(--m-primary)}
+/* 11 — Concentric rings, one per project */
+.v11 svg.chrome .rtrack{stroke:rgba(255,255,255,.06);fill:none;stroke-width:13}
+.v11 .ctr{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  text-align:center;gap:1px;z-index:4}
+.v11 .ctr .n{font-size:15px;font-weight:700;letter-spacing:-.3px}
+.v11 .ctr .s{font-size:11.5px;font-weight:600;color:var(--m-outline)}
+/* the legend sits low, where the chord is only ~224 px wide */
+.v11 .key{position:absolute;left:58px;right:58px;bottom:30px;display:flex;gap:7px;justify-content:center;z-index:5}
+.v11 .key span{display:flex;align-items:center;gap:4px;font-size:10px;font-weight:700;color:var(--m-outline);letter-spacing:.2px}
+.v11 .key i{width:7px;height:7px;border-radius:50%;background:var(--tone)}
+
+/* 12 — Segmented arc nav */
+.v12 svg.chrome .seg{fill:none;stroke-width:9;stroke-linecap:round;stroke:var(--m-surf-hi2)}
+.v12 svg.chrome .seg.on{stroke:var(--m-primary)}
+.v12 .segtitle{font-size:11px;font-weight:800;letter-spacing:1.2px;color:var(--m-primary);flex:none}
+.v12 .srow{display:flex;align-items:center;gap:9px;width:100%;flex:none;padding:3px 0}
+.v12 .srow .t{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--m-outline);width:36px;flex:none}
+.v12 .srow .n{font-size:16px;font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.v12 .srow.live .n{color:var(--t-amber);font-weight:700}
+.v12 .srow.done .n{text-decoration:line-through;color:var(--m-outline)}
+
+/* 13 — Big clock */
+.v13 .clock{font-size:62px;font-weight:300;letter-spacing:-3px;line-height:1;font-variant-numeric:tabular-nums}
+.v13 .clock b{font-weight:700}
+.v13 .hr{width:96px;height:1px;background:var(--m-outline-d);flex:none}
+.v13 .lbl{font-size:10.5px;font-weight:800;letter-spacing:1.3px;color:var(--t-amber);flex:none}
+.v13 .task{font-size:20px;font-weight:650;letter-spacing:-.45px;text-align:center;line-height:1.14}
+.v13 .meta{font-size:12.5px;font-weight:600;color:var(--m-outline);font-variant-numeric:tabular-nums}
+
+/* 14 — Assistant */
+.v14 .gdots{display:flex;gap:8px;justify-content:center;flex:none}
+.v14 .gdots i{width:14px;height:14px;border-radius:50%;animation:bob 1.1s ease-in-out infinite}
+.v14 .gdots i:nth-child(1){background:#4285f4}
+.v14 .gdots i:nth-child(2){background:#ea4335;animation-delay:.14s}
+.v14 .gdots i:nth-child(3){background:#fbbc04;animation-delay:.28s}
+.v14 .gdots i:nth-child(4){background:#34a853;animation-delay:.42s}
+@keyframes bob{50%{transform:translateY(-7px)}}
+.v14 .heard{font-size:19px;font-weight:600;letter-spacing:-.4px;line-height:1.2;text-align:center;flex:none}
+.v14 .heard em{font-style:normal;color:var(--m-primary);font-weight:700}
+.v14 .gbar{height:38px;border-radius:19px;background:var(--m-surf-c);display:flex;align-items:center;
+  justify-content:center;gap:9px;padding:0 16px;font-size:14px;font-weight:600;color:var(--m-on-var);flex:none;width:100%}
+.v14 .gbar i{width:9px;height:9px;border-radius:50%}
+.v14 .mini{display:flex;align-items:center;gap:9px;width:100%;padding:4px 0;flex:none}
+.v14 .mini .t{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--m-outline);width:36px;flex:none}
+.v14 .mini .n{font-size:15.5px;font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.v14 .mini.live .n{color:var(--t-amber);font-weight:700}
+
+/* 15 — Quick chips. Rows of different widths give the block a circular
+   silhouette, which is the one layout a round screen never has to fight. */
+.v15 .cloud{display:flex;flex-direction:column;align-items:center;gap:7px;width:100%}
+.v15 .crow{display:flex;gap:7px;justify-content:center}
+.v15 .qc{background:var(--m-surf-c);border-radius:19px;padding:8px 14px;font-size:14.5px;font-weight:600;
+  white-space:nowrap;letter-spacing:-.1px}
+.v15 .qc.prim{background:var(--m-prim-c);color:var(--m-on-prim-c)}
+.v15 .qc.tone{background:color-mix(in srgb,var(--tone) 22%,#000);color:var(--tone)}
+.v15 .qc.out{background:transparent;box-shadow:inset 0 0 0 1.4px var(--m-outline-d);color:var(--m-outline)}
+/* 16 — Swipe cards */
+.v16 .deck{position:absolute;inset:0;z-index:3}
+.v16 .card{position:absolute;left:34px;right:34px;top:80px;bottom:80px;border-radius:34px;
+  background:var(--m-surf-c);padding:16px 20px;display:flex;flex-direction:column;justify-content:center;gap:6px;overflow:hidden}
+.v16 .card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:5px;background:var(--tone)}
+.v16 .card.behind{transform:scale(.9) translateY(9px);opacity:.35;z-index:1}
+/* mid-swipe: the card really does run under the rim, which is the point */
+.v16 .card.front{z-index:3;transform:translateX(32px) rotate(3.5deg);box-shadow:-18px 0 36px rgba(0,0,0,.75)}
+.v16 .card .t{font-size:13.5px;font-weight:700;color:var(--tone);font-variant-numeric:tabular-nums}
+.v16 .card .n{font-size:21px;font-weight:700;letter-spacing:-.55px;line-height:1.12}
+.v16 .dzone{position:absolute;left:26px;top:50%;transform:translateY(-50%);z-index:2;width:54px;height:54px;
+  border-radius:50%;background:var(--t-green);display:flex;align-items:center;justify-content:center}
+.v16 .dzone svg{width:27px;height:27px;stroke:#07200e;stroke-width:3.2;fill:none}
+.v16 .swipehint{position:absolute;left:56px;right:56px;bottom:26px;text-align:center;z-index:5;
+  font-size:10.5px;font-weight:800;letter-spacing:.9px;color:var(--m-outline)}
+
+/* 17 — Radar */
+.v17 svg.chrome .rc{fill:none;stroke:rgba(255,255,255,.09);stroke-width:1.5}
+.v17 .blip{position:absolute;transform:translate(-50%,-50%);z-index:4;display:flex;flex-direction:column;
+  align-items:center;gap:4px}
+.v17 .blip .b{width:15px;height:15px;border-radius:50%;background:var(--tone);box-shadow:0 0 0 3px #000,0 0 12px var(--tone)}
+.v17 .blip .l{font-size:11px;font-weight:700;white-space:nowrap;color:var(--m-on-var);letter-spacing:-.1px}
+.v17 .core{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:5;text-align:center;
+  display:flex;flex-direction:column;align-items:center;gap:2px;width:150px}
+.v17 .core .k{font-size:9.5px;font-weight:800;letter-spacing:1px;color:var(--t-amber)}
+.v17 .core .n{font-size:16px;font-weight:700;letter-spacing:-.35px;line-height:1.1}
+.v17 .core .s{font-size:11px;font-weight:600;color:var(--m-outline)}
+
+/* 18 — Chord split */
+.v18 .top{position:absolute;left:0;right:0;top:0;height:226px;z-index:3;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:3px;padding:42px 48px 0}
+.v18 .chord{position:absolute;left:0;right:0;top:226px;height:1px;background:var(--m-outline-d);z-index:4}
+/* below the chord the circle narrows fast — 66 px of side padding keeps a 48 px
+   control clear of the rim */
+.v18 .bot{position:absolute;left:0;right:0;top:227px;bottom:0;z-index:3;display:flex;align-items:center;
+  justify-content:center;gap:9px;padding:0 66px}
+.v18 .bot .fabr{width:46px;height:46px}
+.v18 .bot .wbtn{height:42px}
+.v18 .lrow{display:flex;align-items:center;gap:9px;width:100%;padding:3px 0}
+.v18 .lrow .t{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--m-outline);width:36px;flex:none}
+.v18 .lrow .n{font-size:16px;font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.v18 .lrow.live .n{color:var(--t-amber);font-weight:700}
+.v18 .lrow.done .n{text-decoration:line-through;color:var(--m-outline)}
+
+/* 19 — Confirmation overlay */
+.v19 .conf{position:absolute;inset:0;z-index:8;background:rgba(0,0,0,.93);display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:15px}
+.v19 .conf .ck{width:92px;height:92px;border-radius:50%;background:var(--t-green);display:flex;
+  align-items:center;justify-content:center;box-shadow:0 0 0 12px rgba(48,209,88,.14)}
+.v19 .conf .ck svg{width:48px;height:48px;stroke:#07200e;stroke-width:3.4;fill:none}
+.v19 .conf .m{font-size:18px;font-weight:650;letter-spacing:-.3px}
+.v19 .conf .s{font-size:13px;font-weight:600;color:var(--m-outline)}
+
+/* 20 — Always-on display. AOD budgets a small share of lit pixels: no fills, no
+   saturated colour, outline type only, and it refreshes once a minute. */
+.v20 .aodrow{display:flex;align-items:center;gap:9px;width:100%;padding:4px 0}
+.v20 .aodrow .t{font-family:var(--mono);font-size:12px;font-weight:600;color:#5a5f66;width:36px;flex:none}
+.v20 .aodrow .n{font-size:15.5px;font-weight:500;color:#9aa0a8;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.v20 .aodrow.live .n{color:#c8933a;font-weight:650}
+.v20 .aodrow .o{width:8px;height:8px;border-radius:50%;flex:none;box-shadow:inset 0 0 0 1.5px #5a5f66}
+.v20 .aodrow.live .o{box-shadow:inset 0 0 0 1.5px #c8933a}
+.v20 .aodclock{font-size:44px;font-weight:200;letter-spacing:-1.8px;color:#a8aeb6;line-height:1;font-variant-numeric:tabular-nums}
+.v20 .aodnote{position:absolute;left:0;right:0;bottom:20px;text-align:center;z-index:6;
+  font-size:9.5px;font-weight:800;letter-spacing:1.1px;color:#3d4147}
+
+/* 21 — Project wedges */
+.v21 .pie{position:absolute;inset:14px;border-radius:50%;z-index:2;
+  background:conic-gradient(#4c8dff 0 50%,#30d158 50% 66.7%,#bf5af2 66.7% 83.3%,#98989f 83.3% 100%)}
+.v21 .pie.pick{background:conic-gradient(#4c8dff 0 50%,rgba(48,209,88,.22) 50% 66.7%,
+  rgba(191,90,242,.22) 66.7% 83.3%,rgba(152,152,159,.22) 83.3% 100%)}
+.v21 .hole{position:absolute;inset:92px;border-radius:50%;background:#000;z-index:3;display:flex;
+  flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:2px;padding:10px}
+.v21 .hole .n{font-size:15px;font-weight:700;letter-spacing:-.3px;line-height:1.12}
+.v21 .hole .s{font-size:11px;font-weight:600;color:var(--m-outline)}
+.v21 .wlab{position:absolute;z-index:4;font-size:10.5px;font-weight:800;letter-spacing:.5px;color:#08090b;
+  transform:translate(-50%,-50%);white-space:nowrap}
+.v21 .wlab.mute{color:rgba(255,255,255,.5)}
+
+/* 22 — Coil */
+.v22 svg.chrome .coil{fill:none;stroke:rgba(255,255,255,.07);stroke-width:13;stroke-linecap:butt}
+.v22 svg.chrome .seg{fill:none;stroke-width:13;stroke-linecap:butt}
+.v22 svg.chrome .nowmark{fill:none;stroke:#ff453a;stroke-width:17;stroke-linecap:butt}
+.v22 .ctr{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  text-align:center;gap:2px;z-index:4;padding:0 108px}
+.v22 .ctr .k{font-size:9.5px;font-weight:800;letter-spacing:1px;color:var(--t-amber)}
+.v22 .ctr .n{font-size:14px;font-weight:700;letter-spacing:-.3px;line-height:1.1}
+.v22 .ctr .s{font-size:10.5px;font-weight:600;color:var(--m-outline)}
+.v22 .ends{position:absolute;z-index:5;font-family:var(--mono);font-size:10px;font-weight:700;color:var(--m-outline)}
+
+/* 23 — Material You: the same layout, re-themed from the watch face wallpaper */
+.v23a{--m-primary:#ffb59d;--m-on-primary:#571f04;--m-prim-c:#7d3213;--m-on-prim-c:#ffdbcf;
+  --m-surf-c:#251a16;--m-surf-hi:#352721;--m-on-var:#e7bdae;--m-outline:#a08277;--m-outline-d:#53403a}
+.v23b{--m-primary:#a3d5a0;--m-on-primary:#0a3910;--m-prim-c:#215026;--m-on-prim-c:#bef0b8;
+  --m-surf-c:#161f16;--m-surf-hi:#213021;--m-on-var:#c2d8be;--m-outline:#8ba287;--m-outline-d:#3a4a39}
+.v23 .facehint{position:absolute;left:66px;right:66px;bottom:26px;text-align:center;z-index:6;font-size:9.5px;
+  font-weight:800;letter-spacing:.9px;color:var(--m-outline)}
+
+/* 24 — Thumb arc */
+.v24 .tbtn{position:absolute;width:48px;height:48px;border-radius:50%;background:var(--m-surf-hi);z-index:5;
+  display:flex;align-items:center;justify-content:center;transform:translate(-50%,-50%)}
+.v24 .tbtn.prim{background:var(--m-primary);color:var(--m-on-primary)}
+.v24 .tbtn svg{width:22px;height:22px;stroke:currentColor;stroke-width:2.5;fill:none}
+.v24 .tbtn .lb{font-size:13px;font-weight:700}
+.v24 .reach{position:absolute;inset:0;z-index:1;pointer-events:none}
+.v24 .upper{position:absolute;left:0;right:0;top:0;height:236px;z-index:3;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:5px;padding:44px 46px 0}
+.v24 .arclbl{position:absolute;left:0;right:0;bottom:14px;text-align:center;z-index:6;font-size:9.5px;
+  font-weight:800;letter-spacing:1.1px;color:var(--m-outline-d)}
+
+/* 25 — Watch face complications */
+.v25 .facetime{font-size:54px;font-weight:250;letter-spacing:-2.4px;line-height:1;font-variant-numeric:tabular-nums}
+.v25 .comp{position:absolute;z-index:4;display:flex;flex-direction:column;align-items:center;gap:1px;
+  transform:translate(-50%,-50%);text-align:center;width:118px}
+.v25 .comp .k{font-size:8.5px;font-weight:800;letter-spacing:.9px;color:var(--tone,var(--m-outline))}
+.v25 .comp .v{font-size:13px;font-weight:700;letter-spacing:-.2px;line-height:1.12}
+.v25 .comp .v small{font-size:10.5px;font-weight:600;color:var(--m-outline)}
+.v25 svg.chrome .tick{stroke:rgba(255,255,255,.22);stroke-width:2;stroke-linecap:round}
+.v25 .compring{position:absolute;width:60px;height:60px;border-radius:50%;transform:translate(-50%,-50%);z-index:4;
+  box-shadow:inset 0 0 0 3px var(--m-surf-hi);display:flex;align-items:center;justify-content:center}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <span class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 3 3 19h18L12 3Z"/><path d="M12 3v16"/></svg></span>
+    Prisms
+  </div>
+  <h1>Wear OS — 25 directions</h1>
+  <p class="sub">
+    Twenty-five takes on the same deliberately small watch app: <b>show today's itinerary</b> and
+    <b>add a task</b>. Same day and same new task in all twenty-five, so the differences are design and
+    nothing else. Each direction is a pair — the itinerary screen and its add-task screen.
+    Frames are Pixel Watch 3 45 mm (228 × 228 dp) drawn at 1.5×; project colours are the Prisms tones from
+    <code>apps/mobile/src/ui.tsx</code>, sitting on Material 3 dark surfaces.
+  </p>
+</header>
+
+<section class="scope">
+  <div class="box in">
+    <h3>In scope</h3>
+    <ul>
+      <li>Today's scheduled items</li><li>Time · title · project colour</li>
+      <li>Done / now / upcoming</li><li>Tap to complete</li><li>Add a task</li>
+      <li>Optional project + duration</li>
+    </ul>
+  </div>
+  <div class="box out">
+    <h3>Deliberately left on the phone</h3>
+    <ul>
+      <li>Clock-in / timers</li><li>Focus review</li><li>Journal &amp; day notes</li>
+      <li>Day-map drag</li><li>Automations</li><li>Review inbox</li>
+      <li>Project tree</li><li>Habits management</li><li>Substeps</li><li>Dependencies</li>
+    </ul>
+  </div>
+</section>
+
+<section class="platnote">
+  <div class="inner">
+    <h3>What makes these Wear OS and not watchOS</h3>
+    <dl>
+      <dt>Round screen</dt><dd>No corners. A full-width row loses its ends at the top and bottom of the list, which is why so many directions below curve, centre or inscribe their content.</dd>
+      <dt>ScalingLazyColumn</dt><dd>The platform list scales and fades items as they approach the edge, and centres on the middle item instead of top-aligning. Rendered here with the <code>.s95</code>–<code>.s68</code> classes.</dd>
+      <dt>Curved TimeText</dt><dd>The clock is drawn along the top arc, not sat in a corner. Real SVG <code>textPath</code>, so the glyphs actually rotate.</dd>
+      <dt>Position indicator</dt><dd>The scrollbar is a short arc on the right edge, tracking the crown.</dd>
+      <dt>Chips, not rows</dt><dd>Material's stadium-shaped chip — leading circle, primary and secondary label — is the native list item.</dd>
+      <dt>Tiles &amp; complications</dt><dd>Swipe-reachable surfaces that exist before the app is launched. Directions 07 and 25 live there.</dd>
+    </dl>
+  </div>
+</section>
+
+<nav class="jump">
+  <a href="#v1"><b>01</b>Material Chips</a>
+  <a href="#v2"><b>02</b>Scaling Column</a>
+  <a href="#v3"><b>03</b>Now Card</a>
+  <a href="#v4"><b>04</b>Radial Dial</a>
+  <a href="#v5"><b>05</b>Rotating Bezel</a>
+  <a href="#v6"><b>06</b>Curved Text</a>
+  <a href="#v7"><b>07</b>Tiles</a>
+  <a href="#v8"><b>08</b>Edge-Hug Buttons</a>
+  <a href="#v9"><b>09</b>Progress Ring</a>
+  <a href="#v10"><b>10</b>Inscribed Grid</a>
+  <a href="#v11"><b>11</b>Concentric Rings</a>
+  <a href="#v12"><b>12</b>Segmented Arc</a>
+  <a href="#v13"><b>13</b>Big Clock</a>
+  <a href="#v14"><b>14</b>Assistant</a>
+  <a href="#v15"><b>15</b>Quick Chips</a>
+  <a href="#v16"><b>16</b>Swipe Cards</a>
+  <a href="#v17"><b>17</b>Radar</a>
+  <a href="#v18"><b>18</b>Chord Split</a>
+  <a href="#v19"><b>19</b>Confirmation</a>
+  <a href="#v20"><b>20</b>Always-On</a>
+  <a href="#v21"><b>21</b>Wedges</a>
+  <a href="#v22"><b>22</b>Spiral</a>
+  <a href="#v23"><b>23</b>Material You</a>
+  <a href="#v24"><b>24</b>Thumb Arc</a>
+  <a href="#v25"><b>25</b>Complications</a>
+</nav>
+
+<main>
+<!-- ══════════════════ 01 ══════════════════ -->
+<section class="vcard" id="v1">
+  <div class="vhead"><span class="vnum">01</span><h2>Material Chips</h2><span class="tagline">The platform default</span></div>
+  <p class="vdesc">Exactly what Wear OS ships: stadium chips with a leading circle, primary and secondary label,
+    in a ScalingLazyColumn that centres on the middle item. Curved TimeText up top, curved position indicator on
+    the right. The add action is a <b>primary-container chip at the end of the list</b> — Material's own pattern
+    for "the affirmative thing in this list".</p>
+  <div class="frames">
+    <div class="wf"><div class="case"><span class="crown"></span><span class="sbtn"></span>
+      <div class="screen v1">
+        <svg class="chrome" viewBox="0 0 342 342">
+          <text><textPath path="M 26 171 A 145 145 0 0 1 316 171" startOffset="50%" text-anchor="middle">10:09</textPath></text>
+          <circle class="pi-track" cx="171" cy="171" r="163" stroke-dasharray="171 1024" stroke-dashoffset="85"/>
+          <circle class="pi-thumb" cx="171" cy="171" r="163" stroke-dasharray="62 1024" stroke-dashoffset="76"/>
+        </svg>
+        <div class="wbody">
+          <div class="wchip done tn-blue s78"><span class="lead"><svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg></span>
+            <span class="txt"><span class="ti">Standup</span></span></div>
+          <div class="wchip now tn-amber"><span class="lead">09³⁰</span>
+            <span class="txt"><span class="ti">Draft API spec</span><span class="sub">Now · 51m left</span></span></div>
+          <div class="wchip tn-green"><span class="lead">11</span>
+            <span class="txt"><span class="ti">Gym</span><span class="sub">Health · 1h</span></span></div>
+          <div class="wchip tn-grey s88"><span class="lead">12³⁰</span>
+            <span class="txt"><span class="ti">Lunch with Sam</span></span></div>
+          <div class="wchip prim s78"><span class="lead"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span>
+            <span class="txt"><span class="ti">Add task</span></span></div>
+        </div>
+        <div class="vig-t"></div><div class="vig-b"></div>
+      </div></div><div class="cap">Itinerary</div></div>
+
+    <div class="wf"><div class="case"><span class="crown"></span><span class="sbtn"></span>
+      <div class="screen v1">
+        <svg class="chrome" viewBox="0 0 342 342">
+          <text class="tint"><textPath path="M 26 171 A 145 145 0 0 1 316 171" startOffset="50%" text-anchor="middle">New task</textPath></text>
+        </svg>
+        <div class="wbody" style="gap:9px">
+          <div class="wfield">Call the vet<span class="caret"></span></div>
+          <div class="mchips"><span class="mchip on">Work</span><span class="mchip on">30m</span><span class="mchip dash">13:30</span></div>
+          <div class="wbtn prim">Add</div>
+        </div>
+        <div class="vig-t"></div><div class="vig-b"></div>
+      </div></div><div class="cap">Add task</div></div>
+  </div>
+  <div class="verdict">
+    <div class="good"><span class="k">Works because</span><p>Nothing to learn, free accessibility and theming, and it will still look native after the next Wear OS redesign.</p></div>
+    <div class="bad"><span class="k">Costs you</span><p>Three usable chips per screen — the round edge eats the rest. Identical to every other Wear OS app.</p></div>
+  </div>
+</section>
+
+<!-- ══════════════════ 02 ══════════════════ -->
+<section class="vcard" id="v2">
+  <div class="vhead"><span class="vnum">02</span><h2>Scaling Column</h2><span class="tagline">Lean into the curve</span></div>
+  <p class="vdesc">The same list, but the scaling is pushed hard: the focused item is full size and its neighbours
+    fall away fast. The circle stops being a container the list is fighting and becomes <b>a lens the list is
+    read through</b>. The crown drives it, so the whole day is reachable without a finger on the glass.</p>
+  <div class="frames">
+    <div class="wf"><div class="case"><span class="crown"></span><span class="sbtn"></span>
+      <div class="screen v2">
+        <svg class="chrome" viewBox="0 0 342 342">
+          <text><textPath path="M 26 171 A 145 145 0 0 1 316 171" startOffset="50%" text-anchor="middle">10:09</textPath></text>
+          <circle class="pi-track" cx="171" cy="171" r="163" stroke-dasharray="171 1024" stroke-dashoffset="85"/>
+          <circle class="pi-thumb" cx="171" cy="171" r="163" stroke-dasharray="50 1024" stroke-dashoffset="52"/>
+        </svg>
+        <div class="wbody wide" style="gap:5px">
+          <div class="wchip done tn-blue s68"><span class="lead">09</span><span class="txt"><span class="ti">Standup</span></span></div>
+          <div class="wchip tn-amber s88"><span class="lead">09³⁰</span><span class="txt"><span class="ti">Draft API spec</span></span></div>
+          <div class="wchip now tn-green" style="padding:12px 15px 12px 11px"><span class="lead" style="width:32px;height:32px">11</span>
+            <span class="txt"><span class="ti" style="font-size:18px">Gym</span><span class="sub">Health · 1h · in 51m</span></span></div>
+          <div class="wchip tn-grey s88"><span class="lead">12³⁰</span><span class="txt"><span class="ti">Lunch with Sam</span></span></div>
+          <div class="wchip tn-blue s68"><span class="lead">14</span><span class="txt"><span class="ti">Review PRs</span></span></div>
+        </div>
+        <div class="vig-t"></div><div class="vig-b"></div>
+      </div></div><div class="cap">Itinerary</div></div>
+
+    <div class="wf"><div class="case"><span class="crown"></span><span class="sbtn"></span>
+      <div class="screen v2">
+        <svg class="chrome" viewBox="0 0 342 342">
+          <text><textPath path="M 26 171 A 145 145 0 0 1 316 171" startOffset="50%" text-anchor="middle">10:09</textPath></text>
+          <circle class="pi-track" cx="171" cy="171" r="163" stroke-dasharray="171 1024" stroke-dashoffset="85"/>
+          <circle class="pi-thumb" cx="171" cy="171" r="163" stroke-dasharray="50 1024" stroke-dashoffset="118"/>
+        </svg>
+        <div class="wbody wide" style="gap:5px">
+          <div class="wchip tn-blue s68"><span class="lead">14</span><span class="txt"><span class="ti">Review PRs</span></span></div>
+          <div class="wchip tn-purple s88"><span class="lead">16</span><span class="txt"><span class="ti">Guitar</span></span></div>
+          <div class="wchip prim" style="padding:12px 15px 12px 11px;flex-direction:column;align-items:stretch;gap:8px">
+            <span class="ti" style="font-size:17px">Call the vet<span class="caret" style="background:var(--m-on-prim-c)"></span></span>
+            <div class="mchips" style="justify-content:flex-start"><span class="mchip" style="background:rgba(0,0,0,.28);color:#d3e3fd">Work</span><span class="mchip" style="background:rgba(0,0,0,.28);color:#d3e3fd">30m</span></div>
+          </div>
+          <div class="wchip outline s88"><span class="txt"><span class="ti" style="text-align:center">Add</span></span></div>
+        </div>
+        <div class="vig-t"></div><div class="vig-b"></div>
+      </div></div><div class="cap">Add task</div></div>
+  </div>
+  <div class="verdict">
+    <div class="good"><span class="k">Works because</span><p>Turns the round screen from a constraint into the interaction, and one item is always unambiguously "the one".</p></div>
+    <div class="bad"><span class="k">Costs you</span><p>Aggressive scaling makes the shrunken neighbours genuinely unreadable — they become texture, not information.</p></div>
+  </div>
+</section>
+
+<!-- ══════════════════ 03 ══════════════════ -->
+<section class="vcard" id="v3">
+  <div class="vhead"><span class="vnum">03</span><h2>Now Card</h2><span class="tagline">One answer, centred</span></div>
+  <p class="vdesc">A circle has a natural focal point, and this direction just uses it. The current block sits dead
+    centre at a size you can read while moving; the next item is a small chip below. <b>Radial symmetry does the
+    hierarchy for you</b> — no layout gymnastics needed to keep content off the curve.</p>
+  <div class="frames">
+    <div class="wf"><div class="case"><span class="crown"></span><span class="sbtn"></span>
+      <div class="screen v3">
+        <svg class="chrome" viewBox="0 0 342 342">
+          <text><textPath path="M 26 171 A 145 145 0 0 1 316 171" startOffset="50%" text-anchor="middle">10:09</textPath></text>
+        </svg>
+        <div class="wbody" style="gap:9px;padding:0 44px">
+          <span class="nowpill">NOW</span>
+          <div class="big">Draft<br>API spec</div>
+          <div class="rng">09:30 – 11:00 · 51m left</div>
+          <div class="prog"><i style="width:44%"></i></div>
+          <div class="nextchip"><span class="wdot tn-green"></span><span class="t">11:00</span><span>Gym</span></div>
+        </div>
+        <div class="vig-b"></div>
+      </div></div><div class="cap">Itinerary</div></div>
+
+    <div class="wf"><div class="case"><span class="crown"></span><span class="sbtn"></span>
+      <div class="screen v3">
+        <svg class="chrome" viewBox="0 0 342 342">
+          <text class="tint"><textPath path="M 26 171 A 145 145 0 0 1 316 171" startOffset="50%" text-anchor="middle">New task</textPath></text>
+        </svg>
+        <div class="wbody" style="gap:11px;padding:0 44px">
+          <div class="fabr" style="background:var(--m-prim-c);color:var(--m-on-prim-c)">
+            <svg viewBox="0 0 24 24"><path d="M12 3a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3Z"/><path d="M19 11a7 7 0 0 1-14 0"/><path d="M12 18v3"/></svg></div>
+          <div class="big" style="font-size:22px">Call the vet</div>
+          <div class="rng">13:30 · 30 min · Work</div>
+          <div class="wbtn prim" style="width:auto;padding:0 34px">Add</div>
+        </div>
+        <div class="vig-b"></div>
+      </div></div><div class="cap">Add task</div></div>
+  </div>
+  <div class="verdict">
+    <div class="good"><span class="k">Works because</span><p>The only direction here that is fully legible at arm's length, and it never fights the round edge.</p></div>
+    <div class="bad"><span class="k">Costs you</span><p>One item at a time. "What's on this afternoon?" always costs a scroll.</p></div>
+  </div>
+</section>
+
+<!-- ══════════════════ 04 ══════════════════ -->
+<section class="vcard" id="v4">
+  <div class="vhead"><span class="vnum">04</span><h2>Radial Dial</h2><span class="tagline">The screen already is a clock</span></div>
+  <p class="vdesc">A 12-hour dial with an arc per block and a hand at the current time. On a round watch this needs
+    no metaphor at all — <b>the display's shape and the data's shape are the same shape</b>. Adding means turning
+    the bezel or crown to a free wedge, which the dial draws as an outlined gap.</p>
+  <div class="frames">
+    <div class="wf"><div class="case"><span class="crown"></span><span class="sbtn"></span>
+      <div class="screen v4">
+        <svg class="chrome" viewBox="0 0 342 342">
+          <circle class="dial-track" cx="171" cy="171" r="140" stroke-width="19"/>
+          <g transform="rotate(-90 171 171)" fill="none" stroke-width="19">
+            <circle cx="171" cy="171" r="140" stroke="#3a4356" stroke-dasharray="37 880" stroke-dashoffset="-660"/>
+            <circle cx="171" cy="171" r="140" stroke="#ff9f0a" stroke-dasharray="110 880" stroke-dashoffset="-696"/>
+            <circle cx="171" cy="171" r="140" stroke="#30d158" stroke-dasharray="73 880" stroke-dashoffset="-806"/>
+            <circle cx="171" cy="171" r="140" stroke="#98989f" stroke-dasharray="73 880" stroke-dashoffset="-37"/>
+            <circle cx="171" cy="171" r="140" stroke="#4c8dff" stroke-dasharray="73 880" stroke-dashoffset="-147"/>
+            <circle cx="171" cy="171" r="140" stroke="#bf5af2" stroke-dasharray="73 880" stroke-dashoffset="-293"/>
+          </g>
+          <text class="hourlbl" x="171" y="46" text-anchor="middle">12</text>
+          <text class="hourlbl" x="299" y="176" text-anchor="middle">3</text>
+          <text class="hourlbl" x="171" y="305" text-anchor="middle">6</text>
+          <text class="hourlbl" x="44" y="176" text-anchor="middle">9</text>
+          <g transform="rotate(304.5 171 171)">
+            <path class="handbg" d="M171 46V21"/><path class="hand" d="M171 46V21"/>
+            <circle cx="171" cy="21" r="5" fill="#ff453a"/>
+          </g>
+        </svg>
+        <div class="dialctr">
+          <span class="k">NOW · 09:30</span>
+          <span class="n">Draft API spec</span>
+          <span class="s">51m left</span>
+        </div>
+      </div></div><div class="cap">Itinerary</div></div>
+
+    <div class="wf"><div class="case"><span class="crown"></span><span class="sbtn"></span>
+      <div class="screen v4">
+        <svg class="chrome" viewBox="0 0 342 342">
+          <circle class="dial-track" cx="171" cy="171" r="140" stroke-width="19"/>
+          <g transform="rotate(-90 171 171)" fill="none" stroke-width="19" opacity=".32">
+            <circle cx="171" cy="171" r="140" stroke="#ff9f0a" stroke-dasharray="110 880" stroke-dashoffset="-696"/>
+            <circle cx="171" cy="171" r="140" stroke="#30d158" stroke-dasharray="73 880" stroke-dashoffset="-806"/>
+            <circle cx="171" cy="171" r="140" stroke="#98989f" stroke-dasharray="73 880" stroke-dashoffset="-37"/>
+            <circle cx="171" cy="171" r="140" stroke="#4c8dff" stroke-dasharray="73 880" stroke-dashoffset="-147"/>
+          </g>
+          <!-- the free 13:30 wedge: a soft halo under a solid arc -->
+          <g transform="rotate(-90 171 171)" fill="none">
+            <circle cx="171" cy="171" r="140" stroke="#a8c7fa" stroke-width="27" opacity=".2"
+              stroke-dasharray="37 880" stroke-dashoffset="-110"/>
+            <circle cx="171" cy="171" r="140" stroke="#a8c7fa" stroke-width="19"
+              stroke-dasharray="37 880" stroke-dashoffset="-110"/>
+          </g>
+        </svg>
+        <div class="dialctr">
+          <span class="k p">ADD AT</span>
+          <span class="n" style="font-size:26px">13:30</span>
+          <span class="s">Call the vet · 30m</span>
+          <span class="whint" style="margin-top:8px">Turn the crown</span>
+        </div>
+      </div></div><div class="cap">Add task</div></div>
+  </div>
+  <div class="verdict">
+    <div class="good"><span class="k">Works because</span><p>Perfectly native to the hardware — a nine-item day and a two-item day are different shapes, with no scrolling.</p></div>
+    <div class="bad"><span class="k">Costs you</span><p>No titles on the ring, and a 12-hour dial collides morning with evening. Short blocks smear together.</p></div>
+  </div>
+</section>
+
+<!-- ══════════════════ 05 ══════════════════ -->
+<section class="vcard" id="v5">
+  <div class="vhead"><span class="vnum">05</span><h2>Rotating Bezel</h2><span class="tagline">Galaxy Watch</span></div>
+  <p class="vdesc">Built for the one input Wear OS has that watchOS doesn't: Samsung's physical rotating bezel.
+    Items sit as pips around the rim, the selection marker is fixed at twelve o'clock, and <b>turning the bezel
+    spins the day past it</b> with a detent per item. Nothing ever hides under your finger.</p>
+  <div class="frames">
+    <div class="wf"><div class="case bezel"><span class="crown"></span>
+      <div class="screen v5">
+        <svg class="chrome" viewBox="0 0 342 342">
+          <text><textPath path="M 26 171 A 145 145 0 0 1 316 171" startOffset="50%" text-anchor="middle">10:09</textPath></text>
+        </svg>
+        <span class="selmark"></span>
+        <span class="pip sel tn-amber" style="left:159.5px;top:27.5px"></span>
+        <span class="pip tn-green" style="left:278px;top:97.5px"></span>
+        <span class="pip tn-grey" style="left:278px;top:229.5px"></span>
+        <span class="pip tn-blue" style="left:163.5px;top:295.5px"></span>
+        <span class="pip tn-purple" style="left:49px;top:229.5px"></span>
+        <span class="pip done" style="left:49px;top:97.5px"></span>
+        <div class="ctr tn-amber">
+          <span class="t">09:30 – 11:00 · NOW</span>
+          <span class="n">Draft API spec</span>
+          <span class="whint">Work · 51m left</span>
+        </div>
+        <div class="bezhint">◷ ROTATE THE BEZEL</div>
+      </div></div><div class="cap">Itinerary</div></div>
+
+    <div class="wf"><div class="case bezel"><span class="crown"></span>
+      <div class="screen v5">
+        <svg class="chrome" viewBox="0 0 342 342">
+          <text class="tint"><textPath path="M 26 171 A 145 145 0 0 1 316 171" startOffset="50%" text-anchor="middle">Duration</textPath></text>
+        </svg>
+        <span class="selmark"></span>
+        <span class="pip" style="left:163.5px;top:31.5px;background:var(--m-primary);width:15px;height:15px"></span>
+        <span class="pip" style="left:278px;top:97.5px"></span>
+        <span class="pip" style="left:278px;top:229.5px"></span>
+        <span class="pip" style="left:163.5px;top:295.5px"></span>
+        <span class="pip" style="left:49px;top:229.5px"></span>
+        <span class="pip" style="left:49px;top:97.5px"></span>
+        <div class="ctr">
+          <span class="n" style="font-size:17px;color:var(--m-on-var);font-weight:600">Call the vet</span>
+          <span style="font-size:38px;font-weight:750;letter-spacing:-1.4px;line-height:1;color:var(--m-primary)">30<span style="font-size:19px">m</span></span>
+          <div class="wbtn prim" style="width:auto;padding:0 30px;height:38px;margin-top:8px">Add</div>
+        </div>
+        <div class="bezhint">15 · <b style="color:var(--m-primary)">30</b> · 45 · 60 · 120</div>
+      </div></div><div class="cap">Add task</div></div>
+  </div>
+  <div class="verdict">
+    <div class="good"><span class="k">Works because</span><p>Tactile, precise, eyes-free after a day of use, and the finger never covers the screen. Nothing else can copy it.</p></div>
+    <div class="bad"><span class="k">Costs you</span><p>Only Samsung ships the bezel — on a Pixel Watch this degrades to crown scrolling and the pips look decorative.</p></div>
+  </div>
+</section>
+
+<!-- ══════════════════ 06 ══════════════════ -->
+<section class="vcard" id="v6">
+  <div class="vhead"><span class="vnum">06</span><h2>Curved Text</h2><span class="tagline">Wear's own typography</span></div>
+  <p class="vdesc">Wear OS is the only watch platform with a real curved-text primitive, and this direction spends
+    it: the next item arcs under the clock, the action arcs along the bottom rim, and the middle is left entirely
+    to the thing happening now. <b>The chrome moves to the edge so the content can own the centre</b>.</p>
+  <div class="frames">
+    <div class="wf"><div class="case"><span class="crown"></span><span class="sbtn"></span>
+      <div class="screen v6">
+        <svg class="chrome" viewBox="0 0 342 342">
+          <text><textPath path="M 26 171 A 145 145 0 0 1 316 171" startOffset="50%" text-anchor="middle">10:09</textPath></text>
+          <text class="curv tone"><textPath path="M 53 171 A 118 118 0 0 1 289 171" startOffset="50%" text-anchor="middle">Next · 11:00 Gym</textPath></text>
+          <text class="curv dim"><textPath path="M 33 171 A 138 138 0 0 0 309 171" startOffset="50%" text-anchor="middle">2 DONE · 4 LEFT</textPath></text>
+        </svg>
+        <div class="wbody" style="padding:0 62px">
+          <div class="mid">
+            <span class="k">NOW · 09:30</span>
+            <span class="n">Draft<br>API spec</span>
+            <span class="s">51m left</span>
+          </div>
+        </div>
+      </div></div><div class="cap">Itinerary</div></div>
+
+    <div class="wf"><div class="case"><span class="crown"></span><span class="sbtn"></span>
+      <div class="screen v6">
+        <svg class="chrome" viewBox="0 0 342 342">
+          <text class="tint"><textPath path="M 26 171 A 145 145 0 0 1 316 171" startOffset="50%" text-anchor="middle">New task</textPath></text>
+          <text class="curv dim"><textPath path="M 53 171 A 118 118 0 0 1 289 171" startOffset="50%" text-anchor="middle">13:30 · 30 min · Work</textPath></text>
+          <text class="curv prim"><textPath path="M 33 171 A 138 138 0 0 0 309 171" startOffset="50%" text-anchor="middle">TAP TO ADD</textPath></text>
+        </svg>
+        <div class="wbody" style="padding:0 62px">
+          <div class="mid">
+            <span class="n" style="font-size:23px">Call the vet<span class="caret" style="height:21px"></span></span>
+            <div class="mchips" style="margin-top:6px"><span class="mchip on">Work</span><span class="mchip on">30m</span></div>
+          </div>
+        </div>
+      </div></div><div class="cap">Add task</div></div>
+  </div>
+  <div class="verdict">
+    <div class="good"><span class="k">Works because</span><p>Unmistakably Wear OS, and it recovers the corner space every rectangular layout throws away.</p></div>
+    <div class="bad"><span class="k">Costs you</span><p>Curved text is slower to read and caps out around twenty characters. Only works for labels you already know.</p></div>
+  </div>
+</section>
+
+<!-- ══════════════════ 07 ══════════════════ -->
+<section class="vcard" id="v7">
+  <div class="vhead"><span class="vnum">07</span><h2>Tiles</h2><span class="tagline">Before the app exists</span></div>
+  <p class="vdesc">Not an app screen at all — a pair of Tiles, the surface you reach by swiping sideways from the
+    watch face. <b>Zero launches, zero navigation</b>: one swipe shows the day, one more offers four one-tap
+    tasks. Tiles can't scroll, so the design is forced to decide what the three most important rows are.</p>
+  <div class="frames">
+    <div class="wf"><div class="case"><span class="crown"></span><span class="sbtn"></span>
+      <div class="screen v7">
+        <svg class="chrome" viewBox="0 0 342 342">
+          <text><textPath path="M 26 171 A 145 145 0 0 1 316 171" startOffset="50%" text-anchor="middle">10:09</textPath></text>
+        </svg>
+        <div class="wbody tight" style="gap:1px;padding:0 46px">
+          <div class="tilehd"><span class="ico"></span>PRISMS · TODAY</div>
+          <div class="trow done"><span class="t">09:00</span><span class="n">Standup</span></div>
+          <div class="trow live"><span class="t">09:30</span><span class="n">Draft API spec</span></div>
+          <div class="trow"><span class="t">11:00</span><span class="n">Gym</span></div>
+          <div class="trow"><span class="t">12:30</span><span class="n">Lunch with Sam</span></div>
+          <div class="whint" style="margin-top:5px">+2 more</div>
+        </div>
+        <div class="tiledots"><i class="on"></i><i></i><i></i></div>
+      </div></div><div class="cap">Itinerary tile</div></div>
+
+    <div class="wf"><div class="case"><span class="crown"></span><span class="sbtn"></span>
+      <div class="screen v7">
+        <svg class="chrome" viewBox="0 0 342 342">
+          <text><textPath path="M 26 171 A 145 145 0 0 1 316 171" startOffset="50%" text-anchor="middle">10:09</textPath></text>
+        </svg>
+        <div class="wbody tight" style="gap:8px;padding:0 46px">
+          <div class="tilehd"><span class="ico"></span>PRISMS · ADD</div>
+          <div class="qgrid">
+            <span class="q">Call the vet</span>
+            <span class="q">Walk</span>
+            <span class="q">Email triage</span>
+            <span class="q">Read</span>
+            <span class="q prim">Dictate…</span>
+          </div>
+        </div>
+        <div class="tiledots"><i></i><i class="on"></i><i></i></div>
+      </div></div><div class="cap">Add tile</div></div>
+  </div>
+  <div class="verdict">
+    <div class="good"><span class="k">Works because</span><p>The fastest path to both jobs on the whole platform — a swipe from the face, no app launch, no cold start.</p></div>
+    <div class="bad"><span class="k">Costs you</span><p>Tiles can't scroll or hold state, refresh on the system's schedule, and the user must add them by hand first.</p></div>
+  </div>
+</section>
+
+<!-- ══════════════════ 08 ══════════════════ -->
+<section class="vcard" id="v8">
+  <div class="vhead"><span class="vnum">08</span><h2>Edge-Hug Buttons</h2><span class="tagline">Material 3 Expressive</span></div>
+  <p class="vdesc">The newest Wear OS idiom: controls that press flat against the rim, letting the circular clip cut
+    their outer edge into an arc. It <b>reclaims the top and bottom of the display</b>, which every other layout
+    surrenders to the curve, and puts the add button exactly where the thumb already rests.</p>
+  <div class="frames">
+    <div class="wf"><div class="case"><span class="crown"></span><span class="sbtn"></span>
+      <div class="screen v8">
+        <svg class="chrome" viewBox="0 0 342 342">
+          <text><textPath path="M 26 171 A 145 145 0 0 1 316 171" startOffset="50%" text-anchor="middle">10:09</textPath></text>
+        </svg>
+        <div class="hug t">Today · 4 left</div>
+        <div class="wbody" style="gap:7px">
+          <div class="wchip now tn-amber"><span class="lead">09³⁰</span>
+            <span class="txt"><span class="ti">Draft API spec</span><span class="sub">Now · 51m left</span></span></div>
+          <div class="wchip tn-green"><span class="lead">11</span>
+            <span class="txt"><span class="ti">Gym</span><span class="sub">Health · 1h</span></span></div>
+          <div class="wchip tn-grey s88"><span class="lead">12³⁰</span>
+            <span class="txt"><span class="ti">Lunch with Sam</span></span></div>
+        </div>
+        <div class="hug b"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg> Add task</div>
+      </div></div><div class="cap">Itinerary</div></div>
+
+    <div class="wf"><div class="case"><span class="crown"></span><span class="sbtn"></span>
+      <div class="screen v8">
+        <svg class="chrome" viewBox="0 0 342 342">
+          <text class="tint"><textPath path="M 26 171 A 145 145 0 0 1 316 171" startOffset="50%" text-anchor="middle">New task</textPath></text>
+        </svg>
+        <div class="hug t">Cancel</div>
+        <div class="wbody" style="gap:10px">
+          <div class="wfield">Call the vet<span class="caret"></span></div>
+          <div class="mchips"><span class="mchip on">Work</span><span class="mchip on">30m</span><span class="mchip dash">13:30</span></div>
+        </div>
+        <div class="hug b"><svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg> Add</div>
+      </div></div><div class="cap">Add task</div></div>
+  </div>
+  <div class="verdict">
+    <div class="good"><span class="k">Works because</span><p>Recovers real estate nothing else uses, gives the primary action a huge target, and matches where Wear OS is heading.</p></div>
+    <div class="bad"><span class="k">Costs you</span><p>Two fixed bars leave a narrow middle — roughly three chips — and the top bar duplicates what TimeText already says.</p></div>
+  </div>
+</section>
+
+<!-- ══════════════════ 09 ══════════════════ -->
+<section class="vcard" id="v9">
+  <div class="vhead"><span class="vnum">09</span><h2>Progress Ring</h2><span class="tagline">A true circle, finally</span></div>
+  <p class="vdesc">A day-progress ring traced right around the rim. On a round watch this is simply a circle — no
+    corner-radius trickery — so it costs nothing and reads instantly. Inside, a compact list. On the add screen
+    the <b>same ring becomes the duration dial</b>, so the crown means one thing throughout.</p>
+  <div class="frames">
+    <div class="wf"><div class="case"><span class="crown"></span><span class="sbtn"></span>
+      <div class="screen v9">
+        <svg class="chrome" viewBox="0 0 342 342">
+          <circle class="ring-bg" cx="171" cy="171" r="163"/>
+          <circle class="ring-fg" cx="171" cy="171" r="163" transform="rotate(-90 171 171)"
+            stroke-dasharray="215 1024"/>
+          <text><textPath path="M 42 171 A 129 129 0 0 1 300 171" startOffset="50%" text-anchor="middle">10:09</textPath></text>
+        </svg>
+        <div class="wbody" style="gap:7px;padding:0 44px">
+          <div class="capline">21% OF THE DAY · 4 LEFT</div>
+          <div class="wchip now tn-amber" style="padding:8px 13px 8px 9px"><span class="lead" style="width:25px;height:25px">09³⁰</span>
+            <span class="txt"><span class="ti" style="font-size:15px">Draft API spec</span></span></div>
+          <div class="wchip tn-green" style="padding:8px 13px 8px 9px"><span class="lead" style="width:25px;height:25px">11</span>
+            <span class="txt"><span class="ti" style="font-size:15px">Gym</span></span></div>
+          <div class="wchip prim" style="padding:8px 13px 8px 9px"><span class="lead" style="width:25px;height:25px">
+            <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span>
+            <span class="txt"><span class="ti" style="font-size:15px">Add task</span></span></div>
+        </div>
+      </div></div><div class="cap">Itinerary</div></div>
+
+    <div class="wf"><div class="case"><span class="crown"></span><span class="sbtn"></span>
+      <div class="screen v9">
+        <svg class="chrome" viewBox="0 0 342 342">
+          <circle class="ring-bg" cx="171" cy="171" r="163"/>
+          <circle class="ring-fg p" cx="171" cy="171" r="163" transform="rotate(-90 171 171)"
+            stroke-dasharray="256 1024"/>
+          <text class="tint"><textPath path="M 42 171 A 129 129 0 0 1 300 171" startOffset="50%" text-anchor="middle">How long?</textPath></text>
+        </svg>
+        <div class="wbody" style="gap:4px;padding:0 60px">
+          <span style="font-size:48px;font-weight:750;letter-spacing:-1.8px;line-height:1;color:var(--m-primary)">30<span style="font-size:23px">m</span></span>
+          <span style="font-size:16px;font-weight:600;color:var(--m-on-var)">Call the vet</span>
+          <div class="mchips" style="margin-top:6px"><span class="mchip on">Work</span></div>
+          <div class="wbtn prim" style="width:auto;padding:0 32px;height:40px;margin-top:9px">Add</div>
+        </div>
+      </div></div><div class="cap">Add task</div></div>
+  </div>
+  <div class="verdict">
+    <div class="good"><span class="k">Works because</span><p>Ambient context for six pixels of rim, and the crown gesture is identical on both screens.</p></div>
+    <div class="bad"><span class="k">Costs you</span><p>The ring pushes content inward, so chips shrink to three short rows and long titles truncate.</p></div>
+  </div>
+</section>
+
+<!-- ══════════════════ 10 ══════════════════ -->
+<section class="vcard" id="v10">
+  <div class="vhead"><span class="vnum">10</span><h2>Inscribed Grid</h2><span class="tagline">Four at once</span></div>
+  <p class="vdesc">Gives up on lists and fills the largest square that fits inside the circle — 242 dp on a side —
+    with four tiles. <b>Four items visible with no scrolling</b>, which beats every chip layout here, and the
+    fourth cell doubles as the add button so the primary action is always on screen.</p>
+  <div class="frames">
+    <div class="wf"><div class="case"><span class="crown"></span><span class="sbtn"></span>
+      <div class="screen v10">
+        <svg class="chrome" viewBox="0 0 342 342">
+          <text><textPath path="M 26 171 A 145 145 0 0 1 316 171" startOffset="50%" text-anchor="middle">10:09</textPath></text>
+          <circle class="pi-track" cx="171" cy="171" r="163" stroke-dasharray="120 1024" stroke-dashoffset="60"/>
+          <circle class="pi-thumb" cx="171" cy="171" r="163" stroke-dasharray="70 1024" stroke-dashoffset="55"/>
+        </svg>
+        <div class="wbody" style="padding:0">
+          <div class="igrid">
+            <div class="itile now tn-amber"><div class="t">09:30</div><div class="n">Draft API spec</div></div>
+            <div class="itile tn-green"><div class="t">11:00</div><div class="n">Gym</div></div>
+            <div class="itile tn-grey"><div class="t">12:30</div><div class="n">Lunch with Sam</div></div>
+            <div class="itile prim"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg><span style="font-size:13px;font-weight:700">Add</span></div>
+          </div>
+        </div>
+      </div></div><div class="cap">Itinerary</div></div>
+
+    <div class="wf"><div class="case"><span class="crown"></span><span class="sbtn"></span>
+      <div class="screen v10">
+        <svg class="chrome" viewBox="0 0 342 342">
+          <text class="tint"><textPath path="M 26 171 A 145 145 0 0 1 316 171" startOffset="50%" text-anchor="middle">Which project?</textPath></text>
+        </svg>
+        <div class="wbody" style="padding:0;gap:9px">
+          <div class="wfield" style="width:220px;text-align:center;border-radius:22px">Call the vet<span class="caret"></span></div>
+          <div class="igrid" style="height:150px">
+            <div class="itile sel tn-blue" style="justify-content:center;align-items:center"><div class="n" style="color:var(--m-primary)">Work</div></div>
+            <div class="itile tn-green" style="justify-content:center;align-items:center"><div class="n">Health</div></div>
+            <div class="itile tn-purple" style="justify-content:center;align-items:center"><div class="n">Personal</div></div>
+            <div class="itile tn-grey" style="justify-content:center;align-items:center"><div class="n">Inbox</div></div>
+          </div>
+          <div class="wbtn prim" style="width:220px;height:40px">Add</div>
+        </div>
+      </div></div><div class="cap">Add task</div></div>
+  </div>
+  <div class="verdict">
+    <div class="good"><span class="k">Works because</span><p>Best density-per-tap-target ratio in the set, and it exploits a shape constraint instead of apologising for it.</p></div>
+    <div class="bad"><span class="k">Costs you</span><p>Wastes the four circular segments outside the square, and left-to-right-then-down time order gets misread.</p></div>
+  </div>
+</section>
+
+<!-- ══════════════════ 11 ══════════════════ -->
+<section class="vcard" id="v11">
+  <div class="vhead"><span class="vnum">11</span><h2>Concentric Rings</h2><span class="tagline">A lane per project</span></div>
+  <p class="vdesc">Four nested rings, one per project, each carrying that project's blocks as arcs on a 12-hour
+    dial. A single red hand crosses all four. It answers a question no list can: <b>which parts of your life are
+    actually getting time today</b> — an empty ring is as loud as a full one.</p>
+  <div class="frames">
+    <div class="wf"><div class="case"><span class="crown"></span><span class="sbtn"></span>
+      <div class="screen v11">
+        <svg class="chrome" viewBox="0 0 342 342">
+          <circle class="rtrack" cx="171" cy="171" r="150"/><circle class="rtrack" cx="171" cy="171" r="128"/>
+          <circle class="rtrack" cx="171" cy="171" r="106"/><circle class="rtrack" cx="171" cy="171" r="84"/>
+          <g transform="rotate(-90 171 171)" fill="none" stroke-width="13">
+            <!-- Work -->
+            <circle cx="171" cy="171" r="150" stroke="#4c8dff" opacity=".45" stroke-dasharray="39 943" stroke-dashoffset="-707"/>
+            <circle cx="171" cy="171" r="150" stroke="#4c8dff" stroke-dasharray="118 943" stroke-dashoffset="-746"/>
+            <circle cx="171" cy="171" r="150" stroke="#4c8dff" stroke-dasharray="79 943" stroke-dashoffset="-157"/>
+            <!-- Health -->
+            <circle cx="171" cy="171" r="128" stroke="#30d158" stroke-dasharray="67 805" stroke-dashoffset="-737"/>
+            <!-- Personal -->
+            <circle cx="171" cy="171" r="106" stroke="#bf5af2" stroke-dasharray="56 666" stroke-dashoffset="-222"/>
+            <!-- Inbox -->
+            <circle cx="171" cy="171" r="84" stroke="#98989f" stroke-dasharray="44 528" stroke-dashoffset="-22"/>
+          </g>
+          <g transform="rotate(304.5 171 171)">
+            <path class="handbg" d="M171 95V13"/><path class="hand" d="M171 95V13"/>
+          </g>
+          <text><textPath path="M 60 171 A 111 111 0 0 1 282 171" startOffset="50%" text-anchor="middle">10:09</textPath></text>
+        </svg>
+        <div class="ctr">
+          <span class="n">Draft API spec</span>
+          <span class="s">Work · 51m left</span>
+        </div>
+        <div class="key">
+          <span class="tn-blue"><i></i>WORK</span><span class="tn-green"><i></i>HEALTH</span>
+          <span class="tn-purple"><i></i>PERS</span><span class="tn-grey"><i></i>INBOX</span>
+        </div>
+      </div></div><div class="cap">Itinerary</div></div>
+
+    <div class="wf"><div class="case"><span class="crown"></span><span class="sbtn"></span>
+      <div class="screen v11">
+        <svg class="chrome" viewBox="0 0 342 342">
+          <circle class="rtrack" cx="171" cy="171" r="150"/><circle class="rtrack" cx="171" cy="171" r="128"/>
+          <circle class="rtrack" cx="171" cy="171" r="106"/><circle class="rtrack" cx="171" cy="171" r="84"/>
+          <circle cx="171" cy="171" r="150" fill="none" stroke="#a8c7fa" stroke-width="15" opacity=".95"
+            stroke-dasharray="943" stroke-dashoffset="0"/>
+          <g transform="rotate(-90 171 171)" fill="none" stroke-width="13" opacity=".3">
+            <circle cx="171" cy="171" r="128" stroke="#30d158" stroke-dasharray="67 805" stroke-dashoffset="-737"/>
+            <circle cx="171" cy="171" r="106" stroke="#bf5af2" stroke-dasharray="56 666" stroke-dashoffset="-222"/>
+            <circle cx="171" cy="171" r="84" stroke="#98989f" stroke-dasharray="44 528" stroke-dashoffset="-22"/>
+          </g>
+          <text class="tint"><textPath path="M 60 171 A 111 111 0 0 1 282 171" startOffset="50%" text-anchor="middle">Which ring?</textPath></text>
+        </svg>
+        <div class="ctr" style="gap:4px">
+          <span class="n" style="font-size:19px;color:var(--m-primary)">Work</span>
+          <span class="s" style="font-size:13px;color:var(--m-on-var)">Call the vet · 30m</span>
+          <div class="wbtn prim" style="width:auto;padding:0 26px;height:36px;margin-top:8px">Add</div>
+        </div>
+        <div class="key">
+          <span class="tn-blue"><i></i>WORK</span><span class="tn-green"><i></i>HEALTH</span>
+          <span class="tn-purple"><i></i>PERS</span><span class="tn-grey"><i></i>INBOX</span>
+        </div>
+      </div></div><div class="cap">Add task</div></div>
+  </div>
+  <div class="verdict">
+    <div class="good"><span class="k">Works because</span><p>Shows balance across projects, which no other direction here attempts, and scales to a busy day without scrolling.</p></div>
+    <div class="bad"><span class="k">Costs you</span><p>Four rings is close to the legibility limit, arcs carry no titles, and a fifth project has nowhere to go.</p></div>
+  </div>
+</section>
+
+<!-- ══════════════════ 12 ══════════════════ -->
+<section class="vcard" id="v12">
+  <div class="vhead"><span class="vnum">12</span><h2>Segmented Arc</h2><span class="tagline">Navigation on the rim</span></div>
+  <p class="vdesc">Morning, afternoon and evening as three tappable arcs across the top, with the selected part of
+    the day listed below. <b>The navigation lives in the curve</b> and the flat middle is left entirely to
+    content — the round-screen equivalent of a tab bar that costs no vertical space.</p>
+  <div class="frames">
+    <div class="wf"><div class="case"><span class="crown"></span><span class="sbtn"></span>
+      <div class="screen v12">
+        <svg class="chrome" viewBox="0 0 342 342">
+          <g transform="rotate(-162 171 171)">
+            <circle class="seg" cx="171" cy="171" r="155" stroke-dasharray="119 974" stroke-dashoffset="0"/>
+            <circle class="seg on" cx="171" cy="171" r="155" stroke-dasharray="119 974" stroke-dashoffset="-135"/>
+            <circle class="seg" cx="171" cy="171" r="155" stroke-dasharray="119 974" stroke-dashoffset="-270"/>
+          </g>
+          <text><textPath path="M 47 171 A 124 124 0 0 1 295 171" startOffset="50%" text-anchor="middle">10:09</textPath></text>
+        </svg>
+        <div class="wbody" style="gap:2px;padding:0 46px">
+          <div class="segtitle" style="margin-bottom:5px">AFTERNOON · 3</div>
+          <div class="srow tn-green"><span class="t">11:00</span><span class="n">Gym</span></div>
+          <div class="srow tn-grey"><span class="t">12:30</span><span class="n">Lunch with Sam</span></div>
+          <div class="srow tn-blue"><span class="t">14:00</span><span class="n">Review PRs</span></div>
+          <div class="wbtn prim" style="height:36px;margin-top:9px;font-size:14.5px">Add here</div>
+        </div>
+      </div></div><div class="cap">Itinerary</div></div>
+
+    <div class="wf"><div class="case"><span class="crown"></span><span class="sbtn"></span>
+      <div class="screen v12">
+        <svg class="chrome" viewBox="0 0 342 342">
+          <g transform="rotate(-162 171 171)">
+            <circle class="seg" cx="171" cy="171" r="155" stroke-dasharray="119 974" stroke-dashoffset="0"/>
+            <circle class="seg on" cx="171" cy="171" r="155" stroke-dasharray="119 974" stroke-dashoffset="-135"/>
+            <circle class="seg" cx="171" cy="171" r="155" stroke-dasharray="119 974" stroke-dashoffset="-270"/>
+          </g>
+          <text class="tint"><textPath path="M 47 171 A 124 124 0 0 1 295 171" startOffset="50%" text-anchor="middle">Add to afternoon</textPath></text>
+        </svg>
+        <div class="wbody" style="gap:9px;padding:0 46px">
+          <div class="wfield" style="border-radius:18px">Call the vet<span class="caret"></span></div>
+          <div class="mchips"><span class="mchip on">Work</span><span class="mchip on">30m</span></div>
+          <div class="whint">Slots free 13:00 – 14:00</div>
+          <div class="wbtn prim" style="height:38px">Add</div>
+        </div>
+      </div></div><div class="cap">Add task</div></div>
+  </div>
+  <div class="verdict">
+    <div class="good"><span class="k">Works because</span><p>Filtering costs zero vertical space, and "afternoon" is a far easier commitment than picking 14:15.</p></div>
+    <div class="bad"><span class="k">Costs you</span><p>Arc segments are awkward tap targets on a curved edge, and unlabelled arcs need a first-run explanation.</p></div>
+  </div>
+</section>
+
+<!-- ══════════════════ 13 ══════════════════ -->
+<section class="vcard" id="v13">
+  <div class="vhead"><span class="vnum">13</span><h2>Big Clock</h2><span class="tagline">Watch first, app second</span></div>
+  <p class="vdesc">Leads with the time at watch-face scale and treats the itinerary as the subtitle. It suits the
+    way a watch is actually used — you look down to check the time, and the answer to <b>"what am I meant to be
+    doing?" arrives in the same glance</b>, without having asked for it.</p>
+  <div class="frames">
+    <div class="wf"><div class="case"><span class="crown"></span><span class="sbtn"></span>
+      <div class="screen v13">
+        <div class="wbody" style="gap:9px;padding:0 46px">
+          <div class="clock">10<b>:09</b></div>
+          <div class="hr"></div>
+          <div class="lbl">NOW · UNTIL 11:00</div>
+          <div class="task">Draft API spec</div>
+          <div class="meta">Then 11:00 Gym</div>
+        </div>
+        <div class="hug" style="position:absolute;bottom:0;left:0;right:0;padding:11px 0 40px;text-align:center;
+          border-radius:34px 34px 0 0;background:var(--m-surf-c);font-size:14px;font-weight:650;z-index:5">+ Add task</div>
+      </div></div><div class="cap">Itinerary</div></div>
+
+    <div class="wf"><div class="case"><span class="crown"></span><span class="sbtn"></span>
+      <div class="screen v13">
+        <div class="wbody" style="gap:9px;padding:0 46px">
+          <div class="clock" style="font-size:44px;color:var(--m-primary)">13<b>:30</b></div>
+          <div class="hr"></div>
+          <div class="task">Call the vet<span class="caret" style="height:19px"></span></div>
+          <div class="meta">30 min · Work</div>
+          <div class="wbtn prim" style="width:auto;padding:0 32px;height:40px;margin-top:6px">Add</div>
+        </div>
+      </div></div><div class="cap">Add task</div></div>
+  </div>
+  <div class="verdict">
+    <div class="good"><span class="k">Works because</span><p>Fits the actual glance behaviour, and the huge numerals are readable in any light or motion.</p></div>
+    <div class="bad"><span class="k">Costs you</span><p>Spends over a third of the screen on a clock the system already draws in TimeText, leaving room for one item.</p></div>
+  </div>
+</section>
+
+<!-- ══════════════════ 14 ══════════════════ -->
+<section class="vcard" id="v14">
+  <div class="vhead"><span class="vnum">14</span><h2>Assistant</h2><span class="tagline">Speak it, don't type it</span></div>
+  <p class="vdesc">Leans on the thing Wear OS has that no other watch does — a first-class system assistant. The
+    itinerary stays a quiet four-line list and the add flow is a sentence: "call the vet at half one for thirty".
+    The parse comes back <b>as editable chips, not as a silent guess</b>, so a mis-hear costs one tap.</p>
+  <div class="frames">
+    <div class="wf"><div class="case"><span class="crown"></span><span class="sbtn"></span>
+      <div class="screen v14">
+        <svg class="chrome" viewBox="0 0 342 342">
+          <text><textPath path="M 26 171 A 145 145 0 0 1 316 171" startOffset="50%" text-anchor="middle">10:09</textPath></text>
+        </svg>
+        <div class="wbody" style="gap:2px;padding:0 46px">
+          <div class="mini live tn-amber"><span class="t">09:30</span><span class="wdot"></span><span class="n">Draft API spec</span></div>
+          <div class="mini tn-green"><span class="t">11:00</span><span class="wdot"></span><span class="n">Gym</span></div>
+          <div class="mini tn-grey"><span class="t">12:30</span><span class="wdot"></span><span class="n">Lunch with Sam</span></div>
+          <div class="mini tn-blue"><span class="t">14:00</span><span class="wdot"></span><span class="n">Review PRs</span></div>
+          <div class="gbar" style="margin-top:9px"><i style="background:#4285f4"></i><i style="background:#ea4335"></i>
+            <i style="background:#fbbc04"></i><i style="background:#34a853"></i> Add a task</div>
+        </div>
+      </div></div><div class="cap">Itinerary</div></div>
+
+    <div class="wf"><div class="case"><span class="crown"></span><span class="sbtn"></span>
+      <div class="screen v14">
+        <div class="wbody" style="gap:13px;padding:0 44px">
+          <div class="gdots"><i></i><i></i><i></i><i></i></div>
+          <div class="heard">“Call the vet at <em>half one</em> for <em>thirty</em>”</div>
+          <div class="mchips"><span class="mchip on">13:30</span><span class="mchip on">30m</span><span class="mchip dash">Project?</span></div>
+          <div class="wbtn prim" style="width:auto;padding:0 34px;height:40px">Add</div>
+        </div>
+      </div></div><div class="cap">Add task</div></div>
+  </div>
+  <div class="verdict">
+    <div class="good"><span class="k">Works because</span><p>Capture in about three seconds, and showing the parse as chips fixes the trust problem voice input usually has.</p></div>
+    <div class="bad"><span class="k">Costs you</span><p>Unusable in a meeting or on a loud street, and it demotes the itinerary to four cramped lines.</p></div>
+  </div>
+</section>
+
+<!-- ══════════════════ 15 ══════════════════ -->
+<section class="vcard" id="v15">
+  <div class="vhead"><span class="vnum">15</span><h2>Quick Chips</h2><span class="tagline">No keyboard, ever</span></div>
+  <p class="vdesc">Accepts that nobody composes text on a watch. Add opens a cloud of the tasks you actually repeat,
+    and <b>rows of different widths give the block a circular silhouette</b> — the one layout shape a round screen
+    never has to fight. One tap creates. Typing survives as a bordered chip at the bottom.</p>
+  <div class="frames">
+    <div class="wf"><div class="case"><span class="crown"></span><span class="sbtn"></span>
+      <div class="screen v15">
+        <svg class="chrome" viewBox="0 0 342 342">
+          <text><textPath path="M 26 171 A 145 145 0 0 1 316 171" startOffset="50%" text-anchor="middle">10:09</textPath></text>
+        </svg>
+        <div class="wbody" style="gap:7px;padding:0 32px">
+          <div class="wchip now tn-amber"><span class="lead">09³⁰</span>
+            <span class="txt"><span class="ti">Draft API spec</span><span class="sub">Now · 51m left</span></span></div>
+          <div class="wchip tn-green"><span class="lead">11</span>
+            <span class="txt"><span class="ti">Gym</span><span class="sub">Health · 1h</span></span></div>
+          <div class="wchip tn-grey s88"><span class="lead">12³⁰</span><span class="txt"><span class="ti">Lunch with Sam</span></span></div>
+          <div class="wbtn prim" style="height:40px;margin-top:3px">Quick add</div>
+        </div>
+      </div></div><div class="cap">Itinerary</div></div>
+
+    <div class="wf"><div class="case"><span class="crown"></span><span class="sbtn"></span>
+      <div class="screen v15">
+        <svg class="chrome" viewBox="0 0 342 342">
+          <text class="tint"><textPath path="M 26 171 A 145 145 0 0 1 316 171" startOffset="50%" text-anchor="middle">Quick add</textPath></text>
+        </svg>
+        <div class="wbody" style="padding:0 20px">
+          <div class="cloud">
+            <div class="crow"><span class="qc tone tn-purple">Call the vet</span></div>
+            <div class="crow"><span class="qc">Walk</span><span class="qc">Email triage</span></div>
+            <div class="crow"><span class="qc">Groceries</span><span class="qc">Read</span></div>
+            <div class="crow"><span class="qc">Standup notes</span><span class="qc">Stretch</span></div>
+            <div class="crow"><span class="qc out">Type…</span><span class="qc prim">Dictate</span></div>
+          </div>
+        </div>
+      </div></div><div class="cap">Add task</div></div>
+  </div>
+  <div class="verdict">
+    <div class="good"><span class="k">Works because</span><p>One tap, no keyboard, no dictation — and the silhouette fits the circle without a single wasted pixel.</p></div>
+    <div class="bad"><span class="k">Costs you</span><p>Lives or dies on prediction quality. A new user sees a cloud of things they never asked for.</p></div>
+  </div>
+</section>
+
+<!-- ══════════════════ 16 ══════════════════ -->
+<section class="vcard" id="v16">
+  <div class="vhead"><span class="vnum">16</span><h2>Swipe Cards</h2><span class="tagline">Wear's own gesture</span></div>
+  <p class="vdesc">The day as a deck, cleared with the horizontal swipe Wear OS users already make a hundred times
+    a day. Dragging the top card right uncovers a green check and completing it snaps the next one forward.
+    <b>The primary verb is a gesture, not a button</b>, which is the only way to hit a comfortable target on a
+    342 dp circle.</p>
+  <div class="frames">
+    <div class="wf"><div class="case"><span class="crown"></span><span class="sbtn"></span>
+      <div class="screen v16">
+        <svg class="chrome" viewBox="0 0 342 342">
+          <text><textPath path="M 26 171 A 145 145 0 0 1 316 171" startOffset="50%" text-anchor="middle">10:09</textPath></text>
+        </svg>
+        <div class="deck">
+          <div class="card behind tn-green"><div class="t">11:00</div><div class="n">Gym</div></div>
+          <div class="dzone"><svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg></div>
+          <div class="card front tn-amber">
+            <div class="t">09:30 – 11:00 · NOW</div>
+            <div class="n">Draft API spec</div>
+            <div class="mchips" style="justify-content:flex-start;margin-top:6px">
+              <span class="mchip">Work</span><span class="mchip">51m left</span></div>
+          </div>
+        </div>
+        <div class="swipehint">SWIPE TO COMPLETE · 4 LEFT</div>
+      </div></div><div class="cap">Itinerary</div></div>
+
+    <div class="wf"><div class="case"><span class="crown"></span><span class="sbtn"></span>
+      <div class="screen v16">
+        <svg class="chrome" viewBox="0 0 342 342">
+          <text class="tint"><textPath path="M 26 171 A 145 145 0 0 1 316 171" startOffset="50%" text-anchor="middle">New task</textPath></text>
+        </svg>
+        <div class="deck">
+          <div class="card behind tn-amber"><div class="t">09:30</div><div class="n">Draft API spec</div></div>
+          <div class="card tn-blue" style="background:var(--m-prim-c);z-index:3">
+            <div class="t" style="color:var(--m-on-prim-c)">NEW · 13:30</div>
+            <div class="n" style="color:var(--m-on-prim-c)">Call the vet<span class="caret" style="background:var(--m-on-prim-c)"></span></div>
+            <div class="mchips" style="justify-content:flex-start;margin-top:8px">
+              <span class="mchip" style="background:rgba(0,0,0,.3);color:#d3e3fd">Work</span>
+              <span class="mchip" style="background:rgba(0,0,0,.3);color:#d3e3fd">30m</span></div>
+            <div class="wbtn ok" style="height:36px;margin-top:10px;font-size:15px">Add to deck</div>
+          </div>
+        </div>
+      </div></div><div class="cap">Add task</div></div>
+  </div>
+  <div class="verdict">
+    <div class="good"><span class="k">Works because</span><p>The completion gesture is huge, forgiving and already learned. Very satisfying to clear a day with.</p></div>
+    <div class="bad"><span class="k">Costs you</span><p>It collides with the system's own edge-swipe-to-go-back, and a deck implies an order the day may not have.</p></div>
+  </div>
+</section>
+
+<!-- ══════════════════ 17 ══════════════════ -->
+<section class="vcard" id="v17">
+  <div class="vhead"><span class="vnum">17</span><h2>Radar</h2><span class="tagline">Distance is time</span></div>
+  <p class="vdesc">Now sits at the centre; everything else is a blip whose <b>distance from the middle is how soon
+    it arrives</b>. Rings mark one, three and six hours out. It reads the pressure of a day rather than its
+    contents — a cluster near the centre means a tight afternoon, at a glance and with no scrolling.</p>
+  <div class="frames">
+    <div class="wf"><div class="case"><span class="crown"></span><span class="sbtn"></span>
+      <div class="screen v17">
+        <svg class="chrome" viewBox="0 0 342 342">
+          <circle class="rc" cx="171" cy="171" r="52"/><circle class="rc" cx="171" cy="171" r="96"/>
+          <circle class="rc" cx="171" cy="171" r="140"/>
+          <text><textPath path="M 26 171 A 145 145 0 0 1 316 171" startOffset="50%" text-anchor="middle">10:09</textPath></text>
+        </svg>
+        <div class="blip tn-green" style="left:62%;top:40%"><span class="b"></span><span class="l">Gym · 51m</span></div>
+        <div class="blip tn-grey" style="left:71%;top:63%"><span class="b"></span><span class="l">Lunch · 2h</span></div>
+        <div class="blip tn-blue" style="left:27%;top:68%"><span class="b"></span><span class="l">PRs · 4h</span></div>
+        <div class="blip tn-purple" style="left:23%;top:32%"><span class="b"></span><span class="l">Guitar · 6h</span></div>
+        <div class="core">
+          <span class="k">NOW</span><span class="n">Draft API spec</span><span class="s">51m left</span>
+        </div>
+      </div></div><div class="cap">Itinerary</div></div>
+
+    <div class="wf"><div class="case"><span class="crown"></span><span class="sbtn"></span>
+      <div class="screen v17">
+        <svg class="chrome" viewBox="0 0 342 342">
+          <circle class="rc" cx="171" cy="171" r="52"/><circle class="rc" cx="171" cy="171" r="96"/>
+          <circle class="rc" cx="171" cy="171" r="140"/>
+          <circle cx="171" cy="171" r="96" fill="none" stroke="#a8c7fa" stroke-width="2" stroke-dasharray="5 6" opacity=".8"/>
+          <text class="tint"><textPath path="M 26 171 A 145 145 0 0 1 316 171" startOffset="50%" text-anchor="middle">How far out?</textPath></text>
+        </svg>
+        <div class="blip tn-grey" style="left:71%;top:63%;opacity:.4"><span class="b"></span></div>
+        <div class="blip tn-purple" style="left:23%;top:32%;opacity:.4"><span class="b"></span></div>
+        <div class="blip" style="left:50%;top:22%;--tone:var(--m-primary)"><span class="b" style="width:19px;height:19px"></span><span class="l" style="color:var(--m-primary)">+3h · 13:30</span></div>
+        <div class="core" style="gap:4px">
+          <span class="n" style="font-size:17px">Call the vet</span>
+          <span class="s">30m · Work</span>
+          <div class="wbtn prim" style="width:auto;padding:0 26px;height:36px;margin-top:7px">Add</div>
+        </div>
+      </div></div><div class="cap">Add task</div></div>
+  </div>
+  <div class="verdict">
+    <div class="good"><span class="k">Works because</span><p>Encodes urgency spatially, so a crowded next hour is visible before you read a single word.</p></div>
+    <div class="bad"><span class="k">Costs you</span><p>Angle carries no meaning, so it looks like data that isn't there. Labels collide as soon as two things are close together.</p></div>
+  </div>
+</section>
+
+<!-- ══════════════════ 18 ══════════════════ -->
+<section class="vcard" id="v18">
+  <div class="vhead"><span class="vnum">18</span><h2>Chord Split</h2><span class="tagline">Cut the circle</span></div>
+  <p class="vdesc">One horizontal chord across the lower third: everything above is the day, everything below is
+    what you can do about it. It's the simplest possible answer to a round screen — <b>pick where to cut and stop
+    arguing with the curve</b> — and it keeps the two jobs permanently visible without either one moving.</p>
+  <div class="frames">
+    <div class="wf"><div class="case"><span class="crown"></span><span class="sbtn"></span>
+      <div class="screen v18">
+        <svg class="chrome" viewBox="0 0 342 342">
+          <text><textPath path="M 26 171 A 145 145 0 0 1 316 171" startOffset="50%" text-anchor="middle">10:09</textPath></text>
+        </svg>
+        <div class="top">
+          <div class="lrow done tn-blue"><span class="t">09:00</span><span class="wdot"></span><span class="n">Standup</span></div>
+          <div class="lrow live tn-amber"><span class="t">09:30</span><span class="wdot"></span><span class="n">Draft API spec</span></div>
+          <div class="lrow tn-green"><span class="t">11:00</span><span class="wdot"></span><span class="n">Gym</span></div>
+          <div class="lrow tn-grey"><span class="t">12:30</span><span class="wdot"></span><span class="n">Lunch with Sam</span></div>
+        </div>
+        <div class="chord"></div>
+        <div class="bot">
+          <div class="wbtn" style="flex:1">All 6</div>
+          <div class="fabr"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></div>
+        </div>
+      </div></div><div class="cap">Itinerary</div></div>
+
+    <div class="wf"><div class="case"><span class="crown"></span><span class="sbtn"></span>
+      <div class="screen v18">
+        <svg class="chrome" viewBox="0 0 342 342">
+          <text class="tint"><textPath path="M 26 171 A 145 145 0 0 1 316 171" startOffset="50%" text-anchor="middle">New task</textPath></text>
+        </svg>
+        <div class="top" style="gap:9px">
+          <div class="wfield" style="border-radius:18px">Call the vet<span class="caret"></span></div>
+          <div class="mchips"><span class="mchip on">Work</span><span class="mchip on">30m</span><span class="mchip dash">13:30</span></div>
+        </div>
+        <div class="chord"></div>
+        <div class="bot">
+          <div class="wbtn" style="flex:1">Cancel</div>
+          <div class="wbtn prim" style="flex:1">Add</div>
+        </div>
+      </div></div><div class="cap">Add task</div></div>
+  </div>
+  <div class="verdict">
+    <div class="good"><span class="k">Works because</span><p>Dead simple, fully predictable, and both jobs stay on screen at once with no gesture to discover.</p></div>
+    <div class="bad"><span class="k">Costs you</span><p>The action bar permanently costs a third of the display, leaving four short rows for the day itself.</p></div>
+  </div>
+</section>
+
+<!-- ══════════════════ 19 ══════════════════ -->
+<section class="vcard" id="v19">
+  <div class="vhead"><span class="vnum">19</span><h2>Confirmation</h2><span class="tagline">Say it landed</span></div>
+  <p class="vdesc">Built around Wear OS's confirmation overlay: after adding, the screen is taken over by an
+    animated check for about a second, then it drops you back where you were. On a device you are <b>already
+    looking away from</b>, that full-screen beat is the only feedback strong enough to be trusted.</p>
+  <div class="frames">
+    <div class="wf"><div class="case"><span class="crown"></span><span class="sbtn"></span>
+      <div class="screen v19">
+        <svg class="chrome" viewBox="0 0 342 342">
+          <text><textPath path="M 26 171 A 145 145 0 0 1 316 171" startOffset="50%" text-anchor="middle">10:09</textPath></text>
+        </svg>
+        <div class="wbody" style="gap:7px;padding:0 32px">
+          <div class="wchip now tn-amber"><span class="lead">09³⁰</span>
+            <span class="txt"><span class="ti">Draft API spec</span><span class="sub">Now · 51m left</span></span></div>
+          <div class="wchip tn-green"><span class="lead">11</span>
+            <span class="txt"><span class="ti">Gym</span><span class="sub">Health · 1h</span></span></div>
+          <div class="wchip tn-blue s88"><span class="lead">13³⁰</span>
+            <span class="txt"><span class="ti">Call the vet</span><span class="sub">Just added</span></span></div>
+          <div class="wchip prim s78"><span class="lead"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span>
+            <span class="txt"><span class="ti">Add task</span></span></div>
+        </div>
+        <div class="vig-b"></div>
+      </div></div><div class="cap">Itinerary, after</div></div>
+
+    <div class="wf"><div class="case"><span class="crown"></span><span class="sbtn"></span>
+      <div class="screen v19">
+        <div class="wbody" style="gap:9px;opacity:.25">
+          <div class="wfield">Call the vet</div>
+          <div class="mchips"><span class="mchip on">Work</span><span class="mchip on">30m</span></div>
+          <div class="wbtn prim">Add</div>
+        </div>
+        <div class="conf">
+          <div class="ck"><svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg></div>
+          <div class="m">Task added</div>
+          <div class="s">13:30 · Work</div>
+        </div>
+      </div></div><div class="cap">Add task → confirmed</div></div>
+  </div>
+  <div class="verdict">
+    <div class="good"><span class="k">Works because</span><p>Unambiguous, glanceable and haptic-paired — you can lower your wrist the moment you feel it.</p></div>
+    <div class="bad"><span class="k">Costs you</span><p>A second of forced blocking on every add. Delightful once, tedious by the tenth task of the day.</p></div>
+  </div>
+</section>
+
+<!-- ══════════════════ 20 ══════════════════ -->
+<section class="vcard" id="v20">
+  <div class="vhead"><span class="vnum">20</span><h2>Always-On</h2><span class="tagline">The state you're in 95% of the time</span></div>
+  <p class="vdesc">Designs for ambient mode first. Wear OS's always-on display allows only a small fraction of lit
+    pixels and refreshes once a minute, so this is outline dots, dimmed type and no fills — but it means
+    <b>your next three items are on your wrist without ever raising it</b>. Full colour returns on the tap.</p>
+  <div class="frames">
+    <div class="wf"><div class="case"><span class="crown"></span><span class="sbtn"></span>
+      <div class="screen v20">
+        <div class="wbody" style="gap:2px;padding:0 48px">
+          <div class="aodclock" style="margin-bottom:9px">10:09</div>
+          <div class="aodrow live"><span class="t">09:30</span><span class="o"></span><span class="n">Draft API spec</span></div>
+          <div class="aodrow"><span class="t">11:00</span><span class="o"></span><span class="n">Gym</span></div>
+          <div class="aodrow"><span class="t">12:30</span><span class="o"></span><span class="n">Lunch with Sam</span></div>
+        </div>
+        <div class="aodnote">AMBIENT · 1 MIN REFRESH</div>
+      </div></div><div class="cap">Itinerary (ambient)</div></div>
+
+    <div class="wf"><div class="case"><span class="crown"></span><span class="sbtn"></span>
+      <div class="screen v20">
+        <svg class="chrome" viewBox="0 0 342 342">
+          <text class="tint"><textPath path="M 26 171 A 145 145 0 0 1 316 171" startOffset="50%" text-anchor="middle">New task</textPath></text>
+        </svg>
+        <div class="wbody" style="gap:10px">
+          <div class="wfield">Call the vet<span class="caret"></span></div>
+          <div class="mchips"><span class="mchip on">Work</span><span class="mchip on">30m</span><span class="mchip dash">13:30</span></div>
+          <div class="wbtn prim">Add</div>
+          <div class="whint">Wrist down returns to ambient</div>
+        </div>
+      </div></div><div class="cap">Add task (interactive)</div></div>
+  </div>
+  <div class="verdict">
+    <div class="good"><span class="k">Works because</span><p>Turns the app into a passive display you never have to open — the highest-value state on any watch.</p></div>
+    <div class="bad"><span class="k">Costs you</span><p>Two designs to build and keep in sync, hard pixel budgets, and burn-in rules that forbid the brand colour.</p></div>
+  </div>
+</section>
+
+<!-- ══════════════════ 21 ══════════════════ -->
+<section class="vcard" id="v21">
+  <div class="vhead"><span class="vnum">21</span><h2>Wedges</h2><span class="tagline">Where the day went</span></div>
+  <p class="vdesc">The circle cut into sectors sized by how much of today each project actually gets. It answers a
+    different question from every list here — not <em>what is next</em> but <b>what is this day for</b> — and a
+    sector is the largest, most forgiving tap target a round screen can offer.</p>
+  <div class="frames">
+    <div class="wf"><div class="case"><span class="crown"></span><span class="sbtn"></span>
+      <div class="screen v21">
+        <div class="pie"></div>
+        <span class="wlab" style="left:281px;top:171px">WORK 3h</span>
+        <span class="wlab" style="left:116px;top:266px">HEALTH 1h</span>
+        <span class="wlab" style="left:61px;top:171px">PERS 1h</span>
+        <span class="wlab" style="left:116px;top:76px">INBOX 1h</span>
+        <div class="hole">
+          <span class="n">Draft API spec</span>
+          <span class="s">Work · 51m left</span>
+        </div>
+        <svg class="chrome" viewBox="0 0 342 342">
+          <text style="fill:#08090b"><textPath path="M 26 171 A 145 145 0 0 1 316 171" startOffset="50%" text-anchor="middle">10:09</textPath></text>
+        </svg>
+      </div></div><div class="cap">Itinerary</div></div>
+
+    <div class="wf"><div class="case"><span class="crown"></span><span class="sbtn"></span>
+      <div class="screen v21">
+        <div class="pie pick"></div>
+        <span class="wlab" style="left:281px;top:171px">WORK</span>
+        <span class="wlab mute" style="left:116px;top:266px">HEALTH</span>
+        <span class="wlab mute" style="left:61px;top:171px">PERS</span>
+        <span class="wlab mute" style="left:116px;top:76px">INBOX</span>
+        <div class="hole" style="gap:4px">
+          <span class="n" style="font-size:16px">Call the vet</span>
+          <span class="s">30m · 13:30</span>
+          <div class="wbtn prim" style="width:auto;padding:0 20px;height:32px;font-size:14px;margin-top:5px">Add</div>
+        </div>
+        <svg class="chrome" viewBox="0 0 342 342">
+          <text class="tint"><textPath path="M 26 171 A 145 145 0 0 1 316 171" startOffset="50%" text-anchor="middle">Tap a wedge</textPath></text>
+        </svg>
+      </div></div><div class="cap">Add task</div></div>
+  </div>
+  <div class="verdict">
+    <div class="good"><span class="k">Works because</span><p>Enormous tap targets, and it surfaces project balance — the thing a list of six rows can never show.</p></div>
+    <div class="bad"><span class="k">Costs you</span><p>Says nothing about order or time of day. You cannot answer "what's next?" from this screen at all.</p></div>
+  </div>
+</section>
+
+<!-- ══════════════════ 22 ══════════════════ -->
+<section class="vcard" id="v22">
+  <div class="vhead"><span class="vnum">22</span><h2>Coil</h2><span class="tagline">Fixes what 04 breaks</span></div>
+  <p class="vdesc">A spiral running 07:00 to 19:00 over three turns. It is a direct answer to the Radial Dial's
+    flaw: <b>a twelve-hour circle collides morning with evening, a coil never overlaps itself</b>. Twelve hours of
+    schedule with no scrolling, no ambiguity and no second dial.</p>
+  <div class="frames">
+    <div class="wf"><div class="case"><span class="crown"></span><span class="sbtn"></span>
+      <div class="screen v22">
+        <svg class="chrome" viewBox="0 0 342 342">
+          <!-- pathLength=720 makes one dash unit exactly one minute from 07:00 -->
+          <path class="coil" pathLength="720" d="M 21 171 A 145 145 0 0 1 311 171 A 135 135 0 0 1 41 171
+            A 125 125 0 0 1 291 171 A 115 115 0 0 1 61 171 A 105 105 0 0 1 271 171 A 95 95 0 0 1 81 171"/>
+          <g>
+            <path class="seg" stroke="#4c8dff" opacity=".45" pathLength="720" stroke-dasharray="30 720" stroke-dashoffset="-120"
+              d="M 21 171 A 145 145 0 0 1 311 171 A 135 135 0 0 1 41 171 A 125 125 0 0 1 291 171 A 115 115 0 0 1 61 171 A 105 105 0 0 1 271 171 A 95 95 0 0 1 81 171"/>
+            <path class="seg" stroke="#ff9f0a" pathLength="720" stroke-dasharray="90 720" stroke-dashoffset="-150"
+              d="M 21 171 A 145 145 0 0 1 311 171 A 135 135 0 0 1 41 171 A 125 125 0 0 1 291 171 A 115 115 0 0 1 61 171 A 105 105 0 0 1 271 171 A 95 95 0 0 1 81 171"/>
+            <path class="seg" stroke="#30d158" pathLength="720" stroke-dasharray="60 720" stroke-dashoffset="-240"
+              d="M 21 171 A 145 145 0 0 1 311 171 A 135 135 0 0 1 41 171 A 125 125 0 0 1 291 171 A 115 115 0 0 1 61 171 A 105 105 0 0 1 271 171 A 95 95 0 0 1 81 171"/>
+            <path class="seg" stroke="#98989f" pathLength="720" stroke-dasharray="60 720" stroke-dashoffset="-330"
+              d="M 21 171 A 145 145 0 0 1 311 171 A 135 135 0 0 1 41 171 A 125 125 0 0 1 291 171 A 115 115 0 0 1 61 171 A 105 105 0 0 1 271 171 A 95 95 0 0 1 81 171"/>
+            <path class="seg" stroke="#4c8dff" pathLength="720" stroke-dasharray="60 720" stroke-dashoffset="-420"
+              d="M 21 171 A 145 145 0 0 1 311 171 A 135 135 0 0 1 41 171 A 125 125 0 0 1 291 171 A 115 115 0 0 1 61 171 A 105 105 0 0 1 271 171 A 95 95 0 0 1 81 171"/>
+            <path class="seg" stroke="#bf5af2" pathLength="720" stroke-dasharray="60 720" stroke-dashoffset="-540"
+              d="M 21 171 A 145 145 0 0 1 311 171 A 135 135 0 0 1 41 171 A 125 125 0 0 1 291 171 A 115 115 0 0 1 61 171 A 105 105 0 0 1 271 171 A 95 95 0 0 1 81 171"/>
+            <path class="nowmark" pathLength="720" stroke-dasharray="4 720" stroke-dashoffset="-189"
+              d="M 21 171 A 145 145 0 0 1 311 171 A 135 135 0 0 1 41 171 A 125 125 0 0 1 291 171 A 115 115 0 0 1 61 171 A 105 105 0 0 1 271 171 A 95 95 0 0 1 81 171"/>
+          </g>
+          <text class="small"><textPath path="M 46 171 A 125 125 0 0 0 296 171" startOffset="50%" text-anchor="middle">07:00 → 19:00</textPath></text>
+        </svg>
+        <div class="ctr">
+          <span class="k">NOW · 09:30</span>
+          <span class="n">Draft API spec</span>
+          <span class="s">51m left</span>
+        </div>
+      </div></div><div class="cap">Itinerary</div></div>
+
+    <div class="wf"><div class="case"><span class="crown"></span><span class="sbtn"></span>
+      <div class="screen v22">
+        <svg class="chrome" viewBox="0 0 342 342">
+          <path class="coil" pathLength="720" d="M 21 171 A 145 145 0 0 1 311 171 A 135 135 0 0 1 41 171
+            A 125 125 0 0 1 291 171 A 115 115 0 0 1 61 171 A 105 105 0 0 1 271 171 A 95 95 0 0 1 81 171"/>
+          <g opacity=".3">
+            <path class="seg" stroke="#ff9f0a" pathLength="720" stroke-dasharray="90 720" stroke-dashoffset="-150"
+              d="M 21 171 A 145 145 0 0 1 311 171 A 135 135 0 0 1 41 171 A 125 125 0 0 1 291 171 A 115 115 0 0 1 61 171 A 105 105 0 0 1 271 171 A 95 95 0 0 1 81 171"/>
+            <path class="seg" stroke="#30d158" pathLength="720" stroke-dasharray="60 720" stroke-dashoffset="-240"
+              d="M 21 171 A 145 145 0 0 1 311 171 A 135 135 0 0 1 41 171 A 125 125 0 0 1 291 171 A 115 115 0 0 1 61 171 A 105 105 0 0 1 271 171 A 95 95 0 0 1 81 171"/>
+            <path class="seg" stroke="#98989f" pathLength="720" stroke-dasharray="60 720" stroke-dashoffset="-330"
+              d="M 21 171 A 145 145 0 0 1 311 171 A 135 135 0 0 1 41 171 A 125 125 0 0 1 291 171 A 115 115 0 0 1 61 171 A 105 105 0 0 1 271 171 A 95 95 0 0 1 81 171"/>
+          </g>
+          <path class="seg" stroke="#a8c7fa" stroke-width="17" pathLength="720" stroke-dasharray="30 720" stroke-dashoffset="-390"
+            d="M 21 171 A 145 145 0 0 1 311 171 A 135 135 0 0 1 41 171 A 125 125 0 0 1 291 171 A 115 115 0 0 1 61 171 A 105 105 0 0 1 271 171 A 95 95 0 0 1 81 171"/>
+          <text class="small tint"><textPath path="M 46 171 A 125 125 0 0 0 296 171" startOffset="50%" text-anchor="middle">TURN TO MOVE</textPath></text>
+        </svg>
+        <div class="ctr">
+          <span class="k" style="color:var(--m-primary)">ADD AT</span>
+          <span class="n" style="font-size:20px">13:30</span>
+          <span class="s">Call the vet · 30m</span>
+        </div>
+      </div></div><div class="cap">Add task</div></div>
+  </div>
+  <div class="verdict">
+    <div class="good"><span class="k">Works because</span><p>Twelve unambiguous hours in one view — strictly more information than the dial, in the same pixels.</p></div>
+    <div class="bad"><span class="k">Costs you</span><p>Minutes are spaced by path length, so an hour on the outer turn covers less angle than one inside. Pretty, and slightly a lie.</p></div>
+  </div>
+</section>
+
+<!-- ══════════════════ 23 ══════════════════ -->
+<section class="vcard" id="v23">
+  <div class="vhead"><span class="vnum">23</span><h2>Material You</h2><span class="tagline">Themed by the watch face</span></div>
+  <p class="vdesc">Structurally identical to direction 01, but every colour except the project tones is extracted
+    from the user's watch face wallpaper. Wear OS hands you this for free, and it is the one thing that makes a
+    third-party app <b>look like it came with the watch</b>. Two faces shown; the layout never changes.</p>
+  <div class="frames">
+    <div class="wf"><div class="case"><span class="crown"></span><span class="sbtn"></span>
+      <div class="screen v23 v23a">
+        <svg class="chrome" viewBox="0 0 342 342">
+          <text><textPath path="M 26 171 A 145 145 0 0 1 316 171" startOffset="50%" text-anchor="middle">10:09</textPath></text>
+          <circle class="pi-track" cx="171" cy="171" r="163" stroke-dasharray="171 1024" stroke-dashoffset="85"/>
+          <circle class="pi-thumb" cx="171" cy="171" r="163" stroke-dasharray="62 1024" stroke-dashoffset="76"/>
+        </svg>
+        <div class="wbody">
+          <div class="wchip done tn-blue s78"><span class="lead"><svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg></span>
+            <span class="txt"><span class="ti">Standup</span></span></div>
+          <div class="wchip now tn-amber"><span class="lead">09³⁰</span>
+            <span class="txt"><span class="ti">Draft API spec</span><span class="sub">Now · 51m left</span></span></div>
+          <div class="wchip tn-green"><span class="lead">11</span>
+            <span class="txt"><span class="ti">Gym</span><span class="sub">Health · 1h</span></span></div>
+          <div class="wchip prim s88"><span class="lead"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span>
+            <span class="txt"><span class="ti">Add task</span></span></div>
+        </div>
+        <div class="vig-t"></div><div class="vig-b"></div>
+        <div class="facehint">FROM “EMBER” FACE</div>
+      </div></div><div class="cap">Itinerary · warm face</div></div>
+
+    <div class="wf"><div class="case"><span class="crown"></span><span class="sbtn"></span>
+      <div class="screen v23 v23b">
+        <svg class="chrome" viewBox="0 0 342 342">
+          <text class="tint"><textPath path="M 26 171 A 145 145 0 0 1 316 171" startOffset="50%" text-anchor="middle">New task</textPath></text>
+        </svg>
+        <div class="wbody" style="gap:9px">
+          <div class="wfield">Call the vet<span class="caret"></span></div>
+          <div class="mchips"><span class="mchip on">Work</span><span class="mchip on">30m</span><span class="mchip dash">13:30</span></div>
+          <div class="wbtn prim">Add</div>
+        </div>
+        <div class="facehint">FROM “VERDANT” FACE</div>
+      </div></div><div class="cap">Add task · cool face</div></div>
+  </div>
+  <div class="verdict">
+    <div class="good"><span class="k">Works because</span><p>Free from the platform, feels bespoke to every user, and guarantees contrast ratios you would otherwise hand-tune.</p></div>
+    <div class="bad"><span class="k">Costs you</span><p>You surrender brand colour, and the extracted palette can clash badly with fixed project tones.</p></div>
+  </div>
+</section>
+
+<!-- ══════════════════ 24 ══════════════════ -->
+<section class="vcard" id="v24">
+  <div class="vhead"><span class="vnum">24</span><h2>Thumb Arc</h2><span class="tagline">Reachability</span></div>
+  <p class="vdesc">A watch is operated by one thumb arriving from below, and the bottom arc is the only part of a
+    round screen it reaches without the wrist rolling. This direction puts <b>every control on that arc</b> and
+    leaves the rest of the circle purely for reading. Nothing interactive sits where a thumb would cover it.</p>
+  <div class="frames">
+    <div class="wf"><div class="case"><span class="crown"></span><span class="sbtn"></span>
+      <div class="screen v24">
+        <svg class="chrome" viewBox="0 0 342 342">
+          <text><textPath path="M 26 171 A 145 145 0 0 1 316 171" startOffset="50%" text-anchor="middle">10:09</textPath></text>
+          <path d="M 46 264 A 125 125 0 0 0 296 264" fill="none" stroke="rgba(168,199,250,.13)" stroke-width="54"/>
+        </svg>
+        <div class="upper">
+          <div class="lrow" style="display:flex;align-items:center;gap:9px;width:100%">
+            <span style="font-family:var(--mono);font-size:12px;font-weight:700;color:var(--m-outline);width:36px">09:30</span>
+            <span class="wdot tn-amber"></span>
+            <span style="font-size:16.5px;font-weight:700;color:var(--t-amber);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Draft API spec</span>
+          </div>
+          <div class="lrow" style="display:flex;align-items:center;gap:9px;width:100%">
+            <span style="font-family:var(--mono);font-size:12px;font-weight:700;color:var(--m-outline);width:36px">11:00</span>
+            <span class="wdot tn-green"></span>
+            <span style="font-size:16px;font-weight:600;flex:1">Gym</span>
+          </div>
+          <div class="lrow" style="display:flex;align-items:center;gap:9px;width:100%">
+            <span style="font-family:var(--mono);font-size:12px;font-weight:700;color:var(--m-outline);width:36px">12:30</span>
+            <span class="wdot tn-grey"></span>
+            <span style="font-size:16px;font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Lunch with Sam</span>
+          </div>
+        </div>
+        <span class="tbtn" style="left:99px;top:273px"><span class="lb">All</span></span>
+        <span class="tbtn prim" style="left:171px;top:296px"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span>
+        <span class="tbtn" style="left:243px;top:273px"><svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg></span>
+        <div class="arclbl">THUMB ARC</div>
+      </div></div><div class="cap">Itinerary</div></div>
+
+    <div class="wf"><div class="case"><span class="crown"></span><span class="sbtn"></span>
+      <div class="screen v24">
+        <svg class="chrome" viewBox="0 0 342 342">
+          <text class="tint"><textPath path="M 26 171 A 145 145 0 0 1 316 171" startOffset="50%" text-anchor="middle">New task</textPath></text>
+          <path d="M 46 264 A 125 125 0 0 0 296 264" fill="none" stroke="rgba(168,199,250,.13)" stroke-width="54"/>
+        </svg>
+        <div class="upper" style="gap:9px">
+          <div class="wfield" style="border-radius:18px">Call the vet<span class="caret"></span></div>
+          <div class="mchips"><span class="mchip on">Work</span><span class="mchip on">30m</span></div>
+        </div>
+        <span class="tbtn" style="left:99px;top:273px"><span class="lb">15m</span></span>
+        <span class="tbtn prim" style="left:171px;top:296px"><svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg></span>
+        <span class="tbtn" style="left:243px;top:273px"><span class="lb">60m</span></span>
+        <div class="arclbl">THUMB ARC</div>
+      </div></div><div class="cap">Add task</div></div>
+  </div>
+  <div class="verdict">
+    <div class="good"><span class="k">Works because</span><p>Every control is genuinely one-handed, and the thumb never covers the text it is acting on.</p></div>
+    <div class="bad"><span class="k">Costs you</span><p>Three controls is the ceiling, and it assumes a wrist — left-handed and right-handed wearers mirror the comfortable arc.</p></div>
+  </div>
+</section>
+
+<!-- ══════════════════ 25 ══════════════════ -->
+<section class="vcard" id="v25">
+  <div class="vhead"><span class="vnum">25</span><h2>Complications</h2><span class="tagline">No app at all</span></div>
+  <p class="vdesc">The most extreme reduction here: Prisms stops being a screen and becomes three complications on
+    whatever watch face the user already chose. <b>The itinerary is visible every time they check the time</b>,
+    with no launch and no swipe, and tapping the add complication drops straight into dictation.</p>
+  <div class="frames">
+    <div class="wf"><div class="case"><span class="crown"></span><span class="sbtn"></span>
+      <div class="screen v25">
+        <svg class="chrome" viewBox="0 0 342 342">
+          <g class="tick">
+            <path d="M171 14v13"/><path d="M171 328v-13"/><path d="M14 171h13"/><path d="M328 171h-13"/>
+            <path d="M249 35l-6 11"/><path d="M307 93l-11 6"/><path d="M307 249l-11-6"/><path d="M249 307l-6-11"/>
+            <path d="M93 35l6 11"/><path d="M35 93l11 6"/><path d="M35 249l11-6"/><path d="M93 307l6-11"/>
+          </g>
+        </svg>
+        <div class="wbody" style="padding:0">
+          <div class="facetime">10:09</div>
+        </div>
+        <div class="comp tn-amber" style="left:171px;top:88px">
+          <span class="k">PRISMS · NOW</span>
+          <span class="v">Draft API spec</span>
+        </div>
+        <div class="comp tn-green" style="left:112px;top:254px">
+          <span class="k">NEXT</span>
+          <span class="v">11:00 <small>Gym</small></span>
+        </div>
+        <div class="comp tn-blue" style="left:230px;top:254px">
+          <span class="k">TODAY</span>
+          <span class="v">1<small>/6 done</small></span>
+        </div>
+      </div></div><div class="cap">Watch face</div></div>
+
+    <div class="wf"><div class="case"><span class="crown"></span><span class="sbtn"></span>
+      <div class="screen v25">
+        <svg class="chrome" viewBox="0 0 342 342">
+          <text class="tint"><textPath path="M 26 171 A 145 145 0 0 1 316 171" startOffset="50%" text-anchor="middle">Prisms</textPath></text>
+        </svg>
+        <div class="wbody" style="gap:12px;padding:0 46px">
+          <div class="fabr" style="width:62px;height:62px">
+            <svg viewBox="0 0 24 24"><path d="M12 3a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3Z"/><path d="M19 11a7 7 0 0 1-14 0"/><path d="M12 18v3"/></svg></div>
+          <div style="font-size:19px;font-weight:650;letter-spacing:-.4px;text-align:center">Call the vet</div>
+          <div class="mchips"><span class="mchip on">13:30</span><span class="mchip on">30m</span></div>
+          <div class="wbtn prim" style="width:auto;padding:0 32px">Add</div>
+        </div>
+      </div></div><div class="cap">Add task</div></div>
+  </div>
+  <div class="verdict">
+    <div class="good"><span class="k">Works because</span><p>Zero interaction cost — the data is simply there, on the screen the user looks at forty times a day.</p></div>
+    <div class="bad"><span class="k">Costs you</span><p>Complication slots are tiny, fixed in shape, and entirely at the mercy of whichever face the user picked.</p></div>
+  </div>
+</section>
+
+</main>
+
+<footer style="max-width:960px;margin:46px auto 0;padding:0 24px;text-align:center;font-size:12px;color:var(--faint);line-height:1.7">
+  All twenty-five render the same day: Standup (done) · Draft API spec (now) · Gym · Lunch with Sam · Review PRs · Guitar,<br>
+  and the same new task: “Call the vet”, 13:30, 30 min, Work.<br>
+  Static mockups — no build step, no dependencies. Open the file in any browser.
+</footer>
+
+</body>
+</html>
