@@ -32,6 +32,12 @@ export interface ServerConfig {
   trustedOrigins: string[];
   powersync: PowersyncJwtConfig;
   rateLimit: { limit: number; windowMs: number };
+  /** SEC-2/F1: per-IP throttle on the credential endpoints. */
+  authRateLimit: { limit: number; windowMs: number };
+  /** SEC-2/F10: refuse new self-service registrations (PRISMS_DISABLE_SIGNUP=1). */
+  disableSignUp: boolean;
+  /** SEC-2/F10: minimum password length. */
+  minPasswordLength: number;
   /** Start pg-boss workers (§11). Disable for API-only deployments or tests. */
   jobsEnabled: boolean;
 }
@@ -135,6 +141,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
       limit: positiveIntEnv('COMMAND_RATE_LIMIT', env.COMMAND_RATE_LIMIT, 120),
       windowMs: 60_000,
     },
+    authRateLimit: {
+      limit: positiveIntEnv('AUTH_RATE_LIMIT', env.AUTH_RATE_LIMIT, 10),
+      windowMs: 60_000,
+    },
+    disableSignUp: env.PRISMS_DISABLE_SIGNUP === '1',
+    minPasswordLength: positiveIntEnv('PRISMS_MIN_PASSWORD_LENGTH', env.PRISMS_MIN_PASSWORD_LENGTH, 12),
     jobsEnabled: env.PRISMS_JOBS_ENABLED !== 'false',
   };
 }

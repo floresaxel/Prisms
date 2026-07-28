@@ -15,7 +15,7 @@ import { cors } from 'hono/cors';
 import { SignJWT } from 'jose';
 import postgres from 'postgres';
 
-import { createAuth, type Auth } from './auth';
+import { createAuth, TRUSTED_CLIENT_IP_HEADER, type Auth } from './auth';
 import { createDispatcher, type BackstopJob } from './dispatcher';
 import type { PowersyncJwtConfig } from './env';
 import { runBackupSnapshot } from './jobs/backup-snapshot';
@@ -34,6 +34,12 @@ export interface AppOptions {
   trustedOrigins?: string[];
   powersync: PowersyncJwtConfig;
   rateLimit: { limit: number; windowMs: number };
+  /** SEC-2/F1: credential-endpoint throttle (per client IP). Defaults to 10/min. */
+  authRateLimit?: { limit: number; windowMs: number };
+  /** SEC-2/F10: refuse new self-service registrations. */
+  disableSignUp?: boolean;
+  /** SEC-2/F10: minimum password length (default 12). */
+  minPasswordLength?: number;
   /** Fire automation.backstop on completions/creations (§9.4); wired to pg-boss in main.ts. */
   enqueueBackstop?: (job: BackstopJob) => void;
   /** Disable request logging (tests). */
@@ -57,6 +63,8 @@ export function createApp(options: AppOptions): PrismsServer {
     baseUrl,
     secret: options.betterAuthSecret,
     trustedOrigins,
+    disableSignUp: options.disableSignUp,
+    minPasswordLength: options.minPasswordLength,
   });
   const limiter = createRateLimiter(options.rateLimit);
   const dispatcher = createDispatcher(db, limiter, { enqueueBackstop: options.enqueueBackstop });
@@ -98,6 +106,36 @@ export function createApp(options: AppOptions): PrismsServer {
   app.use('/sync/*', corsMiddleware);
 
   app.get('/health', (c) => c.json({ status: 'ok', service: 'prisms-api' }));
+
+  // --- SEC-2/F1: credential-endpoint brute-force throttle ---------------------
+  // better-auth ships its own per-IP limiter, but it FAILS OPEN: when it cannot
+  // resolve a client IP it skips limiting entirely (`if (!ip) return null` in
+  // dist/api/rate-limiter/index.mjs), and it is disabled outside production. This
+  // limiter is the one we rely on — it is always on and it fails CLOSED.
+  //
+  // Only the credential-bearing verbs are throttled. /api/auth/get-session is
+  // polled by every client on load and must not be rate-limited.
+  const CREDENTIAL_PATHS = ['sign-in', 'sign-up', 'change-password', 'change-email', 'forget-password', 'reset-password'];
+  const authLimiter = createRateLimiter(options.authRateLimit ?? { limit: 10, windowMs: 60_000 });
+  /**
+   * The client IP, taken ONLY from the header the reverse proxy overwrites
+   * (never a client-suppliable XFF list). When it is absent — a topology where
+   * the API is reached directly — every request collapses into one shared
+   * bucket. That is deliberate: a shared bucket over-throttles, which is a UX
+   * annoyance, whereas skipping the limit leaves password guessing unbounded.
+   */
+  const clientIpKey = (c: Context<AppEnv>): string => c.req.header(TRUSTED_CLIENT_IP_HEADER)?.trim() || 'unknown-peer';
+
+  app.use('/api/auth/*', async (c, next) => {
+    const path = new URL(c.req.url).pathname;
+    if (!CREDENTIAL_PATHS.some((verb) => path.includes(verb))) return next();
+    const res = authLimiter.consume(`auth-ip:${clientIpKey(c)}`);
+    if (!res.allowed) {
+      c.header('Retry-After', String(res.retryAfterSeconds));
+      return c.json({ error: 'E_RATE_LIMITED', retry_after_seconds: res.retryAfterSeconds }, 429);
+    }
+    return next();
+  });
 
   app.on(['GET', 'POST'], '/api/auth/*', (c) => auth.handler(c.req.raw));
 
