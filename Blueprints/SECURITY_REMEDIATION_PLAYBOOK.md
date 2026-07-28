@@ -199,6 +199,28 @@ documented where an operator will meet it:
    deployment; a second API replica would give each its own buckets. Moving to
    Postgres/Redis is a topology decision, not a patch.
 
+### Operational note — the credential throttle's degraded mode
+
+The SEC-2 throttle keys on `X-Real-IP`, which the bundled nginx sets and
+overwrites. **Reached without that proxy — direct-to-API dev, CI, or a
+hand-rolled deployment — every caller collapses into one shared bucket.** That is
+the intended fail-closed behaviour (over-throttling beats unbounded guessing),
+but it is surprising in the moment: you get 429s that look inexplicable.
+
+This actually bit the e2e job on the first CI run of this branch: 5 of 29 specs
+failed on a missing `sync-state`, because each spec signs in and the suite blew
+through the shared 10/min budget. Two things came out of it:
+
+- CI now sets `AUTH_RATE_LIMIT: '10000'` for the e2e job (the limit only — the
+  keying and fail-closed behaviour are untouched and still covered by
+  `apps/server/test/auth-throttle.test.ts`).
+- The server now warns **once per process** when it has to fall back to the
+  shared bucket, naming the cause and both remedies, so the next person meets a
+  diagnosis instead of a mystery.
+
+If you run the API directly, either front it with the bundled proxy or set
+`AUTH_RATE_LIMIT` deliberately.
+
 ## Follow-ups worth scheduling
 
 - Adopt RS256 + JWKS for PowerSync tokens (residual 4) — the largest remaining

@@ -124,7 +124,25 @@ export function createApp(options: AppOptions): PrismsServer {
    * bucket. That is deliberate: a shared bucket over-throttles, which is a UX
    * annoyance, whereas skipping the limit leaves password guessing unbounded.
    */
-  const clientIpKey = (c: Context<AppEnv>): string => c.req.header(TRUSTED_CLIENT_IP_HEADER)?.trim() || 'unknown-peer';
+  let warnedNoClientIp = false;
+  const clientIpKey = (c: Context<AppEnv>): string => {
+    const ip = c.req.header(TRUSTED_CLIENT_IP_HEADER)?.trim();
+    if (ip) return ip;
+    // Make the degraded mode diagnosable: a shared bucket produces 429s that
+    // look inexplicable ("I only signed in twice") unless you know every caller
+    // is being counted together. Warn once per process, not per request.
+    if (!warnedNoClientIp && !options.quiet) {
+      warnedNoClientIp = true;
+      console.warn(
+        JSON.stringify({
+          msg: `no ${TRUSTED_CLIENT_IP_HEADER} header — credential throttling is falling back to a SINGLE shared bucket for all callers. ` +
+            'Put the API behind the bundled reverse proxy (which sets it), or raise AUTH_RATE_LIMIT for this environment (SEC-2).',
+          limit: (options.authRateLimit ?? { limit: 10 }).limit,
+        }),
+      );
+    }
+    return 'unknown-peer';
+  };
 
   app.use('/api/auth/*', async (c, next) => {
     const path = new URL(c.req.url).pathname;
