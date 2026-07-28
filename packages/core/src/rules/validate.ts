@@ -21,7 +21,8 @@ import { err, ok, type Result } from '../domain/result';
 import { buildFactContext } from '../status/context';
 import {
   evalPredicate,
-  hasOverlongMatchesPattern,
+  firstUnsafeMatchesReason,
+  hasUnsafeMatchesPattern,
   MAX_MATCHES_PATTERN_LENGTH,
   predicateSchema,
   referencesExternalFacts,
@@ -133,14 +134,17 @@ export function validateAutomationRule(
       ),
     );
   }
-  // S3-F7: cap `matches` pattern length at authoring time (ReDoS guard). The
-  // evaluator also fails safe above the cap, so blocker rules are covered at eval
-  // time even though blocker.create has no core validator to reject them here.
-  if (hasOverlongMatchesPattern(candidate.conditions)) {
+  // S3-F7 + SEC-4/F2: reject a `matches` pattern that is overlong OR capable of
+  // catastrophic backtracking, at authoring time, so the author gets told why.
+  // The evaluator applies the same test and fails safe, which is what covers
+  // blocker rules (blocker.create has no core validator to reject them here) and
+  // any rule stored before this check existed.
+  if (hasUnsafeMatchesPattern(candidate.conditions)) {
     return err(
       domainError(
         'E_PATTERN_TOO_LONG',
-        `a "matches" pattern exceeds ${MAX_MATCHES_PATTERN_LENGTH} characters (§9.2 pattern-complexity cap).`,
+        `a "matches" pattern was rejected: ${firstUnsafeMatchesReason(candidate.conditions) ?? 'it exceeds the complexity cap'} ` +
+          `(§9.2 pattern-complexity cap; max ${MAX_MATCHES_PATTERN_LENGTH} characters, and no backtracking-prone constructs).`,
       ),
     );
   }

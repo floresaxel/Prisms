@@ -10,6 +10,7 @@
  */
 import { z } from 'zod';
 
+import { isSupportedHabitRrule } from '../aggregates/occurrences';
 import {
   anchorTypeSchema,
   completionDispositionSchema,
@@ -44,7 +45,14 @@ const titleSchema = z.string().max(MAX_TITLE_LENGTH);
 const descriptionSchema = z.string().max(MAX_DESCRIPTION_LENGTH);
 const labelSchema = z.string().max(MAX_LABEL_LENGTH);
 const sortOrderSchema = z.string().min(1).max(MAX_SORT_ORDER_LENGTH);
-const rruleSchema = z.string().min(1).max(MAX_RRULE_LENGTH);
+// SEC-4/F7: reject an unparseable or sub-daily recurrence at the boundary. A
+// FREQ=SECONDLY habit expands to tens of millions of dates in the nightly
+// all-users recompute, so it must never reach storage.
+const rruleSchema = z
+  .string()
+  .min(1)
+  .max(MAX_RRULE_LENGTH)
+  .refine(isSupportedHabitRrule, 'unsupported recurrence rule (habits support YEARLY, MONTHLY, WEEKLY or DAILY)');
 
 // --- nodes (the tree) -------------------------------------------------------
 
