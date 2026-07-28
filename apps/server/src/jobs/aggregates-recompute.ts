@@ -34,6 +34,7 @@ import { and, eq, isNotNull, isNull, lte } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 
 import type { JobClock } from './clock';
+import { forEachUserIsolated, type BatchOutcome } from './per-user';
 
 const DEFAULT_SETTINGS = { day_reset_hour: 4, timezone: 'America/New_York' };
 
@@ -164,9 +165,13 @@ export async function runAggregatesRecompute(
   }, { isolationLevel: 'repeatable read' });
 }
 
-/** Cron entry point: recompute every user that has settings. */
-export async function runAggregatesRecomputeAll(db: PostgresJsDatabase, clock: JobClock): Promise<number> {
+/**
+ * Cron entry point: recompute every user that has settings.
+ *
+ * SEC-6/F9: per-user isolated — one user's failure (a bad row, a stored habit
+ * whose rrule no longer expands) must not silently skip everyone after them.
+ */
+export async function runAggregatesRecomputeAll(db: PostgresJsDatabase, clock: JobClock): Promise<BatchOutcome> {
   const users = await db.select({ user_id: user_settings.user_id }).from(user_settings);
-  for (const u of users) await runAggregatesRecompute(db, u.user_id, clock);
-  return users.length;
+  return forEachUserIsolated(users, 'aggregates.recompute', (u) => u.user_id, (u) => runAggregatesRecompute(db, u.user_id, clock));
 }
