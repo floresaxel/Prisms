@@ -63,3 +63,70 @@ export const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
 
 export const jsonObjectSchema = z.record(z.string(), jsonValueSchema);
 export type JsonObject = Record<string, JsonValue>;
+
+// --- bounded JSON (SEC-3/F6) -------------------------------------------------
+// `jsonValueSchema` accepts arbitrarily deep, arbitrarily wide JSON. It backs
+// the free-form command fields (node `attributes`, automation `conditions`/
+// `actions`, blocker `scope`/`predicate`), so a single 2 MB upload could carry
+// pathological input that costs far more to validate, store and re-evaluate than
+// it did to send — and those same values are re-walked on every rule evaluation.
+// These ceilings are orders of magnitude above real payloads.
+
+export const MAX_JSON_DEPTH = 12;
+export const MAX_JSON_NODES = 2_000;
+export const MAX_JSON_STRING_LENGTH = 10_000;
+export const MAX_JSON_KEY_LENGTH = 200;
+
+/**
+ * Describe the first limit `value` breaches, or null when it is within bounds.
+ *
+ * Deliberately ITERATIVE: a recursive walker would itself overflow the stack on
+ * the very input it exists to reject, throwing a RangeError out of `safeParse`
+ * (which only traps ZodError) instead of producing a clean rejection.
+ */
+export function jsonLimitViolation(value: unknown): string | null {
+  let nodes = 0;
+  const stack: { v: unknown; depth: number }[] = [{ v: value, depth: 1 }];
+  while (stack.length > 0) {
+    const { v, depth } = stack.pop()!;
+    if (depth > MAX_JSON_DEPTH) return `nested deeper than ${MAX_JSON_DEPTH} levels`;
+    nodes += 1;
+    if (nodes > MAX_JSON_NODES) return `more than ${MAX_JSON_NODES} values`;
+
+    if (typeof v === 'string') {
+      if (v.length > MAX_JSON_STRING_LENGTH) return `a string longer than ${MAX_JSON_STRING_LENGTH} characters`;
+      continue;
+    }
+    if (v === null || typeof v === 'number' || typeof v === 'boolean') continue;
+    if (Array.isArray(v)) {
+      for (const item of v) stack.push({ v: item, depth: depth + 1 });
+      continue;
+    }
+    if (typeof v === 'object') {
+      for (const key of Object.keys(v)) {
+        if (key.length > MAX_JSON_KEY_LENGTH) return `a key longer than ${MAX_JSON_KEY_LENGTH} characters`;
+        stack.push({ v: (v as Record<string, unknown>)[key], depth: depth + 1 });
+      }
+      continue;
+    }
+    return 'a value that is not valid JSON';
+  }
+  return null;
+}
+
+/**
+ * `jsonValueSchema` plus the size/depth ceilings above. The bounds are checked
+ * FIRST (see `.pipe()` below): the shape check is Zod's recursive `z.lazy`, so
+ * letting it run on unbounded input is the very thing we are guarding against.
+ */
+const withinJsonLimits = z.unknown().superRefine((value, ctx) => {
+  const violation = jsonLimitViolation(value);
+  if (violation !== null) {
+    ctx.addIssue({ code: 'custom', message: `JSON value exceeds the allowed size: ${violation}` });
+  }
+});
+
+export const boundedJsonSchema: z.ZodType<JsonValue> = withinJsonLimits.pipe(jsonValueSchema);
+
+/** `jsonObjectSchema` under the same ceilings (node `attributes`). */
+export const boundedJsonObjectSchema: z.ZodType<JsonObject> = withinJsonLimits.pipe(jsonObjectSchema);

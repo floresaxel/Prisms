@@ -18,33 +18,56 @@ import {
   streakModeSchema,
   tagAnswerValueSchema,
 } from '../domain/entities';
-import { isoDateSchema, isoDateTimeSchema, jsonValueSchema, uuidSchema } from '../domain/primitives';
+import { boundedJsonObjectSchema, boundedJsonSchema, isoDateSchema, isoDateTimeSchema, uuidSchema } from '../domain/primitives';
 import { settingsUpdateSchema } from './settings';
 
 const idOnly = z.strictObject({ id: uuidSchema });
+
+// --- field length ceilings (SEC-3/F6) ---------------------------------------
+// Before this, only `journal.content` was bounded; every other free-text field
+// was limited solely by the 2 MB request body. That let one upload store ~2 MB
+// in a single `title`, which then rides every sync-down to every device — and,
+// worse, becomes the SUBJECT a blocker rule's `matches` regex is tested against
+// (SEC-4/F2), where input length is what turns backtracking into an outage.
+// These are generous next to real use; they exist to have a ceiling at all.
+export const MAX_TITLE_LENGTH = 500;
+export const MAX_DESCRIPTION_LENGTH = 20_000;
+export const MAX_LABEL_LENGTH = 200;
+/** Fractional index keys (§7.10a) — a handful of chars in practice. */
+export const MAX_SORT_ORDER_LENGTH = 200;
+/** A recurrence rule is one line of RFC 5545 text. */
+export const MAX_RRULE_LENGTH = 500;
+/** Nodes touched by one `layout.renormalize_order` — each costs a query + an update. */
+export const MAX_RENORMALIZE_NODES = 1_000;
+
+const titleSchema = z.string().max(MAX_TITLE_LENGTH);
+const descriptionSchema = z.string().max(MAX_DESCRIPTION_LENGTH);
+const labelSchema = z.string().max(MAX_LABEL_LENGTH);
+const sortOrderSchema = z.string().min(1).max(MAX_SORT_ORDER_LENGTH);
+const rruleSchema = z.string().min(1).max(MAX_RRULE_LENGTH);
 
 // --- nodes (the tree) -------------------------------------------------------
 
 export const nodeCreateSchema = z.strictObject({
   id: uuidSchema,
   node_type: nodeTypeSchema,
-  title: z.string(),
-  sort_order: z.string().min(1),
+  title: titleSchema,
+  sort_order: sortOrderSchema,
   parent_id: uuidSchema.nullable().optional(),
   habit_id: uuidSchema.nullable().optional(),
-  description: z.string().optional(),
+  description: descriptionSchema.optional(),
   start_date: isoDateSchema.nullable().optional(),
   due_date: isoDateSchema.nullable().optional(),
   estimate_minutes: z.number().int().positive().nullable().optional(),
-  attributes: z.record(z.string(), jsonValueSchema).optional(),
+  attributes: boundedJsonObjectSchema.optional(),
 });
 
-export const nodeRenameSchema = z.strictObject({ id: uuidSchema, title: z.string() });
-export const nodeSetDescriptionSchema = z.strictObject({ id: uuidSchema, description: z.string() });
+export const nodeRenameSchema = z.strictObject({ id: uuidSchema, title: titleSchema });
+export const nodeSetDescriptionSchema = z.strictObject({ id: uuidSchema, description: descriptionSchema });
 export const nodeMoveSchema = z.strictObject({
   id: uuidSchema,
   new_parent_id: uuidSchema.nullable(),
-  sort_order: z.string().min(1),
+  sort_order: sortOrderSchema,
 });
 export const nodeRetypeSchema = z.strictObject({ id: uuidSchema, node_type: nodeTypeSchema });
 export const nodeSetDatesSchema = z
@@ -58,7 +81,7 @@ export const nodeSetEstimateSchema = z.strictObject({
   id: uuidSchema,
   estimate_minutes: z.number().int().positive().nullable(),
 });
-export const nodeReorderSchema = z.strictObject({ id: uuidSchema, sort_order: z.string().min(1) });
+export const nodeReorderSchema = z.strictObject({ id: uuidSchema, sort_order: sortOrderSchema });
 export const nodeCheckOffSchema = z.strictObject({
   id: uuidSchema,
   completed_at: isoDateTimeSchema,
@@ -133,8 +156,8 @@ export const timerReviewSchema = z.strictObject({
 export const habitCreateSchema = z.strictObject({
   id: uuidSchema,
   vision_id: uuidSchema,
-  title: z.string(),
-  rrule: z.string().min(1),
+  title: titleSchema,
+  rrule: rruleSchema,
   streak_mode: streakModeSchema,
   daily_target_minutes: z.number().int().positive().nullable().optional(),
   mastery_target_hours: z.number().int().positive().nullable().optional(),
@@ -143,8 +166,8 @@ export const habitCreateSchema = z.strictObject({
 export const habitUpdateSchema = z
   .strictObject({
     id: uuidSchema,
-    title: z.string().optional(),
-    rrule: z.string().min(1).optional(),
+    title: titleSchema.optional(),
+    rrule: rruleSchema.optional(),
     streak_mode: streakModeSchema.optional(),
     daily_target_minutes: z.number().int().positive().nullable().optional(),
     mastery_target_hours: z.number().int().positive().nullable().optional(),
@@ -163,7 +186,7 @@ export const habitCheckOffSchema = z.strictObject({
 
 export const sprintCreateSchema = z.strictObject({
   id: uuidSchema,
-  title: z.string(),
+  title: titleSchema,
   starts_on: isoDateSchema,
   ends_on: isoDateSchema,
 });
@@ -177,11 +200,11 @@ export const sprintDeleteSchema = idOnly;
 
 // --- decision board ---------------------------------------------------------
 
-export const boardCreateSchema = z.strictObject({ id: uuidSchema, title: z.string() });
+export const boardCreateSchema = z.strictObject({ id: uuidSchema, title: titleSchema });
 export const criterionCreateSchema = z.strictObject({
   id: uuidSchema,
   board_id: uuidSchema,
-  label: z.string(),
+  label: labelSchema,
   weight: z.number().positive(),
 });
 export const criterionSetWeightSchema = z.strictObject({ id: uuidSchema, weight: z.number().positive() });
@@ -196,10 +219,10 @@ export const scoreSetSchema = z.strictObject({
 
 export const tagCreateSchema = z.strictObject({
   id: uuidSchema,
-  label: z.string(),
+  label: labelSchema,
   habit_id: uuidSchema.nullable().optional(),
 });
-export const tagRenameSchema = z.strictObject({ id: uuidSchema, label: z.string() });
+export const tagRenameSchema = z.strictObject({ id: uuidSchema, label: labelSchema });
 export const tagDeleteSchema = idOnly;
 export const tagPlaceSchema = z.strictObject({
   id: uuidSchema,
@@ -236,12 +259,12 @@ export const journalDeleteSchema = idOnly; // journal entry row id
 export const stepAddSchema = z.strictObject({
   id: uuidSchema,
   task_id: uuidSchema,
-  title: z.string(),
-  sort_order: z.string().min(1),
+  title: titleSchema,
+  sort_order: sortOrderSchema,
 });
-export const stepRenameSchema = z.strictObject({ id: uuidSchema, title: z.string() });
+export const stepRenameSchema = z.strictObject({ id: uuidSchema, title: titleSchema });
 export const stepToggleSchema = z.strictObject({ id: uuidSchema, done: z.boolean() });
-export const stepReorderSchema = z.strictObject({ id: uuidSchema, sort_order: z.string().min(1) });
+export const stepReorderSchema = z.strictObject({ id: uuidSchema, sort_order: sortOrderSchema });
 export const stepRemoveSchema = idOnly; // step row id
 
 // --- automation & blocker rules ---------------------------------------------
@@ -249,16 +272,16 @@ export const stepRemoveSchema = idOnly; // step row id
 export const ruleCreateSchema = z.strictObject({
   id: uuidSchema,
   trigger: z.enum(['task_completed', 'task_created']),
-  conditions: jsonValueSchema,
-  actions: jsonValueSchema,
+  conditions: boundedJsonSchema,
+  actions: boundedJsonSchema,
   enabled: z.boolean().optional(),
 });
 export const ruleUpdateSchema = z
   .strictObject({
     id: uuidSchema,
     trigger: z.enum(['task_completed', 'task_created']).optional(),
-    conditions: jsonValueSchema.optional(),
-    actions: jsonValueSchema.optional(),
+    conditions: boundedJsonSchema.optional(),
+    actions: boundedJsonSchema.optional(),
   })
   .refine((p) => Object.keys(p).length > 1, 'rule.update needs at least one field');
 export const ruleToggleSchema = z.strictObject({ id: uuidSchema, enabled: z.boolean() });
@@ -266,17 +289,17 @@ export const ruleDeleteSchema = idOnly;
 
 export const blockerCreateSchema = z.strictObject({
   id: uuidSchema,
-  scope: jsonValueSchema,
-  predicate: jsonValueSchema,
-  label: z.string(),
+  scope: boundedJsonSchema,
+  predicate: boundedJsonSchema,
+  label: labelSchema,
   enabled: z.boolean().optional(),
 });
 export const blockerUpdateSchema = z
   .strictObject({
     id: uuidSchema,
-    scope: jsonValueSchema.optional(),
-    predicate: jsonValueSchema.optional(),
-    label: z.string().optional(),
+    scope: boundedJsonSchema.optional(),
+    predicate: boundedJsonSchema.optional(),
+    label: labelSchema.optional(),
   })
   .refine((p) => Object.keys(p).length > 1, 'blocker.update needs at least one field');
 export const blockerToggleSchema = z.strictObject({ id: uuidSchema, enabled: z.boolean() });
@@ -304,19 +327,21 @@ export const layoutSetCollapsedSchema = z.strictObject({
  */
 export const layoutRenormalizeOrderSchema = z.strictObject({
   parent_id: uuidSchema.nullable(),
-  node_ids: z.array(uuidSchema).min(1),
+  // SEC-3/F5: bounded — the dispatcher runs one ownership query AND one LWW
+  // update per id, so an unbounded list is a per-request amplifier.
+  node_ids: z.array(uuidSchema).min(1).max(MAX_RENORMALIZE_NODES),
 });
 export const groupCreateSchema = z.strictObject({
   id: uuidSchema,
   diagram_id: uuidSchema,
-  label: z.string(),
-  color: z.string().nullable().optional(),
+  label: labelSchema,
+  color: labelSchema.nullable().optional(),
 });
 export const groupUpdateSchema = z
   .strictObject({
     id: uuidSchema,
-    label: z.string().optional(),
-    color: z.string().nullable().optional(),
+    label: labelSchema.optional(),
+    color: labelSchema.nullable().optional(),
   })
   .refine((p) => Object.keys(p).length > 1, 'group.update needs at least one field');
 export const groupDeleteSchema = idOnly;

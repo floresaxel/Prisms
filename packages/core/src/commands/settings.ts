@@ -13,7 +13,8 @@ import { weatherLocationSchema } from '../domain/entities';
 export const settingsUpdateSchema = z
   .strictObject({
     day_reset_hour: z.number().int().min(0).max(23).optional(),
-    timezone: z.string().min(1).optional(),
+    // SEC-3/F6: an IANA zone name is short ('America/Argentina/Buenos_Aires' is 30).
+    timezone: z.string().min(1).max(100).optional(),
     weather_location: weatherLocationSchema.nullable().optional(),
   })
   .refine((patch) => Object.keys(patch).length > 0, {

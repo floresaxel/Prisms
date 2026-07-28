@@ -15,6 +15,12 @@ import {
   uuidSchema,
 } from '../domain/primitives';
 
+/**
+ * SEC-3/F5: per-command causal-dependency ceiling. Each element costs one
+ * serial DB round-trip on the server, so this bounds query amplification.
+ */
+export const MAX_DEPENDS_ON = 32;
+
 export const commandEnvelopeSchema = z.strictObject({
   id: uuidSchema,
   name: z.string().min(1),
@@ -25,9 +31,17 @@ export const commandEnvelopeSchema = z.strictObject({
   /** Row schema version the client writes at (§7.11); below the floor → client_too_old. */
   schema_version: z.number().int().nonnegative().optional(),
   /** Free-form client build tag, for diagnostics + version-specific review items. */
-  client_version: z.string().optional(),
-  /** Intra-device causal dependencies (§7.2e): command ids this one builds on. */
-  depends_on: z.array(uuidSchema).optional(),
+  client_version: z.string().max(200).optional(),
+  /**
+   * Intra-device causal dependencies (§7.2e): command ids this one builds on.
+   *
+   * SEC-3/F5: capped. `commands` is bounded at 100, but each `depends_on`
+   * element drives its OWN sequential `command_log` lookup in the dispatcher's
+   * causalReject(), so an unbounded array turned one 2 MB request into ~55k
+   * serial queries. A command legitimately depends on a handful of predecessors;
+   * MAX_DEPENDS_ON is far above real use and far below the amplification range.
+   */
+  depends_on: z.array(uuidSchema).max(MAX_DEPENDS_ON).optional(),
 });
 export type CommandEnvelope = z.infer<typeof commandEnvelopeSchema>;
 
