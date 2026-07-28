@@ -97,13 +97,22 @@ Write-Host "== [4/6] Emulator" -ForegroundColor Cyan
 $booted = ''
 try { $booted = (& $adb shell getprop sys.boot_completed 2>$null) -join '' } catch {}
 if ($booted -notmatch '1') {
-  Start-Process $emu -ArgumentList '-avd', $Avd, '-no-snapshot-load', '-no-boot-anim'
-  $deadline = (Get-Date).AddMinutes(4)
+  # A killed emulator leaves lock files behind, and the next launch sees them
+  # and exits SILENTLY — no process, no window, no error. Only safe to clear
+  # when no emulator is actually running.
+  if (-not (Get-Process emulator, qemu-system-x86_64 -ErrorAction SilentlyContinue)) {
+    Remove-Item "$env:USERPROFILE\.android\avd\$Avd.avd\*.lock" -Force -Confirm:$false -ErrorAction SilentlyContinue
+  }
+  # Launched through a wrapper so the emulator's own output lands in a log —
+  # a bare Start-Process gives a silent death nothing can diagnose.
+  Start-Process pwsh -WindowStyle Hidden -ArgumentList '-NoProfile', '-Command',
+    "& '$emu' -avd $Avd -no-snapshot-load -no-boot-anim *> '$env:TEMP\prisms-emu.log'"
+  $deadline = (Get-Date).AddMinutes(5)
   do {
     Start-Sleep -Seconds 8
     try { $booted = (& $adb shell getprop sys.boot_completed 2>$null) -join '' } catch { $booted = '' }
   } until ($booted -match '1' -or (Get-Date) -gt $deadline)
-  if ($booted -notmatch '1') { throw 'Emulator did not finish booting — is another instance wedged? (adb emu kill)' }
+  if ($booted -notmatch '1') { throw "Emulator did not finish booting — see $env:TEMP\prisms-emu.log" }
   # A fresh boot can still throw system ANR dialogs for a minute; taps land oddly until it settles.
   Start-Sleep -Seconds 10
 }
