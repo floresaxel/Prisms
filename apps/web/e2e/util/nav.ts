@@ -24,12 +24,13 @@ export type NavKey =
   | 'timeline'
   | 'graph'
   | 'decisions'
-  // Automations hub tabs (#rules|#blockers)
+  // Automations hub tabs (#rules|#blockers|#built-in)
   | 'rules'
-  | 'blockers';
+  | 'blockers'
+  | 'built-in';
 
 const PROJECT_TABS = new Set<NavKey>(['board', 'timeline', 'graph', 'decisions']);
-const AUTOMATION_TABS = new Set<NavKey>(['rules', 'blockers']);
+const AUTOMATION_TABS = new Set<NavKey>(['rules', 'blockers', 'built-in']);
 
 /**
  * Navigate to a screen by semantic key. For a hub tab, clicks the parent nav
