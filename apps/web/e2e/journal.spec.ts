@@ -185,7 +185,11 @@ test('offline write shows immediately (overlay) and syncs on reconnect — one r
   await goto(page, 'agenda');
   await page.getByTestId('day-head-0').click();
   await expect(page.getByTestId('journal-rich')).toContainText('written offline', { timeout: 30_000 });
-  expect(await localCount(page, today)).toBe(1); // exactly one row — no ghost duplicate
+  // POLLED on purpose: the text above is satisfied by the OVERLAY, which does not
+  // require the canonical row to have replicated yet — a bare read here raced the
+  // sync-down and saw 0 (CI run 30453866775, green on re-run of the same commit).
+  // Polling still proves "no ghost duplicate": a real duplicate stays at 2 and times out.
+  await expect.poll(() => localCount(page, today), { timeout: 30_000 }).toBe(1);
 });
 
 test('standalone Journal screen: lists the current month, opens a note, lazily loads a past month, archive downloads', async ({ page }) => {
