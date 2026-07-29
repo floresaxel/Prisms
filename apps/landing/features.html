@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#f6f7f9" />
+  <title>Features — Prisms</title>
+  <meta name="description" content="A tour of Prisms: one tree from visions to tasks, kanban by date, a scheduler that proposes real hours, habits and journal, and accountable automations." />
+  <meta property="og:title" content="Features — Prisms" />
+  <meta property="og:description" content="From a five-year vision to the next 25 minutes: structure, boards, agenda, habits and automations — all local-first." />
+  <meta property="og:type" content="website" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%3E%3Crect%20width='24'%20height='24'%20rx='6'%20fill='%232563eb'/%3E%3Cpath%20d='M12%205.5%205.4%2017.8h13.2Z'%20fill='none'%20stroke='white'%20stroke-width='1.7'%20stroke-linejoin='round'/%3E%3Cpath%20d='M12%205.5v12.3'%20stroke='white'%20stroke-width='1.7'/%3E%3C/svg%3E" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..750&display=swap" rel="stylesheet" />
+  <script>document.documentElement.classList.add('js');</script>
+  <link rel="stylesheet" href="site.css" />
+  <script defer src="site.js"></script>
+</head>
+<body>
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
+  <symbol id="i-prism" viewBox="0 0 24 24"><path d="M12 3 3 20h18Z"/><path d="M12 3v17"/></symbol>
+  <symbol id="i-zap" viewBox="0 0 24 24"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8Z"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="m4 12 5 5L20 7"/></symbol>
+  <symbol id="i-flame" viewBox="0 0 24 24"><path d="M12 3c1.5 3.5 5 4.5 6 8 .8 2.8-.5 8-6 8s-6.8-5.2-6-8c1-3.5 4.5-4.5 6-8z"/></symbol>
+  <symbol id="i-inbox" viewBox="0 0 24 24"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.5 5.1 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.5-6.9A2 2 0 0 0 16.7 4H7.3a2 2 0 0 0-1.8 1.1Z"/></symbol>
+  <symbol id="i-code" viewBox="0 0 24 24"><path d="m9 8-4 4 4 4"/><path d="m15 8 4 4-4 4"/></symbol>
+  <symbol id="i-replay" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></symbol>
+  <symbol id="i-chevr" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
+</svg>
+
+<header class="lp-nav">
+  <a class="lp-brand" href="index.html">
+    <span class="lp-brand-logo"><svg class="lp-ic"><use href="#i-prism"/></svg></span>
+    Prisms
+  </a>
+  <nav class="lp-nav-links">
+    <a href="features.html" class="on">Features</a>
+    <a href="platforms.html">Platforms</a>
+    <a href="self-host.html">Self-host</a>
+    <a href="https://github.com/floresaxel/Prisms" rel="noopener">GitHub</a>
+  </nav>
+  <a class="lp-btn lp-btn--primary" href="self-host.html">Try Prisms</a>
+</header>
+
+<main>
+  <section class="lp-phero">
+    <p class="lp-kicker">Features</p>
+    <h1>From a five-year vision<br/>to the next 25 minutes.</h1>
+    <p class="lp-sub">Most tools manage either your goals or your day. Prisms is one system
+       for both — every screen below is the same data, playing a different role.</p>
+  </section>
+
+  <section class="lp-section lp-section--tour">
+
+    <!-- 1 · structure -->
+    <div class="lp-show" id="plan">
+      <div class="lp-show-copy">
+        <p class="lp-kicker">Structure</p>
+        <h3>Visions become roadmaps.<br/>Roadmaps become Tuesdays.</h3>
+        <p>Everything you plan hangs off one tree — <b>Vision → Roadmap → Project → Milestone → Task</b> —
+           so every task can answer <i>“why does this exist?”</i>. Gantt views compute the critical
+           path; flowcharts, lists and boards stay in perfect sync because they’re the same data.</p>
+        <ul class="lp-points">
+          <li>One tree from life goals down to 20-minute tasks</li>
+          <li>Critical path &amp; time-left, computed for you</li>
+          <li>Flowchart, Gantt, kanban, list — same truth</li>
+        </ul>
+      </div>
+      <div class="lp-scenecard lp-scene" id="scene-structure" data-dur="4600" data-dwell="2600" aria-hidden="true">
+        <div class="s-chain">
+          <span class="s-node vision" data-at="200"><em>Vision</em>Write a novel</span>
+          <i class="s-ln" data-at="500"></i>
+          <span class="s-node roadmap" data-at="700"><em>Roadmap</em>2026 · Draft</span>
+          <i class="s-ln" data-at="1000"></i>
+          <span class="s-node project" data-at="1200"><em>Project</em>Part one</span>
+          <i class="s-ln" data-at="1500"></i>
+          <span class="s-node milestone" data-at="1700"><em>Milestone</em>Ch. 1–4</span>
+          <i class="s-ln" data-at="2000"></i>
+          <span class="s-node task" data-at="2200"><em>Task</em>Draft chapter 3</span>
+        </div>
+        <div class="s-gantt">
+          <div class="s-grow" data-at="2800"><span class="s-glabel">Outline</span><i class="s-gtrk"><b class="s-gbar" style="--w:34%;--l:0%"></b></i></div>
+          <div class="s-grow" data-at="3100"><span class="s-glabel">Draft ch. 1–4</span><i class="s-gtrk"><b class="s-gbar crit" style="--w:46%;--l:26%"></b></i></div>
+          <div class="s-grow" data-at="3400"><span class="s-glabel">Revise</span><i class="s-gtrk"><b class="s-gbar" style="--w:30%;--l:64%"></b></i></div>
+          <span class="s-crit" data-at="3900"><svg class="lp-ic"><use href="#i-zap"/></svg>critical path</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2 · boards / my day -->
+    <div class="lp-show lp-show--flip" id="board">
+      <div class="lp-show-copy">
+        <p class="lp-kicker">Boards &amp; My Day</p>
+        <h3>The day is the unit of work.</h3>
+        <p>The kanban board runs by <b>date, not status</b> — drag a task onto the day it
+           belongs to and it shows up in that day’s worklist. My Day opens with what’s
+           available, what’s blocked and what’s done, plus a one-tap timer so tracked time
+           lands on the right task.</p>
+        <ul class="lp-points">
+          <li>Kanban by date — today is always one column</li>
+          <li>My Day: available / blocked / done, auto-sorted</li>
+          <li>Global timer — clock in from any screen</li>
+        </ul>
+      </div>
+      <div class="lp-scenecard lp-scene" id="scene-board" data-dur="3600" data-dwell="2600" aria-hidden="true">
+        <div class="k-board">
+          <div class="k-col today">
+            <div class="k-head">Today <b class="k-cnt" data-at="2500" data-act="text" data-text="2">1</b></div>
+            <div class="k-card"><b>Draft chapter 3</b><span class="m-meta"><i class="pdot blue"></i>Thesis · 45m</span></div>
+            <div class="k-drop" id="k-drop"></div>
+          </div>
+          <div class="k-col">
+            <div class="k-head">Tue <b class="k-cnt">2</b></div>
+            <div class="k-card"><b>Call the bank</b><span class="m-meta"><i class="pdot amber"></i>Life admin</span></div>
+            <div class="k-card"><b>Edit outline</b><span class="m-meta"><i class="pdot blue"></i>Thesis</span></div>
+          </div>
+          <div class="k-col">
+            <div class="k-head">Wed <b class="k-cnt" data-at="2500" data-act="text" data-text="1">2</b></div>
+            <div class="k-card"><b>Water the plants</b><span class="m-meta"><i class="pdot teal"></i>Home</span></div>
+            <div class="k-slot"></div>
+          </div>
+          <div class="k-card k-move" id="k-move" data-at="1500"><b>Review PR feedback</b><span class="m-meta"><i class="pdot teal"></i>Prisms · 20m</span></div>
+        </div>
+        <span class="lp-cursor"></span>
+        <i class="cue" data-at="500" data-act="cursor" data-target="#k-move"></i>
+        <i class="cue" data-at="1300" data-act="click"></i>
+        <i class="cue" data-at="1500" data-act="cursor" data-target="#k-drop"></i>
+        <i class="cue" data-at="2900" data-act="cursor-hide"></i>
+      </div>
+    </div>
+
+    <!-- 3 · agenda -->
+    <div class="lp-show" id="agenda">
+      <div class="lp-show-copy">
+        <p class="lp-kicker">Agenda</p>
+        <h3>Drag intentions onto real hours.</h3>
+        <p>The scheduler proposes conflict-free blocks around your anchors and deadlines — you
+           commit with one tap, or drag tasks straight onto the week. Committed, anchored and
+           suggested time each look different, so you always know what’s a promise and what’s a plan.</p>
+        <ul class="lp-points">
+          <li>Earliest-fit scheduling with window hints</li>
+          <li>Deadline &amp; dependency aware</li>
+          <li>Habits get standing slots automatically</li>
+        </ul>
+      </div>
+      <div class="lp-scenecard lp-scene" id="scene-agenda" data-dur="4400" data-dwell="2600" aria-hidden="true">
+        <div class="a-grid">
+          <div class="a-gut"><span>09</span><span>11</span><span>13</span><span>15</span><span>17</span></div>
+          <div class="a-col"><b>Mon</b><div class="a-body">
+            <span class="a-block committed" style="--t:8%;--h:22%" data-at="300">Deep work</span>
+            <span class="a-block anchored" style="--t:52%;--h:14%">Standup</span>
+          </div></div>
+          <div class="a-col"><b>Tue</b><div class="a-body">
+            <span class="a-block habit" style="--t:44%;--h:11%" data-at="700">Piano</span>
+            <span class="a-block committed" style="--t:62%;--h:20%" data-at="1100">Draft ch. 3</span>
+          </div></div>
+          <div class="a-col"><b>Wed</b><div class="a-body">
+            <span class="a-block sugg" style="--t:18%;--h:18%" data-at="1600" id="a-sugg">Review PR<span class="m-mini" id="a-ok"><svg class="lp-ic"><use href="#i-check"/></svg></span></span>
+          </div></div>
+          <div class="a-col"><b>Thu</b><div class="a-body">
+            <span class="a-block anchored" style="--t:30%;--h:16%">Dentist</span>
+            <span class="a-block habit" style="--t:44%;--h:11%" data-at="700">Piano</span>
+          </div></div>
+        </div>
+        <div class="a-toast" data-at="3400"><svg class="lp-ic"><use href="#i-check"/></svg>Scheduled — fits before Friday’s deadline</div>
+        <span class="lp-cursor"></span>
+        <i class="cue" data-at="2200" data-act="cursor" data-target="#a-ok"></i>
+        <i class="cue" data-at="2900" data-act="click"></i>
+        <i class="cue" data-at="3050" data-act="class" data-target="#a-sugg" data-class="on2"></i>
+        <i class="cue" data-at="3600" data-act="cursor-hide"></i>
+      </div>
+    </div>
+
+    <!-- 4 · habits + journal -->
+    <div class="lp-show lp-show--flip" id="habits">
+      <div class="lp-show-copy">
+        <p class="lp-kicker">Habits &amp; journal</p>
+        <h3>Show up daily — and remember why.</h3>
+        <p>Habits and skills run as a parallel track: streaks, daily-target rings and practice
+           hours that level up. The journal keeps a note per day with live checkboxes, and
+           exports as plain Markdown files — your history stays readable forever.</p>
+        <ul class="lp-points">
+          <li>Six streak modes, daily-target rings</li>
+          <li>Practice hours roll up into skill levels</li>
+          <li>Day notes export as plain <code>.md</code></li>
+        </ul>
+      </div>
+      <div class="lp-scenecard lp-scene" id="scene-habits" data-dur="4200" data-dwell="2600" aria-hidden="true">
+        <div class="h-wrap">
+          <div class="h-card">
+            <div class="h-top"><b>Piano practice</b><span class="h-streak" data-at="1900"><svg class="lp-ic"><use href="#i-flame"/></svg><i data-at="1900" data-act="text" data-text="12">11</i></span></div>
+            <div class="h-ring">
+              <svg viewBox="0 0 48 48">
+                <circle class="tr" cx="24" cy="24" r="20"/>
+                <circle class="fl" cx="24" cy="24" r="20" data-at="600"/>
+              </svg>
+              <span class="h-ring-lbl"><b data-at="600" data-act="text" data-text="45m">0m</b>/ 60m</span>
+            </div>
+            <div class="h-mastery"><span>Level 4 · Sonatina</span><i class="trk"><b class="fil" data-at="2500"></b></i></div>
+          </div>
+          <div class="h-card h-journal">
+            <div class="h-top"><b>Sun · 6 Jul</b><span class="h-md">.md</span></div>
+            <div class="h-line"><span class="m-ckb sm done"><svg class="lp-ic"><use href="#i-check"/></svg></span>Morning pages</div>
+            <div class="h-line"><span class="m-ckb sm" data-at="2900"><svg class="lp-ic"><use href="#i-check"/></svg></span>Call Anna about the trip</div>
+            <div class="h-line h-typed"><span class="h-reveal" data-at="1200">Practiced the Clementi — finally clean at tempo.</span><i class="h-caret"></i></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 5 · automations -->
+    <div class="lp-show" id="automations">
+      <div class="lp-show-copy">
+        <p class="lp-kicker">Automations</p>
+        <h3>The busywork runs itself —<br/>and shows its work.</h3>
+        <p>Rules spawn follow-ups, reschedule what slipped, and keep recurring work flowing.
+           Nothing happens silently: every automated change carries provenance and lands in a
+           review inbox, so the robots stay accountable to you.</p>
+        <ul class="lp-points">
+          <li>Trigger → condition → action rules</li>
+          <li>Every output answers “why does this exist?”</li>
+          <li>Conflicts &amp; rejections land in one inbox</li>
+        </ul>
+      </div>
+      <div class="lp-scenecard lp-scene" id="scene-auto" data-dur="5200" data-dwell="2600" aria-hidden="true">
+        <div class="au-rule">
+          <span class="au-name"><svg class="lp-ic"><use href="#i-zap"/></svg>Chapter follow-up <i class="au-togl"></i></span>
+          <div class="au-flow">
+            <span class="au-step" data-at="300">when <code>task.completed</code></span>
+            <i class="au-arr" data-at="700">→</i>
+            <span class="au-step" data-at="900">if <code>project = Thesis</code></span>
+            <i class="au-arr" data-at="1300">→</i>
+            <span class="au-step" data-at="1500">then <code>create follow-up</code></span>
+          </div>
+        </div>
+        <div class="au-out" data-at="2200">
+          <span class="m-ckb sm"><svg class="lp-ic"><use href="#i-check"/></svg></span>
+          <span class="m-t"><b>Revise chapter 3 notes</b><span class="m-meta"><i class="pdot blue"></i>Thesis · tomorrow</span></span>
+          <span class="m-tag blue"><svg class="lp-ic"><use href="#i-zap"/></svg>automated</span>
+        </div>
+        <div class="au-why" data-at="3300">
+          <b>Why does this exist?</b>
+          Created by <i>Chapter follow-up</i> when “Draft chapter 3” was completed — 6 Jul, 14:02.
+        </div>
+        <div class="au-inbox" data-at="4300"><svg class="lp-ic"><use href="#i-inbox"/></svg>Review inbox <b data-at="4300" data-act="text" data-text="1">0</b></div>
+      </div>
+    </div>
+
+  </section>
+
+  <section class="lp-section lp-band-wrap">
+    <div class="lp-band">
+      <h2>One brain. Every screen.</h2>
+      <p>All of this works offline and converges across web, desktop and mobile.</p>
+      <div class="lp-ctas">
+        <a class="lp-btn lp-btn--inv lp-btn--lg" href="platforms.html">Explore platforms <svg class="lp-ic"><use href="#i-chevr"/></svg></a>
+        <a class="lp-btn lp-btn--bandghost lp-btn--lg" href="self-host.html">Get started</a>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="lp-foot">
+  <div class="lp-foot-inner">
+    <div class="lp-foot-brand">
+      <span class="lp-brand"><span class="lp-brand-logo"><svg class="lp-ic"><use href="#i-prism"/></svg></span>Prisms</span>
+      <p>Local-first goal execution.<br/>Your goals, your hardware, your data.</p>
+    </div>
+    <nav class="lp-foot-col" aria-label="Product">
+      <b>Product</b>
+      <a href="features.html">Features</a>
+      <a href="platforms.html">Platforms</a>
+      <a href="self-host.html">Self-host</a>
+    </nav>
+    <nav class="lp-foot-col" aria-label="Resources">
+      <b>Resources</b>
+      <a href="https://github.com/floresaxel/Prisms" rel="noopener">GitHub</a>
+      <a href="https://github.com/floresaxel/Prisms/blob/main/docs/SELF_HOSTING.md" rel="noopener">Self-hosting guide</a>
+      <a href="https://github.com/floresaxel/Prisms/blob/main/Blueprints/ARCHITECTURE.md" rel="noopener">Architecture</a>
+    </nav>
+  </div>
+  <div class="lp-foot-base">© 2026 Prisms · free &amp; open · self-hosted</div>
+</footer>
+
+</body>
+</html>
