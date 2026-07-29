@@ -126,6 +126,7 @@ export {
   useBlockTags,
   useJournalMonths,
   useJournalDay,
+  useDayLog,
   useTimeBlocksForDay,
   useTaskSteps,
   useTaskStepsByTask,

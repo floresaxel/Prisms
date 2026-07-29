@@ -361,6 +361,9 @@ export function buildOptimisticEffects(name: CommandName, payload: unknown, ctx:
       if ('day_reset_hour' in p) f['day_reset_hour'] = p['day_reset_hour'];
       if ('timezone' in p) f['timezone'] = p['timezone'];
       if ('weather_location' in p) f['weather_location'] = j(p['weather_location'] ?? null);
+      // EXPLICIT field list: a field missing here still reaches the server, but the
+      // toggle only bites after the round-trip — offline it would look dead.
+      if ('journal_day_log' in p) f['journal_day_log'] = p['journal_day_log'] ? 1 : 0;
       // the settings row id is the user id (server PK), so the merged read patches it.
       return [upd('user_settings', ctx.userId, f)];
     }

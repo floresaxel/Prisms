@@ -15,6 +15,8 @@ export const settingsUpdateSchema = z
     day_reset_hour: z.number().int().min(0).max(23).optional(),
     timezone: z.string().min(1).optional(),
     weather_location: weatherLocationSchema.nullable().optional(),
+    /** Built-in automation toggle (Annex L): show the generated journal day log. */
+    journal_day_log: z.boolean().optional(),
   })
   .refine((patch) => Object.keys(patch).length > 0, {
     message: 'settings.update requires at least one field',

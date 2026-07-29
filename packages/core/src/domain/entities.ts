@@ -438,6 +438,8 @@ export const userSettingsSchema = z.strictObject({
   /** IANA zone name; validated against the platform tz db at the command boundary (s11). */
   timezone: z.string().min(1),
   weather_location: weatherLocationSchema.nullable(),
+  /** Built-in automation toggle (Annex L): render the generated journal day log. DDL default true. */
+  journal_day_log: z.boolean(),
   updated_at: isoDateTimeSchema,
 });
 export type UserSettings = z.infer<typeof userSettingsSchema>;

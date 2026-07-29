@@ -285,6 +285,9 @@ const user_settings = new Table({
   day_reset_hour: column.integer,
   timezone: column.text,
   weather_location: column.text,
+  // Annex L. SQLite has no boolean: 0/1, and ABSENT means ON (the DDL default),
+  // so a client that has not synced settings yet still shows the day log.
+  journal_day_log: column.integer,
   updated_at: column.text,
 });
 
