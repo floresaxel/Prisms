@@ -85,10 +85,24 @@ export interface DayLogSettings {
   timezone?: string | null;
 }
 
+/**
+ * The fields the computation actually reads. Declared as the minimum so a caller
+ * can pass full rows (the client's merged replica) OR a narrow projection (the
+ * export's SELECT), without a widening cast in either direction.
+ */
+export type DayLogNode = Pick<
+  Node,
+  'id' | 'deleted_at' | 'title' | 'completed_at' | 'completion_disposition'
+>;
+export type DayLogBlock = Pick<
+  ScheduleBlock,
+  'id' | 'task_id' | 'status' | 'starts_at' | 'ends_at' | 'superseded_at' | 'deleted_at'
+>;
+
 /** Fact rows. Callers may pass supersets — this module filters and buckets. */
 export interface DayLogFacts {
-  nodes: Iterable<Node>;
-  blocks: Iterable<ScheduleBlock>;
+  nodes: Iterable<DayLogNode>;
+  blocks: Iterable<DayLogBlock>;
 }
 
 export interface DayLogInput extends DayLogFacts, DayLogSettings {
@@ -184,7 +198,7 @@ function collect(
 
   // Live nodes, indexed once: `nodes` may be a one-shot iterator, so it is walked
   // exactly once and the map is the input to the completed pass below.
-  const liveNodes = new Map<Uuid, Node>();
+  const liveNodes = new Map<Uuid, DayLogNode>();
   for (const node of facts.nodes) {
     if (!node || node.deleted_at !== null) continue;
     const id = idOf(node.id);
