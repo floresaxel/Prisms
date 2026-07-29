@@ -16,6 +16,7 @@ import { and, eq, isNull } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 
 import type { JobClock } from './clock';
+import { forEachUserIsolated, type BatchOutcome } from './per-user';
 import { loadSchedulerInput } from './scheduler-context';
 
 export const NIGHTLY_OPTIMIZATION = 'nightly_optimization';
@@ -109,9 +110,8 @@ export async function runScheduleOptimize(db: PostgresJsDatabase, userId: string
   });
 }
 
-/** Cron entry point: optimize every user that has settings. */
-export async function runScheduleOptimizeAll(db: PostgresJsDatabase, clock: JobClock): Promise<number> {
+/** Cron entry point: optimize every user that has settings (SEC-6/F9: per-user isolated). */
+export async function runScheduleOptimizeAll(db: PostgresJsDatabase, clock: JobClock): Promise<BatchOutcome> {
   const users = await db.select({ user_id: user_settings.user_id }).from(user_settings);
-  for (const u of users) await runScheduleOptimize(db, u.user_id, clock);
-  return users.length;
+  return forEachUserIsolated(users, 'schedule.optimize', (u) => u.user_id, (u) => runScheduleOptimize(db, u.user_id, clock));
 }

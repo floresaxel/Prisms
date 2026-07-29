@@ -80,6 +80,12 @@ describe.skipIf(!adminUrl)('S10 API integration (auth, PowerSync JWT, settings.u
         ttlSeconds: 300,
       },
       rateLimit: { limit: 10, windowMs: 60_000 },
+      // SEC-2/F1: the credential throttle is fail-closed — with no proxy-set
+      // X-Real-IP every caller shares one bucket, and this suite makes many
+      // deliberate sign-in attempts (CSRF/origin cases). Raise it here so the
+      // suite tests what it means to test; the throttle itself is covered by
+      // test/auth-throttle.test.ts.
+      authRateLimit: { limit: 10_000, windowMs: 60_000 },
       quiet: true,
     });
   });

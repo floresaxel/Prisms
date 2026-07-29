@@ -13,6 +13,15 @@ import { z } from 'zod';
 export const EXPORT_FORMAT = 'prisms-export';
 export const EXPORT_FORMAT_VERSION = 1;
 
+// SEC-3/F17: ceilings on a restore. `POST /sync/import` accepts 32 MB, and
+// runImportRestore turns the whole manifest into ONE transaction — every row is
+// an individual INSERT … ON CONFLICT, and each table's ids become a single
+// `IN (…)` list. Unbounded, that is a long-running write txn holding locks on a
+// single-node deployment. These bounds are well above a real personal dataset.
+export const MAX_IMPORT_TABLES = 64;
+export const MAX_IMPORT_ROWS_PER_TABLE = 200_000;
+export const MAX_IMPORT_COMMAND_HISTORY = 200_000;
+
 /**
  * A versioned portable export. `tables` is rows-as-data keyed by table name;
  * `command_history` is included for recoverability but is non-replayable.
@@ -25,8 +34,10 @@ export const exportManifestSchema = z.strictObject({
   device_id: deviceIdSchema,
   /** Max HLC in the export; an importer advances its clock past this (monotonicity). */
   hlc_high_water: hlcStringSchema,
-  tables: z.record(z.string(), z.array(jsonObjectSchema)),
-  command_history: z.array(jsonObjectSchema).optional(),
+  tables: z
+    .record(z.string().max(200), z.array(jsonObjectSchema).max(MAX_IMPORT_ROWS_PER_TABLE))
+    .refine((t) => Object.keys(t).length <= MAX_IMPORT_TABLES, `an export may not carry more than ${MAX_IMPORT_TABLES} tables`),
+  command_history: z.array(jsonObjectSchema).max(MAX_IMPORT_COMMAND_HISTORY).optional(),
 });
 export type ExportManifest = z.infer<typeof exportManifestSchema>;
 

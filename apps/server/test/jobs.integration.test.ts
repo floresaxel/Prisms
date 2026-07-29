@@ -80,7 +80,8 @@ describe.skipIf(!adminUrl)('S13 jobs — facts & truth', () => {
       { date: '2026-06-14', high_c: 30, low_c: 23, precip_prob: 0.2, wind_kph: 12 },
     ];
     const res = await runWeatherPoll(db, clock, async () => forecast);
-    expect(res).toEqual({ users: 1, facts: 2 });
+    // SEC-6/F9: `failed` counts users whose forecast fetch/upsert threw.
+    expect(res).toEqual({ users: 1, facts: 2, failed: 0 });
 
     const slug = locationSlug('Merritt Island, FL');
     const rows = await sql_`SELECT key, payload, computed_at FROM external_facts WHERE user_id = ${user} ORDER BY key`;
