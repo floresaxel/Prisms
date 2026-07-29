@@ -88,7 +88,7 @@ export function Journal({ ctx }: { ctx: CommandContext }) {
   async function onArchive() {
     setBusy(true);
     try {
-      await downloadJournalArchive();
+      await downloadJournalArchive(fc.timezone);
     } finally {
       setBusy(false);
     }
