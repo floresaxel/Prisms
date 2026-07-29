@@ -25,11 +25,37 @@ function sourceFiles(dir: string): string[] {
   return out;
 }
 
+/**
+ * React Native's codegen babel plugin reserves the export name `Commands` for
+ * `codegenNativeCommands` results and throws on any other module that exports
+ * it. Because @prisms/ui is in the mobile graph, a single `export { type
+ * Commands }` there made the *entire* app un-bundlable in both dev and prod —
+ * and nothing in `turbo lint typecheck test` could see it, because it is a
+ * Metro/babel rule, not a TypeScript one. Hence this grep.
+ */
+// `export type Commands …` / `export const Commands …`
+const RESERVED_DECL = /export\s+(?:type\s+|const\s+|let\s+|var\s+|class\s+|function\s+|interface\s+|enum\s+)?Commands\b/;
+// `export { …, type Commands, … }` — `\b` will not match inside `createCommands`,
+// and `Commands as Other` renames the export away, so neither is a hit.
+const RESERVED_SPECIFIER = /export\s+(?:type\s+)?\{[^}]*\bCommands\s*(?:,|\}|$)/m;
+
 describe('Hermes compatibility (J5/D6)', () => {
   it('references no Intl.Segmenter anywhere in the mobile-shipped code', () => {
     const files = HERMES_DIRS.flatMap((rel) => sourceFiles(path.join(repoRoot, rel)));
     expect(files.length).toBeGreaterThan(50); // sanity: the scan actually found the trees
     const offenders = files.filter((f) => /Intl\.Segmenter/.test(readFileSync(f, 'utf8'))).map((f) => path.relative(repoRoot, f));
+    expect(offenders).toEqual([]);
+  });
+
+  it('exports nothing named `Commands` (RN codegen reserves it — breaks the bundle)', () => {
+    const files = HERMES_DIRS.flatMap((rel) => sourceFiles(path.join(repoRoot, rel)));
+    expect(files.length).toBeGreaterThan(50);
+    const offenders = files
+      .filter((f) => {
+        const src = readFileSync(f, 'utf8');
+        return RESERVED_DECL.test(src) || RESERVED_SPECIFIER.test(src);
+      })
+      .map((f) => path.relative(repoRoot, f));
     expect(offenders).toEqual([]);
   });
 });

@@ -9,7 +9,7 @@ import { Alert, Text, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 
-import { NavigationContainer, DarkTheme } from '@react-navigation/native';
+import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { PowerSyncContext } from '@powersync/react';
 import type { PowerSyncDatabase } from '@powersync/react-native';
@@ -28,13 +28,15 @@ import { Habits } from './src/screens/Habits';
 import { Kanban } from './src/screens/Kanban';
 import { Login } from './src/screens/Login';
 import { Review } from './src/screens/Review';
-import { Worklist } from './src/screens/Worklist';
+import { Today } from './src/screens/Today';
 
 const Tab = createBottomTabNavigator();
 
+// T0/D1: rebased on the light `DefaultTheme` — react-navigation styles the tab
+// bar, headers and press ripples from this, so it must agree with `theme`.
 const navTheme = {
-  ...DarkTheme,
-  colors: { ...DarkTheme.colors, background: theme.bg, card: theme.surface, border: theme.border, primary: theme.accent, text: theme.text },
+  ...DefaultTheme,
+  colors: { ...DefaultTheme.colors, background: theme.bg, card: theme.surface, border: theme.border, primary: theme.accent, text: theme.text },
 };
 
 function AuthedApp({ user, onSignOut }: { user: SessionUser; onSignOut: () => void }) {
@@ -96,8 +98,29 @@ function AuthedApp({ user, onSignOut }: { user: SessionUser; onSignOut: () => vo
           </View>
         )}
         <NavigationContainer theme={navTheme}>
-          <Tab.Navigator screenOptions={{ headerStyle: { backgroundColor: theme.surface }, headerTintColor: theme.text }}>
-            <Tab.Screen name="Worklist">{() => <Worklist ctx={ctx} />}</Tab.Screen>
+          <Tab.Navigator
+            screenOptions={{
+              headerStyle: { backgroundColor: theme.surface },
+              headerTintColor: theme.text,
+              // react-navigation substitutes a `MissingIcon` placeholder for any
+              // tab without a `tabBarIcon` — which drew a tofu square above all
+              // eight labels. No icon set is a dependency here (D8 budgeted one
+              // new package, and it went to the gradients), so the bar is
+              // label-only on purpose: the slot is removed rather than filled
+              // with a glyph that means nothing. Real icons need react-native-svg
+              // or an icon font — the mock already has the symbol set.
+              tabBarIcon: () => null,
+              tabBarIconStyle: { display: 'none' },
+              tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
+            }}
+          >
+            {/* D2 (completed at T7): Today IS the worklist now — clock in/out
+                with the focus review, check-off with the block picker, and
+                delete all live on it, for scheduled rows and unscheduled ones
+                alike — so the old Worklist tab is gone rather than duplicated. */}
+            {/* Today draws its own "Today / <date>" header (the mock has exactly
+                one), so the navigator's would be a duplicate. */}
+            <Tab.Screen name="Today" options={{ headerShown: false }}>{() => <Today ctx={ctx} />}</Tab.Screen>
             <Tab.Screen name="Agenda">{() => <Agenda ctx={ctx} />}</Tab.Screen>
             <Tab.Screen name="Kanban">{() => <Kanban ctx={ctx} />}</Tab.Screen>
             <Tab.Screen name="Habits">{() => <Habits ctx={ctx} />}</Tab.Screen>
@@ -178,7 +201,7 @@ export function App() {
 
   return (
     <SafeAreaProvider>
-      <StatusBar style="light" />
+      <StatusBar style="dark" />
       {loading ? (
         <View style={{ flex: 1, backgroundColor: theme.bg, justifyContent: 'center', alignItems: 'center' }}>
           <Text style={{ color: theme.dim }} testID="loading">Loading…</Text>

@@ -23,10 +23,12 @@ import {
   DEFAULT_WINDOWS,
   descendantsOf,
   evaluateBlockerRules,
+  expandWindows,
   habitTaskIds,
   habitTodayMinutes,
   isJustified,
   isoToEpochMillis,
+  localInstant,
   mergeTable,
   minutesLeftInDay,
   minutesLeftInTask,
@@ -70,6 +72,8 @@ import { usePrismsData, toOverlayEffect } from './powersync/data-provider';
 import { createSqlOverlayStore, type SqlExecutor } from './powersync/overlay-store';
 import { createJournalMonthSubscriptions, type JournalMonthSubscriptions, type StreamSubscriber } from './powersync/streams';
 import { type ProvenanceFields } from './provenance';
+import { buildDayMap, type DayMap } from './day-map';
+import { blocksForDay, buildItinerary, loggedMinutesByTask, type ItineraryRow } from './today-itinerary';
 import { groupWorklistBySchedule, type WorklistGroup } from './worklist-grouping';
 import {
   toAutomationRule,
@@ -1019,6 +1023,93 @@ export function useDoneToday(now: Instant): DoneTodayItem[] {
   }, [ctx, entryRows, now]);
 }
 
+export interface TodayItinerary {
+  /** The day bucket being shown (day-reset aware, not civil midnight). */
+  today: IsoDate;
+  rows: ItineraryRow[];
+  /**
+   * The same day as percentages, for the 24 h bar (T2) and the swipe-out
+   * calendar (T3). Built here rather than in a second hook so both surfaces
+   * share one agenda read and one pass over the tree — and so a block cannot
+   * possibly be in one and missing from the other.
+   */
+  dayMap: DayMap;
+  /** Minutes logged per task today. */
+  loggedMinutes: ReadonlyMap<string, number>;
+  /** The task the single global timer is on (I5), or null. */
+  runningTaskId: string | null;
+}
+
+/**
+ * The mobile Today itinerary (MOBILE_TODAY_PLAN T1): today's committed blocks
+ * resolved into rows carrying state, project tone and durations.
+ *
+ * Pass a COARSE `now` (the Today screen ticks this once a minute). The elapsed
+ * time on the live row ticks every second in a leaf component instead —
+ * threading a 1 s clock through here would recompute the whole agenda, the
+ * ancestry walk and the entry sums every second, for one label.
+ */
+export function useTodayItinerary(now: Instant): TodayItinerary {
+  const { factContext: ctx } = usePrismsData();
+  const agenda = useAgenda(now);
+  const running = useRunningTimer(now);
+  const runningTaskId = running?.entry.task_id ?? null;
+
+  return useMemo(() => {
+    const today = ctx.today(now);
+    const logged = loggedMinutesByTask(agenda.entries, { today, timezone: ctx.timezone, dayResetHour: ctx.dayResetHour });
+
+    const projectIdByTask = new Map<string, string | null>();
+    const estimateMinutesByTask = new Map<string, number>();
+    const doneTaskIds = new Set<string>();
+    const habitTaskIds = new Set<string>();
+    for (const b of agenda.blocks) {
+      if (projectIdByTask.has(b.taskId)) continue;
+      const node = ctx.tree.byId.get(b.taskId);
+      const project = ancestorsOf(ctx.tree, b.taskId).find((a) => a.node_type === 'project');
+      projectIdByTask.set(b.taskId, project?.id ?? null);
+      if (node?.completed_at != null) doneTaskIds.add(b.taskId);
+      // Read from the node, not from `useHabitTasks`: that hook keeps only
+      // actionable items, so a checked-off habit row would lose its chip.
+      if (node?.habit_id != null) habitTaskIds.add(b.taskId);
+      // A completed task is absent from `tasksById` (useAgenda only keeps live,
+      // estimated ones), so fall back to the node's own estimate.
+      const estimate = agenda.tasksById.get(b.taskId)?.estimateMinutes ?? node?.estimate_minutes ?? null;
+      if (estimate !== null && estimate > 0) estimateMinutesByTask.set(b.taskId, estimate);
+    }
+
+    const rows = buildItinerary({
+      blocks: agenda.blocks,
+      logged,
+      estimateMinutesByTask,
+      projectIdByTask,
+      doneTaskIds,
+      habitTaskIds,
+      runningTaskId,
+      today,
+      timezone: ctx.timezone,
+      dayResetHour: ctx.dayResetHour,
+    });
+
+    // D4: active hours ARE the scheduler windows, so the greyed zones come from
+    // the account's own window config — no second setting to keep in sync.
+    const dayStart = localInstant(today, 0, ctx.timezone);
+    const dayMap = buildDayMap({
+      blocks: blocksForDay(agenda.blocks, { today, timezone: ctx.timezone, dayResetHour: ctx.dayResetHour }),
+      loggedMinutesByTask: logged,
+      projectIdByTask,
+      windows: expandWindows(agenda.input.windows, ctx.timezone, { from: dayStart, to: localInstant(today, 24, ctx.timezone) }),
+      runningTaskId,
+      doneTaskIds,
+      now,
+      today,
+      timezone: ctx.timezone,
+    });
+
+    return { today, rows, dayMap, loggedMinutes: logged, runningTaskId };
+  }, [ctx, agenda, runningTaskId, now]);
+}
+
 export interface ProjectCompletion {
   project: Node;
   value: CompletionValue;
@@ -1481,7 +1572,7 @@ export interface JournalMonthsRead {
  */
 export function useJournalMonths(monthKeys: readonly string[]): JournalMonthsRead {
   const db = usePowerSync();
-  const key = useMemo(() => [...new Set(monthKeys)].sort(), [monthKeys.join(' ')]);
+  const key = useMemo(() => [...new Set(monthKeys)].sort(), [monthKeys.join('\0')]);
 
   useEffect(() => {
     const mgr = journalSubsFor(db as unknown as object);

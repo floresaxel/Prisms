@@ -16,3 +16,17 @@ export function formatMinutes(min: number): string {
   const m = abs % 60;
   return h > 0 ? `${sign}${h}h ${m}m` : `${sign}${m}m`;
 }
+
+/**
+ * The Today itinerary's longer duration copy — `1hr 30min`, `45 min`, `2hrs`.
+ * Spelled out rather than `1h 30m` because these sit alone in a row's metadata
+ * line, where the terse form reads like a code.
+ */
+export function formatDurationLong(min: number): string {
+  const abs = Math.max(0, Math.round(min));
+  const h = Math.floor(abs / 60);
+  const m = abs % 60;
+  if (h === 0) return `${m} min`;
+  const hours = h === 1 ? '1hr' : `${h}hrs`;
+  return m === 0 ? hours : `${hours} ${m}min`;
+}
