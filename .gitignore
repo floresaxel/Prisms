@@ -23,6 +23,12 @@ apps/mobile/.expo-export/
 .env.*
 !.env.example
 
+# Planning/spec documents, design mockups, and the codebase-audit records are
+# kept locally, not published with the repo.
+Blueprints/
+docs/mockups/
+docs/audit/
+
 .DS_Store
 Thumbs.db
 

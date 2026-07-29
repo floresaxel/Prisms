@@ -1,159 +1,305 @@
 # Prisms
 
-Local-first goal-execution platform: `Vision → Roadmap → Project → Milestone → Task → Schedule`, with skills & habits as a parallel track.
+**A local-first goal-execution platform.** You state a long-term vision, break it
+down until it lands on a calendar, and work the plan — offline, on any device,
+with the whole thing syncing to a server you own.
 
-- **Spec:** [Blueprints/ARCHITECTURE.md](Blueprints/ARCHITECTURE.md) (v1.0 baseline) → [Blueprints/other/ARCHITECTURE_1.3.md](Blueprints/other/ARCHITECTURE_1.3.md) (v1.3/1.4 convergence + read-path layer — the current contract)
-- **Build plans:** [Blueprints/BUILD_PLAN.md](Blueprints/BUILD_PLAN.md) (v1.0, S1–S23) → [Blueprints/other/MIGRATION_PLAN_v1.0_to_v1.4.md](Blueprints/other/MIGRATION_PLAN_v1.0_to_v1.4.md) (v1.4 migration, M0–M15)
+Prisms decomposes ambition through six layers:
 
-## Workspace
+```text
+Vision → Roadmap → Project → Milestone → Task → Schedule block
+```
+
+Skills and habits run as a parallel track: they attach directly to a vision and
+produce recurring practice, streaks, daily targets, and accumulated practice
+hours.
+
+![My Day](docs/screenshots/my-day.png)
+
+---
+
+## Why it's built this way
+
+Most planners are either a calendar that forgot why you're busy, or a
+goal-tracker that never touches your day. Prisms keeps the chain intact: every
+scheduled block traces back to a vision, and every vision eventually shows up
+as an hour in your week.
+
+Three constraints shape the whole system:
+
+- **Local-first.** Every read and write hits a local SQLite database first. The
+  UI never waits on the network. Clock in on a plane, complete a task in a
+  tunnel, edit your agenda offline — it all converges when you reconnect.
+- **You own the server.** Vanilla PostgreSQL is the source of truth; one
+  `docker compose` command runs the entire stack on your own hardware. No
+  managed service is required anywhere in the architecture.
+- **Commands, not row patches.** Clients never send arbitrary SQL or generic
+  entity updates. They upload named command envelopes (`node.check_off`,
+  `block.move`, `timer.clock_in`, …), which is what makes offline conflicts
+  resolvable and history explainable.
+
+---
+
+## Features
+
+### Plan the day, not just the year
+
+**My Day** puts what's actually actionable in front of you — available now,
+blocked, done today — sorted by the priority of the project each task belongs
+to. Every task can answer *why?* by tracing its ancestry back to a vision. A
+running timer lifts into a global pill you can clock out of from any screen.
+
+**Agenda** is a week calendar beside your to-do list. Drag a task onto the week
+and the valid time windows light up while everything else dims; drop it in a
+valid slot and it becomes a committed block. Anchored blocks refuse the drag.
+Past time entries render as a faint history layer behind the plan.
+
+![Agenda](docs/screenshots/agenda.png)
+
+### Every task in one place
+
+Capture anything into the **Inbox** without choosing a parent — it waits there
+until you promote it into the tree. Tasks group by project or by status, and
+each row carries its own checklist of substeps.
+
+![Tasks](docs/screenshots/tasks.png)
+
+### Four views on the same plan
+
+The **Projects** hub scopes to one project or all of them, and shows it four
+ways.
+
+| Board — kanban by date | Timeline — Gantt + critical path |
+|---|---|
+| ![Board](docs/screenshots/projects-board.png) | ![Timeline](docs/screenshots/projects-timeline.png) |
+
+| Graph — the dependency DAG | Decisions — weighted priority |
+|---|---|
+| ![Graph](docs/screenshots/projects-graph.png) | ![Decisions](docs/screenshots/projects-decisions.png) |
+
+- **Board** — non-done tasks in a backlog plus day columns; drag a card to
+  another day to re-date it.
+- **Timeline** — one bar per task, dependency arrows, and the critical path
+  (longest chain of estimates) highlighted.
+- **Graph** — a canvas of nodes and their dependency edges. Drag between
+  handles to create a dependency; cycles and type mismatches are rejected
+  instantly, offline, before the server ever sees them.
+- **Decisions** — a weighted decision matrix. Criteria are columns with
+  editable weights, projects are rows, each cell a 0–10 score. The ranking
+  recomputes live, and it is what orders your task list on My Day.
+
+### Know whether you're winning
+
+The **Dashboard** shows burndown against the scheduled line with a projected
+finish date, per-project completion, the live priority ranking, and habit
+streaks. Every panel is computed from local facts, so it renders offline.
+
+![Dashboard](docs/screenshots/dashboard.png)
+
+### Habits and skills
+
+Recurring practices tied to a vision, with six streak modes (daily, weekly,
+monthly, quarterly, yearly, and perfect-planned), daily-target rings, and — for
+skills — practice-hour accumulation, levels, and mastery progress. The ring
+fills while a skill task's timer is running.
+
+![Habits & Skills](docs/screenshots/habits.png)
+
+### A journal that writes half of itself
+
+One markdown note per day in a WYSIWYG editor with working checkboxes, browsable
+by month, exportable as `.md` or a full `.zip` archive. Each day carries a
+generated **day log** footer of what was scheduled and completed — derived at
+render time, never stored.
+
+Months load lazily: a month subscribes its rows only when you open it, so years
+of journaling never weigh down sync.
+
+![Journal](docs/screenshots/journal.png)
+
+### Automations
+
+**Rules** spawn templated follow-up tasks when a task is created or completed,
+with `{trigger.title}`-style interpolation and trigger-relative due dates.
+**Blockers** are predicates that gate tasks — "waiting on an unfinished
+dependency", "rain probability above 60%" — evaluated locally, so a task goes
+blocked instantly and offline. Both are validated client-side before the write.
+
+![Automations](docs/screenshots/automations.png)
+
+### Also in the box
+
+- **Review inbox** — server rejections, edit conflicts, stale suggestions, and
+  automation drift become durable, reviewable items instead of a toast you
+  missed while offline.
+- **Scheduling assistance** — a greedy earliest-fit scheduler plus a weighted
+  optimizer that proposes block placements you accept or reject.
+- **Time tracking** — clock in/out with a focus review on clock-out; double
+  clock-in is impossible by construction, even across two offline devices.
+- **Backup & portability** — versioned `prisms-export` backup/restore with
+  optional passphrase encryption. Import restores rows as data; it never
+  replays your command history.
+
+---
+
+## Platforms
+
+| Client | Stack | Surface |
+|---|---|---|
+| **Web** | Vite + React, PowerSync on wa-sqlite/OPFS, installable PWA | The full feature set |
+| **Desktop** | Tauri v2 shell around the web build | Full feature set + OS notifications |
+| **Mobile** | Expo / React Native | Today, Agenda, Kanban, Habits, Dashboard, Review, read-only graph, local notifications |
+
+All three share the same domain logic and reactive data layer, and all three
+work offline against their own local database.
+
+---
+
+## Getting started
+
+**Requirements:** Node 26+, pnpm, and Docker (with Compose v2).
+
+```bash
+pnpm install
+```
+
+Bring up Postgres and the sync service:
+
+```bash
+docker compose up -d
+```
+
+Apply migrations and (optionally) load a demo dataset:
+
+```bash
+pnpm --filter @prisms/db db:migrate
+```
+
+```bash
+pnpm --filter @prisms/db db:seed
+```
+
+Then run the API and the web app in two terminals:
+
+```bash
+pnpm --filter @prisms/server dev
+```
+
+```bash
+pnpm --filter @prisms/web dev
+```
+
+The app is at **http://localhost:5173** — register an account and you're in.
+In development, Vite reverse-proxies `/api` and `/sync` to the API on `:3001`,
+so the browser stays same-origin.
+
+> The `api` service in `docker-compose.yml` is a placeholder that only answers
+> `/health`. The real API runs on the host via the command above; the
+> one-command deployment is `docker-compose.prod.yml`.
+
+### Mobile
+
+```bash
+pnpm --filter @prisms/mobile start
+```
+
+### Desktop
+
+```bash
+pnpm --filter @prisms/desktop dev
+```
+
+### If the default ports are taken
+
+Host ports are overridable from a gitignored `.env` at the repo root — e.g.
+`PRISMS_POSTGRES_PORT=5434`, `PRISMS_POWERSYNC_PORT=8081`. If you remap the
+PowerSync port, point the web client at it too, via `VITE_POWERSYNC_URL` in
+`apps/web/.env.local`.
+
+### Windows without Docker Desktop
+
+Docker Engine inside WSL2 works fine — prefix the compose commands:
+
+```powershell
+wsl docker compose up -d
+```
+
+WSL shuts down when idle; re-running any `wsl docker …` command boots it again
+and the containers restart automatically.
+
+---
+
+## Self-hosting
+
+One command on a clean host brings up Postgres, PowerSync, the API, and the web
+bundle:
+
+```bash
+cp .env.example .env
+```
+
+```bash
+docker compose -f docker-compose.prod.yml up -d --build
+```
+
+See **[docs/SELF_HOSTING.md](docs/SELF_HOSTING.md)** for secrets, JWT key
+derivation, backup/restore, and upgrade notes, and
+**[docs/SECURITY_REVIEW.md](docs/SECURITY_REVIEW.md)** for the security review
+of the write path, stream scoping, and storage boundaries.
+
+The `web` container serves plain HTTP — terminate TLS in front of it. Auth
+cookies are `Secure`, so sign-in only works over HTTPS (or `localhost`).
+
+---
+
+## Repository layout
 
 | Path | Package | Purpose |
 |---|---|---|
 | `packages/core` | `@prisms/core` | Pure domain logic — no IO, no wall clock, no randomness (lint-enforced) |
-| `packages/db` | `@prisms/db` | Drizzle schema, migrations, PowerSync sync rules |
-| `packages/ui` | `@prisms/ui` | Shared reactive React hooks |
-| `apps/web` | `@prisms/web` | Vite + React SPA (full feature surface incl. flowcharts/Gantt/editors) |
-| `apps/mobile` | `@prisms/mobile` | Expo (React Native) — lists/agenda/kanban/timer/habits + read-only graphs |
-| `apps/desktop` | `@prisms/desktop` | Tauri v2 shell loading the web build |
-| `apps/server` | `@prisms/server` | Hono API + Better Auth + pg-boss jobs |
+| `packages/db` | `@prisms/db` | Drizzle schema, forward-only migrations, PowerSync sync streams |
+| `packages/ui` | `@prisms/ui` | Shared reactive React hooks, platform-neutral |
+| `apps/web` | `@prisms/web` | Vite + React SPA |
+| `apps/mobile` | `@prisms/mobile` | Expo (React Native) |
+| `apps/desktop` | `@prisms/desktop` | Tauri v2 shell |
+| `apps/server` | `@prisms/server` | Hono API + Better Auth + command dispatcher + pg-boss jobs |
 
-## Architecture (v1.4 — two-layer, convergent)
+`packages/core` holds every scheduling, status, aggregate, and merge decision as
+deterministic pure functions, so the same answer comes out on the server, in the
+browser, and on a phone. Package boundaries and core purity are enforced by
+ESLint (`eslint.config.mjs`) and regression-tested.
 
-The v1.0 single-table optimistic model was migrated (M0–M15) to the v1.3/1.4
-convergence + read-path contracts. The load-bearing pieces:
+### How a write travels
 
-- **Two-layer client store (R15).** The UI reads `mergeTable(replica, overlay)`:
-  a read-only canonical replica synced down from Postgres, plus a local-only
-  optimistic overlay of pending commands (`client_commands` + `overlay_effects`).
-  Rollback = drop the overlay entry; overlays never upload as row patches.
-- **Named command envelopes are the only trusted write path.** The client mints
-  the command id (UUIDv7) + HLC at write and uploads the envelope preserving them
-  (V2); the server owns all trust fields (ownership/provenance/system/`hlc`/
-  `schema_version`, R17). A compile-time-exhaustive coverage test proves every
-  `CommandName` has an `executeCommand` writer — the old CRUD-patch path is gone.
-- **Deterministic convergence.** Per-field LWW by HLC, with explicit merge
-  functions for `(sort_order, hlc)` and `mergeTimeEntries` (union-not-sum). A
-  13-scenario two-device harness (`pnpm test:convergence`) is the gate.
-- **Sync Streams tiers (§7.3).** `bootstrap`/`active` auto-sync; `history` (Tier 2)
-  is subscribed lazily. All streams are JWT-scoped with no client-widenable params.
-- **Incremental `StatusIndex` (§7.12), wired.** The client read layer seeds the
-  index once per session and feeds it row-diffs (R7), so an optimistic write updates
-  the merged status view incrementally instead of rebuilding `FactContext`; the
-  index's per-command `apply` is O(neighbourhood), not O(table) (measured: 1 node /
-  ~0.02 ms, touch-set < 100, on a 100k-node account). The server write path caches
-  the per-batch context (tree / edge index / `FactContext`) across a command batch
-  and parallelises its context load (R8), so it is no longer an O(table) rebuild per
-  command.
-- **Persistent, loading-aware read layer (§7.14/7.15).** `PrismsDataProvider`
-  above the router owns the shared subscriptions + `FactContext` once per session;
-  reads are stale-while-revalidate with a remount-surviving cache, so navigation
-  never cold-flashes and a fresh login shows a skeleton, not the empty state.
-- **Conflict/rejection inbox (§7.13).** Server rejections, dependency rejections,
-  HLC conflicts, automation drift, schema-version blocks, and import/sync warnings
-  become durable `sync_review_items` that sync to every client's Review screen.
-- **Portability (§13.1).** Versioned `prisms-export` backup/restore: import
-  restores rows as data (never replays commands) and advances the device HLC past
-  the imported high-water; optional passphrase encryption (default on installed
-  targets). Secrets sit behind a secure-storage adapter; DB encryption behind an
-  adapter port.
+1. The client mints a command id and a hybrid logical clock, applies an
+   optimistic effect to a local overlay, and renders immediately.
+2. The overlay sits on top of a read-only replica synced down from Postgres;
+   the UI reads the merge of the two. Rollback is dropping the overlay entry.
+3. The envelope uploads when there's a connection. The server owns every trust
+   field — ownership, provenance, timestamps — and re-checks invariants.
+4. The canonical row syncs back down. Conflicts resolve by per-field
+   last-write-wins on the HLC, with explicit merge functions where that isn't
+   right (time entries union rather than sum).
+5. Anything the server refuses becomes a durable item in your Review inbox.
 
-## Development
+---
 
-```sh
-pnpm install
-pnpm turbo lint typecheck test   # the repo gate (also run in CI)
-docker compose up -d postgres    # local Postgres (wal_level=logical)
+## Tests
+
+```bash
+pnpm turbo lint typecheck test
 ```
 
-### Windows without Docker Desktop
+Beyond the main gate:
 
-Docker Engine runs fine inside WSL2 (Ubuntu, systemd). From the repo root in
-PowerShell:
+| Command | What it covers |
+|---|---|
+| `pnpm --filter @prisms/core test:coverage` | Core coverage floor (≥90%) |
+| `pnpm test:convergence` | Two-device offline convergence harness |
+| `pnpm --filter @prisms/web e2e` | Playwright end-to-end against a live stack |
 
-```powershell
-wsl docker compose up -d   # boots postgres + powersync + api
-wsl docker compose ps
-```
-
-Then bring the database and API up to date:
-
-```sh
-pnpm --filter @prisms/db db:migrate    # forward-only migrations
-pnpm --filter @prisms/db db:seed       # demo user (optional)
-pnpm --filter @prisms/server dev       # real API on :3001 (compose api stub is a placeholder)
-pnpm --filter @prisms/web dev          # web app on :5173 (proxies /api + /sync to :3001)
-```
-
-The web app (`apps/web`) is a Vite + React SPA on PowerSync (wa-sqlite/OPFS).
-In dev, Vite reverse-proxies `/api` + `/sync` to the API so the browser is
-same-origin. The Playwright DoD e2e (`pnpm --filter @prisms/web e2e`) runs
-against the production build served by `vite preview` (real service worker for
-offline) with the stack up — start the API with
-`BETTER_AUTH_URL=http://localhost:5173 BETTER_AUTH_TRUSTED_ORIGINS=http://localhost:5173`.
-
-Cookie-authenticated POSTs require a trusted `Origin` (CSRF, §13): the API's
-own origin is always trusted; add cross-origin clients (e.g. the Vite dev
-server) via `BETTER_AUTH_TRUSTED_ORIGINS=http://localhost:5173`.
-
-Host ports are overridable in a local `.env` (gitignored) when the defaults
-are taken — e.g. `PRISMS_POSTGRES_PORT=5434`, `PRISMS_POWERSYNC_PORT=8081`.
-The web client's default PowerSync URL is `http://localhost:8080` (matching
-compose); if you remap the container port, point the client at it too, e.g.
-`VITE_POWERSYNC_URL=http://localhost:8081` in `apps/web/.env.local`.
-Note WSL shuts down when idle; re-running any `wsl docker ...` command boots
-it again and the containers auto-start (`restart: unless-stopped`).
-
-Architectural rules (package boundaries, core purity bans) are enforced by ESLint — see `eslint.config.mjs` — and regression-tested in `packages/core/test/architecture-lint.test.ts`.
-
-## Production / self-hosting
-
-One command on a clean host brings up Postgres + PowerSync + the API + the web
-bundle (`docker-compose.prod.yml`). See **[docs/SELF_HOSTING.md](docs/SELF_HOSTING.md)**
-for secrets, the JWT key derivation, backup/restore (operator + per-user portable
-export), and upgrades, and **[docs/SECURITY_REVIEW.md](docs/SECURITY_REVIEW.md)**
-for the §13 security review (trusted write path, stream scoping, trust fields,
-secure storage, encryption limits).
-
-```sh
-cp .env.example .env          # fill in secrets
-docker compose -f docker-compose.prod.yml up -d --build
-```
-
-## Session status
-
-- [x] S1 — Monorepo scaffold
-- [x] S2 — Domain types, schemas, time (HLC, bucketDate, Clock/Rng, UUID helpers)
-- [x] S3 — Database package (Drizzle schema, migrations, sync rules, demo seed)
-- [x] S4 — Graph module (tree/DAG ops, sort order, I1–I4/I10 validators, critical path)
-- [x] S5 — Status + predicate AST (§7.1 status fn, phase derivation, tri-state §9.2 evaluator)
-- [x] S6 — Aggregates (practice hours/levels, six streak modes, progress, completion %, burndown + projection, time-left)
-- [x] S7 — Rules engine (spawn automations, fixpoint MAX_DEPTH=5, UUIDv5 outputs, self-trigger guard)
-- [x] S8 — Scheduler · greedy (earliest-fit, window hints, dependency+lag, single-task reschedule)
-- [x] S9 — Scheduler · optimize (weighted soft objectives, local search over greedy seed, proposal diffing)
-- [x] S10 — API shell + auth (Hono, Better Auth, PowerSync JWT, settings.update, rate limiter)
-- [x] S11 — Command dispatcher + full §8.1 catalog (49 verbs, invariant checks, idempotency, backstop enqueue)
-- [x] S12 — Convergence harness (two-device HLC LWW, §7.4 double clock-in, UUIDv5 automation convergence)
-- [x] S13 — Jobs I · facts & truth (pg-boss: weather.poll, aggregates.recompute, automation.backstop, retention.purge)
-- [x] S14 — Jobs II · scheduling & notify (schedule.optimize, pastdue.scan, layout.precompute/ELK, notify.dispatch)
-- [x] S15 — Web shell + data layer (Vite+React, PowerSync/OPFS, ui hooks, optimistic apply + rollback, PWA; Playwright DoD ✓)
-- [x] S16 — Worklist, timer, focus review, activity inbox (offline loop; double-timer impossible)
-- [x] S17 — Agenda (week calendar + to-do, drag/tap-to-place with live window hints, anchored/suggested/grey, block move/resize)
-- [x] S18 — Kanban by date + habits (streaks, daily-target rings, practice hours/levels)
-- [x] S19 — Dashboard (burndown + projection + completion + priority + streaks) + decision board
-- [x] S20 — Graph surfaces (React Flow flowcharts, Gantt) + automation/blocker editors + settings
-- [x] S21 — Mobile core (Expo): reuses the platform-neutral `@prisms/ui`; lists/agenda/kanban/timer/habits + read-only graph + local notifications
-- [x] S22 — Desktop (Tauri v2 shell around the web build; OS notifications)
-- [x] S23 — Hardening & release (CI matrix, core coverage ≥90%, prod compose + backup/restore, self-hosting guide, 100k-node load budgets)
-
-All 23 v1.0 build sessions complete. The **v1.4 migration** (M0–M15) is also
-complete: two-layer client store, Sync Streams tiers, incremental `StatusIndex`,
-6-step dispatcher with causal ordering + server-owned trust fields, automation
-drift backstop, 13-scenario convergence gate, review inbox, persistent +
-loading-aware read layer, portable encrypted import/export, and mobile/desktop
-parity. See [Blueprints/other/MIGRATION_PLAN_v1.0_to_v1.4.md](Blueprints/other/MIGRATION_PLAN_v1.0_to_v1.4.md).
-
-The repo gate is `pnpm turbo lint typecheck test` (21 tasks) plus the web
-Playwright suite (`pnpm --filter @prisms/web e2e`, incl. the `v14` no-flash
-read-path + `m13` import/export flows), the two-device convergence harness
-(`pnpm test:convergence`), and the core coverage gate
-(`pnpm --filter @prisms/core test:coverage`).
+The e2e suite needs the full stack running and the API started with
+`BETTER_AUTH_URL=http://localhost:5173` and
+`BETTER_AUTH_TRUSTED_ORIGINS=http://localhost:5173`. Cookie-authenticated POSTs
+require a trusted `Origin`; the API's own origin is always trusted, and
+cross-origin clients like the Vite dev server are added through that variable.
