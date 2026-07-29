@@ -8,11 +8,16 @@ import type { CommandContext } from '@prisms/ui';
 
 import { TabBar, useHashTab, type TabSpec } from '../components/HashTabs';
 import { Blockers } from './Blockers';
+import { BuiltIn } from './BuiltIn';
 import { Rules } from './Rules';
 
 const TABS: readonly TabSpec[] = [
   { key: 'rules', label: 'Rules', icon: 'zap' },
   { key: 'blockers', label: 'Blockers', icon: 'lock' },
+  // Annex L: automations the app performs itself. They are settings flags, not
+  // automation_rules rows — the toggle lives here because this is where a user
+  // looks for "what does Prisms do on its own?".
+  { key: 'built-in', label: 'Built-in', icon: 'repeat' },
 ];
 
 export function Automations({ ctx }: { ctx: CommandContext }) {
@@ -26,6 +31,7 @@ export function Automations({ ctx }: { ctx: CommandContext }) {
       <TabBar tabs={TABS} active={tab} onSelect={select} />
       {tab === 'rules' && <Rules ctx={ctx} />}
       {tab === 'blockers' && <Blockers ctx={ctx} />}
+      {tab === 'built-in' && <BuiltIn ctx={ctx} />}
     </section>
   );
 }

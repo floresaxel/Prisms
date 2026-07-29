@@ -700,3 +700,66 @@ A markdown note on any calendar day. Design decisions D1–D7 are normative; dis
 
 API surface additions: `GET /sync/journal/export` (requireSession + rate-gated) → `{ entries:
 [{ entry_date, content, updated_at }] }`.
+
+---
+
+## Annex L — Journal day log *(post-1.0 feature; full spec: `Blueprints/JOURNAL_DAY_LOG_DERIVED_PLAN.md`)*
+
+A read-only, system-generated **"Day log"** under each journal day, listing that day's
+**scheduled** blocks and **completed** tasks. Optional and **ON by default**. Decisions D1–D9
+are normative; distilled:
+
+- **Derived, never stored (D1).** There is no `journal_day_logs` table and no writer anywhere.
+  `computeDayLog(facts, date, settings) → DayLogEntries | null` (`packages/core/src/journal/day-log.ts`)
+  is evaluated in exactly two places: the client at render (`useDayLog(date)` over the warm merged
+  `FactContext`) and the server at export time. Clients already hold every fact it needs — the
+  `bootstrap` stream syncs all live `nodes` and `schedule_blocks` with no age window — so the
+  computation costs one memoized pass and nothing replicates. Consequences: no publication change,
+  no stream change, no dispatcher write path, no optimistic mirror, no tombstones, no
+  purge/restore entries, no backstop job; `ROW_SCHEMA_VERSION` stays 1 and `entitySchemas` stays
+  at 22. The log is **not editable structurally** — there is no stored artifact to address.
+- **Semantics (D2).** `{v: 1, scheduled[], completed[], truncated?}`. `scheduled` = live committed
+  blocks (`status='committed' AND superseded_at IS NULL AND deleted_at IS NULL`) whose `starts_at`
+  buckets to the day, joined to their live node, with `done = node.completed_at !== null` (live,
+  any day). `completed` = live nodes whose `completed_at` buckets to the day, carrying
+  `disposition` ('obsolete' renders "descoped") and `planned` (the task had a committed live block
+  that same day). Deterministic order — scheduled by `(starts_at, block_id)`, completed by
+  `(completed_at, task_id)` — capped at 100 per list with the overflow counted in `truncated`.
+  The log is a **snapshot of current facts, not history**: unchecking removes a line, renaming
+  retitles it, deleting erases it from every day. That is the feature.
+- **Day assignment (D3).** `bucketDate` and nothing else (§7.2): blocks belong to the day of
+  `starts_at` (one crossing the reset hour stays on its start day), completions to the day of
+  `completed_at`; settings come from the merged `user_settings` at compute time, falling back to
+  the DDL defaults. **Changing the timezone or day-reset hour re-buckets every day at the next
+  render** — deliberate, and only possible because nothing was materialized under the old setting.
+- **Toggle (D4).** `user_settings.journal_day_log boolean NOT NULL DEFAULT true` (migration
+  `0012_journal_day_log.sql` — a column, so **no publication change**, though the bootstrap
+  stream's explicit `user_settings` column list did change, which needs a PowerSync restart on
+  deploy). The flag threads through five explicit field lists, each of which silently kills it if
+  forgotten: the bootstrap query, `settingsUpdateSchema`, the dispatcher's `settings.update`
+  candidate list, the client's optimistic `settings.update` effect, and `useCommands.updateSettings`.
+  OFF ⇒ `useDayLog` returns null and exports omit the section and the log-only days.
+- **Rendering (D7).** The entries are **never markdown at rest**: each surface renders its own
+  views, and one core module owns both textual forms (`renderDayLogMarkdown`, `composeDayMarkdown`),
+  so the UI and the archive cannot drift. A day's `.md` is its `content` **verbatim**, then
+  `\n\n---\n\n### Day log\n` and the section — appended only when the flag is on and the log is
+  non-empty (`content` is always a verbatim prefix, property-tested). Times render `HH:mm` in the
+  user's zone through the `bucket.ts` Intl machinery (nothing Hermes lacks). The footer is a
+  sibling **below** the editor/preview, never inside the document.
+- **Surfaces (D8).** Web/desktop: the `DayJournal` panel footer (shared by the Agenda and the
+  Journal screen) plus **Automations → Built-in**, where the toggle lives — built-in automations
+  are settings flags, deliberately **not** `automation_rules` rows, so they never leak into rule
+  CRUD, replay, or drift audits. Mobile renders the footer and obeys the synced flag (no toggle).
+- **Export (D6).** `GET /sync/journal/export` grows an optional `day_log` per day and includes
+  days holding ONLY a log (`{entry_date, content: '', day_log}`), so the archive shows what the
+  journal shows. Server-sourced on purpose (lazy month sync would truncate a client-side "export
+  all"); it ships structure, never rendered markdown.
+- **If devices ever stop holding old facts (D9).** Age-tiering *live* archival data off devices
+  (deferred Annex A5) is the one condition that breaks derivation, and only for aged-out days —
+  which are by definition immutable. The answer then is a **compaction-time snapshot** written
+  once by the archiving job and deleted if the facts are ever un-archived, sharing the same
+  `computeDayLog`; NOT a live materialized cache. Out of scope for v1.
+
+API surface additions: none. `GET /sync/journal/export` entries gain an optional
+`day_log: DayLogEntries` and may omit `updated_at` on a log-only day; with the flag off the
+response is byte-identical to Annex J's.

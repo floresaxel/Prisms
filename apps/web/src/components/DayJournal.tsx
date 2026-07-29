@@ -17,8 +17,10 @@ import { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
-import { journalDayFilename, useCommands, useJournalDay, type CommandContext } from '@prisms/ui';
+import { composeDayMarkdown } from '@prisms/core';
+import { journalDayFilename, useCommands, useDayLog, useJournalDay, useUserSettings, type CommandContext } from '@prisms/ui';
 
+import { DayLogFooter } from './DayLogFooter';
 import { RichJournalEditor } from './RichJournalEditor';
 
 const SAVE_DEBOUNCE_MS = 800;
@@ -50,6 +52,10 @@ export function MarkdownView({ markdown }: { markdown: string }) {
 export function DayJournalPanel({ date, ctx }: { date: string; ctx: CommandContext }) {
   const { entry, isLoading } = useJournalDay(date);
   const commands = useCommands(ctx);
+  // Annex L: derived at render from the warm provider — null when the built-in
+  // automation is off or the day holds nothing.
+  const dayLog = useDayLog(date);
+  const { timezone } = useUserSettings();
   const [draft, setDraft] = useState(entry?.content ?? '');
   const [preview, setPreview] = useState(false);
   const dirty = useRef(false);
@@ -90,7 +96,9 @@ export function DayJournalPanel({ date, ctx }: { date: string; ctx: CommandConte
   }
 
   function exportDay() {
-    const blob = new Blob([draft], { type: 'text/markdown;charset=utf-8' });
+    // The note VERBATIM, then the day-log section (D7) — the same core compose
+    // the archive zip and mobile Share use, so no two surfaces can disagree.
+    const blob = new Blob([composeDayMarkdown(draft, dayLog, { timezone })], { type: 'text/markdown;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -125,6 +133,10 @@ export function DayJournalPanel({ date, ctx }: { date: string; ctx: CommandConte
       ) : (
         <RichJournalEditor value={draft} onChange={change} onBlur={flush} />
       )}
+
+      {/* OUTSIDE the editor and the preview, in both modes — never part of the
+          document the user types into. */}
+      {!isLoading && <DayLogFooter entries={dayLog} timezone={timezone} />}
 
       <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
         <button className="px-btn" data-testid="journal-export" onClick={exportDay}>Export .md</button>

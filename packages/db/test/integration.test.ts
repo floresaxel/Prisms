@@ -59,6 +59,12 @@ describe.skipIf(!adminUrl)('migrations + seed against fresh postgres', () => {
       'task_steps', 'time_entries', 'user', 'user_settings', 'verification',
     ];
     expect(rows.map((t) => t.table_name)).toEqual(expected);
+    // Annex L is DERIVED: migration 0012 adds a settings COLUMN and no table, so
+    // this list must not grow. Asserted in the same commit as the migration
+    // because this test only runs against a fresh DB in CI — a drift here is
+    // invisible locally and fails the branch's first CI run.
+    expect(expected).toHaveLength(32);
+    expect(expected).not.toContain('journal_day_logs');
   });
 
   it('migrations are idempotent (re-run is a no-op)', async () => {
@@ -68,10 +74,11 @@ describe.skipIf(!adminUrl)('migrations + seed against fresh postgres', () => {
   it('seed runs and is deterministic across re-runs', async () => {
     const first = await seedDemoUser(url);
     expect(first).toEqual({
-      nodes: 22,
+      nodes: 23,
       habits: 3,
       habit_completions: 8,
       edges: 6,
+      schedule_blocks: 1,
       time_entries: 8,
       journal_entries: 2,
     });
@@ -90,6 +97,30 @@ describe.skipIf(!adminUrl)('migrations + seed against fresh postgres', () => {
       'Knowledge',
       'Expression',
     ]);
+  });
+
+  it('journal_day_log defaults ON for a settings row that never names it (Annex L)', async () => {
+    const [row] = await sql<{ journal_day_log: boolean }[]>`
+      SELECT journal_day_log FROM user_settings WHERE user_id = ${DEMO_USER_ID}`;
+    // The seed inserts no journal_day_log — migration 0012's DEFAULT true is what
+    // makes the feature opt-OUT for every pre-existing user.
+    expect(row!.journal_day_log).toBe(true);
+  });
+
+  it('seeds a LOG-ONLY past-month day: facts on 2026-05-08, no note (Annex L)', async () => {
+    const notes = await sql`
+      SELECT 1 FROM journal_entries
+      WHERE user_id = ${DEMO_USER_ID} AND entry_date = '2026-05-08'`;
+    expect(notes).toHaveLength(0);
+    const blocks = await sql<{ task_id: string; status: string }[]>`
+      SELECT task_id, status FROM schedule_blocks
+      WHERE user_id = ${DEMO_USER_ID} AND deleted_at IS NULL`;
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0]!.status).toBe('committed');
+    const [task] = await sql<{ title: string; completed_at: Date }[]>`
+      SELECT title, completed_at FROM nodes WHERE id = ${blocks[0]!.task_id}`;
+    expect(task!.title).toBe('Write the April retro 📝');
+    expect(task!.completed_at).not.toBeNull();
   });
 
   it('I1 trigger rejects a task under a vision', async () => {

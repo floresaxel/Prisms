@@ -40,6 +40,7 @@ export interface SeedSummary {
   habits: number;
   habit_completions: number;
   edges: number;
+  schedule_blocks: number;
   time_entries: number;
   journal_entries: number;
 }
@@ -199,6 +200,20 @@ export async function seedDemoUser(databaseUrl: string): Promise<SeedSummary> {
     sort_order: 'a0',
   });
 
+  // Annex L — the LOG-ONLY past-month day (2026-05-08): a committed block plus a
+  // completed task on a day that has NO journal note, in a month before T0. The
+  // V5 archive e2e proves the export is server-sourced by finding this day in the
+  // zip although its month was never subscribed on the device. Bucketed with
+  // day_reset_hour 4 in America/New_York (EDT = UTC-4 in May).
+  const retroNotes = makeNode({
+    node_type: 'task',
+    title: 'Write the April retro 📝',
+    parent_id: portfolio.id,
+    sort_order: 'a2',
+    estimate_minutes: 90,
+    completed_at: '2026-05-08T18:20:00.000Z',
+  });
+
   // --- habits & skills --------------------------------------------------------
   const habitBase = () => ({
     ...base(),
@@ -256,7 +271,21 @@ export async function seedDemoUser(databaseUrl: string): Promise<SeedSummary> {
     foundations, engines,
     monorepo, domainTypes, dbPackage, statusEngine, scheduler,
     research, draft, vectorsTask,
-    inboxActivity, runToday, practiceScales,
+    inboxActivity, retroNotes, runToday, practiceScales,
+  ];
+
+  // --- schedule blocks (committed agenda) --------------------------------------
+  // Explicit schema_version — rows built in JS must carry it or the dispatcher
+  // rejects them as E_CLIENT_TOO_OLD far from the cause (0f6b95d lesson).
+  const blockRows = [
+    {
+      ...base(),
+      task_id: retroNotes.id,
+      starts_at: '2026-05-08T17:00:00.000Z',
+      ends_at: '2026-05-08T18:30:00.000Z',
+      status: 'committed' as const,
+      schema_version: 1,
+    },
   ];
 
   // --- dependency edges (same node_type, DAG — §6.7 I4) ------------------------
@@ -356,6 +385,7 @@ export async function seedDemoUser(databaseUrl: string): Promise<SeedSummary> {
     await db.insert(nodes).values(allNodes);
     await db.insert(habits).values([morningRun, guitar, weeklyReview]);
     await db.insert(edges).values(edgeRows);
+    await db.insert(schedule_blocks).values(blockRows);
     await db.insert(time_entries).values(entryRows);
     await db.insert(habit_completions).values(completionRows);
     await db.insert(journal_entries).values(journalRows);
@@ -365,6 +395,7 @@ export async function seedDemoUser(databaseUrl: string): Promise<SeedSummary> {
       habits: 3,
       habit_completions: completionRows.length,
       edges: edgeRows.length,
+      schedule_blocks: blockRows.length,
       time_entries: entryRows.length,
       journal_entries: journalRows.length,
     };

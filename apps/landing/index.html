@@ -1,0 +1,367 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#f6f7f9" />
+  <title>Prisms — turn goals into days</title>
+  <meta name="description" content="Prisms is a local-first planner that turns visions into roadmaps, projects, tasks and scheduled hours — with habits, a journal and automations. Self-hosted, offline-first, yours." />
+  <meta property="og:title" content="Prisms — turn goals into days" />
+  <meta property="og:description" content="Local-first goal execution: visions become roadmaps, projects, tasks and time on your week. Self-hosted and offline-first." />
+  <meta property="og:type" content="website" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%3E%3Crect%20width='24'%20height='24'%20rx='6'%20fill='%232563eb'/%3E%3Cpath%20d='M12%205.5%205.4%2017.8h13.2Z'%20fill='none'%20stroke='white'%20stroke-width='1.7'%20stroke-linejoin='round'/%3E%3Cpath%20d='M12%205.5v12.3'%20stroke='white'%20stroke-width='1.7'/%3E%3C/svg%3E" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..750&display=swap" rel="stylesheet" />
+  <script>document.documentElement.classList.add('js');</script>
+  <link rel="stylesheet" href="site.css" />
+  <script defer src="site.js"></script>
+</head>
+<body>
+
+<!-- icon sprite — same strokes as the app (@prisms/ui icons.tsx subset) -->
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
+  <symbol id="i-prism" viewBox="0 0 24 24"><path d="M12 3 3 20h18Z"/><path d="M12 3v17"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+  <symbol id="i-cal" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></symbol>
+  <symbol id="i-repeat" viewBox="0 0 24 24"><path d="M17 2l4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></symbol>
+  <symbol id="i-book" viewBox="0 0 24 24"><path d="M2 4h6a4 4 0 0 1 4 4v12a3 3 0 0 0-3-3H2z"/><path d="M22 4h-6a4 4 0 0 0-4 4v12a3 3 0 0 1 3-3h7z"/></symbol>
+  <symbol id="i-inbox" viewBox="0 0 24 24"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.5 5.1 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.5-6.9A2 2 0 0 0 16.7 4H7.3a2 2 0 0 0-1.8 1.1Z"/></symbol>
+  <symbol id="i-layers" viewBox="0 0 24 24"><path d="m12 2-10 5 10 5 10-5Z"/><path d="m2 17 10 5 10-5"/><path d="m2 12 10 5 10-5"/></symbol>
+  <symbol id="i-zap" viewBox="0 0 24 24"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8Z"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="m4 12 5 5L20 7"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 5v14l12-7Z"/></symbol>
+  <symbol id="i-flame" viewBox="0 0 24 24"><path d="M12 3c1.5 3.5 5 4.5 6 8 .8 2.8-.5 8-6 8s-6.8-5.2-6-8c1-3.5 4.5-4.5 6-8z"/></symbol>
+  <symbol id="i-cols" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M15 3v12"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M9 6h12M9 12h12M9 18h12"/><circle cx="4" cy="6" r="1.2"/><circle cx="4" cy="12" r="1.2"/><circle cx="4" cy="18" r="1.2"/></symbol>
+  <symbol id="i-code" viewBox="0 0 24 24"><path d="m9 8-4 4 4 4"/><path d="m15 8 4 4-4 4"/></symbol>
+  <symbol id="i-replay" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></symbol>
+  <symbol id="i-chevr" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
+</svg>
+
+<header class="lp-nav">
+  <a class="lp-brand" href="index.html">
+    <span class="lp-brand-logo"><svg class="lp-ic"><use href="#i-prism"/></svg></span>
+    Prisms
+  </a>
+  <nav class="lp-nav-links">
+    <a href="features.html">Features</a>
+    <a href="platforms.html">Platforms</a>
+    <a href="self-host.html">Self-host</a>
+    <a href="https://github.com/floresaxel/Prisms" rel="noopener">GitHub</a>
+  </nav>
+  <a class="lp-btn lp-btn--primary" href="self-host.html">Try Prisms</a>
+</header>
+
+<main id="top">
+
+  <!-- ─── hero ─────────────────────────────────────────────────────────── -->
+  <section class="lp-hero">
+    <div class="lp-hero-copy">
+      <svg class="lp-beam" viewBox="0 0 260 84" aria-hidden="true">
+        <path class="lp-beam-in" d="M0 46 H96" />
+        <path class="lp-beam-prism" d="M120 18 100 60h40Z" />
+        <path class="lp-ray lp-ray--blue"  d="M132 38 C176 30 216 22 260 14" />
+        <path class="lp-ray lp-ray--teal"  d="M133 42 C180 40 216 38 260 34" />
+        <path class="lp-ray lp-ray--amber" d="M133 46 C180 50 216 54 260 56" />
+        <path class="lp-ray lp-ray--green" d="M132 50 C176 60 216 68 260 76" />
+      </svg>
+      <p class="lp-eyebrow">Local-first · Open · Self-hostable</p>
+      <h1>Turn goals into days.</h1>
+      <p class="lp-sub">
+        Prisms breaks long-term visions into roadmaps, projects and tasks — then schedules
+        them into real hours on your week, tracks the habits behind them, and automates the
+        busywork. Every change lands locally first and syncs to every device you own.
+      </p>
+      <div class="lp-ctas">
+        <a class="lp-btn lp-btn--primary lp-btn--lg" href="self-host.html">Try Prisms</a>
+        <a class="lp-btn lp-btn--ghost lp-btn--lg" href="features.html">Explore the product</a>
+      </div>
+      <p class="lp-hero-meta">Web · desktop · mobile — one synced brain, on your own server.</p>
+    </div>
+
+    <!-- animated app window: My Day playback -->
+    <div class="lp-window lp-scene" id="scene-hero" data-dur="8800" data-dwell="2400" aria-hidden="true">
+      <div class="lp-titlebar"><i></i><i></i><i></i><span>Prisms — My Day</span></div>
+      <div class="m-app">
+        <aside class="m-sb">
+          <div class="m-brand"><span class="m-logo"><svg class="lp-ic"><use href="#i-prism"/></svg></span>Prisms</div>
+          <div class="m-group">Today</div>
+          <span class="m-nav on"><svg class="lp-ic"><use href="#i-sun"/></svg>My Day</span>
+          <span class="m-nav"><svg class="lp-ic"><use href="#i-list"/></svg>Tasks</span>
+          <span class="m-nav"><svg class="lp-ic"><use href="#i-cal"/></svg>Agenda<b class="m-badge">3</b></span>
+          <span class="m-nav"><svg class="lp-ic"><use href="#i-book"/></svg>Journal</span>
+          <div class="m-group">Plan</div>
+          <span class="m-nav"><svg class="lp-ic"><use href="#i-layers"/></svg>Projects</span>
+          <span class="m-nav"><svg class="lp-ic"><use href="#i-repeat"/></svg>Habits</span>
+          <span class="m-nav"><svg class="lp-ic"><use href="#i-zap"/></svg>Automations</span>
+        </aside>
+        <div class="m-main">
+          <div class="m-top">
+            <span class="m-crumb"><b>My Day</b><i>/</i>Mon 6 Jul</span>
+            <span class="m-timer" data-at="3600">
+              <i class="dot"></i><b>Draft chapter 3</b>
+              <span class="m-timer-t" data-at="3600" data-tick="0" data-tick-static="25:14">0:00</span>
+            </span>
+            <span class="m-sync" id="h-sync"><i class="dot"></i><span class="st">Synced</span></span>
+          </div>
+          <div class="m-content">
+            <div class="m-left">
+              <div class="m-h1">Good morning <span class="m-sub2">4 focus tasks · 2h 40m planned</span></div>
+              <div class="m-chips">
+                <span class="m-chip"><svg class="lp-ic"><use href="#i-check"/></svg>Done today <b data-at="2150" data-act="text" data-text="4">3</b></span>
+                <span class="m-chip"><svg class="lp-ic"><use href="#i-clock"/></svg>Tracked <b>1h 05m</b></span>
+                <span class="m-chip"><svg class="lp-ic"><use href="#i-zap"/></svg>Automated <b>2</b></span>
+              </div>
+              <div class="m-sec">Available<i></i></div>
+              <ul class="m-rows">
+                <li class="m-row" data-at="2050" id="h-row1">
+                  <span class="m-ckb" id="h-ck1"><svg class="lp-ic"><use href="#i-check"/></svg></span>
+                  <span class="m-t"><b>Review PR feedback</b><span class="m-meta"><i class="pdot teal"></i>Prisms · P2 · 20m</span></span>
+                  <span class="m-due today">Today</span>
+                </li>
+                <li class="m-row" id="h-row2">
+                  <span class="m-ckb"><svg class="lp-ic"><use href="#i-check"/></svg></span>
+                  <span class="m-t"><b>Draft chapter 3</b><span class="m-meta"><i class="pdot blue"></i>Thesis · P1 · 45m</span></span>
+                  <span class="m-tag amber" data-at="3600"><i class="dot"></i>now</span>
+                  <span class="m-playbtn" id="h-play"><svg class="lp-ic"><use href="#i-play"/></svg></span>
+                </li>
+                <li class="m-row">
+                  <span class="m-ckb"><svg class="lp-ic"><use href="#i-check"/></svg></span>
+                  <span class="m-t"><b>Book dentist</b><span class="m-meta"><i class="pdot amber"></i>Life admin · 10m</span></span>
+                  <span class="m-due">Wed</span>
+                </li>
+              </ul>
+              <div class="m-sec dim">Done today<i></i></div>
+              <ul class="m-rows muted">
+                <li class="m-row done">
+                  <span class="m-ckb done"><svg class="lp-ic"><use href="#i-check"/></svg></span>
+                  <span class="m-t"><b>Morning pages</b><span class="m-meta"><i class="pdot teal"></i>Habit · 15m</span></span>
+                </li>
+              </ul>
+            </div>
+            <div class="m-rail">
+              <div class="m-card">
+                <div class="m-card-h">Today’s plan</div>
+                <div class="m-block committed"><span class="tm">09:00–10:30</span><b>Deep work — thesis</b></div>
+                <div class="m-block habit"><span class="tm">12:30–13:00</span><b>Piano practice</b></div>
+                <div class="m-block sugg" id="h-sugg" data-at="5400">
+                  <span class="tm">16:00–16:30</span><b>Review PR feedback</b>
+                  <span class="m-mini" id="h-ok"><svg class="lp-ic"><use href="#i-check"/></svg></span>
+                </div>
+                <div class="m-card-f">Suggested by the scheduler — one tap to commit.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- cursor + cues -->
+      <span class="lp-cursor"></span>
+      <i class="cue" data-at="1200" data-act="cursor" data-target="#h-ck1"></i>
+      <i class="cue" data-at="1950" data-act="click"></i>
+      <i class="cue" data-at="2700" data-act="cursor" data-target="#h-play"></i>
+      <i class="cue" data-at="3500" data-act="click"></i>
+      <i class="cue" data-at="4500" data-act="cursor" data-target="#h-ok"></i>
+      <i class="cue" data-at="5300" data-act="click"></i>
+      <i class="cue" data-at="6000" data-act="class" data-target="#h-sync" data-class="busy"></i>
+      <i class="cue" data-at="7100" data-act="unclass" data-target="#h-sync" data-class="busy"></i>
+      <i class="cue" data-at="6200" data-act="cursor-hide"></i>
+    </div>
+  </section>
+
+  <!-- ─── product teasers ──────────────────────────────────────────────── -->
+  <section class="lp-section">
+    <p class="lp-kicker">Product tour</p>
+    <h2 class="lp-h2">Four ideas. One system.</h2>
+    <p class="lp-lead">Structure gives every task a reason. The scheduler gives it a time.
+       Habits keep you showing up. Automations keep it all moving. Watch each one work:</p>
+
+    <div class="lp-tease-grid">
+
+      <!-- boards / kanban -->
+      <div class="lp-tease">
+        <div class="lp-scenecard lp-scene" id="scene-board" data-dur="3600" data-dwell="2600" aria-hidden="true">
+          <div class="k-board">
+            <div class="k-col today">
+              <div class="k-head">Today <b class="k-cnt" data-at="2500" data-act="text" data-text="2">1</b></div>
+              <div class="k-card"><b>Draft chapter 3</b><span class="m-meta"><i class="pdot blue"></i>Thesis · 45m</span></div>
+              <div class="k-drop" id="k-drop"></div>
+            </div>
+            <div class="k-col">
+              <div class="k-head">Tue <b class="k-cnt">2</b></div>
+              <div class="k-card"><b>Call the bank</b><span class="m-meta"><i class="pdot amber"></i>Life admin</span></div>
+              <div class="k-card"><b>Edit outline</b><span class="m-meta"><i class="pdot blue"></i>Thesis</span></div>
+            </div>
+            <div class="k-col">
+              <div class="k-head">Wed <b class="k-cnt" data-at="2500" data-act="text" data-text="1">2</b></div>
+              <div class="k-card"><b>Water the plants</b><span class="m-meta"><i class="pdot teal"></i>Home</span></div>
+              <div class="k-slot"></div>
+            </div>
+            <div class="k-card k-move" id="k-move" data-at="1500"><b>Review PR feedback</b><span class="m-meta"><i class="pdot teal"></i>Prisms · 20m</span></div>
+          </div>
+          <span class="lp-cursor"></span>
+          <i class="cue" data-at="500" data-act="cursor" data-target="#k-move"></i>
+          <i class="cue" data-at="1300" data-act="click"></i>
+          <i class="cue" data-at="1500" data-act="cursor" data-target="#k-drop"></i>
+          <i class="cue" data-at="2900" data-act="cursor-hide"></i>
+        </div>
+        <div class="lp-tease-cap">
+          <b>Plan the week as columns</b>
+          <p>Kanban by date, not by status — drag work onto the day it belongs to.</p>
+          <a href="features.html#board">See boards &amp; My Day <svg class="lp-ic"><use href="#i-chevr"/></svg></a>
+        </div>
+      </div>
+
+      <!-- agenda -->
+      <div class="lp-tease">
+        <div class="lp-scenecard lp-scene" id="scene-agenda" data-dur="4400" data-dwell="2600" aria-hidden="true">
+          <div class="a-grid">
+            <div class="a-gut"><span>09</span><span>11</span><span>13</span><span>15</span><span>17</span></div>
+            <div class="a-col"><b>Mon</b><div class="a-body">
+              <span class="a-block committed" style="--t:8%;--h:22%" data-at="300">Deep work</span>
+              <span class="a-block anchored" style="--t:52%;--h:14%">Standup</span>
+            </div></div>
+            <div class="a-col"><b>Tue</b><div class="a-body">
+              <span class="a-block habit" style="--t:44%;--h:11%" data-at="700">Piano</span>
+              <span class="a-block committed" style="--t:62%;--h:20%" data-at="1100">Draft ch. 3</span>
+            </div></div>
+            <div class="a-col"><b>Wed</b><div class="a-body">
+              <span class="a-block sugg" style="--t:18%;--h:18%" data-at="1600" id="a-sugg">Review PR<span class="m-mini" id="a-ok"><svg class="lp-ic"><use href="#i-check"/></svg></span></span>
+            </div></div>
+            <div class="a-col"><b>Thu</b><div class="a-body">
+              <span class="a-block anchored" style="--t:30%;--h:16%">Dentist</span>
+              <span class="a-block habit" style="--t:44%;--h:11%" data-at="700">Piano</span>
+            </div></div>
+          </div>
+          <div class="a-toast" data-at="3400"><svg class="lp-ic"><use href="#i-check"/></svg>Scheduled — fits before Friday’s deadline</div>
+          <span class="lp-cursor"></span>
+          <i class="cue" data-at="2200" data-act="cursor" data-target="#a-ok"></i>
+          <i class="cue" data-at="2900" data-act="click"></i>
+          <i class="cue" data-at="3050" data-act="class" data-target="#a-sugg" data-class="on2"></i>
+          <i class="cue" data-at="3600" data-act="cursor-hide"></i>
+        </div>
+        <div class="lp-tease-cap">
+          <b>Put intentions on real hours</b>
+          <p>The scheduler proposes conflict-free blocks; you commit with one tap.</p>
+          <a href="features.html#agenda">See the agenda <svg class="lp-ic"><use href="#i-chevr"/></svg></a>
+        </div>
+      </div>
+
+      <!-- habits + journal -->
+      <div class="lp-tease">
+        <div class="lp-scenecard lp-scene" id="scene-habits" data-dur="4200" data-dwell="2600" aria-hidden="true">
+          <div class="h-wrap">
+            <div class="h-card">
+              <div class="h-top"><b>Piano practice</b><span class="h-streak" data-at="1900"><svg class="lp-ic"><use href="#i-flame"/></svg><i data-at="1900" data-act="text" data-text="12">11</i></span></div>
+              <div class="h-ring">
+                <svg viewBox="0 0 48 48">
+                  <circle class="tr" cx="24" cy="24" r="20"/>
+                  <circle class="fl" cx="24" cy="24" r="20" data-at="600"/>
+                </svg>
+                <span class="h-ring-lbl"><b data-at="600" data-act="text" data-text="45m">0m</b>/ 60m</span>
+              </div>
+              <div class="h-mastery"><span>Level 4 · Sonatina</span><i class="trk"><b class="fil" data-at="2500"></b></i></div>
+            </div>
+            <div class="h-card h-journal">
+              <div class="h-top"><b>Sun · 6 Jul</b><span class="h-md">.md</span></div>
+              <div class="h-line"><span class="m-ckb sm done"><svg class="lp-ic"><use href="#i-check"/></svg></span>Morning pages</div>
+              <div class="h-line"><span class="m-ckb sm" data-at="2900"><svg class="lp-ic"><use href="#i-check"/></svg></span>Call Anna about the trip</div>
+              <div class="h-line h-typed"><span class="h-reveal" data-at="1200">Practiced the Clementi — finally clean at tempo.</span><i class="h-caret"></i></div>
+            </div>
+          </div>
+        </div>
+        <div class="lp-tease-cap">
+          <b>Show up daily — and remember why</b>
+          <p>Streaks, practice rings and a journal that exports as plain Markdown.</p>
+          <a href="features.html#habits">See habits &amp; journal <svg class="lp-ic"><use href="#i-chevr"/></svg></a>
+        </div>
+      </div>
+
+      <!-- automations -->
+      <div class="lp-tease">
+        <div class="lp-scenecard lp-scene" id="scene-auto" data-dur="5200" data-dwell="2600" aria-hidden="true">
+          <div class="au-rule">
+            <span class="au-name"><svg class="lp-ic"><use href="#i-zap"/></svg>Chapter follow-up <i class="au-togl"></i></span>
+            <div class="au-flow">
+              <span class="au-step" data-at="300">when <code>task.completed</code></span>
+              <i class="au-arr" data-at="700">→</i>
+              <span class="au-step" data-at="900">if <code>project = Thesis</code></span>
+              <i class="au-arr" data-at="1300">→</i>
+              <span class="au-step" data-at="1500">then <code>create follow-up</code></span>
+            </div>
+          </div>
+          <div class="au-out" data-at="2200">
+            <span class="m-ckb sm"><svg class="lp-ic"><use href="#i-check"/></svg></span>
+            <span class="m-t"><b>Revise chapter 3 notes</b><span class="m-meta"><i class="pdot blue"></i>Thesis · tomorrow</span></span>
+            <span class="m-tag blue"><svg class="lp-ic"><use href="#i-zap"/></svg>automated</span>
+          </div>
+          <div class="au-why" data-at="3300">
+            <b>Why does this exist?</b>
+            Created by <i>Chapter follow-up</i> when “Draft chapter 3” was completed — 6 Jul, 14:02.
+          </div>
+          <div class="au-inbox" data-at="4300"><svg class="lp-ic"><use href="#i-inbox"/></svg>Review inbox <b data-at="4300" data-act="text" data-text="1">0</b></div>
+        </div>
+        <div class="lp-tease-cap">
+          <b>Let the busywork run itself</b>
+          <p>Rules spawn follow-ups with full provenance — nothing happens silently.</p>
+          <a href="features.html#automations">See automations <svg class="lp-ic"><use href="#i-chevr"/></svg></a>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ─── why prisms ───────────────────────────────────────────────────── -->
+  <section id="why" class="lp-section lp-section--tint">
+    <p class="lp-kicker">Why Prisms</p>
+    <h2 class="lp-h2">Built like infrastructure, not a subscription.</h2>
+    <div class="lp-grid">
+      <div class="lp-feat"><span class="lp-feat-ic blue"><svg class="lp-ic"><use href="#i-zap"/></svg></span><b>Offline-first, instantly</b><p>Every action commits to a local store in milliseconds and syncs when you’re back. Planes, basements, focus mode — nothing blocks.</p></div>
+      <div class="lp-feat"><span class="lp-feat-ic teal"><svg class="lp-ic"><use href="#i-repeat"/></svg></span><b>Two devices, one truth</b><p>Deterministic merges converge every device to the same state — edit the same task on your phone and laptop and lose nothing.</p></div>
+      <div class="lp-feat"><span class="lp-feat-ic amber"><svg class="lp-ic"><use href="#i-lock"/></svg></span><b>Yours to host</b><p>One <code>docker compose up</code> on your own hardware. Your goals, journal and time data never live on someone else’s cloud.</p></div>
+      <div class="lp-feat"><span class="lp-feat-ic green"><svg class="lp-ic"><use href="#i-cols"/></svg></span><b>Web · desktop · mobile</b><p>A fast web app, a native desktop shell and a mobile client share one data layer — pick up exactly where you left off.</p></div>
+      <div class="lp-feat"><span class="lp-feat-ic blue"><svg class="lp-ic"><use href="#i-down"/></svg></span><b>Portable by design</b><p>Encrypted one-file backup and restore, and a journal that exports to per-day Markdown. Leaving is easy — that’s the point.</p></div>
+      <div class="lp-feat"><span class="lp-feat-ic teal"><svg class="lp-ic"><use href="#i-inbox"/></svg></span><b>Nothing happens silently</b><p>Automations, sync conflicts and rejections land in a review inbox with full provenance. Trust the system because you can audit it.</p></div>
+    </div>
+  </section>
+
+  <!-- ─── closing cta ──────────────────────────────────────────────────── -->
+  <section class="lp-section lp-band-wrap">
+    <div class="lp-band">
+      <h2>Run it tonight.</h2>
+      <p>One compose file brings up the database, sync service, API and app — on hardware you already own.</p>
+      <div class="lp-ctas">
+        <a class="lp-btn lp-btn--inv lp-btn--lg" href="self-host.html">Get started</a>
+        <a class="lp-btn lp-btn--bandghost lp-btn--lg" href="https://github.com/floresaxel/Prisms" rel="noopener"><svg class="lp-ic"><use href="#i-code"/></svg>View the code</a>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="lp-foot">
+  <div class="lp-foot-inner">
+    <div class="lp-foot-brand">
+      <span class="lp-brand"><span class="lp-brand-logo"><svg class="lp-ic"><use href="#i-prism"/></svg></span>Prisms</span>
+      <p>Local-first goal execution.<br/>Your goals, your hardware, your data.</p>
+    </div>
+    <nav class="lp-foot-col" aria-label="Product">
+      <b>Product</b>
+      <a href="features.html">Features</a>
+      <a href="platforms.html">Platforms</a>
+      <a href="self-host.html">Self-host</a>
+    </nav>
+    <nav class="lp-foot-col" aria-label="Resources">
+      <b>Resources</b>
+      <a href="https://github.com/floresaxel/Prisms" rel="noopener">GitHub</a>
+      <a href="https://github.com/floresaxel/Prisms/blob/main/docs/SELF_HOSTING.md" rel="noopener">Self-hosting guide</a>
+      <a href="https://github.com/floresaxel/Prisms/blob/main/Blueprints/ARCHITECTURE.md" rel="noopener">Architecture</a>
+    </nav>
+  </div>
+  <div class="lp-foot-base">© 2026 Prisms · free &amp; open · self-hosted</div>
+</footer>
+
+</body>
+</html>

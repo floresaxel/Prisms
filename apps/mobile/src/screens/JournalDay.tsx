@@ -12,8 +12,10 @@ import { Share, TextInput, View } from 'react-native';
 
 import Markdown from 'react-native-markdown-display';
 
-import { applyMarkdownEdit, journalDayFilename, useCommands, useJournalDay, type CommandContext, type MarkdownAction, type Selection } from '@prisms/ui';
+import { composeDayMarkdown } from '@prisms/core';
+import { applyMarkdownEdit, journalDayFilename, useCommands, useDayLog, useJournalDay, useUserSettings, type CommandContext, type MarkdownAction, type Selection } from '@prisms/ui';
 
+import { DayLogFooter } from '../components/DayLogFooter';
 import { Btn, Card, H2, Row, theme } from '../ui';
 
 const SAVE_DEBOUNCE_MS = 800;
@@ -50,6 +52,10 @@ const mdStyles = {
 export function JournalDay({ date, ctx, onClose }: { date: string; ctx: CommandContext; onClose?: () => void }) {
   const { entry } = useJournalDay(date);
   const commands = useCommands(ctx);
+  // Annex L: derived at render from the shared provider. Mobile has no toggle —
+  // it obeys the synced flag (the switch is web/desktop-only, D4).
+  const dayLog = useDayLog(date);
+  const { timezone } = useUserSettings();
   const [draft, setDraft] = useState(entry?.content ?? '');
   const [preview, setPreview] = useState(false);
   const [sel, setSel] = useState<Selection>({ start: 0, end: 0 });
@@ -92,7 +98,9 @@ export function JournalDay({ date, ctx, onClose }: { date: string; ctx: CommandC
     void write(draft);
   }
   async function share() {
-    await Share.share({ title: journalDayFilename(date), message: draft });
+    // The note VERBATIM plus the day-log section — the same core compose the web
+    // download and the archive zip use (D7).
+    await Share.share({ title: journalDayFilename(date), message: composeDayMarkdown(draft, dayLog, { timezone }) });
   }
   function remove() {
     if (!existingId) return;
@@ -146,6 +154,9 @@ export function JournalDay({ date, ctx, onClose }: { date: string; ctx: CommandC
           />
         </>
       )}
+
+      {/* BELOW the editor and the preview, never inside the TextInput. */}
+      <DayLogFooter entries={dayLog} timezone={timezone} />
 
       <Row>
         <Btn title="Share .md" testID="journal-share" onPress={() => void share()} />

@@ -37,7 +37,7 @@ function tzFormatter(timeZone: string): Intl.DateTimeFormat {
   return formatter;
 }
 
-interface LocalParts {
+export interface LocalParts {
   year: number;
   month: number;
   day: number;
@@ -45,7 +45,13 @@ interface LocalParts {
   minute: number;
 }
 
-function localParts(ms: EpochMillis, timeZone: string): LocalParts {
+/**
+ * The instant's wall-clock components in `timeZone`. Exported so day-assignment
+ * *display* (Annex L `formatDayLogTime`) reads the same Intl.DateTimeFormat this
+ * module already caches — one timezone mechanism, and nothing from the Intl
+ * surface Hermes lacks (see the mobile hermes-compat guard).
+ */
+export function localParts(ms: EpochMillis, timeZone: string): LocalParts {
   const parts = tzFormatter(timeZone).formatToParts(new Date(ms));
   const read = (type: Intl.DateTimeFormatPartTypes): number => {
     const part = parts.find((p) => p.type === type);

@@ -5,7 +5,7 @@
  * successful restore it advances the device HLC floor so subsequent local edits
  * order after the imported state (monotonicity, R20).
  */
-import type { ExportManifest, ImportReport } from '@prisms/core';
+import type { DayLogEntries, ExportManifest, ImportReport } from '@prisms/core';
 import { buildJournalArchive, journalArchiveFilename, parseImportFile, persistImportedHlc, serializeExport, exportFilename } from '@prisms/ui';
 
 import { config } from './config';
@@ -85,7 +85,10 @@ export async function restoreImport(manifest: ExportManifest): Promise<ImportRes
 export interface JournalExportRow {
   entry_date: string;
   content: string;
-  updated_at: string;
+  /** Absent on a LOG-ONLY day (Annex L) — there is no note row to stamp. */
+  updated_at?: string;
+  /** Annex L, structure not markdown; the client composes the `.md` bytes. */
+  day_log?: DayLogEntries | null;
 }
 
 /**
@@ -99,12 +102,16 @@ export async function fetchJournalExport(): Promise<JournalExportRow[]> {
   return ((await res.json()) as { entries: JournalExportRow[] }).entries;
 }
 
-/** Fetch all notes, build the per-day `.md` zip, and trigger a browser download. */
-export async function downloadJournalArchive(): Promise<string> {
+/**
+ * Fetch all notes, build the per-day `.md` zip, and trigger a browser download.
+ * `timezone` renders the Annex L day-log times; the day logs themselves come
+ * from the server, so months this device never viewed are still included.
+ */
+export async function downloadJournalArchive(timezone?: string): Promise<string> {
   const entries = await fetchJournalExport();
   const name = journalArchiveFilename(new Date().toISOString());
   // Copy into a fresh Uint8Array (plain ArrayBuffer) so it satisfies BlobPart (TS 5.7 variance).
-  const blob = new Blob([new Uint8Array(buildJournalArchive(entries))], { type: 'application/zip' });
+  const blob = new Blob([new Uint8Array(buildJournalArchive(entries, { timezone }))], { type: 'application/zip' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;

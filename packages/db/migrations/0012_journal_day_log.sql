@@ -1,0 +1,11 @@
+-- Annex L — the journal day log toggle. ONE settings column, opt-OUT: the
+-- DEFAULT true backfills every existing row, so upgrading users get the footer.
+--
+-- Deliberately NO publication change: migration 0009 scoped the `powersync`
+-- publication to an explicit table list, so a new synced TABLE must be added to
+-- it — a new COLUMN on an already-published table needs nothing. The day log
+-- adds no table at all (it is derived at read time), so the fresh-DB table list
+-- is unchanged. The bootstrap stream QUERY does change (sync-streams.yaml reads
+-- an explicit column list), so a live deployment must restart the PowerSync
+-- container after deploying — see docs/SELF_HOSTING.md "Upgrade notes".
+ALTER TABLE "user_settings" ADD COLUMN "journal_day_log" boolean DEFAULT true NOT NULL;

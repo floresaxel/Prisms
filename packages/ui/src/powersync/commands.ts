@@ -358,10 +358,13 @@ export function createCommands(store: OverlayStore, ctx: CommandContext, deps: E
       await run('blocker.delete', { id });
     },
 
-    async updateSettings(patch: { day_reset_hour?: number; timezone?: string }): Promise<void> {
+    async updateSettings(patch: { day_reset_hour?: number; timezone?: string; journal_day_log?: boolean }): Promise<void> {
       const payload: Record<string, unknown> = {};
       if (patch.day_reset_hour !== undefined) payload['day_reset_hour'] = patch.day_reset_hour;
       if (patch.timezone !== undefined) payload['timezone'] = patch.timezone;
+      // Annex L. Another EXPLICIT field list — a field missing here never leaves
+      // the client at all, so the toggle would do nothing anywhere.
+      if (patch.journal_day_log !== undefined) payload['journal_day_log'] = patch.journal_day_log;
       if (Object.keys(payload).length === 0) return;
       await run('settings.update', payload);
     },

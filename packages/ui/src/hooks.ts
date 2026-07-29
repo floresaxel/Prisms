@@ -17,7 +17,9 @@ import {
   canonicalProgress,
   canonicalStreak,
   childrenOf,
+  computeDayLog,
   criticalPath,
+  DEFAULT_JOURNAL_DAY_LOG,
   DEFAULT_WINDOWS,
   descendantsOf,
   evaluateBlockerRules,
@@ -39,6 +41,7 @@ import {
   type BurndownValue,
   type CommittedBlock,
   type CompletionValue,
+  type DayLogEntries,
   type DecisionBoard,
   type DecisionCriterion,
   type DiagramGroup,
@@ -1382,6 +1385,8 @@ export interface UserSettingsView {
   dayResetHour: number;
   timezone: string;
   weatherLocation: unknown;
+  /** Annex L built-in automation. Opt-OUT: no row (or no column) still means ON. */
+  journalDayLog: boolean;
 }
 
 /** User settings row, with architecture defaults when a fresh account has not synced one yet. */
@@ -1394,8 +1399,40 @@ export function useUserSettings(): UserSettingsView {
       dayResetHour: row?.day_reset_hour ?? 4,
       timezone: row?.timezone ?? 'America/New_York',
       weatherLocation: row?.weather_location ?? null,
+      journalDayLog: row?.journal_day_log ?? DEFAULT_JOURNAL_DAY_LOG,
     };
   }, [rows.user_settings]);
+}
+
+/**
+ * The generated "Day log" for one journal day (Annex L), or null when the flag
+ * is off or the day holds nothing. DERIVED at render from the warm provider —
+ * there is no day-log table, no writer, and nothing to reconcile.
+ *
+ * Two properties come free from reading the provider's MERGED rows:
+ * - offline-instant: a pending `node.check_off` has already patched the facts,
+ *   so the footer updates in the same render pass with zero write code;
+ * - every mutation path is covered by construction — a completion from the timer
+ *   review path, an automation spawn, a restored import all change the same
+ *   inputs, so there is no per-verb collector to keep in sync with the commands.
+ *
+ * Memoized on `[rows.schedule_blocks, ctx, date]` — NOT on `now`, so unlike
+ * `useWorklist` it never recomputes on the 1-second tick.
+ */
+export function useDayLog(date: IsoDate): DayLogEntries | null {
+  const { factContext: ctx, rows } = usePrismsData();
+  const { journalDayLog } = useUserSettings();
+  const blockRows = rows.schedule_blocks;
+  return useMemo(() => {
+    if (!journalDayLog) return null;
+    return computeDayLog({
+      date,
+      nodes: ctx.tree.byId.values(), // live nodes only (tombstones excluded)
+      blocks: blockRows.map(toScheduleBlock),
+      dayResetHour: ctx.dayResetHour,
+      timezone: ctx.timezone,
+    });
+  }, [ctx, blockRows, date, journalDayLog]);
 }
 
 /** Server-computed aggregates (burndown, streaks, …) with their freshness. */

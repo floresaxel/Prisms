@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#f6f7f9" />
+  <title>Self-host — Prisms</title>
+  <meta name="description" content="Run Prisms on your own hardware: one docker compose brings up Postgres, the sync service, the API and the app. Encrypted backups, portable exports, tiny footprint." />
+  <meta property="og:title" content="Self-host — Prisms" />
+  <meta property="og:description" content="Your goals, your box: bring up the whole Prisms stack with one compose file. It runs happily on very small hardware." />
+  <meta property="og:type" content="website" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%3E%3Crect%20width='24'%20height='24'%20rx='6'%20fill='%232563eb'/%3E%3Cpath%20d='M12%205.5%205.4%2017.8h13.2Z'%20fill='none'%20stroke='white'%20stroke-width='1.7'%20stroke-linejoin='round'/%3E%3Cpath%20d='M12%205.5v12.3'%20stroke='white'%20stroke-width='1.7'/%3E%3C/svg%3E" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..750&display=swap" rel="stylesheet" />
+  <script>document.documentElement.classList.add('js');</script>
+  <link rel="stylesheet" href="site.css" />
+  <script defer src="site.js"></script>
+</head>
+<body>
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
+  <symbol id="i-prism" viewBox="0 0 24 24"><path d="M12 3 3 20h18Z"/><path d="M12 3v17"/></symbol>
+  <symbol id="i-zap" viewBox="0 0 24 24"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8Z"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="m4 12 5 5L20 7"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></symbol>
+  <symbol id="i-code" viewBox="0 0 24 24"><path d="m9 8-4 4 4 4"/><path d="m15 8 4 4-4 4"/></symbol>
+  <symbol id="i-db" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></symbol>
+  <symbol id="i-repeat" viewBox="0 0 24 24"><path d="M17 2l4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></symbol>
+  <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a13.5 13.5 0 0 1 0 18 13.5 13.5 0 0 1 0-18Z"/></symbol>
+  <symbol id="i-server" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7.5h.01M7 16.5h.01"/></symbol>
+  <symbol id="i-replay" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></symbol>
+</svg>
+
+<header class="lp-nav">
+  <a class="lp-brand" href="index.html">
+    <span class="lp-brand-logo"><svg class="lp-ic"><use href="#i-prism"/></svg></span>
+    Prisms
+  </a>
+  <nav class="lp-nav-links">
+    <a href="features.html">Features</a>
+    <a href="platforms.html">Platforms</a>
+    <a href="self-host.html" class="on">Self-host</a>
+    <a href="https://github.com/floresaxel/Prisms" rel="noopener">GitHub</a>
+  </nav>
+  <a class="lp-btn lp-btn--primary" href="#quickstart">Try Prisms</a>
+</header>
+
+<main>
+  <section class="lp-phero">
+    <p class="lp-kicker">Self-host</p>
+    <h1>Your goals. Your box.</h1>
+    <p class="lp-sub">Prisms is open and self-hosted by design. No accounts you don’t own,
+       no cloud you don’t control — the whole stack comes up with one compose file
+       and runs happily on very small hardware.</p>
+  </section>
+
+  <section class="lp-section lp-section--scene" id="quickstart">
+    <div class="lp-steps">
+      <div class="lp-step"><b class="n">1</b><b>Clone</b><p>Grab the repository — everything ships in one place, including the production compose file.</p></div>
+      <div class="lp-step"><b class="n">2</b><b>Configure</b><p>Copy <code>.env.example</code> to <code>.env</code> and fill in your secrets. That’s the whole configuration story.</p></div>
+      <div class="lp-step"><b class="n">3</b><b>Compose up</b><p>One command builds and starts the database, sync service, API and web bundle.</p></div>
+    </div>
+
+    <pre class="lp-code"><code><span class="c">$</span> git clone https://github.com/floresaxel/Prisms &amp;&amp; cd Prisms
+<span class="c">$</span> cp .env.example .env   <span class="cm"># fill in your secrets</span>
+<span class="c">$</span> docker compose -f docker-compose.prod.yml up -d --build</code></pre>
+
+    <div class="lp-stack">
+      <span class="lp-stack-chip"><svg class="lp-ic"><use href="#i-db"/></svg>Postgres</span>
+      <span class="lp-stack-chip"><svg class="lp-ic"><use href="#i-repeat"/></svg>PowerSync</span>
+      <span class="lp-stack-chip"><svg class="lp-ic"><use href="#i-zap"/></svg>API + jobs</span>
+      <span class="lp-stack-chip"><svg class="lp-ic"><use href="#i-globe"/></svg>Web app</span>
+    </div>
+
+    <div class="lp-callout">
+      <svg class="lp-ic"><use href="#i-server"/></svg>
+      <p><b>It really does run on small hardware.</b> The reference install is a Surface Go
+         tablet running Ubuntu Server, reached over Tailscale HTTPS from every device.
+         No public IP, no domain, no reverse-proxy yoga required.</p>
+    </div>
+  </section>
+
+  <section class="lp-section lp-section--tint">
+    <p class="lp-kicker">Trust &amp; exit</p>
+    <h2 class="lp-h2">Easy to trust, easy to leave.</h2>
+    <div class="lp-twocol">
+      <div>
+        <h3><svg class="lp-ic"><use href="#i-lock"/></svg>Locked down by default</h3>
+        <ul class="lp-points">
+          <li>Sync streams are JWT-scoped per user — clients can’t widen their own access</li>
+          <li>The server owns all trust fields; clients can’t forge ownership or provenance</li>
+          <li>Secrets sit behind a secure-storage adapter on every platform</li>
+        </ul>
+      </div>
+      <div>
+        <h3><svg class="lp-ic"><use href="#i-down"/></svg>Portable by design</h3>
+        <ul class="lp-points">
+          <li>One-file versioned backup &amp; restore, with optional passphrase encryption</li>
+          <li>Journal exports as plain per-day Markdown files</li>
+          <li>Operator-level database backups documented in the self-hosting guide</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="lp-section lp-faq-sec">
+    <p class="lp-kicker">FAQ</p>
+    <h2 class="lp-h2">Before you ask.</h2>
+    <div class="lp-faq">
+      <details>
+        <summary>Do I need a domain or a public IP?</summary>
+        <p>No. Prisms works great on a private network — the reference setup uses Tailscale,
+           which gives every device a secure HTTPS route to your box with zero port-forwarding.
+           A classic domain + reverse proxy works too.</p>
+      </details>
+      <details>
+        <summary>What hardware do I need?</summary>
+        <p>Very little. Postgres, the sync service and the API are all lightweight — an old
+           laptop, a mini PC or a small VPS is plenty. The reference install runs on a
+           Surface Go tablet.</p>
+      </details>
+      <details>
+        <summary>What happens when I’m offline?</summary>
+        <p>Everything keeps working. Changes commit to the device’s local store instantly and
+           upload when connectivity returns; devices converge deterministically, and anything
+           that can’t merge cleanly becomes a visible review item instead of a silent overwrite.</p>
+      </details>
+      <details>
+        <summary>Can I get my data out?</summary>
+        <p>Always. There’s a versioned one-file export (optionally passphrase-encrypted) that
+           restores on any instance, and the journal exports as plain Markdown. Your data
+           outlives the software.</p>
+      </details>
+    </div>
+    <div class="lp-ctas lp-ctas--center">
+      <a class="lp-btn lp-btn--primary lp-btn--lg" href="https://github.com/floresaxel/Prisms" rel="noopener"><svg class="lp-ic"><use href="#i-code"/></svg>Get the code</a>
+      <a class="lp-btn lp-btn--ghost lp-btn--lg" href="https://github.com/floresaxel/Prisms/blob/main/docs/SELF_HOSTING.md" rel="noopener">Read the self-hosting guide</a>
+    </div>
+  </section>
+</main>
+
+<footer class="lp-foot">
+  <div class="lp-foot-inner">
+    <div class="lp-foot-brand">
+      <span class="lp-brand"><span class="lp-brand-logo"><svg class="lp-ic"><use href="#i-prism"/></svg></span>Prisms</span>
+      <p>Local-first goal execution.<br/>Your goals, your hardware, your data.</p>
+    </div>
+    <nav class="lp-foot-col" aria-label="Product">
+      <b>Product</b>
+      <a href="features.html">Features</a>
+      <a href="platforms.html">Platforms</a>
+      <a href="self-host.html">Self-host</a>
+    </nav>
+    <nav class="lp-foot-col" aria-label="Resources">
+      <b>Resources</b>
+      <a href="https://github.com/floresaxel/Prisms" rel="noopener">GitHub</a>
+      <a href="https://github.com/floresaxel/Prisms/blob/main/docs/SELF_HOSTING.md" rel="noopener">Self-hosting guide</a>
+      <a href="https://github.com/floresaxel/Prisms/blob/main/Blueprints/ARCHITECTURE.md" rel="noopener">Architecture</a>
+    </nav>
+  </div>
+  <div class="lp-foot-base">© 2026 Prisms · free &amp; open · self-hosted</div>
+</footer>
+
+</body>
+</html>
