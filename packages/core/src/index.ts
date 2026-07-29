@@ -21,6 +21,7 @@
  *                (s08); optimize-mode local search + diffing (s09)
  * - commands/    upload envelope (s10), full §8.1 catalog payload schemas +
  *                per-verb invariant checks, timer-merge resolver (s11)
+ * - journal/     the derived journal day log + its markdown rendering (Annex L)
  */
 export const CORE_PACKAGE = '@prisms/core' as const;
 
@@ -71,6 +72,7 @@ export * from './aggregates/burndown';
 export * from './aggregates/timeleft';
 export * from './aggregates/today';
 export * from './aggregates/decision';
+export * from './journal/day-log';
 export * from './rules/actions';
 export * from './rules/engine';
 export * from './rules/validate';
