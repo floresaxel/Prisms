@@ -188,6 +188,7 @@ const validRows: { [K in EntityTable]: unknown } = {
     day_reset_hour: 4,
     timezone: 'America/New_York',
     weather_location: { lat: 28.36, lon: -80.7, label: 'Merritt Island, FL' },
+    journal_day_log: true,
     updated_at: T1,
   },
 };

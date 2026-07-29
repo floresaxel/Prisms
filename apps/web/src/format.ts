@@ -1,5 +1,12 @@
 /** Small display formatters (a UI concern — core stays free of locale/format). */
 
+/**
+ * Re-exported so every screen keeps importing tones from `../format`: the tone
+ * function itself now lives in `@prisms/ui` because mobile's day map has to
+ * tint the same project the same colour (MOBILE_TODAY_PLAN D7).
+ */
+export { projectTone, type DotTone } from '@prisms/ui';
+
 /** Elapsed milliseconds → `h:mm:ss` (or `m:ss` under an hour). */
 export function formatElapsed(ms: number): string {
   const total = Math.floor(ms / 1000);
@@ -28,16 +35,6 @@ export function rejectionMessage(code: string | undefined): string {
     default:
       return `Change rejected${code ? ` (${code})` : ''} and reverted.`;
   }
-}
-
-/** Stable per-project accent (the mock tints each project) derived from its id. */
-const DOT_TONES = ['teal', 'blue', 'amber', 'green'] as const;
-export type DotTone = (typeof DOT_TONES)[number];
-export function projectTone(projectId: string | null): DotTone {
-  if (!projectId) return 'blue';
-  let h = 0;
-  for (let i = 0; i < projectId.length; i++) h = (h * 31 + projectId.charCodeAt(i)) >>> 0;
-  return DOT_TONES[h % DOT_TONES.length]!;
 }
 
 /** A signed minute count → human duration, e.g. `1h 30m`, `45m`, `−20m` (over). */

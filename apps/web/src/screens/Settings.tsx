@@ -81,7 +81,7 @@ export function Settings({ ctx }: { ctx: CommandContext }) {
         </div>
       )}
 
-      {tab === 'data' && <Portability />}
+      {tab === 'data' && <Portability timezone={settings.timezone} />}
 
       {tab === 'account' && (
         <div className="px-set-grid">
@@ -103,7 +103,7 @@ export function Settings({ ctx }: { ctx: CommandContext }) {
  * web, encryption is opt-in and the replica is not encrypted at rest (§13.2) —
  * installed apps default to encrypted export (M14).
  */
-function Portability() {
+function Portability({ timezone }: { timezone: string }) {
   const [exportPass, setExportPass] = useState('');
   const [importPass, setImportPass] = useState('');
   const [fileText, setFileText] = useState<string | null>(null);
@@ -158,7 +158,7 @@ function Portability() {
     setJournalBusy(true);
     setStatus(null);
     try {
-      const name = await downloadJournalArchive();
+      const name = await downloadJournalArchive(timezone);
       setStatus(`Exported ${name}`);
     } catch (e) {
       setStatus(e instanceof Error ? e.message : 'journal export failed');

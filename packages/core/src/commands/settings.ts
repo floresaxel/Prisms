@@ -16,6 +16,8 @@ export const settingsUpdateSchema = z
     // SEC-3/F6: an IANA zone name is short ('America/Argentina/Buenos_Aires' is 30).
     timezone: z.string().min(1).max(100).optional(),
     weather_location: weatherLocationSchema.nullable().optional(),
+    /** Built-in automation toggle (Annex L): show the generated journal day log. */
+    journal_day_log: z.boolean().optional(),
   })
   .refine((patch) => Object.keys(patch).length > 0, {
     message: 'settings.update requires at least one field',

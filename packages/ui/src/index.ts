@@ -15,7 +15,7 @@ export {
   type CommandUploadOptions,
   type WatchableDb,
 } from './powersync/connector';
-export { createCommands, type Commands, type CommandContext } from './powersync/commands';
+export { createCommands, type PrismsCommands, type CommandContext } from './powersync/commands';
 export {
   newId,
   createHlc,
@@ -64,6 +64,7 @@ export {
   type MarkdownAction,
   type MarkdownEdit,
 } from './markdown';
+export { projectTone, type DotTone } from './format';
 
 // two-layer client store (1.3 §7.2, R15) — M0 spike
 export {
@@ -126,6 +127,7 @@ export {
   useBlockTags,
   useJournalMonths,
   useJournalDay,
+  useDayLog,
   useTimeBlocksForDay,
   useTaskSteps,
   useTaskStepsByTask,
@@ -134,6 +136,7 @@ export {
   useMyDayAvailable,
   useProjectPriorities,
   useDoneToday,
+  useTodayItinerary,
   useBlockedTasks,
   useHabitTasks,
   // loading-aware read layer (1.4 §7.15, Fix C) — M12
@@ -174,8 +177,26 @@ export {
   type ReviewItemView,
   type JournalMonthsRead,
   type JournalDayRead,
+  type TodayItinerary,
 } from './hooks';
 export { groupWorklistBySchedule, type WorklistGroup } from './worklist-grouping';
+export {
+  blocksForDay,
+  buildItinerary,
+  loggedMinutesByTask,
+  minutesOfDay,
+  formatWallTime,
+  type DayBucketOptions,
+  type ItineraryRow,
+  type ItineraryState,
+} from './today-itinerary';
+export {
+  buildDayMap,
+  type DayMap,
+  type DayMapSegment,
+  type DayMapState,
+  type DayMapZone,
+} from './day-map';
 
 // design system
 export { Layout, type LayoutProps, type NavItemSpec, type NavGroupSpec, type BreadcrumbSpec } from './components/Layout';

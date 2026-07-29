@@ -1522,6 +1522,9 @@ export function createDispatcher(
         if (p.day_reset_hour !== undefined) candidate['day_reset_hour'] = p.day_reset_hour;
         if (p.timezone !== undefined) candidate['timezone'] = p.timezone;
         if (p.weather_location !== undefined) candidate['weather_location'] = p.weather_location;
+        // EXPLICIT field list: a settings field missing here applies as a silent
+        // no-op — the command succeeds and nothing changes (Annex L).
+        if (p.journal_day_log !== undefined) candidate['journal_day_log'] = p.journal_day_log;
         const win = await lwwFields(tx, hlc, userId, 'user_settings', userId, candidate);
         if (Object.keys(win).length === 0) return applied(); // every field lost LWW
         await tx

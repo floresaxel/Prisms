@@ -43,6 +43,11 @@ vi.mock('@prisms/ui', async (importOriginal) => {
     useIsHydrated: () => true,
     useBlockTags: () => [],
     useTagCatalog: () => [],
+    // Annex L: the panel now also reads the derived day log + the timezone. Off
+    // here, so these cases stay about the editor — the footer has its own suite
+    // (test/daylog-ui.test.ts).
+    useDayLog: () => null,
+    useUserSettings: () => ({ hasRow: true, dayResetHour: 0, timezone: 'UTC', weatherLocation: null, journalDayLog: false }),
   };
 });
 

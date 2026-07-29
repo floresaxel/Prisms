@@ -26,6 +26,8 @@ import { isoToEpochMillis, type Instant } from '../time/instant';
 /** Mirrors the user_settings DDL defaults (§6.0). */
 export const DEFAULT_DAY_RESET_HOUR = 4;
 export const DEFAULT_TIMEZONE = 'America/New_York';
+/** Annex L: the journal day log is opt-OUT — absent settings mean ON. */
+export const DEFAULT_JOURNAL_DAY_LOG = true;
 
 export interface FactRows {
   nodes: readonly Node[];

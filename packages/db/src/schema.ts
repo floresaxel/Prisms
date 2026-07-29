@@ -703,6 +703,8 @@ export const user_settings = pgTable(
     weather_location: jsonb('weather_location').$type<
       NonNullable<UserSettings['weather_location']>
     >(),
+    // Annex L built-in automation, opt-OUT: existing rows get it ON at migration.
+    journal_day_log: boolean('journal_day_log').notNull().default(true),
     updated_at: timestamptz('updated_at').notNull(),
   },
   (t) => [

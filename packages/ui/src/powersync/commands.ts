@@ -150,6 +150,14 @@ export function createCommands(store: OverlayStore, ctx: CommandContext, deps: E
       if (Object.keys(payload).length === 1) return;
       await run('node.set_dates', payload);
     },
+    /**
+     * Set (or clear) a task's estimate after creation. `node.create` carries an
+     * estimate, but only the project path goes through it — an inbox capture or
+     * a habit promotion needs this to get one.
+     */
+    async setEstimate(taskId: string, minutes: number | null): Promise<void> {
+      await run('node.set_estimate', { id: taskId, estimate_minutes: minutes });
+    },
 
     // --- habits & skills (§1.2, §7.2) ---------------------------------------
     async createHabit(input: {
@@ -350,10 +358,13 @@ export function createCommands(store: OverlayStore, ctx: CommandContext, deps: E
       await run('blocker.delete', { id });
     },
 
-    async updateSettings(patch: { day_reset_hour?: number; timezone?: string }): Promise<void> {
+    async updateSettings(patch: { day_reset_hour?: number; timezone?: string; journal_day_log?: boolean }): Promise<void> {
       const payload: Record<string, unknown> = {};
       if (patch.day_reset_hour !== undefined) payload['day_reset_hour'] = patch.day_reset_hour;
       if (patch.timezone !== undefined) payload['timezone'] = patch.timezone;
+      // Annex L. Another EXPLICIT field list — a field missing here never leaves
+      // the client at all, so the toggle would do nothing anywhere.
+      if (patch.journal_day_log !== undefined) payload['journal_day_log'] = patch.journal_day_log;
       if (Object.keys(payload).length === 0) return;
       await run('settings.update', payload);
     },
@@ -374,4 +385,11 @@ export function createCommands(store: OverlayStore, ctx: CommandContext, deps: E
   };
 }
 
-export type Commands = ReturnType<typeof createCommands>;
+/**
+ * NOT named `Commands`: React Native's codegen babel plugin reserves that
+ * export name for `codegenNativeCommands` results and throws on any other
+ * module that exports it — which silently made the whole mobile app
+ * un-bundlable (dev *and* prod), since @prisms/ui is in its graph.
+ * `apps/mobile/test/hermes-compat.test.ts` guards the name.
+ */
+export type PrismsCommands = ReturnType<typeof createCommands>;

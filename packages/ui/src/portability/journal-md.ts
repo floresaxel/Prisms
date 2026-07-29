@@ -5,13 +5,21 @@
  * `buildJournalArchive` packages one `.md` per day into a zip via fflate (pure
  * JS: node/browser/Hermes). PURE — the platform supplies the source (the
  * server-sourced export) and the download/share of the returned bytes.
+ *
+ * Annex L: an entry may carry a derived `day_log`, which `composeDayMarkdown`
+ * appends AFTER the verbatim content. The same core function renders the day
+ * panel's download and mobile Share, so the archive can never say something the
+ * app doesn't.
  */
+import { composeDayMarkdown, type DayLogEntries } from '@prisms/core';
 import { strToU8, zipSync } from 'fflate';
 
 /** A day's note as returned by `GET /sync/journal/export` — the archive input. */
 export interface JournalExportEntry {
   entry_date: string; // 'YYYY-MM-DD'
   content: string;
+  /** Annex L. Absent when the built-in automation is off or the day has no log. */
+  day_log?: DayLogEntries | null;
 }
 
 /** `YYYY-MM-DD.md` — the single-day export filename. */
@@ -27,14 +35,20 @@ export const journalArchiveFilename = (atIso: string): string => `prisms-journal
  * A zip of one `journal/YYYY/YYYY-MM-DD.md` per entry, content UTF-8-encoded
  * VERBATIM (emoji byte-exact via `strToU8`'s TextEncoder). Entries are written in
  * date order so the file layout is deterministic (testable); an empty-content day
- * still emits its (empty) file. Paths are pure ASCII — no zip UTF-8-flag pitfalls.
+ * still emits its (empty) file — which is also how a LOG-ONLY day arrives.
+ * Paths are pure ASCII — no zip UTF-8-flag pitfalls.
  */
-export function buildJournalArchive(entries: readonly JournalExportEntry[]): Uint8Array {
+export function buildJournalArchive(
+  entries: readonly JournalExportEntry[],
+  options: { timezone?: string } = {},
+): Uint8Array {
   const files: Record<string, Uint8Array> = {};
   const sorted = [...entries].sort((a, b) => (a.entry_date < b.entry_date ? -1 : a.entry_date > b.entry_date ? 1 : 0));
   for (const e of sorted) {
     const year = e.entry_date.slice(0, 4);
-    files[`journal/${year}/${e.entry_date}.md`] = strToU8(e.content);
+    files[`journal/${year}/${e.entry_date}.md`] = strToU8(
+      composeDayMarkdown(e.content, e.day_log ?? null, { timezone: options.timezone }),
+    );
   }
   return zipSync(files);
 }

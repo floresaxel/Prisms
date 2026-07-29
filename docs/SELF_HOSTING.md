@@ -136,6 +136,20 @@ TABLE task_steps`. Same rule: after this upgrade lands on a live deployment, **r
 PowerSync** (the `restart powersync` above) so it reprocesses the new table. Omitting the
 restart leaves checklist steps silently un-synced.
 
+**Journal day log (migration 0012).** The generated "Day log" footer adds **no
+table**, so — unlike 0010 and 0011 — its migration
+(`packages/db/migrations/0012_journal_day_log.sql`) makes **no publication
+change**: it only adds `user_settings.journal_day_log boolean NOT NULL DEFAULT
+true` (existing users get the feature ON; they can turn it off in Automations →
+Built-in). The log itself is computed from tasks and agenda blocks at read time,
+so there is nothing to replicate and no new job.
+
+The bootstrap stream's `user_settings` **query** did change, though — it selects
+an explicit column list and now names the new column — so after this upgrade
+lands, **restart PowerSync** (the `restart powersync` above) so it picks up the
+new `sync-streams.yaml`. Omitting the restart leaves clients without the flag, so
+the toggle silently does nothing on every device. No new environment variables.
+
 **History window (D4).** Soft-deleted rows and the `command_log` dedup history are
 purged after **90 days** by the retention job — this is the v1 dedup/undo horizon,
 not a user-facing archival guarantee. Longer retention is a post-v1 feature (the

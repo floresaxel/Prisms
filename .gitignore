@@ -9,6 +9,16 @@ playwright-report/
 *.tsbuildinfo
 *.log
 
+# Expo native projects: this app uses continuous native generation, so app.json
+# is the source of truth and `expo prebuild` regenerates these. Committing them
+# would fork the native config away from the plugin list.
+.expo/
+.gradle/
+apps/mobile/android/
+apps/mobile/ios/
+# Scratch output from `expo export` bundle checks.
+apps/mobile/.expo-export/
+
 .env
 .env.*
 !.env.example

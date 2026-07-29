@@ -93,6 +93,20 @@ describe.skipIf(!adminUrl)('J2 /sync/journal/export (D7 HTTP)', () => {
     expect(body.entries[0]!.content).toBe(ZWJ); // surrogate pairs intact through HTTP
   });
 
+  it('carries the Annex L day_log through the route (payload passthrough)', async () => {
+    const [me] = await sql<{ id: string }[]>`SELECT id FROM "user" WHERE email = 'jx@prisms.test'`;
+    const taskId = randomUUID();
+    await sql`
+      INSERT INTO nodes (id, user_id, node_type, title, sort_order, updated_at, completed_at)
+      VALUES (${taskId}, ${me!.id}, 'task', ${`ship it ${ZWJ}`}, 'a0', now(), '2026-05-08T18:00:00.000Z')`;
+    const res = await exportReq({ cookie });
+    const body = (await res.json()) as { entries: { entry_date: string; content: string; day_log?: { completed: { title: string }[] } }[] };
+    // a LOG-ONLY day: no note was ever written for 2026-05-08
+    const day = body.entries.find((e) => e.entry_date === '2026-05-08');
+    expect(day?.content).toBe('');
+    expect(day?.day_log?.completed[0]!.title).toBe(`ship it ${ZWJ}`); // emoji intact through JSON
+  });
+
   it('the shared endpoint rate gate returns 429 + Retry-After', async () => {
     let last: Response | undefined;
     for (let i = 0; i < 31; i++) last = await exportReq({ cookie }); // fixed limit 30 → the last is denied

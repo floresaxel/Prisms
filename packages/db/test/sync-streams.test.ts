@@ -89,6 +89,21 @@ describe('sync-streams.yaml (§7.3)', () => {
     }
   });
 
+  it('bootstrap ships every user_settings column clients read (Annex L flag)', () => {
+    // The settings query is the one EXPLICIT column list in the file: a column
+    // missing here never reaches a device, and its toggle is silently dead —
+    // the client keeps rendering its own default forever. Pin the list.
+    const settingsQuery = queryLines.find((l) => l.includes('FROM user_settings'));
+    expect(settingsQuery).toBeDefined();
+    for (const col of ['day_reset_hour', 'timezone', 'weather_location', 'journal_day_log', 'updated_at']) {
+      expect(settingsQuery, `bootstrap must select ${col}`).toContain(col);
+    }
+  });
+
+  it('adds NO table for the journal day log — it is derived at read time (Annex L)', () => {
+    expect(yaml).not.toMatch(/FROM journal_day_logs?\b/);
+  });
+
   it('subscribes Tier 0/1 automatically and Tier 2 (history) lazily', () => {
     const history = yaml.slice(yaml.indexOf('history:'));
     expect(history).toMatch(/auto_subscribe:\s*false/);

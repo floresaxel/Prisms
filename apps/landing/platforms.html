@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#f6f7f9" />
+  <title>Platforms — Prisms</title>
+  <meta name="description" content="Prisms runs on web, desktop and mobile with one local-first data layer: instant offline edits, deterministic sync, and a review inbox for anything that conflicts." />
+  <meta property="og:title" content="Platforms — Prisms" />
+  <meta property="og:description" content="One brain, every screen: web, desktop and mobile converge on the same state — offline is the default, not a failure mode." />
+  <meta property="og:type" content="website" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%3E%3Crect%20width='24'%20height='24'%20rx='6'%20fill='%232563eb'/%3E%3Cpath%20d='M12%205.5%205.4%2017.8h13.2Z'%20fill='none'%20stroke='white'%20stroke-width='1.7'%20stroke-linejoin='round'/%3E%3Cpath%20d='M12%205.5v12.3'%20stroke='white'%20stroke-width='1.7'/%3E%3C/svg%3E" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..750&display=swap" rel="stylesheet" />
+  <script>document.documentElement.classList.add('js');</script>
+  <link rel="stylesheet" href="site.css" />
+  <script defer src="site.js"></script>
+</head>
+<body>
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
+  <symbol id="i-prism" viewBox="0 0 24 24"><path d="M12 3 3 20h18Z"/><path d="M12 3v17"/></symbol>
+  <symbol id="i-zap" viewBox="0 0 24 24"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8Z"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="m4 12 5 5L20 7"/></symbol>
+  <symbol id="i-cols" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M15 3v12"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></symbol>
+  <symbol id="i-inbox" viewBox="0 0 24 24"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.5 5.1 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.5-6.9A2 2 0 0 0 16.7 4H7.3a2 2 0 0 0-1.8 1.1Z"/></symbol>
+  <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a13.5 13.5 0 0 1 0 18 13.5 13.5 0 0 1 0-18Z"/></symbol>
+  <symbol id="i-desktop" viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></symbol>
+  <symbol id="i-phone" viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20" rx="2.5"/><path d="M11 18.5h2"/></symbol>
+  <symbol id="i-replay" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></symbol>
+  <symbol id="i-chevr" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
+</svg>
+
+<header class="lp-nav">
+  <a class="lp-brand" href="index.html">
+    <span class="lp-brand-logo"><svg class="lp-ic"><use href="#i-prism"/></svg></span>
+    Prisms
+  </a>
+  <nav class="lp-nav-links">
+    <a href="features.html">Features</a>
+    <a href="platforms.html" class="on">Platforms</a>
+    <a href="self-host.html">Self-host</a>
+    <a href="https://github.com/floresaxel/Prisms" rel="noopener">GitHub</a>
+  </nav>
+  <a class="lp-btn lp-btn--primary" href="self-host.html">Try Prisms</a>
+</header>
+
+<main>
+  <section class="lp-phero">
+    <p class="lp-kicker">Platforms</p>
+    <h1>One brain. Every screen.</h1>
+    <p class="lp-sub">Web, desktop and mobile share a single local-first data layer.
+       Offline isn’t a failure mode — it’s the default. Watch two devices converge:</p>
+  </section>
+
+  <!-- two-device sync playback -->
+  <section class="lp-section lp-section--scene">
+    <div class="lp-scenecard lp-scene lp-scene--wide" id="scene-sync" data-dur="7600" data-dwell="2800" aria-hidden="true">
+      <div class="sy-wrap">
+        <div class="sy-dev">
+          <div class="sy-head"><svg class="lp-ic"><use href="#i-desktop"/></svg>Laptop · web
+            <span class="sy-chip" id="sy-c1"><i class="dot"></i><span class="st">Synced</span></span>
+          </div>
+          <ul class="m-rows sy-rows">
+            <li class="m-row" data-at="1100">
+              <span class="m-ckb" id="sy-lck"><svg class="lp-ic"><use href="#i-check"/></svg></span>
+              <span class="m-t"><b>Draft chapter 3</b><span class="m-meta"><i class="pdot blue"></i>Thesis · P1</span></span>
+            </li>
+            <li class="m-row" data-at="6300">
+              <span class="m-ckb"><svg class="lp-ic"><use href="#i-check"/></svg></span>
+              <span class="m-t"><b>Stretch 10 minutes</b><span class="m-meta"><i class="pdot teal"></i>Habit</span></span>
+            </li>
+            <li class="m-row">
+              <span class="m-ckb"><svg class="lp-ic"><use href="#i-check"/></svg></span>
+              <span class="m-t"><b>Book dentist</b><span class="m-meta"><i class="pdot amber"></i>Life admin</span></span>
+            </li>
+          </ul>
+        </div>
+        <div class="sy-lane">
+          <i class="sy-dot" data-at="1300"></i>
+          <i class="sy-dot rev" data-at="5500"></i>
+          <em>PowerSync</em>
+        </div>
+        <div class="sy-dev sy-phone">
+          <div class="sy-head"><svg class="lp-ic"><use href="#i-phone"/></svg>Phone
+            <span class="sy-chip" id="sy-c2"><i class="dot"></i><span class="st">Synced</span></span>
+          </div>
+          <ul class="m-rows sy-rows">
+            <li class="m-row" data-at="2300">
+              <span class="m-ckb"><svg class="lp-ic"><use href="#i-check"/></svg></span>
+              <span class="m-t"><b>Draft chapter 3</b></span>
+            </li>
+            <li class="m-row" data-at="4400">
+              <span class="m-ckb" id="sy-pck"><svg class="lp-ic"><use href="#i-check"/></svg></span>
+              <span class="m-t"><b>Stretch 10 minutes</b></span>
+            </li>
+            <li class="m-row">
+              <span class="m-ckb"><svg class="lp-ic"><use href="#i-check"/></svg></span>
+              <span class="m-t"><b>Book dentist</b></span>
+            </li>
+          </ul>
+          <span class="sy-pend" id="sy-pend" data-at="4600">1 change queued</span>
+        </div>
+      </div>
+      <span class="lp-cursor"></span>
+      <i class="cue" data-at="400" data-act="cursor" data-target="#sy-lck"></i>
+      <i class="cue" data-at="1000" data-act="click"></i>
+      <i class="cue" data-at="1200" data-act="class" data-target="#sy-c1" data-class="busy"></i>
+      <i class="cue" data-at="2400" data-act="unclass" data-target="#sy-c1" data-class="busy"></i>
+      <i class="cue" data-at="3100" data-act="class" data-target="#sy-c2" data-class="off"></i>
+      <i class="cue" data-at="3500" data-act="cursor" data-target="#sy-pck"></i>
+      <i class="cue" data-at="4200" data-act="click"></i>
+      <i class="cue" data-at="5300" data-act="unclass" data-target="#sy-c2" data-class="off"></i>
+      <i class="cue" data-at="5350" data-act="class" data-target="#sy-c2" data-class="busy"></i>
+      <i class="cue" data-at="6500" data-act="unclass" data-target="#sy-c2" data-class="busy"></i>
+      <i class="cue" data-at="6500" data-act="unclass" data-target="#sy-pend" data-class="on"></i>
+      <i class="cue" data-at="5600" data-act="cursor-hide"></i>
+    </div>
+    <p class="lp-scenecap">A real flow: check a task on the laptop and it lands on the phone.
+       Then the phone goes <b>offline</b>, keeps working, and converges the moment it’s back.</p>
+  </section>
+
+  <!-- platform cards -->
+  <section class="lp-section">
+    <p class="lp-kicker">The clients</p>
+    <h2 class="lp-h2">Pick a screen. It’s all the same brain.</h2>
+    <div class="lp-plats">
+      <div class="lp-plat">
+        <span class="lp-feat-ic blue"><svg class="lp-ic"><use href="#i-globe"/></svg></span>
+        <h3>Web</h3>
+        <p>The full feature surface — flowcharts, Gantt, editors, dashboards — as an installable
+           PWA. Your data lives in the browser’s local store, so it opens instantly and works offline.</p>
+        <ul class="lp-points">
+          <li>Installable, offline-capable PWA</li>
+          <li>Every view: graphs, boards, agenda, journal</li>
+        </ul>
+      </div>
+      <div class="lp-plat">
+        <span class="lp-feat-ic teal"><svg class="lp-ic"><use href="#i-desktop"/></svg></span>
+        <h3>Desktop</h3>
+        <p>A lightweight native shell around the same fast core, with OS notifications.
+           No Electron bloat — it starts fast and stays out of your way.</p>
+        <ul class="lp-points">
+          <li>Native window &amp; notifications (Tauri)</li>
+          <li>Identical to web — zero re-learning</li>
+        </ul>
+      </div>
+      <div class="lp-plat">
+        <span class="lp-feat-ic amber"><svg class="lp-ic"><use href="#i-phone"/></svg></span>
+        <h3>Mobile</h3>
+        <p>The day-to-day loop in your pocket: lists, agenda, kanban, timer and habits,
+           with local notifications — plus read-only project graphs for context on the go.</p>
+        <ul class="lp-points">
+          <li>Capture, check off, clock in from anywhere</li>
+          <li>Local notifications for blocks &amp; habits</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- sync guarantees -->
+  <section class="lp-section lp-section--tint">
+    <p class="lp-kicker">Under the hood</p>
+    <h2 class="lp-h2">Sync you can reason about.</h2>
+    <div class="lp-grid">
+      <div class="lp-feat"><span class="lp-feat-ic blue"><svg class="lp-ic"><use href="#i-zap"/></svg></span><b>Instant local writes</b><p>Every action commits to the device store first and uploads as a signed command — the UI never waits on the network.</p></div>
+      <div class="lp-feat"><span class="lp-feat-ic teal"><svg class="lp-ic"><use href="#i-check"/></svg></span><b>Deterministic merges</b><p>Concurrent edits merge per field with a hybrid logical clock; time entries union instead of overwriting. Same inputs, same result, every device.</p></div>
+      <div class="lp-feat"><span class="lp-feat-ic amber"><svg class="lp-ic"><use href="#i-inbox"/></svg></span><b>Conflicts become items</b><p>Anything that can’t merge cleanly turns into a review-inbox item on every client — visible, auditable, resolvable. Never a silent overwrite.</p></div>
+    </div>
+  </section>
+
+  <section class="lp-section lp-band-wrap">
+    <div class="lp-band">
+      <h2>Ready when you are.</h2>
+      <p>Bring it up on your own hardware in a few minutes — everything above is one compose file away.</p>
+      <div class="lp-ctas">
+        <a class="lp-btn lp-btn--inv lp-btn--lg" href="self-host.html">Self-host Prisms <svg class="lp-ic"><use href="#i-chevr"/></svg></a>
+        <a class="lp-btn lp-btn--bandghost lp-btn--lg" href="https://github.com/floresaxel/Prisms" rel="noopener">View the code</a>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="lp-foot">
+  <div class="lp-foot-inner">
+    <div class="lp-foot-brand">
+      <span class="lp-brand"><span class="lp-brand-logo"><svg class="lp-ic"><use href="#i-prism"/></svg></span>Prisms</span>
+      <p>Local-first goal execution.<br/>Your goals, your hardware, your data.</p>
+    </div>
+    <nav class="lp-foot-col" aria-label="Product">
+      <b>Product</b>
+      <a href="features.html">Features</a>
+      <a href="platforms.html">Platforms</a>
+      <a href="self-host.html">Self-host</a>
+    </nav>
+    <nav class="lp-foot-col" aria-label="Resources">
+      <b>Resources</b>
+      <a href="https://github.com/floresaxel/Prisms" rel="noopener">GitHub</a>
+      <a href="https://github.com/floresaxel/Prisms/blob/main/docs/SELF_HOSTING.md" rel="noopener">Self-hosting guide</a>
+      <a href="https://github.com/floresaxel/Prisms/blob/main/Blueprints/ARCHITECTURE.md" rel="noopener">Architecture</a>
+    </nav>
+  </div>
+  <div class="lp-foot-base">© 2026 Prisms · free &amp; open · self-hosted</div>
+</footer>
+
+</body>
+</html>

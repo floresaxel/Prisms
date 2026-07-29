@@ -359,8 +359,15 @@ export const toComputedAggregate = (r: Row): ComputedAggregate => ({
   ...syncFields(r),
 });
 
-export const toUserSettings = (r: Row): Pick<UserSettings, 'day_reset_hour' | 'timezone' | 'weather_location'> => ({
+export const toUserSettings = (
+  r: Row,
+): Pick<UserSettings, 'day_reset_hour' | 'timezone' | 'weather_location' | 'journal_day_log'> => ({
   day_reset_hour: Number(r['day_reset_hour'] ?? 4),
   timezone: String(r['timezone'] ?? 'America/New_York'),
   weather_location: json(r['weather_location'], null) as UserSettings['weather_location'],
+  // Annex L is opt-OUT: only an explicit 0 turns it off. A row synced before the
+  // column existed (or a device that has not synced settings) reads as ON.
+  journal_day_log: r['journal_day_log'] === null || r['journal_day_log'] === undefined
+    ? true
+    : Number(r['journal_day_log']) !== 0,
 });
