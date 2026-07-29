@@ -3,6 +3,14 @@
 # sensitive lives in the repo. The HS256 key here (PS_JWT_K_B64URL) MUST be the
 # base64url of PS_JWT_SECRET (the API signs short-lived tokens with that secret;
 # §13). TODO: rotate to API-served JWKS (RS256) for key rotation without redeploy.
+# SEC-5/F15 — on `sslmode: disable`: PowerSync reaches Postgres over the private
+# compose bridge network (service name `postgres`), so this traffic never leaves
+# the host's network namespace and is not reachable from the LAN. It is disabled
+# because enabling it would require issuing and mounting a server certificate
+# that nothing would verify. If you move Postgres OFF this host — a managed
+# instance, a separate box, anything crossing a real network — you MUST switch
+# both connections to `verify-full` and mount the CA, or replication credentials
+# and every synced row travel in the clear.
 replication:
   connections:
     - type: postgresql

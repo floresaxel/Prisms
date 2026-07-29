@@ -1,5 +1,16 @@
 # Keep image build contexts lean and deterministic (audit S10-F6): dependency
 # installs happen inside the image from the lockfile — never copy host installs.
+
+# SEC-1/F3: NEVER ship the operator's real secrets into a build layer. The web
+# image is built with `COPY . .` (apps/web/Dockerfile), so an un-ignored `.env`
+# — POSTGRES_PASSWORD, BETTER_AUTH_SECRET, PS_JWT_SECRET — would be readable in
+# that layer by anyone with the image or the build cache, even though the final
+# nginx stage only copies `dist`. `.env` is gitignored but git-ignore does NOT
+# imply docker-ignore. `.env.example` is deliberately kept (it ships no values).
+.env
+.env.*
+!.env.example
+
 node_modules
 **/node_modules
 **/dist

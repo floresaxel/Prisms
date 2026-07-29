@@ -70,6 +70,8 @@ export function locationSlug(label: string): string {
 export interface WeatherPollResult {
   users: number;
   facts: number;
+  /** SEC-6/F9: users whose forecast could not be fetched/stored this cycle. */
+  failed: number;
 }
 
 export async function runWeatherPoll(
@@ -84,35 +86,60 @@ export async function runWeatherPoll(
 
   let users = 0;
   let facts = 0;
+  let failed = 0;
   for (const row of rows) {
     const loc = row.weather_location;
     if (!loc) continue;
     users += 1;
-    const slug = locationSlug(loc.label ?? 'location');
-    const forecast = await fetchForecast(loc.lat, loc.lon);
-    for (const day of forecast) {
-      await db
-        .insert(external_facts)
-        .values({
-          id: randomUUID(),
+    // SEC-6/F9: isolate per user. `fetchForecast` is a network call to a third
+    // party — a timeout, a rate-limit or one malformed response used to abort
+    // the whole cycle, so every user after this one silently got no forecast.
+    try {
+      facts += await pollOneUser(db, row.user_id, loc, now, fetchForecast);
+    } catch (error) {
+      failed += 1;
+      console.error(
+        JSON.stringify({
+          msg: 'weather.poll failed for one user; continuing',
+          job: 'weather.poll',
           user_id: row.user_id,
-          kind: WEATHER_KIND,
-          key: `${slug}/${day.date}`,
-          payload: { high_c: day.high_c, low_c: day.low_c, precip_prob: day.precip_prob, wind_kph: day.wind_kph },
-          computed_at: now,
-          updated_at: now,
-        })
-        .onConflictDoUpdate({
-          target: [external_facts.user_id, external_facts.kind, external_facts.key],
-          set: {
-            payload: { high_c: day.high_c, low_c: day.low_c, precip_prob: day.precip_prob, wind_kph: day.wind_kph },
-            computed_at: now,
-            updated_at: now,
-            deleted_at: null,
-          },
-        });
-      facts += 1;
+          error: error instanceof Error ? error.message : String(error),
+        }),
+      );
     }
   }
-  return { users, facts };
+  return { users, facts, failed };
+}
+
+/** One user's forecast fetch + upsert; returns the number of facts written. */
+async function pollOneUser(
+  db: PostgresJsDatabase,
+  userId: string,
+  loc: { lat: number; lon: number; label?: string },
+  now: string,
+  fetchForecast: ForecastFetcher,
+): Promise<number> {
+  const slug = locationSlug(loc.label ?? 'location');
+  const forecast = await fetchForecast(loc.lat, loc.lon);
+  let facts = 0;
+  for (const day of forecast) {
+    const payload = { high_c: day.high_c, low_c: day.low_c, precip_prob: day.precip_prob, wind_kph: day.wind_kph };
+    await db
+      .insert(external_facts)
+      .values({
+        id: randomUUID(),
+        user_id: userId,
+        kind: WEATHER_KIND,
+        key: `${slug}/${day.date}`,
+        payload,
+        computed_at: now,
+        updated_at: now,
+      })
+      .onConflictDoUpdate({
+        target: [external_facts.user_id, external_facts.kind, external_facts.key],
+        set: { payload, computed_at: now, updated_at: now, deleted_at: null },
+      });
+    facts += 1;
+  }
+  return facts;
 }

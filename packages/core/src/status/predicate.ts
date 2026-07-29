@@ -124,20 +124,159 @@ export function referencesExternalFacts(predicate: unknown): boolean {
  */
 export const MAX_MATCHES_PATTERN_LENGTH = 200;
 
-function walkForLongMatch(node: PredicateNode): boolean {
-  if ('all' in node) return node.all.some(walkForLongMatch);
-  if ('any' in node) return node.any.some(walkForLongMatch);
-  if ('not' in node) return walkForLongMatch(node.not);
-  return node.op === 'matches' && typeof node.value === 'string' && node.value.length > MAX_MATCHES_PATTERN_LENGTH;
+/**
+ * SEC-4/F2: the longest subject a `matches` pattern is tested against.
+ *
+ * Even a backtracking-free pattern costs O(subject); descriptions run to 20k
+ * characters and a rule is re-evaluated for every task on every status pass.
+ * Truncating bounds that per-evaluation cost. A rule matching beyond 4k of a
+ * single field is not a use case we support.
+ */
+export const MAX_MATCHES_SUBJECT_LENGTH = 4_096;
+
+/** Index just past the quantifier at `i`, or null when there isn't one. */
+function quantifierEnd(pattern: string, i: number): number | null {
+  const ch = pattern[i];
+  let end: number;
+  if (ch === '*' || ch === '+' || ch === '?') {
+    end = i + 1;
+  } else if (ch === '{') {
+    const close = pattern.indexOf('}', i);
+    if (close === -1) return null; // a literal '{', not a quantifier
+    if (!/^\{\d+(,\d*)?\}$/.test(pattern.slice(i, close + 1))) return null;
+    end = close + 1;
+  } else {
+    return null;
+  }
+  // absorb a lazy/possessive marker so it isn't re-read as another quantifier
+  if (pattern[end] === '?' || pattern[end] === '+') end += 1;
+  return end;
 }
 
 /**
- * True if any `matches` leaf carries a pattern longer than the cap (S3-F7). A
- * malformed predicate parses to nothing → false (it can't evaluate regardless).
+ * SEC-4/F2: why `pattern` is not safe to run, or null when it is.
+ *
+ * The `matches` op compiles user-authored regexes and runs them server-side, and
+ * JavaScript's engine is backtracking with NO timeout — so a 6-character pattern
+ * like `(a+)+$` against a moderately long subject runs effectively forever and
+ * pegs the single shared event loop for every user on the node. The pre-existing
+ * S3-F7 cap bounds pattern LENGTH, which is unrelated to backtracking.
+ *
+ * Rather than trying to detect every catastrophic pattern, this admits only a
+ * conservative, linear-time-safe subset and rejects the constructs that make
+ * exponential backtracking possible:
+ *   - backreferences (inherently exponential),
+ *   - lookaround (can hide a quantified sub-pattern),
+ *   - star height > 1: a quantifier inside a quantified group — `(a+)+`,
+ *   - alternation inside a quantified group — `(a|a)*`.
+ *
+ * Ordinary rule patterns (`^Deploy`, `urgent|important`, `\bfoo\b`, `[A-Z]+`,
+ * `report-\d{4}`) are unaffected. False rejections are acceptable here; a false
+ * ACCEPT is an outage.
  */
-export function hasOverlongMatchesPattern(predicate: unknown): boolean {
+export function unsafeMatchesPatternReason(pattern: string): string | null {
+  if (pattern.length > MAX_MATCHES_PATTERN_LENGTH) {
+    return `it exceeds ${MAX_MATCHES_PATTERN_LENGTH} characters`;
+  }
+
+  interface Frame { quantified: boolean; alternation: boolean }
+  const stack: Frame[] = [];
+  let frame: Frame = { quantified: false, alternation: false };
+  let i = 0;
+
+  while (i < pattern.length) {
+    const ch = pattern[i]!;
+
+    if (ch === '\\') {
+      const next = pattern[i + 1];
+      if (next !== undefined && next >= '1' && next <= '9') return 'it uses a backreference';
+      i += 2;
+      continue;
+    }
+
+    // A character class is a single atom; a quantifier on it is harmless.
+    if (ch === '[') {
+      i += 1;
+      while (i < pattern.length && pattern[i] !== ']') i += pattern[i] === '\\' ? 2 : 1;
+      i += 1;
+      const q = quantifierEnd(pattern, i);
+      if (q !== null) { frame.quantified = true; i = q; }
+      continue;
+    }
+
+    if (ch === '(') {
+      if (/^\(\?<?[=!]/.test(pattern.slice(i, i + 4))) return 'it uses lookaround';
+      stack.push(frame);
+      frame = { quantified: false, alternation: false };
+      i += 1;
+      if (pattern.startsWith('?:', i)) i += 2;
+      else if (pattern[i] === '?' && pattern[i + 1] === '<') {
+        while (i < pattern.length && pattern[i] !== '>') i += 1;
+        i += 1;
+      }
+      continue;
+    }
+
+    if (ch === ')') {
+      const body = frame;
+      const parent = stack.pop();
+      if (parent === undefined) return 'its groups are unbalanced';
+      const q = quantifierEnd(pattern, i + 1);
+      if (q !== null) {
+        // The dangerous shapes: a repeated group whose body can itself repeat,
+        // or whose branches can match the same input.
+        if (body.quantified) return 'it nests a quantifier inside a repeated group (e.g. "(a+)+")';
+        if (body.alternation) return 'it puts an alternation inside a repeated group (e.g. "(a|a)*")';
+        parent.quantified = true;
+        i = q;
+      } else {
+        parent.quantified ||= body.quantified;
+        parent.alternation ||= body.alternation;
+        i += 1;
+      }
+      frame = parent;
+      continue;
+    }
+
+    if (ch === '|') { frame.alternation = true; i += 1; continue; }
+
+    const q = quantifierEnd(pattern, i);
+    if (q !== null) { frame.quantified = true; i = q; continue; }
+
+    i += 1;
+  }
+
+  if (stack.length > 0) return 'its groups are unbalanced';
+
+  try {
+    new RegExp(pattern, 'i');
+  } catch {
+    return 'it is not a valid regular expression';
+  }
+  return null;
+}
+
+/**
+ * True if any `matches` leaf carries a pattern that is overlong or not
+ * linear-time-safe (S3-F7 + SEC-4/F2). A malformed predicate parses to nothing →
+ * false (it can't evaluate regardless).
+ */
+export function hasUnsafeMatchesPattern(predicate: unknown): boolean {
+  return firstUnsafeMatchesReason(predicate) !== null;
+}
+
+function walkForReason(node: PredicateNode): string | null {
+  if ('all' in node) return node.all.reduce<string | null>((found, n) => found ?? walkForReason(n), null);
+  if ('any' in node) return node.any.reduce<string | null>((found, n) => found ?? walkForReason(n), null);
+  if ('not' in node) return walkForReason(node.not);
+  if (node.op !== 'matches' || typeof node.value !== 'string') return null;
+  return unsafeMatchesPatternReason(node.value);
+}
+
+/** Why the first unsafe `matches` leaf was rejected — for an actionable authoring error. */
+export function firstUnsafeMatchesReason(predicate: unknown): string | null {
   const parsed = predicateSchema.safeParse(predicate);
-  return parsed.success ? walkForLongMatch(parsed.data) : false;
+  return parsed.success ? walkForReason(parsed.data) : null;
 }
 
 /**
@@ -290,10 +429,16 @@ function compareSingle(op: PredicateOp, fact: FactValue, expected: JsonValue | u
     }
     case 'matches': {
       if (typeof fact !== 'string' || typeof expected !== 'string') return 'unknown';
-      // S3-F7: refuse to compile an overlong (ReDoS-surface) pattern; fail safe.
-      if (expected.length > MAX_MATCHES_PATTERN_LENGTH) return 'unknown';
+      // S3-F7 + SEC-4/F2: refuse to RUN a pattern that is overlong or capable of
+      // catastrophic backtracking; fail safe to 'unknown'. This is the guard that
+      // actually protects the server — blocker rules have no authoring validator
+      // to hook, and rules stored before this check existed still evaluate here.
+      if (unsafeMatchesPatternReason(expected) !== null) return 'unknown';
+      // Bound the subject too: even a safe pattern is O(subject), and this runs
+      // per task per status pass.
+      const subject = fact.length > MAX_MATCHES_SUBJECT_LENGTH ? fact.slice(0, MAX_MATCHES_SUBJECT_LENGTH) : fact;
       try {
-        return new RegExp(expected, 'i').test(fact) ? 'true' : 'false';
+        return new RegExp(expected, 'i').test(subject) ? 'true' : 'false';
       } catch {
         return 'unknown'; // invalid pattern — fail safe
       }

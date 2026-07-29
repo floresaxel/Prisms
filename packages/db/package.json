@@ -25,7 +25,7 @@
   },
   "devDependencies": {
     "@powersync/service-sync-rules": "^0.37.0",
-    "@types/node": "^24.13.2",
+    "@types/node": "^26.1.2",
     "drizzle-kit": "^0.31.10",
     "eslint": "^10.4.1",
     "tsx": "^4.22.4",

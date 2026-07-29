@@ -17,6 +17,32 @@ and the *same PowerSync interface* literally — only the host (WebView vs.
 browser tab) differs. OS notifications use the Tauri notification plugin via
 `apps/web/src/desktop.ts` (`osNotify`, guarded by `isDesktop()`).
 
+## Security — pin the CSP origin before you distribute a build (SEC-5/F8)
+
+`src-tauri/tauri.conf.json` ships two policies:
+
+- `csp` (production) — `connect-src 'self' https: wss:`
+- `devCsp` — the same plus `http://localhost:*` / `ws://localhost:*` for `tauri dev`
+
+Splitting them means a **packaged** build can no longer open connections to
+arbitrary localhost ports on the user's machine; that grant now exists only in
+dev.
+
+`https:`/`wss:` are still SCHEME sources — they match *any* host, so a script
+that got a foothold could stream your replica to an attacker. They are the
+default only because this repo cannot know your server's origin: the desktop app
+loads the same `apps/web` bundle, whose API and sync URLs are baked in at build
+time from `VITE_API_URL` / `VITE_POWERSYNC_URL`.
+
+**Before distributing a build, replace them with your own origin**, e.g.:
+
+```json
+"csp": "default-src 'self'; connect-src 'self' https://prisms.example.com wss://prisms.example.com; ..."
+```
+
+That makes exfiltration to a third-party host a CSP violation rather than an
+allowed request.
+
 ## Run / build (needs the Rust toolchain)
 
 ```bash

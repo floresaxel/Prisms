@@ -10,11 +10,11 @@ jobs:
     name: Lint, typecheck, test, coverage
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v5
         with:
-          node-version: 24
+          node-version: 26
           cache: pnpm
 
       - name: Install dependencies
@@ -33,11 +33,11 @@ jobs:
     name: DB + API against compose postgres/powersync
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v5
         with:
-          node-version: 24
+          node-version: 26
           cache: pnpm
 
       - name: Install dependencies
@@ -81,11 +81,11 @@ jobs:
     # The web client's default powersyncUrl (:8080) matches compose's default
     # container mapping — no port remap needed (audit S1-F7/S9-F4).
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v5
         with:
-          node-version: 24
+          node-version: 26
           cache: pnpm
 
       - name: Install dependencies
@@ -117,6 +117,14 @@ jobs:
           BETTER_AUTH_URL: http://localhost:5173
           BETTER_AUTH_TRUSTED_ORIGINS: http://localhost:5173
           PRISMS_JOBS_ENABLED: 'true'
+          # SEC-2: the credential throttle keys on the reverse proxy's X-Real-IP
+          # and FAILS CLOSED — with no proxy in front (Playwright hits the API
+          # directly here) every caller shares one bucket. The suite signs in
+          # once per spec, which is exactly the traffic shape the default
+          # 10/min is meant to stop, so it must be raised for the run. This
+          # relaxes the LIMIT only; the keying and fail-closed behaviour are
+          # unchanged and are covered by apps/server/test/auth-throttle.test.ts.
+          AUTH_RATE_LIMIT: '10000'
 
       - name: Start web (vite preview)
         run: pnpm --filter @prisms/web preview &
@@ -135,7 +143,7 @@ jobs:
 
       - name: Upload traces on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: playwright-traces
           path: apps/web/test-results
