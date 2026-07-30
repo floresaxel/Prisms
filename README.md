@@ -243,9 +243,7 @@ docker compose -f docker-compose.prod.yml up -d --build
 ```
 
 See **[docs/SELF_HOSTING.md](docs/SELF_HOSTING.md)** for secrets, JWT key
-derivation, backup/restore, and upgrade notes, and
-**[docs/SECURITY_REVIEW.md](docs/SECURITY_REVIEW.md)** for the security review
-of the write path, stream scoping, and storage boundaries.
+derivation, backup/restore, and upgrade notes.
 
 The `web` container serves plain HTTP — terminate TLS in front of it. Auth
 cookies are `Secure`, so sign-in only works over HTTPS (or `localhost`).
