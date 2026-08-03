@@ -67,6 +67,18 @@ export function createCommands(store: OverlayStore, ctx: CommandContext, deps: E
     async promoteActivity(id: string, target: { parentId: string } | { habitId: string }): Promise<void> {
       await run('activity.promote', 'parentId' in target ? { id, parent_id: target.parentId } : { id, habit_id: target.habitId });
     },
+    /** A project under a roadmap (I1: `project`'s only legal parent). Roadmap tab. */
+    async createProject(input: { id?: string; roadmapId: string; title: string; sortOrder: string }): Promise<string> {
+      const id = input.id ?? newId();
+      await run('node.create', { id, parent_id: input.roadmapId, node_type: 'project', title: input.title, sort_order: input.sortOrder });
+      return id;
+    },
+    /** A roadmap under a vision (I1: `roadmap`'s only legal parent). */
+    async createRoadmap(input: { id?: string; visionId: string; title: string; sortOrder: string }): Promise<string> {
+      const id = input.id ?? newId();
+      await run('node.create', { id, parent_id: input.visionId, node_type: 'roadmap', title: input.title, sort_order: input.sortOrder });
+      return id;
+    },
     async createTask(input: { id?: string; parentId: string; title: string; sortOrder: string; estimateMinutes?: number }): Promise<string> {
       const id = input.id ?? newId();
       await run('node.create', {

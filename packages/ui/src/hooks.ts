@@ -638,6 +638,13 @@ export interface TodoTask {
   schedulable: SchedulableTask;
 }
 
+export interface AgendaTask extends TodoTask {
+  /** False when the task carries no estimate of its own — `schedulable.estimateMinutes` is then `DEFAULT_DRAG_MINUTES`. */
+  estimated: boolean;
+  /** A committed block already exists for it. */
+  scheduled: boolean;
+}
+
 export interface Agenda {
   /** SchedulerInput (greedy) for `validWindowsFor` drag hints (§10). */
   input: SchedulerInput;
@@ -648,7 +655,17 @@ export interface Agenda {
   entries: AgendaEntry[];
   /** Schedulable tasks not yet placed — the to-do side panel. */
   todo: TodoTask[];
+  /**
+   * EVERY live, not-done task — the Agenda's "All tasks" list. Unlike `todo`
+   * this keeps already-scheduled tasks and tasks with no estimate (they get
+   * `DEFAULT_DRAG_MINUTES` so they are still draggable onto the week; the drop
+   * creates a block of that length).
+   */
+  allTasks: AgendaTask[];
 }
+
+/** Assumed block length when dragging a task that has no estimate of its own. */
+export const DEFAULT_DRAG_MINUTES = 30;
 
 /**
  * Agenda data (§12.2, §10 client mode): mirrors the server's scheduler-context
@@ -753,7 +770,29 @@ export function useAgenda(now: Instant, horizonDays = 7): Agenda {
       .map((t) => ({ task: tree.byId.get(t.id) as Node, schedulable: t }))
       .sort((a, b) => (a.task.title < b.task.title ? -1 : a.task.title > b.task.title ? 1 : 0));
 
-    return { input, tasksById, blocks, entries, todo };
+    // The full list: `tasks` above already dropped anything without a positive
+    // estimate, so walk the tree again and synthesize a schedulable for those —
+    // an estimate-less task is still something you can drop onto the week.
+    const allTasks: AgendaTask[] = [];
+    for (const node of tree.byId.values()) {
+      if (node.node_type !== 'task' || node.completed_at !== null) continue;
+      const existing = tasksById.get(node.id);
+      allTasks.push({
+        task: node,
+        schedulable: existing ?? {
+          id: node.id,
+          estimateMinutes: DEFAULT_DRAG_MINUTES,
+          dueDate: node.due_date,
+          dependencies: depsBySuccessor.get(node.id),
+          sprintMember: sprintMemberNodeIds.has(node.id),
+        },
+        estimated: existing !== undefined,
+        scheduled: scheduledTaskIds.has(node.id),
+      });
+    }
+    allTasks.sort((a, b) => (a.task.title < b.task.title ? -1 : a.task.title > b.task.title ? 1 : 0));
+
+    return { input, tasksById, blocks, entries, todo, allTasks };
   }, [ctx, edgeRows, blockRows, entryRows, sprintRows, membershipRows, now, horizonDays]);
 }
 

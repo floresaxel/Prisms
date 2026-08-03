@@ -219,7 +219,9 @@ test('exports: the day .md carries the section, and the archive has a LOG-ONLY p
   await openToday(page);
   await expect(footer(page)).toBeVisible({ timeout: 30_000 });
 
-  // The day download: the note VERBATIM, then the section.
+  // The day download: the note VERBATIM, then the section. Export lives behind
+  // the note's corner "⋯" menu.
+  await page.getByTestId('journal-menu').click();
   const [dl] = await Promise.all([page.waitForEvent('download'), page.getByTestId('journal-export').click()]);
   expect(dl.suggestedFilename()).toBe(`${today}.md`);
   const md = await readFile(await dl.path(), 'utf8');

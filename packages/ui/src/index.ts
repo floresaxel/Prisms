@@ -141,6 +141,7 @@ export {
   useHabitTasks,
   // loading-aware read layer (1.4 §7.15, Fix C) — M12
   useIsHydrated,
+  DEFAULT_DRAG_MINUTES,
   useHabitsHydrated,
   useDecisionsHydrated,
   useRulesHydrated,
@@ -159,6 +160,7 @@ export {
   type AgendaBlock,
   type AgendaEntry,
   type TodoTask,
+  type AgendaTask,
   type HabitView,
   type KanbanColumn,
   type DecisionBoardView,

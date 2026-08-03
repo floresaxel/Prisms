@@ -42,7 +42,17 @@ body {
   font-family: var(--px-font);
   background: var(--px-bg);
   color: var(--px-text);
+  /* The I-beam pointer and the blinking caret belong to text-entry surfaces
+     ONLY. Both are inherited properties, so setting them here neutralizes them
+     app-wide; the rules below hand them back to real inputs, and the explicit
+     cursors on buttons/links/drag handles win over this inherited default. */
+  cursor: default;
+  caret-color: transparent;
 }
+input, textarea, [contenteditable]:not([contenteditable='false']) { caret-color: auto; }
+textarea,
+[contenteditable]:not([contenteditable='false']),
+input:not([type='button']):not([type='checkbox']):not([type='color']):not([type='file']):not([type='image']):not([type='radio']):not([type='range']):not([type='reset']):not([type='submit']) { cursor: text; }
 
 /* ── app shell v2 (web redesign W1): sidebar with grouped nav + topbar. Ported
    from docs/mockups/web-layout-redesign.html (.app/.sb/.topbar), px-prefixed. ── */
@@ -153,12 +163,20 @@ body {
 .px-ag-sw--novision { background: var(--px-slate-bg); border-color: var(--px-border-2); }
 .px-ag-sw--history { background: var(--px-surface-2); border: 1px dashed var(--px-border-2); }
 
-.px-agenda { display: grid; grid-template-columns: 264px minmax(0, 1fr) 232px; gap: 18px; align-items: start; }
+/* Column order: to-schedule (left) · week grid · note (right). */
+.px-agenda { display: grid; grid-template-columns: 248px minmax(0, 1fr) 286px; gap: 18px; align-items: start; }
 .px-agenda-journal, .px-agenda-todo { background: var(--px-surface); border: 1px solid var(--px-border); border-radius: 10px; padding: 12px 14px; box-shadow: var(--px-shadow); min-width: 0; }
 .px-agenda-journal h2, .px-agenda-todo h2 { margin-top: 0; font-size: 14px; }
 .px-drag-hint { font-size: 11px; margin: 10px 0 0; }
 .px-todo-item { display: flex; justify-content: space-between; gap: 8px; padding: 9px 11px; margin-bottom: 7px; background: var(--px-surface); border: 1px solid var(--px-border); border-radius: 8px; font-size: 12.5px; cursor: grab; user-select: none; box-shadow: var(--px-shadow); }
 .px-todo-item:hover { border-color: var(--px-accent); }
+/* "All tasks" — every live task, scheduled ones included, in a bounded scroller
+   so the panel never outgrows the week grid beside it. */
+.px-ag-all { margin-top: 16px; border-top: 1px solid var(--px-border); padding-top: 10px; }
+.px-ag-scroll { max-height: 268px; overflow-y: auto; padding-right: 2px; }
+.px-todo-item--placed { background: var(--px-surface-2); color: var(--px-text-dim); box-shadow: none; }
+.px-todo-sub { font-size: 11px; color: var(--px-faint); white-space: nowrap; }
+.px-todo-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .px-cal-grid { display: grid; grid-template-columns: 48px repeat(7, 1fr); gap: 0; border: 1px solid var(--px-border); border-radius: var(--px-radius); overflow: hidden; }
 .px-cal-gutter { position: relative; border-right: 1px solid var(--px-border); margin-top: 28px; }
@@ -578,3 +596,21 @@ body {
 .px-jn-d--sel .px-jn-d-date { color: var(--px-blue-deep); }
 .px-jn-d-title { font-size: 12.5px; color: var(--px-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .px-jn-editor { background: var(--px-surface); border: 1px solid var(--px-border); border-radius: 10px; padding: 4px 16px 16px; box-shadow: var(--px-shadow); min-width: 0; }
+
+/* ── overflow ("⋯") menu — secondary actions tucked into a corner ── */
+.px-menu { position: relative; display: inline-flex; }
+.px-menu-btn { padding: 4px 7px; line-height: 0; color: var(--px-text-dim); }
+.px-menu-pop { position: absolute; z-index: 30; top: calc(100% + 6px); right: 0; min-width: 176px; padding: 4px; background: var(--px-surface); border: 1px solid var(--px-border); border-radius: 9px; box-shadow: var(--px-shadow-pop); display: flex; flex-direction: column; }
+.px-menu-item { display: flex; align-items: center; gap: 9px; width: 100%; text-align: left; background: none; border: none; font: inherit; font-size: 12.5px; color: var(--px-text); padding: 7px 9px; border-radius: 6px; cursor: pointer; }
+.px-menu-item .px-ic { width: 14px; height: 14px; color: var(--px-faint); }
+.px-menu-item:hover { background: var(--px-surface-2); }
+.px-menu-item--danger { color: var(--px-danger); }
+.px-menu-item--danger .px-ic { color: var(--px-danger); }
+.px-menu-sep { height: 1px; background: var(--px-border); margin: 4px 2px; }
+
+/* ── Roadmap tab — a top-to-bottom graph of a roadmap's projects ── */
+.px-rm-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.px-flow-canvas--tall { height: 560px; }
+.px-rm-empty { padding: 26px 20px; text-align: center; color: var(--px-text-dim); background: var(--px-surface); border: 1px dashed var(--px-border-2); border-radius: var(--px-radius); }
+.px-rm-empty p { margin: 0 0 12px; font-size: 12.5px; }
+.px-flow-node--root { width: 190px; border-color: var(--px-sky); background: var(--px-sky-bg); }

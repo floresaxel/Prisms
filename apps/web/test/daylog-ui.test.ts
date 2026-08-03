@@ -61,6 +61,9 @@ import { downloadJournalArchive } from '../src/portability';
 const CTX = { userId: 'u1', deviceId: 'web-1', now: () => '2026-05-08T18:00:00.000Z' };
 const DAY = '2026-05-08';
 
+/** Lock-edit / Export / Delete live behind the corner "⋯" menu — open it first. */
+const openNoteMenu = () => fireEvent.click(screen.getByTestId('journal-menu'));
+
 /** Real entries from the real compute — the UI is tested against actual output. */
 function sampleLog(): DayLogEntries {
   const base = {
@@ -158,6 +161,7 @@ describe('DayJournalPanel — the footer sits outside the editor', () => {
     expect(screen.getByTestId('daylog')).toBeTruthy();
     expect(editor.contains(screen.getByTestId('daylog'))).toBe(false);
 
+    openNoteMenu();
     fireEvent.click(screen.getByTestId('journal-preview-toggle'));
     expect(screen.getByTestId('daylog')).toBeTruthy();
     expect(screen.getByTestId('journal-preview').contains(screen.getByTestId('daylog'))).toBe(false);
@@ -180,6 +184,7 @@ describe('DayJournalPanel — the footer sits outside the editor', () => {
     const revoke = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
     const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
 
+    openNoteMenu();
     fireEvent.click(screen.getByTestId('journal-export'));
 
     const text = await captured!.text();
@@ -202,6 +207,7 @@ describe('DayJournalPanel — the footer sits outside the editor', () => {
     const revoke = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
     const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
 
+    openNoteMenu();
     fireEvent.click(screen.getByTestId('journal-export'));
 
     expect(await captured!.text()).toBe('note only');

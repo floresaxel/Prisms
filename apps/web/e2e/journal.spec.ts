@@ -104,7 +104,9 @@ test('create → reload → edit → delete (WYSIWYG) with emoji; day Export .md
   const stored = (await serverContent(page, today))!;
   expect(stored).toContain('👨‍👩‍👧‍👦'); // ZWJ emoji byte-intact through the WYSIWYG (D6)
 
-  // Export .md downloads exactly the stored markdown, named <today>.md.
+  // Export .md downloads exactly the stored markdown, named <today>.md. The note
+  // actions live behind the corner "⋯" menu, so open it first.
+  await page.getByTestId('journal-menu').click();
   const [dl] = await Promise.all([page.waitForEvent('download'), page.getByTestId('journal-export').click()]);
   expect(dl.suggestedFilename()).toBe(`${today}.md`);
   expect(await readFile(await dl.path(), 'utf8')).toBe(stored);
@@ -121,6 +123,7 @@ test('create → reload → edit → delete (WYSIWYG) with emoji; day Export .md
   await page.keyboard.insertText(' — edited ✏️');
   await page.getByTestId('journal-rich').blur();
   await expect.poll(async () => (await serverDays(page)).length, { timeout: 30_000 }).toBe(1);
+  await page.getByTestId('journal-menu').click();
   await page.getByTestId('journal-delete').click();
   await expect(page.getByTestId(`note-dot-${today}`)).toHaveCount(0);
   await expect.poll(async () => (await serverDays(page)).length, { timeout: 30_000 }).toBe(0);

@@ -39,6 +39,7 @@ vi.mock('@prisms/ui', async (importOriginal) => {
       blocks: [],
       entries: [],
       todo: [],
+      allTasks: [],
     }),
     useIsHydrated: () => true,
     useBlockTags: () => [],
@@ -74,6 +75,9 @@ import { downloadJournalArchive } from '../src/portability';
 
 const CTX = { userId: 'u1', deviceId: 'web-1', now: () => '2026-06-27T00:00:00.000Z' };
 const ZWJ = '👨‍👩‍👧‍👦';
+
+/** Lock-edit / Export / Delete live behind the corner "⋯" menu — open it first. */
+const openNoteMenu = () => fireEvent.click(screen.getByTestId('journal-menu'));
 
 afterEach(() => {
   cleanup();
@@ -114,11 +118,17 @@ describe('DayJournalPanel — editor', () => {
     expect((screen.getByTestId('journal-rich') as HTMLTextAreaElement).value).toBe(`${ZWJ} family`);
   });
 
-  it('preview toggle renders the markdown', () => {
+  it('the menu\'s "Lock edit" renders the markdown read-only, and flips to "Edit"', () => {
     state.entry = { id: 'j1', content: '# Title', deleted_at: null };
     render(createElement(DayJournalPanel, { date: '2026-06-11', ctx: CTX }));
+    openNoteMenu();
+    expect(screen.getByTestId('journal-preview-toggle').textContent).toBe('Lock edit');
     fireEvent.click(screen.getByTestId('journal-preview-toggle'));
     expect(screen.getByTestId('journal-preview').querySelector('h1')?.textContent).toBe('Title');
+    // acting on an item closes the menu; re-opening shows the inverse label
+    expect(screen.queryByTestId('journal-menu-pop')).toBeNull();
+    openNoteMenu();
+    expect(screen.getByTestId('journal-preview-toggle').textContent).toBe('Edit');
   });
 
   it('Export .md downloads the current content as YYYY-MM-DD.md', async () => {
@@ -134,6 +144,7 @@ describe('DayJournalPanel — editor', () => {
       if (captured) captured.name = this.download;
     });
 
+    openNoteMenu();
     fireEvent.click(screen.getByTestId('journal-export'));
 
     expect(captured).not.toBeNull();
@@ -147,8 +158,29 @@ describe('DayJournalPanel — editor', () => {
   it('Delete calls journal.delete for the live row', () => {
     state.entry = { id: 'j1', content: 'x', deleted_at: null };
     render(createElement(DayJournalPanel, { date: '2026-06-11', ctx: CTX }));
+    openNoteMenu();
     fireEvent.click(screen.getByTestId('journal-delete'));
     expect(command('deleteJournal')).toHaveBeenCalledWith('j1');
+  });
+
+  it('the note actions are ONLY reachable through the corner menu', () => {
+    state.entry = { id: 'j1', content: 'x', deleted_at: null };
+    render(createElement(DayJournalPanel, { date: '2026-06-11', ctx: CTX }));
+    for (const id of ['journal-preview-toggle', 'journal-export', 'journal-delete']) {
+      expect(screen.queryByTestId(id)).toBeNull();
+    }
+    openNoteMenu();
+    for (const id of ['journal-preview-toggle', 'journal-export', 'journal-delete']) {
+      expect(screen.getByTestId(id)).toBeTruthy();
+    }
+  });
+
+  it('Delete is absent for a day with no saved note', () => {
+    state.entry = null;
+    render(createElement(DayJournalPanel, { date: '2026-06-11', ctx: CTX }));
+    openNoteMenu();
+    expect(screen.queryByTestId('journal-delete')).toBeNull();
+    expect(screen.getByTestId('journal-export')).toBeTruthy();
   });
 
   it('flushes a pending debounced save on unmount (day switch, no blur) — last edit not lost', () => {

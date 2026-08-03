@@ -19,7 +19,8 @@ export type NavKey =
   | 'dashboard'
   | 'automations'
   | 'settings'
-  // Projects hub tabs (#board|#timeline|#graph|#decisions)
+  // Projects hub tabs (#roadmap|#board|#timeline|#graph|#decisions)
+  | 'roadmap'
   | 'board'
   | 'timeline'
   | 'graph'
@@ -29,7 +30,7 @@ export type NavKey =
   | 'blockers'
   | 'built-in';
 
-const PROJECT_TABS = new Set<NavKey>(['board', 'timeline', 'graph', 'decisions']);
+const PROJECT_TABS = new Set<NavKey>(['roadmap', 'board', 'timeline', 'graph', 'decisions']);
 const AUTOMATION_TABS = new Set<NavKey>(['rules', 'blockers', 'built-in']);
 
 /**

@@ -1,9 +1,11 @@
 /**
  * DayJournal (J4/J7, D2/D3/D7): the left-panel editor for a calendar day's note.
  * The edit surface is the TipTap WYSIWYG (`RichJournalEditor`, J7) bound to the
- * markdown `content` field; a Preview toggle renders the same markdown read-only
- * via `react-markdown`+`remark-gfm` (the exact sanitized output shared with the
- * `.md` export and other clients). Mobile keeps the J4 toolbar/textarea editor.
+ * markdown `content` field; "Lock edit" renders the same markdown read-only via
+ * `react-markdown`+`remark-gfm` (the exact sanitized output shared with the `.md`
+ * export and other clients). Lock/edit, Export .md and Delete live in a corner
+ * "⋯" menu rather than as inline buttons. Mobile keeps the J4 toolbar/textarea
+ * editor and its own Preview/Export/Delete buttons.
  *
  * Rendering is SANITIZED (D2): raw HTML in the markdown is NEVER rendered
  * (react-markdown default — we deliberately do NOT add rehype-raw), link hrefs are
@@ -18,7 +20,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
 import { composeDayMarkdown } from '@prisms/core';
-import { journalDayFilename, useCommands, useDayLog, useJournalDay, useUserSettings, type CommandContext } from '@prisms/ui';
+import { Ic, journalDayFilename, useCommands, useDayLog, useJournalDay, useUserSettings, type CommandContext } from '@prisms/ui';
 
 import { DayLogFooter } from './DayLogFooter';
 import { RichJournalEditor } from './RichJournalEditor';
@@ -57,10 +59,31 @@ export function DayJournalPanel({ date, ctx }: { date: string; ctx: CommandConte
   const dayLog = useDayLog(date);
   const { timezone } = useUserSettings();
   const [draft, setDraft] = useState(entry?.content ?? '');
+  // `preview` is the LOCKED (read-only) state: the same sanitized markdown render
+  // as before, now surfaced as "Lock edit" ⇄ "Edit" rather than Preview ⇄ Edit.
   const [preview, setPreview] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const dirty = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const existingId = entry?.id;
+  const menuRef = useRef<HTMLDivElement | null>(null);
+
+  // Dismiss the overflow menu on an outside click or Escape.
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (!menuRef.current?.contains(e.target as HTMLElement)) setMenuOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMenuOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [menuOpen]);
 
   // Adopt synced content when it arrives, unless the user has already edited.
   useEffect(() => {
@@ -121,9 +144,66 @@ export function DayJournalPanel({ date, ctx }: { date: string; ctx: CommandConte
     <div className="px-journal" data-testid={`journal-${date}`} style={{ marginTop: 16 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <h2 style={{ margin: 0, flex: 1 }}>Note · {date}</h2>
-        <button className="px-btn" data-testid="journal-preview-toggle" aria-pressed={preview} onClick={() => setPreview((p) => !p)}>
-          {preview ? 'Edit' : 'Preview'}
-        </button>
+        {/* Lock/edit, export and delete all live in this corner menu so the note
+            itself is the only thing competing for the panel. */}
+        <div className="px-menu" ref={menuRef}>
+          <button
+            className="px-btn px-menu-btn"
+            data-testid="journal-menu"
+            aria-label="note options"
+            aria-haspopup="menu"
+            aria-expanded={menuOpen}
+            onClick={() => setMenuOpen((o) => !o)}
+          >
+            <Ic name="dots" />
+          </button>
+          {menuOpen && (
+            <div className="px-menu-pop" role="menu" data-testid="journal-menu-pop">
+              <button
+                className="px-menu-item"
+                role="menuitem"
+                data-testid="journal-preview-toggle"
+                aria-pressed={preview}
+                onClick={() => {
+                  setPreview((p) => !p);
+                  setMenuOpen(false);
+                }}
+              >
+                <Ic name={preview ? 'pen' : 'lock'} />
+                {preview ? 'Edit' : 'Lock edit'}
+              </button>
+              <button
+                className="px-menu-item"
+                role="menuitem"
+                data-testid="journal-export"
+                onClick={() => {
+                  exportDay();
+                  setMenuOpen(false);
+                }}
+              >
+                <Ic name="down" />
+                Export .md
+              </button>
+              {existingId && (
+                <>
+                  <div className="px-menu-sep" />
+                  <button
+                    className="px-menu-item px-menu-item--danger"
+                    role="menuitem"
+                    data-testid="journal-delete"
+                    onClick={() => {
+                      remove();
+                      setMenuOpen(false);
+                    }}
+                  >
+                    <Ic name="trash" />
+                    Delete
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       {isLoading ? (
@@ -137,13 +217,6 @@ export function DayJournalPanel({ date, ctx }: { date: string; ctx: CommandConte
       {/* OUTSIDE the editor and the preview, in both modes — never part of the
           document the user types into. */}
       {!isLoading && <DayLogFooter entries={dayLog} timezone={timezone} />}
-
-      <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-        <button className="px-btn" data-testid="journal-export" onClick={exportDay}>Export .md</button>
-        {existingId && (
-          <button className="px-btn px-btn--danger" data-testid="journal-delete" onClick={remove}>Delete</button>
-        )}
-      </div>
     </div>
   );
 }
