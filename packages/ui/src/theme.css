@@ -608,9 +608,26 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
 .px-menu-item--danger .px-ic { color: var(--px-danger); }
 .px-menu-sep { height: 1px; background: var(--px-border); margin: 4px 2px; }
 
-/* ── Roadmap tab — a top-to-bottom graph of a roadmap's projects ── */
+/* ── Roadmap tab — a top-to-bottom graph of a roadmap's projects, grouped and
+   tinted by the owning VISION's colour (stored in the vision's attributes) ── */
 .px-rm-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
 .px-flow-canvas--tall { height: 560px; }
-.px-rm-empty { padding: 26px 20px; text-align: center; color: var(--px-text-dim); background: var(--px-surface); border: 1px dashed var(--px-border-2); border-radius: var(--px-radius); }
-.px-rm-empty p { margin: 0 0 12px; font-size: 12.5px; }
-.px-flow-node--root { width: 190px; border-color: var(--px-sky); background: var(--px-sky-bg); }
+.px-rm-empty { padding: 26px 20px; color: var(--px-text-dim); background: var(--px-surface); border: 1px dashed var(--px-border-2); border-radius: var(--px-radius); display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.px-rm-empty p { margin: 0; font-size: 12.5px; text-align: center; max-width: 52ch; line-height: 1.55; }
+.px-flow-node--root { width: 190px; }
+
+/* colour swatches (vision colour picker + the active-vision indicator) */
+.px-swatches { display: inline-flex; gap: 6px; }
+.px-swatch { width: 22px; height: 22px; border-radius: 7px; border: 2px solid transparent; padding: 0; cursor: pointer; box-shadow: inset 0 0 0 1px rgba(16,24,40,.08); }
+.px-swatch--on { border-color: var(--px-text); }
+.px-swatch--sm { width: 12px; height: 12px; border-radius: 4px; border: none; flex: none; cursor: inherit; }
+
+/* the vision group: every roadmap that shares this vision's colour */
+.px-rm-group { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 14px; }
+.px-rm-group-lbl { font-size: 11px; font-weight: 640; letter-spacing: 0.5px; text-transform: uppercase; color: var(--px-faint); }
+.px-rm-chip { font: inherit; font-size: 12px; font-weight: 560; border: 1px solid; border-radius: 20px; padding: 3px 11px; cursor: pointer; }
+.px-rm-chip--on { font-weight: 640; }
+
+/* inline create-a-roadmap / create-a-vision forms */
+.px-rm-form { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 14px; padding: 12px 14px; background: var(--px-surface); border: 1px solid var(--px-border); border-radius: 10px; box-shadow: var(--px-shadow); }
+.px-rm-form .px-input { min-width: 200px; }

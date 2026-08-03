@@ -12,6 +12,7 @@
  * are untouched — only the storage path moved from replica `db.execute` to the
  * overlay.
  */
+import type { VisionColor } from '../format';
 import { newId } from './client-runtime';
 import { buildAcceptSuggestionEffects, type AcceptSuggestionBlock, type EffectSpec } from './effects';
 import { createExecuteCommand, type ExecuteDeps } from './execute';
@@ -52,9 +53,21 @@ export function createCommands(store: OverlayStore, ctx: CommandContext, deps: E
       // authoritatively and the descendants reconcile tombstoned.
       await run('node.soft_delete', { id: taskId });
     },
-    async createVision(title: string): Promise<string> {
+    /**
+     * A vision, optionally with a colour. The colour rides in `attributes` —
+     * a type-specific extra the node schema already carries, so no new column
+     * and no new verb — and everything under the vision reads it back through
+     * `visionColorOf`.
+     */
+    async createVision(title: string, opts?: { color?: VisionColor; sortOrder?: string }): Promise<string> {
       const id = newId();
-      await run('node.create', { id, node_type: 'vision', title, sort_order: 'a0' });
+      await run('node.create', {
+        id,
+        node_type: 'vision',
+        title,
+        sort_order: opts?.sortOrder ?? 'a0',
+        ...(opts?.color ? { attributes: { color: opts.color } } : {}),
+      });
       return id;
     },
     /** Inbox item (§1.2): a parentless `activity` node, justification deferred until promote. */
