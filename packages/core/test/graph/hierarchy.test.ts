@@ -102,27 +102,28 @@ describe('validateNodeMove (node.move re-validates I1)', () => {
   });
 });
 
-describe('I2 — max 4 visions', () => {
+describe('I2 — max visions', () => {
   const visions = (n: number) =>
     Array.from({ length: n }, (_, i) =>
       makeNode({ id: idOf(100 + i), node_type: 'vision', sort_order: `a${i}` }),
     );
 
   it('allows creating up to the limit', () => {
-    expect(countVisions(buildTreeIndex(visions(3)))).toBe(3);
-    expect(validateVisionLimit(buildTreeIndex(visions(3))).ok).toBe(true);
+    const under = visions(MAX_VISIONS - 1);
+    expect(countVisions(buildTreeIndex(under))).toBe(MAX_VISIONS - 1);
+    expect(validateVisionLimit(buildTreeIndex(under)).ok).toBe(true);
   });
 
-  it('rejects a fifth vision with E_MAX_VISIONS', () => {
+  it('rejects one past the limit with E_MAX_VISIONS', () => {
     const verdict = validateVisionLimit(buildTreeIndex(visions(MAX_VISIONS)));
     expect(!verdict.ok && verdict.error.code).toBe('E_MAX_VISIONS');
   });
 
   it('ignores soft-deleted visions', () => {
-    const four = visions(MAX_VISIONS);
-    (four[0] as { deleted_at: string | null }).deleted_at = '2026-06-02T00:00:00.000Z';
-    const idx = buildTreeIndex(four);
-    expect(countVisions(idx)).toBe(3);
+    const atLimit = visions(MAX_VISIONS);
+    (atLimit[0] as { deleted_at: string | null }).deleted_at = '2026-06-02T00:00:00.000Z';
+    const idx = buildTreeIndex(atLimit);
+    expect(countVisions(idx)).toBe(MAX_VISIONS - 1);
     expect(validateVisionLimit(idx).ok).toBe(true);
   });
 });

@@ -12,7 +12,7 @@
  * are untouched — only the storage path moved from replica `db.execute` to the
  * overlay.
  */
-import type { VisionColor } from '../format';
+import type { VisionColor, VisionHorizon } from '../format';
 import { newId } from './client-runtime';
 import { buildAcceptSuggestionEffects, type AcceptSuggestionBlock, type EffectSpec } from './effects';
 import { createExecuteCommand, type ExecuteDeps } from './execute';
@@ -54,19 +54,27 @@ export function createCommands(store: OverlayStore, ctx: CommandContext, deps: E
       await run('node.soft_delete', { id: taskId });
     },
     /**
-     * A vision, optionally with a colour. The colour rides in `attributes` —
-     * a type-specific extra the node schema already carries, so no new column
-     * and no new verb — and everything under the vision reads it back through
-     * `visionColorOf`.
+     * A vision, optionally with a colour and an expected (dateless) timeline.
+     * Both ride in `attributes` — a type-specific extra the node schema already
+     * carries, so no new column and no new verb — and are read back through
+     * `visionColorOf` / `readVisionHorizon`.
      */
-    async createVision(title: string, opts?: { color?: VisionColor; sortOrder?: string }): Promise<string> {
+    async createVision(
+      title: string,
+      opts?: { color?: VisionColor; horizon?: VisionHorizon; description?: string; sortOrder?: string },
+    ): Promise<string> {
       const id = newId();
+      const attributes = {
+        ...(opts?.color ? { color: opts.color } : {}),
+        ...(opts?.horizon ? { horizon: { unit: opts.horizon.unit, amount: opts.horizon.amount } } : {}),
+      };
       await run('node.create', {
         id,
         node_type: 'vision',
         title,
         sort_order: opts?.sortOrder ?? 'a0',
-        ...(opts?.color ? { attributes: { color: opts.color } } : {}),
+        ...(opts?.description ? { description: opts.description } : {}),
+        ...(Object.keys(attributes).length > 0 ? { attributes } : {}),
       });
       return id;
     },

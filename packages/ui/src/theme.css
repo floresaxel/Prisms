@@ -279,7 +279,22 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
 .px-scrim { position: fixed; inset: 0; background: rgba(16,24,40,0.45); display: flex; align-items: center; justify-content: center; z-index: 50; }
 .px-modal { background: var(--px-surface); border: 1px solid var(--px-border); border-radius: var(--px-radius); padding: 22px; width: min(440px, 92vw); box-shadow: var(--px-shadow-pop); }
 .px-modal-title { margin: 0 0 12px; font-size: 18px; }
+.px-modal-sub { margin: -6px 0 18px; font-size: 13px; color: var(--px-text-dim); line-height: 1.55; }
 .px-modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+
+/* full-screen dialog: the page behind is blurred and dimmed, the form itself
+   stays a readable column centered in the viewport. */
+.px-scrim--blur { background: rgba(246,247,249,0.62); backdrop-filter: blur(14px) saturate(120%); -webkit-backdrop-filter: blur(14px) saturate(120%); }
+/* `scrollbar-gutter: both-edges` keeps the column optically centered when the
+   form is taller than the viewport and the dialog grows a scrollbar. */
+.px-modal--full { width: 100%; height: 100%; max-width: none; border: none; border-radius: 0; background: transparent; box-shadow: none; padding: 0; overflow-y: auto; scrollbar-gutter: stable both-edges; display: flex; align-items: center; justify-content: center; }
+.px-modal-inner { width: min(660px, 92vw); margin: auto; padding: 40px 0 48px; }
+.px-modal--full .px-modal-title { font-size: 26px; letter-spacing: -0.3px; margin-bottom: 8px; }
+.px-modal--full .px-modal-actions { margin-top: 28px; }
+@media (prefers-reduced-motion: no-preference) {
+  .px-modal--full .px-modal-inner { animation: px-rise 160ms ease-out; }
+}
+@keyframes px-rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 
 .px-auth { max-width: 360px; margin: 12vh auto; padding: 28px; background: var(--px-surface); border: 1px solid var(--px-border); border-radius: var(--px-radius); }
 .px-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
@@ -616,11 +631,39 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
 .px-rm-empty p { margin: 0; font-size: 12.5px; text-align: center; max-width: 52ch; line-height: 1.55; }
 .px-flow-node--root { width: 190px; }
 
-/* colour swatches (vision colour picker + the active-vision indicator) */
-.px-swatches { display: inline-flex; gap: 6px; }
-.px-swatch { width: 22px; height: 22px; border-radius: 7px; border: 2px solid transparent; padding: 0; cursor: pointer; box-shadow: inset 0 0 0 1px rgba(16,24,40,.08); }
+/* colour swatches (vision colour picker + the active-vision indicator).
+   `--px-vc` carries the vision's own hex; softer surfaces are mixed from it. */
+.px-swatches { display: grid; grid-template-columns: repeat(10, 1fr); gap: 8px; max-width: 420px; }
+.px-swatch { width: 100%; aspect-ratio: 1; border-radius: 8px; border: 2px solid transparent; padding: 0; cursor: pointer; box-shadow: inset 0 0 0 1px rgba(16,24,40,.1); position: relative; }
 .px-swatch--on { border-color: var(--px-text); }
-.px-swatch--sm { width: 12px; height: 12px; border-radius: 4px; border: none; flex: none; cursor: inherit; }
+.px-swatch--on::after { content: ''; position: absolute; inset: 0; margin: auto; width: 7px; height: 7px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 1px rgba(16,24,40,.25); }
+/* a colour another vision already wears: struck through and not selectable */
+.px-swatch:disabled { cursor: not-allowed; opacity: 0.28; }
+.px-swatch:disabled::after { content: ''; position: absolute; inset: 0; margin: auto; width: 130%; height: 2px; background: var(--px-text); transform: rotate(-45deg); transform-origin: center; }
+.px-swatch--sm { width: 12px; height: 12px; aspect-ratio: auto; border-radius: 4px; border: none; flex: none; cursor: inherit; box-shadow: none; }
+.px-swatch-name { font-size: 12px; color: var(--px-text-dim); }
+
+/* create-a-vision dialog: description + the dateless expected timeline */
+.px-vd-field { margin-bottom: 20px; }
+.px-vd-lbl { display: block; font-size: 12px; font-weight: 640; letter-spacing: 0.4px; text-transform: uppercase; color: var(--px-text-dim); margin-bottom: 7px; }
+.px-vd-hint { font-size: 11.5px; color: var(--px-faint); margin: 6px 0 0; line-height: 1.5; }
+.px-vd-input { width: 100%; font: inherit; padding: 10px 13px; border-radius: 9px; border: 1px solid var(--px-border); background: var(--px-surface); color: var(--px-text); }
+.px-vd-input::placeholder { color: var(--px-faint); }
+.px-vd-input:focus { outline: none; border-color: var(--px-accent); }
+textarea.px-vd-input { min-height: 92px; resize: vertical; line-height: 1.55; }
+.px-vd-units { display: inline-flex; gap: 2px; padding: 3px; background: var(--px-surface-2); border-radius: 9px; }
+.px-vd-unit { font: inherit; font-size: 12.5px; font-weight: 560; padding: 5px 14px; border-radius: 7px; border: none; background: none; color: var(--px-text-dim); cursor: pointer; }
+.px-vd-unit--on { background: var(--px-surface); color: var(--px-text); box-shadow: var(--px-shadow); }
+.px-vd-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.px-vd-presets { display: inline-flex; gap: 6px; }
+.px-vd-preset { font: inherit; font-size: 12.5px; font-weight: 560; min-width: 38px; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--px-border); background: var(--px-surface); color: var(--px-text-dim); cursor: pointer; }
+.px-vd-preset:hover { border-color: var(--px-border-2); }
+.px-vd-preset--on { background: var(--px-blue-bg); border-color: var(--px-blue-brd); color: var(--px-blue-deep); }
+.px-vd-amount { width: 84px; font: inherit; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--px-border); background: var(--px-surface); color: var(--px-text); }
+.px-vd-amount:focus { outline: none; border-color: var(--px-accent); }
+.px-vd-sep { font-size: 12px; color: var(--px-faint); }
+.px-vd-preview { font-size: 13px; font-weight: 560; }
+.px-vd-err { color: var(--px-danger); font-size: 12px; margin: 8px 0 0; }
 
 /* the vision group: every roadmap that shares this vision's colour */
 .px-rm-group { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 14px; }

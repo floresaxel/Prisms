@@ -7,7 +7,7 @@
  *
  * Invariant → code mapping (§6.7):
  * - I1 hierarchy typing            → E_HIERARCHY
- * - I2 max 4 visions               → E_MAX_VISIONS
+ * - I2 max visions (MAX_VISIONS)   → E_MAX_VISIONS
  * - I3 justification xor           → E_JUSTIFICATION
  * - I4 DAG / same-type edges       → E_CYCLE, E_EDGE_TYPE_MISMATCH
  * - I5 one open time entry         → E_TIMER_ALREADY_RUNNING

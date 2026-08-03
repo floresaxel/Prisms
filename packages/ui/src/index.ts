@@ -64,7 +64,25 @@ export {
   type MarkdownAction,
   type MarkdownEdit,
 } from './markdown';
-export { projectTone, visionColorOf, VISION_COLORS, type DotTone, type VisionColor } from './format';
+export {
+  projectTone,
+  visionColorOf,
+  visionHex,
+  firstFreeVisionColor,
+  readVisionHorizon,
+  formatHorizon,
+  isHorizonAmount,
+  VISION_COLORS,
+  VISION_PALETTE,
+  HORIZON_UNITS,
+  HORIZON_PRESETS,
+  HORIZON_MIN,
+  HORIZON_MAX,
+  type DotTone,
+  type VisionColor,
+  type HorizonUnit,
+  type VisionHorizon,
+} from './format';
 
 // two-layer client store (1.3 §7.2, R15) — M0 spike
 export {

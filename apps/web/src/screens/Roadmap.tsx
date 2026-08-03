@@ -16,8 +16,10 @@
  * falls back to a stable id-derived colour for visions made before colours.
  *
  * The tab also creates the levels above it, because otherwise it is a dead end:
- * no vision ⇒ no roadmap ⇒ no project. Both forms are inline (I2 caps visions at
- * MAX_VISIONS).
+ * no vision ⇒ no roadmap ⇒ no project. A roadmap is a small inline form (name +
+ * which vision); a vision is a full-screen dialog (NewVisionDialog) because it
+ * asks for a description, a dateless timeline and a unique colour. I2 caps
+ * visions at MAX_VISIONS.
  */
 import { useEffect, useMemo, useState } from 'react';
 
@@ -36,16 +38,20 @@ import '@xyflow/react/dist/style.css';
 
 import { childrenOf, initialSortOrder, MAX_VISIONS, sortOrderBetween, type Node } from '@prisms/core';
 import {
+  formatHorizon,
   Ic,
+  readVisionHorizon,
   Skeleton,
   useCommands,
   useIsHydrated,
   useNodeTree,
   visionColorOf,
-  VISION_COLORS,
+  visionHex,
   type CommandContext,
   type VisionColor,
 } from '@prisms/ui';
+
+import { NewVisionDialog, type NewVisionValues } from '../components/NewVisionDialog';
 
 /** Derived layout: the roadmap on one row, its projects on the next. */
 const NODE_W = 190;
@@ -54,10 +60,14 @@ const ROW_Y = 190;
 
 const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 
-/** The web palette hook: every vision colour has a full `--px-*` triplet. */
-const solid = (c: VisionColor) => `var(--px-${c})`;
-const soft = (c: VisionColor) => `var(--px-${c}-bg)`;
-const tint = (c: VisionColor) => `var(--px-${c}-brd)`;
+/**
+ * The vision palette carries its own hex (a user-picked colour is content, not a
+ * theme token), so the softer surfaces are mixed from it against the page rather
+ * than looked up as `--px-*` tokens.
+ */
+const solid = (c: VisionColor) => visionHex(c);
+const soft = (c: VisionColor) => `color-mix(in srgb, ${visionHex(c)} 12%, var(--px-surface))`;
+const tint = (c: VisionColor) => `color-mix(in srgb, ${visionHex(c)} 38%, var(--px-surface))`;
 
 /** Next sibling key for a fractional-index insert at the end of `parentId`. */
 function nextSortOrder(tree: ReturnType<typeof useNodeTree>, parentId: string | null): string {
@@ -97,27 +107,6 @@ function RoadmapNode({ data }: { data: RoadmapNodeData }) {
 
 const nodeTypes = { roadmap: RoadmapNode };
 
-/** The colour picker used when creating a vision. */
-function ColorChoice({ value, onChange }: { value: VisionColor; onChange: (c: VisionColor) => void }) {
-  return (
-    <div className="px-swatches" role="radiogroup" aria-label="vision colour">
-      {VISION_COLORS.map((c) => (
-        <button
-          key={c}
-          type="button"
-          role="radio"
-          aria-checked={c === value}
-          aria-label={c}
-          data-testid={`rm-color-${c}`}
-          className={`px-swatch${c === value ? ' px-swatch--on' : ''}`}
-          style={{ background: solid(c) }}
-          onClick={() => onChange(c)}
-        />
-      ))}
-    </div>
-  );
-}
-
 export function Roadmap({ ctx }: { ctx: CommandContext }) {
   const tree = useNodeTree();
   const commands = useCommands(ctx);
@@ -144,6 +133,8 @@ export function Roadmap({ ctx }: { ctx: CommandContext }) {
   const active = activeId ? tree.byId.get(activeId) : undefined;
   const vision = active?.parent_id ? tree.byId.get(active.parent_id) : undefined;
   const color = visionColorOf(vision);
+  /** The vision's dateless expected timeline ("6 months", "3 years", …). */
+  const horizonLabel = formatHorizon(readVisionHorizon(vision?.attributes));
   /** The active vision's other roadmaps — the group that shares this colour. */
   const siblings = useMemo(
     () => (vision ? roadmaps.filter((r) => r.parent_id === vision.id) : []),
@@ -157,11 +148,10 @@ export function Roadmap({ ctx }: { ctx: CommandContext }) {
 
   const [title, setTitle] = useState('');
   const [busy, setBusy] = useState(false);
-  const [form, setForm] = useState<'roadmap' | 'vision' | null>(null);
+  const [form, setForm] = useState<'roadmap' | null>(null);
+  const [visionOpen, setVisionOpen] = useState(false);
   const [rmTitle, setRmTitle] = useState('');
   const [rmVision, setRmVision] = useState('');
-  const [vTitle, setVTitle] = useState('');
-  const [vColor, setVColor] = useState<VisionColor>('teal');
 
   const [rfNodes, setRfNodes] = useNodesState<RFNode<RoadmapNodeData>>([]);
   const [rfEdges, setRfEdges] = useEdgesState<RFEdge>([]);
@@ -241,19 +231,33 @@ export function Roadmap({ ctx }: { ctx: CommandContext }) {
     }
   }
 
-  async function addVision() {
-    const t = vTitle.trim();
-    if (!t || busy || visions.length >= MAX_VISIONS) return;
+  async function addVision(values: NewVisionValues) {
+    if (busy || visions.length >= MAX_VISIONS) return;
     setBusy(true);
     try {
-      const id = await commands.createVision(t, { color: vColor, sortOrder: nextSortOrder(tree, null) });
-      setVTitle('');
+      const id = await commands.createVision(values.title, {
+        color: values.color,
+        horizon: values.horizon,
+        description: values.description,
+        sortOrder: nextSortOrder(tree, null),
+      });
+      setVisionOpen(false);
       setRmVision(id); // the new vision becomes the target for the next roadmap
       setForm('roadmap');
     } finally {
       setBusy(false);
     }
   }
+
+  const visionDialog = (
+    <NewVisionDialog
+      open={visionOpen}
+      busy={busy}
+      existing={visions}
+      onClose={() => setVisionOpen(false)}
+      onCreate={(values) => void addVision(values)}
+    />
+  );
 
   const roadmapForm = (
     <div className="px-rm-form" data-testid="rm-roadmap-form">
@@ -284,40 +288,27 @@ export function Roadmap({ ctx }: { ctx: CommandContext }) {
     </div>
   );
 
-  const visionForm = (
-    <div className="px-rm-form" data-testid="rm-vision-form">
-      <input
-        className="px-input"
-        data-testid="rm-new-vision-title"
-        placeholder="Vision name…"
-        value={vTitle}
-        onChange={(e) => setVTitle(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') void addVision();
-        }}
-      />
-      <ColorChoice value={vColor} onChange={setVColor} />
-      <button className="px-btn px-btn--primary" data-testid="rm-create-vision" disabled={busy || vTitle.trim() === ''} onClick={() => void addVision()}>
-        Create vision
-      </button>
-      {visions.length > 0 && (
-        <button className="px-btn" data-testid="rm-cancel-vision" onClick={() => setForm(null)}>Cancel</button>
-      )}
-    </div>
-  );
-
   // Nothing to show yet: create the missing level instead of a dead end.
   if (roadmaps.length === 0) {
     if (!hydrated) return <Skeleton testId="roadmap-skeleton" rows={4} />;
     return (
-      <div className="px-rm-empty" data-testid="roadmap-empty">
-        <p>
-          {visions.length === 0
-            ? 'A roadmap belongs to a vision, and there is no vision yet. Name one and give it a colour — every roadmap under it will carry that colour.'
-            : 'No roadmaps yet. A roadmap holds your projects; it takes the colour of the vision you put it under.'}
-        </p>
-        {visions.length === 0 ? visionForm : roadmapForm}
-      </div>
+      <>
+        <div className="px-rm-empty" data-testid="roadmap-empty">
+          <p>
+            {visions.length === 0
+              ? 'A roadmap belongs to a vision, and there is no vision yet. Start one — name it, say what it means, give it a timeline and a colour. Every roadmap under it will carry that colour.'
+              : 'No roadmaps yet. A roadmap holds your projects; it takes the colour of the vision you put it under.'}
+          </p>
+          {visions.length === 0 ? (
+            <button className="px-btn px-btn--primary" data-testid="rm-new-vision" onClick={() => setVisionOpen(true)}>
+              <Ic name="plus" /> New vision
+            </button>
+          ) : (
+            roadmapForm
+          )}
+        </div>
+        {visionDialog}
+      </>
     );
   }
 
@@ -376,8 +367,10 @@ export function Roadmap({ ctx }: { ctx: CommandContext }) {
 
       {/* the group: every roadmap of the active vision, all in its one colour */}
       <div className="px-rm-group" data-testid="rm-vision-group">
-        <span className="px-rm-group-lbl">
-          {vision ? vision.title : 'No vision'} · {siblings.length || 1} roadmap{(siblings.length || 1) === 1 ? '' : 's'}
+        <span className="px-rm-group-lbl" title={vision?.description || undefined}>
+          {vision ? vision.title : 'No vision'}
+          {horizonLabel && ` · ${horizonLabel}`} · {siblings.length || 1} roadmap
+          {(siblings.length || 1) === 1 ? '' : 's'}
         </span>
         {(siblings.length > 0 ? siblings : active ? [active] : []).map((r) => (
           <button
@@ -400,7 +393,7 @@ export function Roadmap({ ctx }: { ctx: CommandContext }) {
             data-testid="rm-new-vision"
             disabled={visions.length >= MAX_VISIONS}
             title={visions.length >= MAX_VISIONS ? `At most ${MAX_VISIONS} visions (I2)` : undefined}
-            onClick={() => setForm(form === 'vision' ? null : 'vision')}
+            onClick={() => setVisionOpen(true)}
           >
             <Ic name="plus" /> New vision
           </button>
@@ -408,7 +401,7 @@ export function Roadmap({ ctx }: { ctx: CommandContext }) {
       </div>
 
       {form === 'roadmap' && roadmapForm}
-      {form === 'vision' && visionForm}
+      {visionDialog}
 
       <div className="px-flow-canvas px-flow-canvas--tall" data-testid="roadmap-canvas">
         <ReactFlow
