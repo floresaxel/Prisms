@@ -208,6 +208,10 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
 .px-ag-all { margin-top: 16px; border-top: 1px solid var(--px-border); padding-top: 10px; }
 .px-ag-scroll { max-height: 268px; overflow-y: auto; padding-right: 2px; }
 .px-todo-item--placed { background: var(--px-surface-2); color: var(--px-text-dim); box-shadow: none; }
+/* Inbox items (captured, not yet promoted): listed and draggable, but flagged —
+   they sit under no project, so a block on one renders "No vision". */
+.px-todo-item--inbox { border-style: dashed; }
+.px-todo-flag { margin-right: 6px; font-size: 10px; padding: 1px 5px; }
 .px-todo-sub { font-size: 11px; color: var(--px-faint); white-space: nowrap; }
 .px-todo-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 

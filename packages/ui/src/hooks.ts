@@ -643,6 +643,13 @@ export interface AgendaTask extends TodoTask {
   estimated: boolean;
   /** A committed block already exists for it. */
   scheduled: boolean;
+  /**
+   * `activity` = captured into the Inbox and not yet promoted (§1.2): no parent,
+   * so no vision. It is still listed and still schedulable — a block on one is
+   * accepted and simply renders unjustified (the agenda's grey "No vision"
+   * state) until it is promoted under a project.
+   */
+  kind: 'task' | 'activity';
 }
 
 export interface Agenda {
@@ -660,10 +667,10 @@ export interface Agenda {
    */
   todo: AgendaTask[];
   /**
-   * EVERY live, not-done task — the Agenda's "All tasks" list. Unlike `todo`
-   * this keeps already-scheduled tasks and tasks with no estimate (they get
-   * `DEFAULT_DRAG_MINUTES` so they are still draggable onto the week; the drop
-   * creates a block of that length).
+   * EVERY live, not-done task AND Inbox activity — the Agenda's "All tasks"
+   * list. Unlike `todo` this keeps already-scheduled ones. Anything with no
+   * estimate carries `DEFAULT_DRAG_MINUTES` so it is still draggable onto the
+   * week; the drop creates a block of that length.
    */
   allTasks: AgendaTask[];
 }
@@ -770,24 +777,32 @@ export function useAgenda(now: Instant, horizonDays = 7): Agenda {
 
     const scheduledTaskIds = new Set(committed.map((b) => b.taskId));
 
-    // The full list: `tasks` above already dropped anything without a positive
-    // estimate, so walk the tree again and synthesize a schedulable for those —
-    // an estimate-less task is still something you can drop onto the week.
+    // The full list. Two things `tasks` above deliberately excludes have to come
+    // back here, because both are things the user thinks of as "my tasks":
+    //  - anything without a positive estimate (it gets DEFAULT_DRAG_MINUTES), and
+    //  - `activity` nodes — the Inbox. The web app's capture bar creates ONLY
+    //    those, so a tree walk restricted to node_type='task' showed a user none
+    //    of what they had just typed in.
+    // `tasks`/`input` stay tasks-only: that is the SCHEDULER's view, and an
+    // unpromoted activity has no justification to schedule against.
     const allTasks: AgendaTask[] = [];
     for (const node of tree.byId.values()) {
-      if (node.node_type !== 'task' || node.completed_at !== null) continue;
+      const kind = node.node_type === 'task' ? 'task' : node.node_type === 'activity' ? 'activity' : null;
+      if (kind === null || node.completed_at !== null) continue;
       const existing = tasksById.get(node.id);
+      const own = node.estimate_minutes !== null && node.estimate_minutes > 0 ? node.estimate_minutes : null;
       allTasks.push({
         task: node,
         schedulable: existing ?? {
           id: node.id,
-          estimateMinutes: DEFAULT_DRAG_MINUTES,
+          estimateMinutes: own ?? DEFAULT_DRAG_MINUTES,
           dueDate: node.due_date,
           dependencies: depsBySuccessor.get(node.id),
           sprintMember: sprintMemberNodeIds.has(node.id),
         },
-        estimated: existing !== undefined,
+        estimated: existing !== undefined || own !== null,
         scheduled: scheduledTaskIds.has(node.id),
+        kind,
       });
     }
     allTasks.sort((a, b) => (a.task.title < b.task.title ? -1 : a.task.title > b.task.title ? 1 : 0));

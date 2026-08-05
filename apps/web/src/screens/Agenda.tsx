@@ -55,6 +55,14 @@ const DAY_LABEL = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 const SPAN_KEY = 'prisms.agenda.span';
 
+/** Hover text for a to-do row: what it is, and what a drop would actually make. */
+function rowTitle(t: AgendaTask): string {
+  const parts = [t.task.title];
+  if (t.kind === 'activity') parts.push('Inbox item — not under a project yet, so a block on it has no vision');
+  if (!t.estimated) parts.push(`no estimate, drops as a ${t.schedulable.estimateMinutes}-minute event`);
+  return parts.join(' — ');
+}
+
 /**
  * The section's own width, observed — drives both the stacking and the day count.
  * Measured rather than read off the viewport because the sidebar's rail toggle
@@ -308,9 +316,17 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
     setDrag({ taskId: task.id, durationMs: task.estimateMinutes * MS_PER_MIN, valid: validWindowsFor(task, agenda.input) });
   }
 
+  /** Drag lookup over EVERYTHING listed, not just `tasksById` — that map is the
+   *  scheduler's view (estimated tasks only), so a block on an estimate-less task
+   *  or an Inbox item would otherwise be un-draggable once placed. */
+  const schedulableById = useMemo(
+    () => new Map(agenda.allTasks.map((t) => [t.task.id, t.schedulable])),
+    [agenda.allTasks],
+  );
+
   function startBlockDrag(block: AgendaBlock) {
     if (block.anchored) return; // I7: anchored blocks refuse the drag
-    const task = agenda.tasksById.get(block.taskId);
+    const task = schedulableById.get(block.taskId);
     if (!task) return;
     setDrag({ taskId: block.taskId, blockId: block.id, durationMs: task.estimateMinutes * MS_PER_MIN, valid: validWindowsFor(task, agenda.input) });
   }
@@ -383,16 +399,20 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
             {agenda.todo.map((t: AgendaTask) => (
               <div
                 key={t.task.id}
-                className="px-todo-item"
+                className={`px-todo-item${t.kind === 'activity' ? ' px-todo-item--inbox' : ''}`}
                 data-testid={`todo-${t.task.id}`}
-                title={t.estimated ? t.task.title : `${t.task.title} — no estimate, drops as a ${t.schedulable.estimateMinutes}-minute event`}
+                data-kind={t.kind}
+                title={rowTitle(t)}
                 onMouseDown={(e) => {
                   e.preventDefault();
                   startTaskDrag(t.schedulable);
                 }}
               >
                 <span className="px-todo-title">{t.task.title}</span>
-                <span className="px-todo-sub">{t.estimated ? '' : '~'}{t.schedulable.estimateMinutes}m</span>
+                <span className="px-todo-sub">
+                  {t.kind === 'activity' && <span className="px-tag px-tag--grey px-todo-flag">inbox</span>}
+                  {t.estimated ? '' : '~'}{t.schedulable.estimateMinutes}m
+                </span>
               </div>
             ))}
           </div>
@@ -407,9 +427,10 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
               {agenda.allTasks.map((t: AgendaTask) => (
                 <div
                   key={t.task.id}
-                  className={`px-todo-item${t.scheduled ? ' px-todo-item--placed' : ''}`}
+                  className={`px-todo-item${t.scheduled ? ' px-todo-item--placed' : ''}${t.kind === 'activity' ? ' px-todo-item--inbox' : ''}`}
                   data-testid={`alltask-${t.task.id}`}
-                  title={t.estimated ? t.task.title : `${t.task.title} — no estimate, drops as a ${t.schedulable.estimateMinutes}-minute event`}
+                  data-kind={t.kind}
+                  title={rowTitle(t)}
                   onMouseDown={(e) => {
                     e.preventDefault();
                     startTaskDrag(t.schedulable);
@@ -417,6 +438,7 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
                 >
                   <span className="px-todo-title">{t.task.title}</span>
                   <span className="px-todo-sub">
+                    {t.kind === 'activity' && <span className="px-tag px-tag--grey px-todo-flag">inbox</span>}
                     {t.scheduled ? 'scheduled · ' : ''}
                     {t.estimated ? '' : '~'}
                     {t.schedulable.estimateMinutes}m
