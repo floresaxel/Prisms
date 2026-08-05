@@ -146,6 +146,9 @@ const journal_entries = new Table({
   entry_date: column.text,
   month_key: column.text,
   content: column.text,
+  // read-only flag for the day, synced (migration 0013) — SQLite has no boolean,
+  // so it rides as 0/1 like every other synced flag.
+  locked: column.integer,
   created_at: column.text,
   updated_at: column.text,
   deleted_at: column.text,

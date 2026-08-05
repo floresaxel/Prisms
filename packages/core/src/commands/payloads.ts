@@ -260,6 +260,17 @@ export const journalWriteSchema = z.strictObject({
   content: z.string().max(100_000),
 });
 export const journalDeleteSchema = idOnly; // journal entry row id
+/**
+ * Lock/unlock a day's note (read-only). Same upsert-by-day shape as
+ * `journal.write` — a day can be locked before it has any prose, which mints the
+ * row — and deliberately a SEPARATE verb from the content write: locking is not
+ * an edit, so the two fields resolve independently under per-field LWW.
+ */
+export const journalSetLockedSchema = z.strictObject({
+  id: uuidSchema,
+  entry_date: isoDateSchema,
+  locked: z.boolean(),
+});
 
 // --- task steps (checklist on a task, W3/D4) --------------------------------
 // A client-minted row id + the parent task + the fractional order (same scheme
@@ -411,6 +422,7 @@ export const COMMAND_SCHEMAS = {
   'tag.clear_answer': tagClearAnswerSchema,
   'journal.write': journalWriteSchema,
   'journal.delete': journalDeleteSchema,
+  'journal.set_locked': journalSetLockedSchema,
   'step.add': stepAddSchema,
   'step.rename': stepRenameSchema,
   'step.toggle': stepToggleSchema,

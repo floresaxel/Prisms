@@ -624,6 +624,10 @@ export const journal_entries = pgTable(
     month_key: text('month_key').notNull(),
     // CommonMark markdown; emoji ride through as plain Unicode.
     content: text('content').notNull().default(''),
+    // Read-only flag for THIS day, synced so the lock follows the user across
+    // devices (migration 0013). Per-row, so locking two days from two devices
+    // never contends.
+    locked: boolean('locked').notNull().default(false),
   },
   (t) => [
     // [0-9] not \d — Drizzle's sql template is JS; \d would lose its backslash.

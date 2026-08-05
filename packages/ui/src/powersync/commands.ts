@@ -293,6 +293,14 @@ export function createCommands(store: OverlayStore, ctx: CommandContext, deps: E
     async deleteJournal(id: string): Promise<void> {
       await run('journal.delete', { id });
     },
+    /**
+     * Lock/unlock a day's note. SYNCED, so the lock follows the user to every
+     * device. Upsert-by-day like `writeJournal`: pass the live row's id when the
+     * day already has one, else a new id is minted and the day is created locked.
+     */
+    async setJournalLocked(input: { existingId?: string; entryDate: string; locked: boolean }): Promise<void> {
+      await run('journal.set_locked', { id: input.existingId ?? newId(), entry_date: input.entryDate, locked: input.locked });
+    },
 
     // --- task steps (checklist on a task, W3/D4) ----------------------------
     /** Append a checklist step to a task; the caller mints `sortOrder` (fractional, like nodes). */

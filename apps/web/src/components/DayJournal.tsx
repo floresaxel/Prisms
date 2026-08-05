@@ -22,7 +22,6 @@ import remarkGfm from 'remark-gfm';
 import { composeDayMarkdown } from '@prisms/core';
 import { Ic, journalDayFilename, useCommands, useDayLog, useJournalDay, useUserSettings, type CommandContext } from '@prisms/ui';
 
-import { isNoteLocked, setNoteLocked } from '../note-locks';
 import { DayLogFooter } from './DayLogFooter';
 import { RichJournalEditor } from './RichJournalEditor';
 
@@ -76,25 +75,24 @@ export function DayJournalPanel({
   const dayLog = useDayLog(date);
   const { timezone } = useUserSettings();
   const [draft, setDraft] = useState(entry?.content ?? '');
-  // `preview` is the LOCKED (read-only) state, surfaced as "Lock edit" ⇄ "Edit".
-  // It is PER DAY and remembered: each day keeps whichever state it was left in,
-  // so locking one note does not lock the rest.
-  const [preview, setPreview] = useState(() => isNoteLocked(date));
-  // Both call sites mount this with key={date}, so the initializer above already
-  // re-runs per day. This keeps that correct if a future one forgets the key.
-  useEffect(() => setPreview(isNoteLocked(date)), [date]);
-
-  function toggleLock() {
-    const next = !preview;
-    setPreview(next);
-    setNoteLocked(date, next);
-  }
+  /**
+   * The LOCKED (read-only) state of THIS day, surfaced as "Lock edit" ⇄ "Edit".
+   * It is a SYNCED field on the day's row (`journal_entries.locked`), not local
+   * UI state, so a day locked here opens locked on every other device. Read
+   * straight from the entry — the optimistic overlay makes the toggle instant,
+   * and a rejected command rolls back by dropping that overlay.
+   */
+  const preview = entry?.locked ?? false;
 
   const [menuOpen, setMenuOpen] = useState(false);
   const dirty = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const existingId = entry?.id;
   const menuRef = useRef<HTMLDivElement | null>(null);
+
+  function toggleLock() {
+    void commands.setJournalLocked({ existingId, entryDate: date, locked: !preview });
+  }
 
   // Dismiss the overflow menu on an outside click or Escape.
   useEffect(() => {

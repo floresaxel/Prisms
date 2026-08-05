@@ -516,6 +516,13 @@ export const journalEntrySchema = z.strictObject({
   month_key: z.string().regex(/^\d{4}-\d{2}$/),
   /** CommonMark markdown; the cap counts UTF-16 code units (§D4). */
   content: z.string().max(100_000),
+  /**
+   * The day's note is read-only. SYNCED (migration 0013), so a day locked on one
+   * device opens locked on every other. Per-row rather than a set in settings, so
+   * locking two different days from two devices never contends — the ordinary
+   * per-field HLC last-writer settles the same day being toggled from both.
+   */
+  locked: z.boolean(),
 });
 export type JournalEntry = z.infer<typeof journalEntrySchema>;
 

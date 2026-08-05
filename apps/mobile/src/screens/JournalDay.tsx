@@ -57,7 +57,12 @@ export function JournalDay({ date, ctx, onClose }: { date: string; ctx: CommandC
   const dayLog = useDayLog(date);
   const { timezone } = useUserSettings();
   const [draft, setDraft] = useState(entry?.content ?? '');
-  const [preview, setPreview] = useState(false);
+  /**
+   * Read-only state for THIS day. A SYNCED field on the day's row (migration
+   * 0013), not local UI state — a day locked on the web or desktop opens locked
+   * here, and vice versa.
+   */
+  const preview = entry?.locked ?? false;
   const [sel, setSel] = useState<Selection>({ start: 0, end: 0 });
   const dirty = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -114,7 +119,11 @@ export function JournalDay({ date, ctx, onClose }: { date: string; ctx: CommandC
     <Card testID={`journal-${date}`}>
       <Row>
         <H2>Note · {date}</H2>
-        <Btn title={preview ? 'Edit' : 'Preview'} testID="journal-preview-toggle" onPress={() => setPreview((p) => !p)} />
+        <Btn
+          title={preview ? 'Edit' : 'Lock edit'}
+          testID="journal-preview-toggle"
+          onPress={() => void commands.setJournalLocked({ existingId, entryDate: date, locked: !preview })}
+        />
         {onClose && <Btn title="Close" testID="journal-close" onPress={onClose} />}
       </Row>
 
