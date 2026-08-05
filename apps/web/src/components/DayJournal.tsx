@@ -1,11 +1,11 @@
 /**
  * DayJournal (J4/J7, D2/D3/D7): the left-panel editor for a calendar day's note.
  * The edit surface is the TipTap WYSIWYG (`RichJournalEditor`, J7) bound to the
- * markdown `content` field; "Lock edit" renders the same markdown read-only via
+ * markdown `content` field; locking renders the same markdown read-only via
  * `react-markdown`+`remark-gfm` (the exact sanitized output shared with the `.md`
- * export and other clients). Lock/edit, Export .md and Delete live in a corner
- * "⋯" menu rather than as inline buttons. Mobile keeps the J4 toolbar/textarea
- * editor and its own Preview/Export/Delete buttons.
+ * export and other clients). The chrome around it depends on where the panel is
+ * mounted — see the `actions` prop. Mobile keeps the J4 toolbar/textarea editor
+ * and its own Preview/Export/Delete buttons.
  *
  * Rendering is SANITIZED (D2): raw HTML in the markdown is NEVER rendered
  * (react-markdown default — we deliberately do NOT add rehype-raw), link hrefs are
@@ -51,7 +51,23 @@ export function MarkdownView({ markdown }: { markdown: string }) {
  * clobbers an in-progress edit (`dirty`). `existingId` (the live row id) is passed
  * to `writeJournal` so edits patch that row — a new day mints one.
  */
-export function DayJournalPanel({ date, ctx }: { date: string; ctx: CommandContext }) {
+export function DayJournalPanel({
+  date,
+  ctx,
+  actions = 'menu',
+}: {
+  date: string;
+  ctx: CommandContext;
+  /**
+   * Which chrome the panel carries.
+   * - `menu` (default, the Journal screen): the "⋯" menu — lock/edit, Export .md,
+   *   Delete. That screen is where a note is managed, so it keeps the full set.
+   * - `lock`: a single lock/pencil toggle and nothing else. The Agenda uses this
+   *   — there the note is a side panel next to the week, and export/delete are a
+   *   click away on the Journal screen.
+   */
+  actions?: 'menu' | 'lock';
+}) {
   const { entry, isLoading } = useJournalDay(date);
   const commands = useCommands(ctx);
   // Annex L: derived at render from the warm provider — null when the built-in
@@ -144,8 +160,22 @@ export function DayJournalPanel({ date, ctx }: { date: string; ctx: CommandConte
     <div className="px-journal" data-testid={`journal-${date}`} style={{ marginTop: 16 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <h2 style={{ margin: 0, flex: 1 }}>Note · {date}</h2>
-        {/* Lock/edit, export and delete all live in this corner menu so the note
-            itself is the only thing competing for the panel. */}
+        {/* `lock`: one button, nothing else — the icon is the affordance for what
+            the click DOES (a padlock while editing, a pencil while locked). */}
+        {actions === 'lock' ? (
+          <button
+            className="px-btn px-btn--icon"
+            data-testid="journal-preview-toggle"
+            aria-pressed={preview}
+            aria-label={preview ? 'Edit this note' : 'Lock this note from editing'}
+            title={preview ? 'Edit' : 'Lock edit'}
+            onClick={() => setPreview((p) => !p)}
+          >
+            <Ic name={preview ? 'pen' : 'lock'} />
+          </button>
+        ) : (
+        /* Lock/edit, export and delete all live in this corner menu so the note
+           itself is the only thing competing for the panel. */
         <div className="px-menu" ref={menuRef}>
           <button
             className="px-btn px-menu-btn"
@@ -204,6 +234,7 @@ export function DayJournalPanel({ date, ctx }: { date: string; ctx: CommandConte
             </div>
           )}
         </div>
+        )}
       </div>
 
       {isLoading ? (

@@ -104,8 +104,18 @@ test('create → reload → edit → delete (WYSIWYG) with emoji; day Export .md
   const stored = (await serverContent(page, today))!;
   expect(stored).toContain('👨‍👩‍👧‍👦'); // ZWJ emoji byte-intact through the WYSIWYG (D6)
 
-  // Export .md downloads exactly the stored markdown, named <today>.md. The note
-  // actions live behind the corner "⋯" menu, so open it first.
+  // The Agenda's note panel carries ONE control — the lock/edit toggle — so
+  // export and delete are exercised on the Journal screen, which keeps the "⋯"
+  // menu. Lock here, and the same markdown renders read-only.
+  await page.getByTestId('journal-preview-toggle').click();
+  await expect(page.getByTestId('journal-preview')).toBeVisible();
+  await expect(page.getByTestId('journal-rich')).toHaveCount(0);
+  await expect(page.getByTestId('journal-menu')).toHaveCount(0); // no menu on the Agenda
+  await page.getByTestId('journal-preview-toggle').click(); // back to editing
+
+  // Export .md downloads exactly the stored markdown, named <today>.md.
+  await goto(page, 'journal');
+  await expect(page.getByTestId(`journal-${today}`)).toBeVisible({ timeout: 30_000 });
   await page.getByTestId('journal-menu').click();
   const [dl] = await Promise.all([page.waitForEvent('download'), page.getByTestId('journal-export').click()]);
   expect(dl.suggestedFilename()).toBe(`${today}.md`);
@@ -117,16 +127,19 @@ test('create → reload → edit → delete (WYSIWYG) with emoji; day Export .md
   await page.getByTestId('day-head-0').click();
   await expect(page.getByTestId('journal-rich')).toContainText('Standup notes', { timeout: 30_000 });
 
-  // edit (append) → converges as ONE row; then delete → the dot disappears.
+  // edit (append) → converges as ONE row; then delete from the Journal screen →
+  // the Agenda's day marker disappears.
   await page.getByTestId('journal-rich').click();
   await page.keyboard.press('ControlOrMeta+End');
   await page.keyboard.insertText(' — edited ✏️');
   await page.getByTestId('journal-rich').blur();
   await expect.poll(async () => (await serverDays(page)).length, { timeout: 30_000 }).toBe(1);
+  await goto(page, 'journal');
   await page.getByTestId('journal-menu').click();
   await page.getByTestId('journal-delete').click();
-  await expect(page.getByTestId(`note-dot-${today}`)).toHaveCount(0);
   await expect.poll(async () => (await serverDays(page)).length, { timeout: 30_000 }).toBe(0);
+  await goto(page, 'agenda');
+  await expect(page.getByTestId(`note-dot-${today}`)).toHaveCount(0);
 });
 
 test('fresh-device lazy-load: a past-month note is NOT local until viewed; the .md archive is server-sourced', async ({ page }) => {

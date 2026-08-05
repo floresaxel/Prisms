@@ -604,7 +604,9 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
             </>
           ) : (
             // key by day so the editor re-initializes per day (J4/D3); defaults to today.
-            <DayJournalPanel key={journalDay} date={journalDay} ctx={ctx} />
+            // `lock`: just the lock/pencil toggle here — managing the note
+            // (export, delete) belongs to the Journal screen.
+            <DayJournalPanel key={journalDay} date={journalDay} ctx={ctx} actions="lock" />
           )}
         </div>
       </div>

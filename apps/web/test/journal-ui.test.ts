@@ -175,6 +175,29 @@ describe('DayJournalPanel — editor', () => {
     }
   });
 
+  it('actions="lock" (the Agenda) shows ONE control and no menu at all', () => {
+    state.entry = { id: 'j1', content: '# Title', deleted_at: null };
+    render(createElement(DayJournalPanel, { date: '2026-06-11', ctx: CTX, actions: 'lock' }));
+    for (const id of ['journal-menu', 'journal-export', 'journal-delete']) {
+      expect(screen.queryByTestId(id)).toBeNull();
+    }
+    const toggle = screen.getByTestId('journal-preview-toggle');
+    // the icon IS the affordance: a padlock while editing, a pencil while locked
+    expect(toggle.getAttribute('aria-pressed')).toBe('false');
+    expect(toggle.querySelector('use')?.getAttribute('href')).toBe('#i-lock');
+    expect(toggle.getAttribute('title')).toBe('Lock edit');
+
+    fireEvent.click(toggle);
+    expect(screen.getByTestId('journal-preview').querySelector('h1')?.textContent).toBe('Title');
+    const locked = screen.getByTestId('journal-preview-toggle');
+    expect(locked.getAttribute('aria-pressed')).toBe('true');
+    expect(locked.querySelector('use')?.getAttribute('href')).toBe('#i-pen');
+    expect(locked.getAttribute('title')).toBe('Edit');
+
+    fireEvent.click(locked); // and back to the editor
+    expect(screen.getByTestId('journal-rich')).toBeTruthy();
+  });
+
   it('Delete is absent for a day with no saved note', () => {
     state.entry = null;
     render(createElement(DayJournalPanel, { date: '2026-06-11', ctx: CTX }));
