@@ -60,17 +60,31 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
 .px-sidebar { width: 234px; flex: none; display: flex; flex-direction: column; padding: 12px 10px 10px; background: var(--px-sb-bg); border-right: 1px solid var(--px-border); transition: width 140ms ease; }
 .px-brand { display: flex; align-items: center; gap: 8px; padding: 2px 8px 10px; font-weight: 650; font-size: 14px; letter-spacing: 0.1px; }
 
-/* collapsed rail: icons + badges only, labels become tooltips */
-.px-sidebar--rail { width: 56px; padding-left: 6px; padding-right: 6px; }
-.px-sidebar--rail .px-brand { padding-left: 4px; }
+/* Collapsed rail: icons + badges only, labels become tooltips. The width is
+   DERIVED from the icon rather than a round number — a 16px glyph inside a
+   square hit target (kept at/above the 24px WCAG 2.2 minimum) plus a hair of
+   sidebar padding. Nothing in here is wider than that, so the rail is exactly
+   as wide as the icons need. */
+.px-sidebar--rail {
+  --px-rail-ic: 16px;   /* the glyph */
+  --px-rail-ring: 9px;  /* hit area around it → 34px square */
+  --px-rail-pad: 3px;   /* sidebar gutter */
+  width: calc(var(--px-rail-ic) + 2 * var(--px-rail-ring) + 2 * var(--px-rail-pad));
+  padding-left: var(--px-rail-pad);
+  padding-right: var(--px-rail-pad);
+}
+.px-sidebar--rail .px-brand { padding: 2px 0 10px; justify-content: center; }
 .px-sidebar--rail .px-brand-lbl,
 .px-sidebar--rail .px-nav-group,
 .px-sidebar--rail .px-navlink-lbl,
 .px-sidebar--rail .px-sidebar-email,
 .px-sidebar--rail .px-sidebar-actions { display: none; }
-.px-sidebar--rail .px-navlink { justify-content: center; padding: 8px 0; position: relative; }
-.px-sidebar--rail .px-nav-badge { position: absolute; top: 1px; right: 2px; margin: 0; font-size: 9.5px; padding: 0 4px; line-height: 14px; }
+.px-sidebar--rail .px-navlink { justify-content: center; gap: 0; padding: var(--px-rail-ring) 0; margin: 2px 0; position: relative; }
+/* the count rides the icon's top-right corner; it is the one thing that would
+   otherwise dictate a wider rail. */
+.px-sidebar--rail .px-nav-badge { position: absolute; top: 0; right: 0; margin: 0; font-size: 9px; font-weight: 640; padding: 0 3px; min-width: 13px; text-align: center; line-height: 13px; border-radius: 7px; }
 .px-sidebar--rail .px-sidebar-user { justify-content: center; padding: 7px 0 3px; }
+.px-sidebar--rail .px-sidebar-foot { align-items: center; }
 .px-sidebar-actions { display: flex; flex-direction: column; gap: 4px; }
 .px-rail-toggle { flex: none; margin-left: -6px; color: var(--px-text-dim); }
 @media (prefers-reduced-motion: reduce) { .px-sidebar { transition: none; } }
