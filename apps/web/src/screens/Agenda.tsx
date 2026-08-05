@@ -13,7 +13,7 @@
  * Drag is pointer-based (mousedown→mouseup) rather than HTML5 DnD so the live
  * window-hint state is observable mid-drag and it drives reliably in tests.
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 
 import {
   addDays,
@@ -42,6 +42,7 @@ import {
   type CommandContext,
 } from '@prisms/ui';
 
+import { agendaLayout, DAY_SPANS, DEFAULT_SPAN, GUTTER_W, isDaySpan } from '../agenda-layout';
 import { DayJournalPanel } from '../components/DayJournal';
 import { WhyButton } from '../components/Why';
 
@@ -51,6 +52,33 @@ const HOUR_PX = 44;
 const MS_PER_MIN = 60_000;
 const BODY_HEIGHT = (GRID_END_HOUR - GRID_START_HOUR) * HOUR_PX;
 const DAY_LABEL = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+const SPAN_KEY = 'prisms.agenda.span';
+
+/**
+ * The section's own width, observed — drives both the stacking and the day count.
+ * Measured rather than read off the viewport because the sidebar's rail toggle
+ * changes the room available without the window resizing at all.
+ */
+function useMeasuredWidth(): [RefObject<HTMLElement | null>, number] {
+  const ref = useRef<HTMLElement | null>(null);
+  const [width, setWidth] = useState(0);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    setWidth(el.clientWidth);
+    // The one-shot measurement above is enough to render; only the LIVE reflow
+    // needs an observer, so an environment without one (jsdom) still works.
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver((entries) => {
+      const w = entries[0]?.contentRect.width;
+      if (w != null) setWidth(w);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  return [ref, width];
+}
 
 interface DragState {
   taskId: string;
@@ -171,9 +199,29 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
     return () => clearInterval(t);
   }, []);
 
-  const [weekOffset, setWeekOffset] = useState(0);
+  const [pageOffset, setPageOffset] = useState(0);
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  const [span, setSpan] = useState<number>(() => {
+    try {
+      const stored = Number(localStorage.getItem(SPAN_KEY));
+      return isDaySpan(stored) ? stored : DEFAULT_SPAN;
+    } catch {
+      return DEFAULT_SPAN;
+    }
+  });
+  const chooseSpan = (value: number) => {
+    setSpan(value);
+    setPageOffset(0); // pages are span-sized, so the old offset means something else
+    try {
+      localStorage.setItem(SPAN_KEY, String(value));
+    } catch {
+      /* preference is best-effort */
+    }
+  };
+
+  const [viewRef, width] = useMeasuredWidth();
+  const { stacked, narrow, perRow, rowCount, shownDays } = agendaLayout(width, span);
   const agenda = useAgenda(now);
   const commands = useCommands(ctx);
   const hydrated = useIsHydrated();
@@ -222,9 +270,15 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
   }, [resize, commands]);
 
   const days = useMemo(() => {
-    const base = addDays(bucketDate(now, 0, tz), weekOffset * 7);
-    return Array.from({ length: 7 }, (_, i) => addDays(base, i));
-  }, [now, tz, weekOffset]);
+    const base = addDays(bucketDate(now, 0, tz), pageOffset * shownDays);
+    return Array.from({ length: shownDays }, (_, i) => addDays(base, i));
+  }, [now, tz, pageOffset, shownDays]);
+
+  /** `days` split into the rendered rows (one grid each). */
+  const dayRows = useMemo(
+    () => Array.from({ length: rowCount }, (_, r) => days.slice(r * perRow, (r + 1) * perRow)),
+    [days, rowCount, perRow],
+  );
 
   // The journal panel shows today's note by default; a day-header click swaps it
   // to that day and a block click swaps it to the block's tags. todayDate is
@@ -275,14 +329,31 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
   }
 
   return (
-    <section className="px-agenda-view">
+    <section className="px-agenda-view" ref={viewRef as RefObject<HTMLElement>}>
       <div className="px-page-head">
         <h1>Agenda</h1>
-        <span className="px-page-sub" data-testid="week-range">{days[0]} – {days[6]}</span>
+        <span className="px-page-sub" data-testid="week-range">{days[0]} – {days.at(-1)}</span>
+        {shownDays < span && (
+          <span className="px-page-sub" data-testid="span-capped">showing {shownDays} of {span} — widen the window for more</span>
+        )}
         <div className="px-head-actions">
-          <button className="px-btn px-btn--icon" data-testid="week-prev" aria-label="previous week" onClick={() => setWeekOffset((w) => w - 1)}><Ic name="chevl" /></button>
-          <button className="px-btn" data-testid="week-today" onClick={() => setWeekOffset(0)}>Today</button>
-          <button className="px-btn px-btn--icon" data-testid="week-next" aria-label="next week" onClick={() => setWeekOffset((w) => w + 1)}><Ic name="chevr" /></button>
+          <div className="px-seg" role="group" aria-label="days shown" data-testid="span-picker">
+            {DAY_SPANS.map((s) => (
+              <button
+                key={s.value}
+                className={`px-seg-btn${span === s.value ? ' px-seg-btn--on' : ''}`}
+                data-testid={`span-${s.value}`}
+                aria-pressed={span === s.value}
+                title={s.label}
+                onClick={() => chooseSpan(s.value)}
+              >
+                {s.short}
+              </button>
+            ))}
+          </div>
+          <button className="px-btn px-btn--icon" data-testid="week-prev" aria-label="previous period" onClick={() => setPageOffset((w) => w - 1)}><Ic name="chevl" /></button>
+          <button className="px-btn" data-testid="week-today" onClick={() => setPageOffset(0)}>Today</button>
+          <button className="px-btn px-btn--icon" data-testid="week-next" aria-label="next period" onClick={() => setPageOffset((w) => w + 1)}><Ic name="chevr" /></button>
         </div>
       </div>
 
@@ -297,25 +368,31 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
         </div>
       </div>
 
-      <div className="px-agenda" style={drag || resize ? { userSelect: 'none' } : undefined}>
+      <div
+        className={`px-agenda${stacked ? ' px-agenda--stack' : ''}${narrow ? ' px-agenda--narrow' : ''}`}
+        data-testid="agenda-layout"
+        data-layout={stacked ? (narrow ? 'narrow' : 'stack') : 'cols'}
+        style={drag || resize ? { userSelect: 'none' } : undefined}
+      >
         {/* to-schedule + all tasks (left) — every row drags onto the week */}
         <div className="px-agenda-todo">
           <h2>To schedule <span className="px-muted">{agenda.todo.length}</span></h2>
           <div data-testid="todo-list" className="px-list">
             {agenda.todo.length === 0 &&
               (hydrated ? <div className="px-list-empty">Nothing to place.</div> : <Skeleton testId="todo-skeleton" rows={4} />)}
-            {agenda.todo.map(({ task, schedulable }) => (
+            {agenda.todo.map((t: AgendaTask) => (
               <div
-                key={task.id}
+                key={t.task.id}
                 className="px-todo-item"
-                data-testid={`todo-${task.id}`}
+                data-testid={`todo-${t.task.id}`}
+                title={t.estimated ? t.task.title : `${t.task.title} — no estimate, drops as a ${t.schedulable.estimateMinutes}-minute event`}
                 onMouseDown={(e) => {
                   e.preventDefault();
-                  startTaskDrag(schedulable);
+                  startTaskDrag(t.schedulable);
                 }}
               >
-                <span className="px-todo-title">{task.title}</span>
-                <span className="px-todo-sub">{schedulable.estimateMinutes}m</span>
+                <span className="px-todo-title">{t.task.title}</span>
+                <span className="px-todo-sub">{t.estimated ? '' : '~'}{t.schedulable.estimateMinutes}m</span>
               </div>
             ))}
           </div>
@@ -352,14 +429,25 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
         </div>
 
         <div className="px-agenda-cal">
-        <div className="px-cal-grid">
+        {/* one grid per row — a span over a week wraps, and a narrow window
+            simply gets fewer columns rather than a sideways scrollbar. */}
+        <div className="px-cal-rows">
+        {dayRows.map((rowDays, r) => (
+        <div
+          key={r}
+          className="px-cal-grid"
+          data-testid={`cal-row-${r}`}
+          style={{ gridTemplateColumns: `${GUTTER_W}px repeat(${rowDays.length}, minmax(0, 1fr))` }}
+        >
           <div className="px-cal-gutter" style={{ height: BODY_HEIGHT }}>
             {Array.from({ length: GRID_END_HOUR - GRID_START_HOUR }, (_, i) => (
               <div key={i} className="px-cal-hour-label" style={{ top: i * HOUR_PX }}>{fmtHour(GRID_START_HOUR + i)}</div>
             ))}
           </div>
 
-          {days.map((date, col) => (
+          {rowDays.map((date, i) => {
+            const col = r * perRow + i;
+            return (
             <div key={date} className="px-cal-col" data-testid={`day-${col}`}>
               <div
                 className={`px-cal-col-head${selectedDay === date ? ' px-cal-col-head--sel' : ''}`}
@@ -470,7 +558,10 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
                 )}
               </div>
             </div>
-          ))}
+            );
+          })}
+        </div>
+        ))}
         </div>
       </div>
 

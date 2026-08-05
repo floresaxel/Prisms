@@ -70,12 +70,15 @@ function hhmm(): string {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
-function NavLink({ item, active, onNavigate }: { item: NavItemSpec; active: boolean; onNavigate?: (href: string) => void }) {
+function NavLink({ item, active, onNavigate, rail }: { item: NavItemSpec; active: boolean; onNavigate?: (href: string) => void; rail: boolean }) {
   return (
     <a
       href={item.href}
       data-testid={`nav-${item.key}`}
       className={`px-navlink${active ? ' px-navlink--active' : ''}`}
+      // collapsed, the label is gone — the native tooltip carries it instead.
+      title={rail ? item.label : undefined}
+      aria-label={rail ? item.label : undefined}
       onClick={(e) => {
         if (onNavigate) {
           e.preventDefault();
@@ -84,7 +87,7 @@ function NavLink({ item, active, onNavigate }: { item: NavItemSpec; active: bool
       }}
     >
       <Ic name={item.icon} />
-      <span>{item.label}</span>
+      <span className="px-navlink-lbl">{item.label}</span>
       {item.badge != null && item.badge > 0 && (
         <span className={`px-nav-badge${item.badgeTone === 'alert' ? ' px-nav-badge--alert' : ''}`}>{item.badge}</span>
       )}
@@ -92,41 +95,91 @@ function NavLink({ item, active, onNavigate }: { item: NavItemSpec; active: bool
   );
 }
 
+const RAIL_KEY = 'prisms.sidebar.collapsed';
+/** Below this the sidebar is a rail regardless of preference — a 234px nav on a
+ *  narrow window costs more than it gives. */
+const RAIL_FORCE_W = 900;
+
+/**
+ * Sidebar collapse state: the user's preference, overridden to `true` while the
+ * window is too narrow to afford the full nav. Persisted so it survives reloads.
+ */
+function useSidebarRail(): [boolean, boolean, () => void] {
+  const [pref, setPref] = useState(() => {
+    try {
+      return localStorage.getItem(RAIL_KEY) === '1';
+    } catch {
+      return false; // storage denied (private mode / desktop shell)
+    }
+  });
+  const [forced, setForced] = useState(() => window.innerWidth < RAIL_FORCE_W);
+  useEffect(() => {
+    const onResize = () => setForced(window.innerWidth < RAIL_FORCE_W);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+  const toggle = () => {
+    setPref((p) => {
+      const next = !p;
+      try {
+        localStorage.setItem(RAIL_KEY, next ? '1' : '0');
+      } catch {
+        /* preference is best-effort */
+      }
+      return next;
+    });
+  };
+  return [pref || forced, forced, toggle];
+}
+
 export function Layout({ brand = 'Prisms', groups, foot, active, onNavigate, breadcrumb, sync, timer, user, footer, children }: LayoutProps) {
   const initial = (user?.name?.trim()?.[0] ?? user?.email?.[0] ?? '?').toUpperCase();
+  const [rail, railForced, toggleRail] = useSidebarRail();
   return (
-    <div className="px-app">
+    <div className={`px-app${rail ? ' px-app--rail' : ''}`}>
       <IconSprite />
-      <aside className="px-sidebar">
+      <aside className={`px-sidebar${rail ? ' px-sidebar--rail' : ''}`}>
         <div className="px-brand">
           <span className="px-brand-logo"><Ic name="prism" /></span>
-          {brand}
+          <span className="px-brand-lbl">{brand}</span>
         </div>
         <nav className="px-nav">
           {groups.map((group, gi) => (
             <div key={group.label ?? `g${gi}`}>
               {group.label && <div className="px-nav-group">{group.label}</div>}
               {group.items.map((item) => (
-                <NavLink key={item.key} item={item} active={item.href === active} onNavigate={onNavigate} />
+                <NavLink key={item.key} item={item} active={item.href === active} onNavigate={onNavigate} rail={rail} />
               ))}
             </div>
           ))}
         </nav>
         <div className="px-sidebar-foot">
           {foot?.map((item) => (
-            <NavLink key={item.key} item={item} active={item.href === active} onNavigate={onNavigate} />
+            <NavLink key={item.key} item={item} active={item.href === active} onNavigate={onNavigate} rail={rail} />
           ))}
           {user && (
-            <div className="px-sidebar-user">
+            <div className="px-sidebar-user" title={user.email}>
               <span className="px-avatar">{initial}</span>
-              <span>{user.email}</span>
+              <span className="px-sidebar-email">{user.email}</span>
             </div>
           )}
-          {footer}
+          <div className="px-sidebar-actions">{footer}</div>
         </div>
       </aside>
       <div className="px-shell">
         <header className="px-topbar">
+          <button
+            className="px-btn px-btn--icon px-rail-toggle"
+            data-testid="sidebar-toggle"
+            aria-label={rail ? 'expand sidebar' : 'collapse sidebar'}
+            aria-expanded={!rail}
+            // while the window forces the rail, the preference cannot win.
+            disabled={railForced}
+            title={railForced ? 'The window is too narrow for the full sidebar' : rail ? 'Expand sidebar' : 'Collapse sidebar'}
+            onClick={toggleRail}
+          >
+            <Ic name={rail ? 'chevr' : 'chevl'} />
+          </button>
           <div className="px-crumb">
             <span>{breadcrumb.section}</span>
             <span className="px-crumb-sep">/</span>

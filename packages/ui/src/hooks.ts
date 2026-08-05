@@ -653,8 +653,12 @@ export interface Agenda {
   blocks: AgendaBlock[];
   /** Past `time_entries` as the historical event layer (§12.2). */
   entries: AgendaEntry[];
-  /** Schedulable tasks not yet placed — the to-do side panel. */
-  todo: TodoTask[];
+  /**
+   * Tasks not yet placed — the to-do side panel. Includes tasks with no estimate
+   * of their own (they carry `DEFAULT_DRAG_MINUTES`); requiring an estimate hid
+   * every task the web app itself creates.
+   */
+  todo: AgendaTask[];
   /**
    * EVERY live, not-done task — the Agenda's "All tasks" list. Unlike `todo`
    * this keeps already-scheduled tasks and tasks with no estimate (they get
@@ -765,10 +769,6 @@ export function useAgenda(now: Instant, horizonDays = 7): Agenda {
       }));
 
     const scheduledTaskIds = new Set(committed.map((b) => b.taskId));
-    const todo: TodoTask[] = tasks
-      .filter((t) => !scheduledTaskIds.has(t.id))
-      .map((t) => ({ task: tree.byId.get(t.id) as Node, schedulable: t }))
-      .sort((a, b) => (a.task.title < b.task.title ? -1 : a.task.title > b.task.title ? 1 : 0));
 
     // The full list: `tasks` above already dropped anything without a positive
     // estimate, so walk the tree again and synthesize a schedulable for those —
@@ -791,6 +791,13 @@ export function useAgenda(now: Instant, horizonDays = 7): Agenda {
       });
     }
     allTasks.sort((a, b) => (a.task.title < b.task.title ? -1 : a.task.title > b.task.title ? 1 : 0));
+
+    // The to-schedule panel: every task not already placed. An estimate is NOT
+    // required to appear here. It used to be, and that silently emptied the panel
+    // the whole Agenda is built around: the app's own capture path
+    // (`activity.create` → `activity.promote`) never sets one, so every task a
+    // user made in the web UI was missing from it. Those get DEFAULT_DRAG_MINUTES.
+    const todo: AgendaTask[] = allTasks.filter((t) => !t.scheduled);
 
     return { input, tasksById, blocks, entries, todo, allTasks };
   }, [ctx, edgeRows, blockRows, entryRows, sprintRows, membershipRows, now, horizonDays]);

@@ -57,8 +57,23 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
 /* ── app shell v2 (web redesign W1): sidebar with grouped nav + topbar. Ported
    from docs/mockups/web-layout-redesign.html (.app/.sb/.topbar), px-prefixed. ── */
 .px-app { display: flex; min-height: 100vh; }
-.px-sidebar { width: 234px; flex: none; display: flex; flex-direction: column; padding: 12px 10px 10px; background: var(--px-sb-bg); border-right: 1px solid var(--px-border); }
+.px-sidebar { width: 234px; flex: none; display: flex; flex-direction: column; padding: 12px 10px 10px; background: var(--px-sb-bg); border-right: 1px solid var(--px-border); transition: width 140ms ease; }
 .px-brand { display: flex; align-items: center; gap: 8px; padding: 2px 8px 10px; font-weight: 650; font-size: 14px; letter-spacing: 0.1px; }
+
+/* collapsed rail: icons + badges only, labels become tooltips */
+.px-sidebar--rail { width: 56px; padding-left: 6px; padding-right: 6px; }
+.px-sidebar--rail .px-brand { padding-left: 4px; }
+.px-sidebar--rail .px-brand-lbl,
+.px-sidebar--rail .px-nav-group,
+.px-sidebar--rail .px-navlink-lbl,
+.px-sidebar--rail .px-sidebar-email,
+.px-sidebar--rail .px-sidebar-actions { display: none; }
+.px-sidebar--rail .px-navlink { justify-content: center; padding: 8px 0; position: relative; }
+.px-sidebar--rail .px-nav-badge { position: absolute; top: 1px; right: 2px; margin: 0; font-size: 9.5px; padding: 0 4px; line-height: 14px; }
+.px-sidebar--rail .px-sidebar-user { justify-content: center; padding: 7px 0 3px; }
+.px-sidebar-actions { display: flex; flex-direction: column; gap: 4px; }
+.px-rail-toggle { flex: none; margin-left: -6px; color: var(--px-text-dim); }
+@media (prefers-reduced-motion: reduce) { .px-sidebar { transition: none; } }
 .px-brand-logo { width: 22px; height: 22px; border-radius: 6px; background: var(--px-blue); color: #fff; display: flex; align-items: center; justify-content: center; flex: none; }
 .px-brand-logo .px-ic { width: 13px; height: 13px; }
 .px-nav { flex: 1; overflow-y: auto; padding-bottom: 8px; }
@@ -163,8 +178,26 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
 .px-ag-sw--novision { background: var(--px-slate-bg); border-color: var(--px-border-2); }
 .px-ag-sw--history { background: var(--px-surface-2); border: 1px dashed var(--px-border-2); }
 
-/* Column order: to-schedule (left) · week grid · note (right). */
+/* Column order: to-schedule (left) · week grid · note (right). Below ~1040px of
+   MEASURED screen width the two panels move under the calendar, and below ~720px
+   they stop sharing a row — the JS that measures also sheds day columns, so the
+   page never scrolls sideways. */
 .px-agenda { display: grid; grid-template-columns: 248px minmax(0, 1fr) 286px; gap: 18px; align-items: start; }
+.px-agenda--stack { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.px-agenda--stack .px-agenda-cal { grid-column: 1 / -1; order: 0; }
+.px-agenda--stack .px-agenda-todo { order: 1; }
+.px-agenda--stack .px-agenda-journal { order: 2; }
+.px-agenda--narrow { grid-template-columns: minmax(0, 1fr); }
+.px-agenda-cal { min-width: 0; }
+/* multi-row spans (2 weeks) stack their grids */
+.px-cal-rows { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+
+/* segmented control — how many days the calendar shows */
+.px-seg { display: inline-flex; border: 1px solid var(--px-border); background: var(--px-surface); border-radius: 8px; overflow: hidden; box-shadow: var(--px-shadow); }
+.px-seg-btn { font: inherit; font-size: 12px; font-weight: 560; color: var(--px-text-dim); background: none; border: none; border-right: 1px solid var(--px-border); padding: 6px 10px; cursor: pointer; min-width: 34px; }
+.px-seg-btn:last-child { border-right: none; }
+.px-seg-btn:hover { background: var(--px-surface-2); color: var(--px-text); }
+.px-seg-btn--on { background: var(--px-blue-bg); color: var(--px-blue-deep); font-weight: 640; }
 .px-agenda-journal, .px-agenda-todo { background: var(--px-surface); border: 1px solid var(--px-border); border-radius: 10px; padding: 12px 14px; box-shadow: var(--px-shadow); min-width: 0; }
 .px-agenda-journal h2, .px-agenda-todo h2 { margin-top: 0; font-size: 14px; }
 .px-drag-hint { font-size: 11px; margin: 10px 0 0; }
@@ -178,7 +211,8 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
 .px-todo-sub { font-size: 11px; color: var(--px-faint); white-space: nowrap; }
 .px-todo-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-.px-cal-grid { display: grid; grid-template-columns: 48px repeat(7, 1fr); gap: 0; border: 1px solid var(--px-border); border-radius: var(--px-radius); overflow: hidden; }
+/* the column template is set inline — the day count is measured, not fixed. */
+.px-cal-grid { display: grid; grid-template-columns: 48px repeat(7, minmax(0, 1fr)); gap: 0; border: 1px solid var(--px-border); border-radius: var(--px-radius); overflow: hidden; min-width: 0; }
 .px-cal-gutter { position: relative; border-right: 1px solid var(--px-border); margin-top: 28px; }
 .px-cal-hour-label { position: absolute; right: 6px; font-size: 10px; color: var(--px-text-dim); transform: translateY(-6px); }
 .px-cal-col { border-right: 1px solid var(--px-border); }
@@ -576,9 +610,11 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
 .px-set-lbl span { font-size: 11.5px; color: var(--px-faint); line-height: 1.45; }
 .px-set-ctl { flex: 1; }
 
-/* ── W8 polish — keyboard focus-visible, reduced motion, desktop min-width ── */
-/* the shell is a desktop-first 3-column IA; below this it scrolls rather than collapsing. */
-.px-app { min-width: 1024px; }
+/* ── W8 polish — keyboard focus-visible, reduced motion ── */
+/* The shell used to be pinned at `min-width: 1024px`, so a narrow window scrolled
+   sideways instead of adapting. It now reflows: the sidebar drops to a rail and
+   the Agenda restacks + sheds day columns (see .px-agenda--stack below). */
+.px-content { min-width: 0; }
 /* a visible focus ring for KEYBOARD navigation only (mouse clicks don't trigger it). */
 :focus-visible { outline: 2px solid var(--px-accent); outline-offset: 2px; }
 .px-navlink:focus-visible,
