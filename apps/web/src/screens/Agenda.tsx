@@ -470,7 +470,12 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
           {rowDays.map((date, i) => {
             const col = r * perRow + i;
             return (
-            <div key={date} className="px-cal-col" data-testid={`day-${col}`}>
+            <div
+              key={date}
+              className={`px-cal-col${selectedDay === date ? ' px-cal-col--sel' : ''}`}
+              data-testid={`day-${col}`}
+              data-selected={selectedDay === date ? 'true' : undefined}
+            >
               <div
                 className={`px-cal-col-head${selectedDay === date ? ' px-cal-col-head--sel' : ''}`}
                 data-testid={`day-head-${col}`}

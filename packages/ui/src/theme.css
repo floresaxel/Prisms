@@ -357,7 +357,15 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
 /* journal (D2/D3/J7): day-header note affordance + TipTap WYSIWYG editor + toolbar + markdown preview */
 .px-cal-col-head { cursor: pointer; gap: 4px; }
 .px-cal-col-head:hover { color: var(--px-text); }
-.px-cal-col-head--sel { color: var(--px-text); background: var(--px-surface-2); }
+/* The selected day: an accent-tinted header with an underline, and the thin rule
+   down EACH side of its column accented too. The left-hand rule is not the
+   column's own — it is the previous column's right border (or the hour gutter's)
+   — so recolour that existing line rather than adding a second one beside it. */
+.px-cal-col-head--sel { color: var(--px-blue-deep); background: var(--px-blue-bg); font-weight: 620; box-shadow: inset 0 -2px 0 var(--px-blue); }
+.px-cal-col--sel { border-right-color: var(--px-blue); }
+.px-cal-col:has(+ .px-cal-col--sel), .px-cal-gutter:has(+ .px-cal-col--sel) { border-right-color: var(--px-blue); }
+/* the last column has no right border (the grid's own edge stands in), so draw it */
+.px-cal-col--sel:last-child { box-shadow: inset -1px 0 0 var(--px-blue); }
 /* "this day has a note" marker in a day header */
 .px-note-ic { display: inline-flex; align-items: center; color: var(--px-accent); flex: none; }
 .px-note-ic .px-ic { width: 11px; height: 11px; }

@@ -22,6 +22,7 @@ import remarkGfm from 'remark-gfm';
 import { composeDayMarkdown } from '@prisms/core';
 import { Ic, journalDayFilename, useCommands, useDayLog, useJournalDay, useUserSettings, type CommandContext } from '@prisms/ui';
 
+import { isNoteLocked, setNoteLocked } from '../note-locks';
 import { DayLogFooter } from './DayLogFooter';
 import { RichJournalEditor } from './RichJournalEditor';
 
@@ -75,9 +76,20 @@ export function DayJournalPanel({
   const dayLog = useDayLog(date);
   const { timezone } = useUserSettings();
   const [draft, setDraft] = useState(entry?.content ?? '');
-  // `preview` is the LOCKED (read-only) state: the same sanitized markdown render
-  // as before, now surfaced as "Lock edit" ⇄ "Edit" rather than Preview ⇄ Edit.
-  const [preview, setPreview] = useState(false);
+  // `preview` is the LOCKED (read-only) state, surfaced as "Lock edit" ⇄ "Edit".
+  // It is PER DAY and remembered: each day keeps whichever state it was left in,
+  // so locking one note does not lock the rest.
+  const [preview, setPreview] = useState(() => isNoteLocked(date));
+  // Both call sites mount this with key={date}, so the initializer above already
+  // re-runs per day. This keeps that correct if a future one forgets the key.
+  useEffect(() => setPreview(isNoteLocked(date)), [date]);
+
+  function toggleLock() {
+    const next = !preview;
+    setPreview(next);
+    setNoteLocked(date, next);
+  }
+
   const [menuOpen, setMenuOpen] = useState(false);
   const dirty = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -169,7 +181,7 @@ export function DayJournalPanel({
             aria-pressed={preview}
             aria-label={preview ? 'Edit this note' : 'Lock this note from editing'}
             title={preview ? 'Edit' : 'Lock edit'}
-            onClick={() => setPreview((p) => !p)}
+            onClick={toggleLock}
           >
             <Ic name={preview ? 'pen' : 'lock'} />
           </button>
@@ -195,7 +207,7 @@ export function DayJournalPanel({
                 data-testid="journal-preview-toggle"
                 aria-pressed={preview}
                 onClick={() => {
-                  setPreview((p) => !p);
+                  toggleLock();
                   setMenuOpen(false);
                 }}
               >

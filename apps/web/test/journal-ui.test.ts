@@ -72,6 +72,9 @@ vi.mock('../src/components/RichJournalEditor', async () => {
 import { DayJournalPanel, MarkdownView } from '../src/components/DayJournal';
 import { Agenda } from '../src/screens/Agenda';
 import { downloadJournalArchive } from '../src/portability';
+import { installMemoryStorage } from './util/memory-storage';
+
+const store = installMemoryStorage();
 
 const CTX = { userId: 'u1', deviceId: 'web-1', now: () => '2026-06-27T00:00:00.000Z' };
 const ZWJ = '👨‍👩‍👧‍👦';
@@ -84,6 +87,7 @@ afterEach(() => {
   state.entry = null;
   state.months = [];
   commandFns.clear();
+  store.clear(); // per-day lock state persists across mounts by design
 });
 
 describe('MarkdownView — sanitized rendering (D2)', () => {
@@ -196,6 +200,36 @@ describe('DayJournalPanel — editor', () => {
 
     fireEvent.click(locked); // and back to the editor
     expect(screen.getByTestId('journal-rich')).toBeTruthy();
+  });
+
+  it('opens each day in the state it was left in, and remembers a lock per day', () => {
+    state.entry = { id: 'j1', content: '# Mon', deleted_at: null };
+    const monday = render(createElement(DayJournalPanel, { date: '2026-08-03', ctx: CTX, actions: 'lock' }));
+    fireEvent.click(screen.getByTestId('journal-preview-toggle')); // lock Monday
+    expect(screen.getByTestId('journal-preview')).toBeTruthy();
+    monday.unmount();
+
+    // a DIFFERENT day is untouched — it opens editable
+    const tuesday = render(createElement(DayJournalPanel, { date: '2026-08-04', ctx: CTX, actions: 'lock' }));
+    expect(screen.getByTestId('journal-rich')).toBeTruthy();
+    expect(screen.queryByTestId('journal-preview')).toBeNull();
+    tuesday.unmount();
+
+    // …and Monday comes back locked (this is what a reload does too)
+    render(createElement(DayJournalPanel, { date: '2026-08-03', ctx: CTX, actions: 'lock' }));
+    expect(screen.getByTestId('journal-preview')).toBeTruthy();
+    expect(screen.getByTestId('journal-preview-toggle').getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('the menu variant writes the same per-day lock', () => {
+    state.entry = { id: 'j1', content: 'x', deleted_at: null };
+    const first = render(createElement(DayJournalPanel, { date: '2026-08-07', ctx: CTX }));
+    openNoteMenu();
+    fireEvent.click(screen.getByTestId('journal-preview-toggle'));
+    first.unmount();
+    // re-mounted as the Agenda's lock-only variant: still locked
+    render(createElement(DayJournalPanel, { date: '2026-08-07', ctx: CTX, actions: 'lock' }));
+    expect(screen.getByTestId('journal-preview')).toBeTruthy();
   });
 
   it('Delete is absent for a day with no saved note', () => {
