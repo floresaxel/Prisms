@@ -344,7 +344,9 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
 .px-cal-col-head { cursor: pointer; gap: 4px; }
 .px-cal-col-head:hover { color: var(--px-text); }
 .px-cal-col-head--sel { color: var(--px-text); background: var(--px-surface-2); }
-.px-note-dot { width: 6px; height: 6px; border-radius: 999px; background: var(--px-accent); display: inline-block; }
+/* "this day has a note" marker in a day header */
+.px-note-ic { display: inline-flex; align-items: center; color: var(--px-accent); flex: none; }
+.px-note-ic .px-ic { width: 11px; height: 11px; }
 .px-journal-rich-wrap { margin-top: 8px; }
 .px-journal-rich { min-height: 200px; line-height: 1.5; cursor: text; }
 .px-journal-rich:focus, .px-journal-rich:focus-visible { outline: none; border-color: var(--px-accent); }

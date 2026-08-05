@@ -483,7 +483,12 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
                 }}
               >
                 {DAY_LABEL[new Date(`${date}T00:00:00Z`).getUTCDay()]} {date.slice(8)}
-                {noteByDate.has(date) && <span className="px-note-dot" data-testid={`note-dot-${date}`} aria-label="has note" />}
+                {/* testid keeps the `note-dot-` name the specs already address it by. */}
+                {noteByDate.has(date) && (
+                  <span className="px-note-ic" data-testid={`note-dot-${date}`} role="img" aria-label="has note">
+                    <Ic name="note" />
+                  </span>
+                )}
               </div>
               <div className="px-cal-col-body" style={{ height: BODY_HEIGHT }}>
                 {/* hour grid lines */}
