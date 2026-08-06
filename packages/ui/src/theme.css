@@ -236,6 +236,22 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
 .px-todo-sub { font-size: 11px; color: var(--px-faint); white-space: nowrap; }
 .px-todo-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+/* the grabbed item, riding the cursor until it is dropped on a slot.
+   `pointer-events: none` keeps it from swallowing the drop's mouseup. */
+.px-drag-ghost {
+  position: fixed; top: 0; left: 0; z-index: 60; pointer-events: none;
+  display: flex; align-items: center; gap: 10px; max-width: 260px;
+  padding: 7px 11px; font-size: 12.5px;
+  background: var(--px-surface); color: var(--px-text);
+  border: 1px solid var(--px-accent); border-radius: 8px;
+  box-shadow: var(--px-shadow-pop); opacity: 0.96;
+  transform: translate3d(-9999px, -9999px, 0); /* off-screen until first placed */
+}
+.px-drag-ghost-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 550; }
+.px-drag-ghost-dur { color: var(--px-text-dim); font-variant-numeric: tabular-nums; flex: none; }
+/* the row it came from stays put but reads as lifted */
+.px-todo-item--dragging { opacity: 0.4; }
+
 /* the column template is set inline — the day count is measured, not fixed. */
 .px-cal-grid { display: grid; grid-template-columns: 48px repeat(7, minmax(0, 1fr)); gap: 0; border: 1px solid var(--px-border); border-radius: var(--px-radius); overflow: hidden; min-width: 0; }
 .px-cal-gutter { position: relative; border-right: 1px solid var(--px-border); margin-top: 28px; }

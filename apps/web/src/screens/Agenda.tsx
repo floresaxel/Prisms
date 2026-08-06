@@ -13,7 +13,7 @@
  * Drag is pointer-based (mousedown→mouseup) rather than HTML5 DnD so the live
  * window-hint state is observable mid-drag and it drives reliably in tests.
  */
-import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
+import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type RefObject } from 'react';
 
 import {
   addDays,
@@ -95,7 +95,16 @@ interface DragState {
   /** Set when moving an existing block rather than placing a new one. */
   blockId?: string;
   valid: Interval[];
+  /** Shown on the card that follows the cursor. */
+  title: string;
+  /** Where the grab started, so the card appears under the cursor immediately. */
+  originX: number;
+  originY: number;
 }
+
+/** Offset from the cursor so the card never sits under the pointer itself. */
+const GHOST_DX = 14;
+const GHOST_DY = 12;
 
 function fmtHour(h: number): string {
   const ampm = h < 12 || h === 24 ? 'am' : 'pm';
@@ -319,8 +328,15 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
     return { col, top, height };
   }
 
-  function startTaskDrag(task: SchedulableTask) {
-    setDrag({ taskId: task.id, durationMs: task.estimateMinutes * MS_PER_MIN, valid: validWindowsFor(task, agenda.input) });
+  function startTaskDrag(task: SchedulableTask, title: string, e: ReactMouseEvent) {
+    setDrag({
+      taskId: task.id,
+      durationMs: task.estimateMinutes * MS_PER_MIN,
+      valid: validWindowsFor(task, agenda.input),
+      title,
+      originX: e.clientX,
+      originY: e.clientY,
+    });
   }
 
   /** Drag lookup over EVERYTHING listed, not just `tasksById` — that map is the
@@ -331,12 +347,37 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
     [agenda.allTasks],
   );
 
-  function startBlockDrag(block: AgendaBlock) {
+  function startBlockDrag(block: AgendaBlock, e: ReactMouseEvent) {
     if (block.anchored) return; // I7: anchored blocks refuse the drag
     const task = schedulableById.get(block.taskId);
     if (!task) return;
-    setDrag({ taskId: block.taskId, blockId: block.id, durationMs: task.estimateMinutes * MS_PER_MIN, valid: validWindowsFor(task, agenda.input) });
+    setDrag({
+      taskId: block.taskId,
+      blockId: block.id,
+      durationMs: task.estimateMinutes * MS_PER_MIN,
+      valid: validWindowsFor(task, agenda.input),
+      title: block.title,
+      originX: e.clientX,
+      originY: e.clientY,
+    });
   }
+
+  /**
+   * The card that follows the cursor. Positioned IMPERATIVELY on mousemove: the
+   * Agenda re-render is heavy (a week of blocks plus two task lists), and doing
+   * it per pointer sample would make the drag stutter. React owns whether the
+   * card exists; the mouse owns where it is.
+   */
+  const ghostRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!drag) return;
+    const onMove = (e: MouseEvent) => {
+      const el = ghostRef.current;
+      if (el) el.style.transform = `translate3d(${e.clientX + GHOST_DX}px, ${e.clientY + GHOST_DY}px, 0)`;
+    };
+    window.addEventListener('mousemove', onMove);
+    return () => window.removeEventListener('mousemove', onMove);
+  }, [drag]);
 
   const cellValid = (cellStart: Instant, durationMs: number, valid: Interval[]): boolean =>
     valid.some((w) => w.start <= cellStart && cellStart + durationMs <= w.end);
@@ -406,13 +447,13 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
             {agenda.todo.map((t: AgendaTask) => (
               <div
                 key={t.task.id}
-                className={`px-todo-item${t.kind === 'activity' ? ' px-todo-item--inbox' : ''}`}
+                className={`px-todo-item${t.kind === 'activity' ? ' px-todo-item--inbox' : ''}${drag?.taskId === t.task.id ? ' px-todo-item--dragging' : ''}`}
                 data-testid={`todo-${t.task.id}`}
                 data-kind={t.kind}
                 title={rowTitle(t)}
                 onMouseDown={(e) => {
                   e.preventDefault();
-                  startTaskDrag(t.schedulable);
+                  startTaskDrag(t.schedulable, t.task.title, e);
                 }}
               >
                 <span className="px-todo-title">{t.task.title}</span>
@@ -434,13 +475,13 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
               {agenda.allTasks.map((t: AgendaTask) => (
                 <div
                   key={t.task.id}
-                  className={`px-todo-item${t.scheduled ? ' px-todo-item--placed' : ''}${t.kind === 'activity' ? ' px-todo-item--inbox' : ''}`}
+                  className={`px-todo-item${t.scheduled ? ' px-todo-item--placed' : ''}${t.kind === 'activity' ? ' px-todo-item--inbox' : ''}${drag?.taskId === t.task.id ? ' px-todo-item--dragging' : ''}`}
                   data-testid={`alltask-${t.task.id}`}
                   data-kind={t.kind}
                   title={rowTitle(t)}
                   onMouseDown={(e) => {
                     e.preventDefault();
-                    startTaskDrag(t.schedulable);
+                    startTaskDrag(t.schedulable, t.task.title, e);
                   }}
                 >
                   <span className="px-todo-title">{t.task.title}</span>
@@ -542,7 +583,7 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
                       onMouseDown={(e) => {
                         if (b.status !== 'committed') return;
                         e.preventDefault();
-                        startBlockDrag(b);
+                        startBlockDrag(b, e);
                       }}
                       onClick={() => {
                         setSelectedBlockId(b.id);
@@ -622,6 +663,22 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
           )}
         </div>
       </div>
+
+      {/* The grabbed item, following the cursor until it is dropped. `pointer-events:
+          none` is load-bearing: without it the card sits under the pointer and eats
+          the mouseup that the calendar cell needs to receive the drop. */}
+      {drag && (
+        <div
+          ref={ghostRef}
+          className="px-drag-ghost"
+          data-testid="drag-ghost"
+          aria-hidden="true"
+          style={{ transform: `translate3d(${drag.originX + GHOST_DX}px, ${drag.originY + GHOST_DY}px, 0)` }}
+        >
+          <span className="px-drag-ghost-title">{drag.title}</span>
+          <span className="px-drag-ghost-dur">{Math.round(drag.durationMs / MS_PER_MIN)}m</span>
+        </div>
+      )}
     </section>
   );
 }
