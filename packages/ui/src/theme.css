@@ -56,7 +56,12 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
 
 /* ── app shell v2 (web redesign W1): sidebar with grouped nav + topbar. Ported
    from docs/mockups/web-layout-redesign.html (.app/.sb/.topbar), px-prefixed. ── */
-.px-app { display: flex; min-height: 100vh; }
+/* The shell fills the viewport EXACTLY and never grows past it, so the only
+   thing that scrolls is `.px-content`. With `min-height` the app grew with its
+   content, the whole page scrolled, and the sidebar's foot (Settings, the user,
+   sign-out) rode down out of sight on any tall screen. `dvh` after `vh` so a
+   mobile browser's collapsing chrome does not clip it. */
+.px-app { display: flex; height: 100vh; height: 100dvh; overflow: hidden; }
 .px-sidebar { width: 234px; flex: none; display: flex; flex-direction: column; padding: 12px 10px 10px; background: var(--px-sb-bg); border-right: 1px solid var(--px-border); transition: width 140ms ease; }
 .px-brand { display: flex; align-items: center; gap: 8px; padding: 2px 8px 10px; font-weight: 650; font-size: 14px; letter-spacing: 0.1px; }
 
@@ -90,7 +95,9 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
 @media (prefers-reduced-motion: reduce) { .px-sidebar { transition: none; } }
 .px-brand-logo { width: 22px; height: 22px; border-radius: 6px; background: var(--px-blue); color: #fff; display: flex; align-items: center; justify-content: center; flex: none; }
 .px-brand-logo .px-ic { width: 13px; height: 13px; }
-.px-nav { flex: 1; overflow-y: auto; padding-bottom: 8px; }
+/* min-height:0 — a flex item defaults to min-height:auto, which refuses to
+   shrink below its content and would push the foot out of the column again. */
+.px-nav { flex: 1; min-height: 0; overflow-y: auto; padding-bottom: 8px; }
 .px-nav-group { margin: 14px 8px 4px; font-size: 10.5px; font-weight: 640; letter-spacing: 0.7px; color: var(--px-faint); text-transform: uppercase; }
 .px-navlink { display: flex; align-items: center; gap: 9px; padding: 6px 9px; margin: 1px 0; border-radius: 7px; color: var(--px-text-dim); text-decoration: none; font-size: 13px; font-weight: 480; cursor: pointer; }
 .px-navlink .px-ic { width: 16px; height: 16px; color: var(--px-faint); }
@@ -105,7 +112,7 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
 .px-avatar { width: 24px; height: 24px; border-radius: 50%; background: var(--px-teal); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 640; flex: none; }
 
 /* main column: topbar over a scrolling content area */
-.px-shell { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.px-shell { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .px-topbar { height: 50px; flex: none; background: var(--px-surface); border-bottom: 1px solid var(--px-border); display: flex; align-items: center; gap: 12px; padding: 0 20px; }
 .px-crumb { font-size: 13px; color: var(--px-faint); }
 .px-crumb b { color: var(--px-text); font-weight: 600; }
@@ -650,7 +657,9 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
 /* The shell used to be pinned at `min-width: 1024px`, so a narrow window scrolled
    sideways instead of adapting. It now reflows: the sidebar drops to a rail and
    the Agenda restacks + sheds day columns (see .px-agenda--stack below). */
-.px-content { min-width: 0; }
+/* min-height:0 lets it actually shrink inside the fixed-height shell, which is
+   what makes IT the scroller instead of the page. */
+.px-content { min-width: 0; min-height: 0; }
 /* a visible focus ring for KEYBOARD navigation only (mouse clicks don't trigger it). */
 :focus-visible { outline: 2px solid var(--px-accent); outline-offset: 2px; }
 .px-navlink:focus-visible,
