@@ -222,18 +222,16 @@ export function DayJournalPanel({
         {/* The title is editable; the DATE moves below it, so renaming a note
             never costs you the day it belongs to. */}
         <div className="px-jn-head">
-          {/* BLANK until the note is actually known. Both the value and the
-              default heading are claims about a note: while the row is still
-              arriving we have neither, so the field shows nothing at all rather
-              than flashing "Note · <date>" and correcting itself. Once the note
-              exists, an untitled one offers the default as a PLACEHOLDER — a
-              suggestion, not a name it already has. */}
+          {/* The heading is the note's title, or "Note · <date>" when it has
+              none — but ONLY once the note has loaded and that absence is a
+              fact. While the row is still arriving we know neither, so the field
+              stays blank rather than showing the default for a moment and then
+              correcting itself. */}
           <input
             className="px-jn-title"
             data-testid="journal-title"
             aria-label="note title"
-            value={titleDraft ?? entry?.title ?? ''}
-            placeholder={hasNote ? journalTitleOf('', date) : ''}
+            value={titleDraft ?? (hasNote ? heading : '')}
             disabled={!hasNote || preview}
             title={hasNote ? heading : 'Write something first — an empty day is not saved'}
             onChange={(e) => setTitleDraft(e.target.value)}

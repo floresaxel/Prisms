@@ -367,8 +367,6 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
 .px-jn-title:hover:not(:disabled) { border-color: var(--px-border); }
 .px-jn-title:focus { outline: none; border-color: var(--px-accent); background: var(--px-surface); }
 .px-jn-title:disabled { color: var(--px-text); opacity: 1; }
-/* the untitled default reads as a suggestion, not as the note's name */
-.px-jn-title::placeholder { color: var(--px-text-dim); font-weight: 560; opacity: 1; }
 .px-jn-date { font-size: 11.5px; color: var(--px-faint); font-variant-numeric: tabular-nums; padding-left: 0; }
 
 /* journal (D2/D3/J7): day-header note affordance + TipTap WYSIWYG editor + toolbar + markdown preview */

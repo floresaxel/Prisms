@@ -291,18 +291,14 @@ describe('DayJournalPanel — editor', () => {
 
   // --- the editable title ---------------------------------------------------
 
-  it('offers "Note · <date>" as the default, as a PLACEHOLDER not a value', () => {
-    // Rendering the default as a value asserted a name the note does not have,
-    // which flashed and then corrected itself once the row arrived.
+  it('defaults an untitled note to "Note · <date>" once it has loaded', () => {
     state.entry = { id: 'j1', content: 'x', deleted_at: null, locked: false };
     render(createElement(DayJournalPanel, { date: '2026-08-05', ctx: CTX, actions: 'lock' }));
-    const input = screen.getByTestId('journal-title') as HTMLInputElement;
-    expect(input.value).toBe(''); // untitled
-    expect(input.placeholder).toBe('Note · 2026-08-05');
+    expect((screen.getByTestId('journal-title') as HTMLInputElement).value).toBe('Note · 2026-08-05');
     expect(screen.getByTestId('journal-date').textContent).toBe('2026-08-05');
   });
 
-  it('is BLANK while the day is still loading — no default, no title', () => {
+  it('is BLANK while the day is still loading — the default must not flash first', () => {
     state.entry = null;
     state.loading = true;
     render(createElement(DayJournalPanel, { date: '2026-08-05', ctx: CTX, actions: 'lock' }));
@@ -317,7 +313,6 @@ describe('DayJournalPanel — editor', () => {
     render(createElement(DayJournalPanel, { date: '2026-08-05', ctx: CTX, actions: 'lock' }));
     const input = screen.getByTestId('journal-title') as HTMLInputElement;
     expect(input.value).toBe('');
-    expect(input.placeholder).toBe('');
     expect(input.disabled).toBe(true);
   });
 
@@ -352,10 +347,10 @@ describe('DayJournalPanel — editor', () => {
     expect((screen.getByTestId('journal-title') as HTMLInputElement).disabled).toBe(true);
   });
 
-  it('offers the default only once the note exists', () => {
-    state.entry = { id: 'j1', content: 'x', deleted_at: null, locked: false };
+  it('a loaded note with a title shows the TITLE, never the default', () => {
+    state.entry = { id: 'j1', content: 'x', deleted_at: null, locked: false, title: 'Trip planning' };
     render(createElement(DayJournalPanel, { date: '2026-08-05', ctx: CTX, actions: 'lock' }));
-    expect((screen.getByTestId('journal-title') as HTMLInputElement).placeholder).toBe('Note · 2026-08-05');
+    expect((screen.getByTestId('journal-title') as HTMLInputElement).value).toBe('Trip planning');
   });
 
   it('flushes a pending debounced save on unmount (day switch, no blur) — last edit not lost', () => {
