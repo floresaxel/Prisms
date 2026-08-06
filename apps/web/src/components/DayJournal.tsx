@@ -113,12 +113,14 @@ export function DayJournalPanel({
   const [titleDraft, setTitleDraft] = useState<string | null>(null);
 
   function commitTitle() {
-    const next = (titleDraft ?? '').trim();
-    setTitleDraft(null);
-    if (!existingId || next === heading) return;
+    if (titleDraft === null) return; // nothing typed
     // typing the default back is the same as clearing it — stay untitled so the
     // heading keeps tracking the date.
-    void commands.setJournalTitle(existingId, next === journalTitleOf('', date) ? '' : next);
+    const typed = titleDraft.trim();
+    const next = typed === journalTitleOf('', date) ? '' : typed;
+    setTitleDraft(null);
+    if (!existingId || next === (entry?.title ?? '')) return;
+    void commands.setJournalTitle(existingId, next);
   }
 
   function toggleLock() {
@@ -220,20 +222,36 @@ export function DayJournalPanel({
         {/* The title is editable; the DATE moves below it, so renaming a note
             never costs you the day it belongs to. */}
         <div className="px-jn-head">
-          <input
-            className="px-jn-title"
-            data-testid="journal-title"
-            aria-label="note title"
-            value={titleDraft ?? heading}
-            disabled={!hasNote || preview}
-            title={hasNote ? undefined : 'Write something first — an empty day is not saved'}
-            onChange={(e) => setTitleDraft(e.target.value)}
-            onBlur={commitTitle}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') e.currentTarget.blur();
-              if (e.key === 'Escape') setTitleDraft(null);
-            }}
-          />
+          {/* Until the day's row has loaded we do NOT know its title, and the
+              default is a claim about the note ("it is untitled") — rendering it
+              early flashed "Note · <date>" for half a second before the real
+              title replaced it. A placeholder asserts nothing. */}
+          {isLoading ? (
+            <span className="px-skeleton px-jn-title-skel" data-testid="journal-title-loading" aria-label="loading note title" role="img" />
+          ) : (
+            /* The default is the PLACEHOLDER, not the value: an untitled note
+               genuinely has no title, and rendering the default as a value
+               asserted a name the note did not have — which is what flashed and
+               then corrected itself while the row was still arriving. As a
+               placeholder it reads as "this is what it will be called", and a
+               title landing a beat later replaces muted grey rather than
+               overwriting a confident wrong heading. */
+            <input
+              className="px-jn-title"
+              data-testid="journal-title"
+              aria-label="note title"
+              value={titleDraft ?? entry?.title ?? ''}
+              placeholder={heading}
+              disabled={!hasNote || preview}
+              title={hasNote ? heading : 'Write something first — an empty day is not saved'}
+              onChange={(e) => setTitleDraft(e.target.value)}
+              onBlur={commitTitle}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') e.currentTarget.blur();
+                if (e.key === 'Escape') setTitleDraft(null);
+              }}
+            />
+          )}
           <span className="px-jn-date" data-testid="journal-date">{date}</span>
         </div>
         {/* `lock`: one button, nothing else — the icon is the affordance for what

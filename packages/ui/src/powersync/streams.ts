@@ -58,6 +58,16 @@ export interface JournalMonthSubscriptions {
   hold(monthKey: string): () => void;
   /** Months currently held (introspection/tests). */
   heldMonths(): string[];
+  /**
+   * Has this month's FIRST SYNC finished — i.e. is "no row for that day" now a
+   * fact rather than "not downloaded yet"? A reader that cannot tell the two
+   * apart renders a day as empty and then corrects itself a beat later.
+   * Unheld months report false. A first sync that fails still settles, so a
+   * reader gated on this can never hang.
+   */
+  isSettled(monthKey: string): boolean;
+  /** Re-render hook: notified whenever any month settles. Returns an unsubscribe. */
+  onSettledChange(listener: () => void): () => void;
 }
 
 /**
@@ -73,6 +83,13 @@ export interface JournalMonthSubscriptions {
 export function createJournalMonthSubscriptions(db: StreamSubscriber, opts: JournalMonthOptions = {}): JournalMonthSubscriptions {
   const ttl = opts.ttlSeconds ?? 3600;
   const held = new Map<string, { count: number; sub: Promise<StreamSubscription> }>();
+  const settled = new Set<string>();
+  const listeners = new Set<() => void>();
+  const markSettled = (monthKey: string) => {
+    if (settled.has(monthKey) || !held.has(monthKey)) return;
+    settled.add(monthKey);
+    for (const l of listeners) l();
+  };
   return {
     hold(monthKey) {
       let entry = held.get(monthKey);
@@ -80,6 +97,12 @@ export function createJournalMonthSubscriptions(db: StreamSubscriber, opts: Jour
         const sub = db.syncStream(JOURNAL_MONTH_STREAM, { month: monthKey }).subscribe({ ttl, priority: 3 });
         entry = { count: 0, sub };
         held.set(monthKey, entry);
+        // Settle on success OR failure: a reader gated on this must never hang,
+        // and a month that cannot sync is still "as known as it is going to get".
+        void sub
+          .then((s) => s.waitForFirstSync())
+          .then(() => markSettled(monthKey))
+          .catch(() => markSettled(monthKey));
       }
       entry.count += 1;
       let released = false;
@@ -91,12 +114,21 @@ export function createJournalMonthSubscriptions(db: StreamSubscriber, opts: Jour
         e.count -= 1;
         if (e.count <= 0) {
           held.delete(monthKey);
+          // a re-hold re-subscribes, so it must wait for its own first sync again
+          settled.delete(monthKey);
           void e.sub.then((s) => s.unsubscribe()).catch(() => undefined);
         }
       };
     },
     heldMonths() {
       return [...held.keys()];
+    },
+    isSettled(monthKey) {
+      return settled.has(monthKey);
+    },
+    onSettledChange(listener) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
     },
   };
 }

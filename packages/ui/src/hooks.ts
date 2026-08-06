@@ -2,7 +2,7 @@
  * Reactive hooks (§12.2): PowerSync reactive queries → core selectors → React.
  * No view caches derived status; it recomputes on data change (microseconds).
  */
-import { useEffect, useMemo, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useMemo, useSyncExternalStore } from 'react';
 
 import { usePowerSync, useQuery } from '@powersync/react';
 import {
@@ -1635,13 +1635,26 @@ export function useJournalMonths(monthKeys: readonly string[]): JournalMonthsRea
   const db = usePowerSync();
   const key = useMemo(() => [...new Set(monthKeys)].sort(), [monthKeys.join('\0')]);
 
+  const mgr = journalSubsFor(db as unknown as object);
   useEffect(() => {
-    const mgr = journalSubsFor(db as unknown as object);
     const releases = key.map((m) => mgr.hold(m));
     return () => {
       for (const release of releases) release();
     };
-  }, [db, key]);
+  }, [mgr, key]);
+
+  /**
+   * Have the held months finished their first sync? Until they have, an empty
+   * result means "not downloaded yet", NOT "this day has no note" — and a reader
+   * that confuses the two renders the day as blank and then corrects itself. The
+   * day panel showed "Note · <date>" for ~half a second before the real title
+   * replaced it, because the local query resolves long before the rows land.
+   */
+  const monthsSettled = useSyncExternalStore(
+    useCallback((onChange: () => void) => mgr.onSettledChange(onChange), [mgr]),
+    () => key.every((m) => mgr.isSettled(m)),
+    () => true, // SSR//no-store: nothing to wait for
+  );
 
   const sql = key.length
     ? `SELECT * FROM journal_entries WHERE deleted_at IS NULL AND month_key IN (${key.map(() => '?').join(',')})`
@@ -1655,7 +1668,7 @@ export function useJournalMonths(monthKeys: readonly string[]): JournalMonthsRea
         .sort((a, b) => (a.entry_date < b.entry_date ? -1 : a.entry_date > b.entry_date ? 1 : 0)),
     [read.data, key],
   );
-  return { entries, isLoading: read.isLoading };
+  return { entries, isLoading: read.isLoading || !monthsSettled };
 }
 
 export interface JournalDayRead {

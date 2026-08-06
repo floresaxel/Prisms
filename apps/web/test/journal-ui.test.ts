@@ -18,6 +18,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 const state = {
   entry: null as null | { id: string; content: string; deleted_at: null; locked?: boolean; title?: string },
   months: [] as { entry_date: string; content: string }[],
+  loading: false,
 };
 const commandFns = new Map<string, ReturnType<typeof vi.fn>>();
 const command = (name: string) => {
@@ -31,7 +32,7 @@ vi.mock('@prisms/ui', async (importOriginal) => {
   return {
     ...actual,
     useCommands: () => commands,
-    useJournalDay: () => ({ entry: state.entry, isLoading: false }),
+    useJournalDay: () => ({ entry: state.entry, isLoading: state.loading }),
     useJournalMonths: () => ({ entries: state.months, isLoading: false }),
     useAgenda: () => ({
       input: { tasks: [], committed: [], windows: [], timezone: 'UTC', horizon: { from: 0, to: 0 }, mode: 'greedy' },
@@ -86,6 +87,7 @@ afterEach(() => {
   cleanup();
   state.entry = null;
   state.months = [];
+  state.loading = false;
   commandFns.clear();
   store.clear(); // per-day lock state persists across mounts by design
 });
@@ -289,11 +291,24 @@ describe('DayJournalPanel — editor', () => {
 
   // --- the editable title ---------------------------------------------------
 
-  it('defaults the title to "Note · <date>" and shows the date separately', () => {
+  it('offers "Note · <date>" as the default, as a PLACEHOLDER not a value', () => {
+    // Rendering the default as a value asserted a name the note does not have,
+    // which flashed and then corrected itself once the row arrived.
     state.entry = { id: 'j1', content: 'x', deleted_at: null, locked: false };
     render(createElement(DayJournalPanel, { date: '2026-08-05', ctx: CTX, actions: 'lock' }));
-    expect((screen.getByTestId('journal-title') as HTMLInputElement).value).toBe('Note · 2026-08-05');
+    const input = screen.getByTestId('journal-title') as HTMLInputElement;
+    expect(input.value).toBe(''); // untitled
+    expect(input.placeholder).toBe('Note · 2026-08-05');
     expect(screen.getByTestId('journal-date').textContent).toBe('2026-08-05');
+  });
+
+  it('shows a skeleton instead of a heading while the day is still loading', () => {
+    state.entry = null;
+    state.loading = true;
+    render(createElement(DayJournalPanel, { date: '2026-08-05', ctx: CTX, actions: 'lock' }));
+    expect(screen.queryByTestId('journal-title')).toBeNull(); // nothing asserted
+    expect(screen.getByTestId('journal-title-loading')).toBeTruthy();
+    expect(screen.getByTestId('journal-date').textContent).toBe('2026-08-05'); // the day is known
   });
 
   it('shows a stored title, with the date still visible', () => {
