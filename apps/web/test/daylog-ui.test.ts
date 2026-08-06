@@ -22,7 +22,7 @@ const NY = 'America/New_York';
 const ZWJ = '👨‍👩‍👧‍👦';
 
 const state = {
-  entry: null as null | { id: string; content: string; deleted_at: null },
+  entry: null as null | { id: string; content: string; deleted_at: null; locked?: boolean },
   dayLog: null as DayLogEntries | null,
   journalDayLog: true,
 };
@@ -60,6 +60,9 @@ import { downloadJournalArchive } from '../src/portability';
 
 const CTX = { userId: 'u1', deviceId: 'web-1', now: () => '2026-05-08T18:00:00.000Z' };
 const DAY = '2026-05-08';
+
+/** Lock-edit / Export / Delete live behind the corner "⋯" menu — open it first. */
+const openNoteMenu = () => fireEvent.click(screen.getByTestId('journal-menu'));
 
 /** Real entries from the real compute — the UI is tested against actual output. */
 function sampleLog(): DayLogEntries {
@@ -152,13 +155,17 @@ describe('DayJournalPanel — the footer sits outside the editor', () => {
   it('renders below the editor AND below the preview, never inside either', () => {
     state.entry = { id: 'j1', content: 'my note', deleted_at: null };
     state.dayLog = sampleLog();
-    render(createElement(DayJournalPanel, { date: DAY, ctx: CTX }));
+    const editable = render(createElement(DayJournalPanel, { date: DAY, ctx: CTX }));
 
     const editor = screen.getByTestId('journal-rich');
     expect(screen.getByTestId('daylog')).toBeTruthy();
     expect(editor.contains(screen.getByTestId('daylog'))).toBe(false);
+    editable.unmount();
 
-    fireEvent.click(screen.getByTestId('journal-preview-toggle'));
+    // locked is a SYNCED field on the row now, so the read-only mode is reached
+    // by the row saying so — not by a click on local state.
+    state.entry = { id: 'j1', content: 'my note', deleted_at: null, locked: true };
+    render(createElement(DayJournalPanel, { date: DAY, ctx: CTX }));
     expect(screen.getByTestId('daylog')).toBeTruthy();
     expect(screen.getByTestId('journal-preview').contains(screen.getByTestId('daylog'))).toBe(false);
   });
@@ -180,6 +187,7 @@ describe('DayJournalPanel — the footer sits outside the editor', () => {
     const revoke = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
     const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
 
+    openNoteMenu();
     fireEvent.click(screen.getByTestId('journal-export'));
 
     const text = await captured!.text();
@@ -202,6 +210,7 @@ describe('DayJournalPanel — the footer sits outside the editor', () => {
     const revoke = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
     const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
 
+    openNoteMenu();
     fireEvent.click(screen.getByTestId('journal-export'));
 
     expect(await captured!.text()).toBe('note only');

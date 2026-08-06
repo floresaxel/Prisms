@@ -16,8 +16,9 @@ import { strFromU8, unzipSync } from 'fflate';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const state = {
-  entry: null as null | { id: string; content: string; deleted_at: null },
+  entry: null as null | { id: string; content: string; deleted_at: null; locked?: boolean; title?: string },
   months: [] as { entry_date: string; content: string }[],
+  loading: false,
 };
 const commandFns = new Map<string, ReturnType<typeof vi.fn>>();
 const command = (name: string) => {
@@ -31,7 +32,7 @@ vi.mock('@prisms/ui', async (importOriginal) => {
   return {
     ...actual,
     useCommands: () => commands,
-    useJournalDay: () => ({ entry: state.entry, isLoading: false }),
+    useJournalDay: () => ({ entry: state.entry, isLoading: state.loading }),
     useJournalMonths: () => ({ entries: state.months, isLoading: false }),
     useAgenda: () => ({
       input: { tasks: [], committed: [], windows: [], timezone: 'UTC', horizon: { from: 0, to: 0 }, mode: 'greedy' },
@@ -39,6 +40,7 @@ vi.mock('@prisms/ui', async (importOriginal) => {
       blocks: [],
       entries: [],
       todo: [],
+      allTasks: [],
     }),
     useIsHydrated: () => true,
     useBlockTags: () => [],
@@ -71,15 +73,23 @@ vi.mock('../src/components/RichJournalEditor', async () => {
 import { DayJournalPanel, MarkdownView } from '../src/components/DayJournal';
 import { Agenda } from '../src/screens/Agenda';
 import { downloadJournalArchive } from '../src/portability';
+import { installMemoryStorage } from './util/memory-storage';
+
+const store = installMemoryStorage();
 
 const CTX = { userId: 'u1', deviceId: 'web-1', now: () => '2026-06-27T00:00:00.000Z' };
 const ZWJ = '👨‍👩‍👧‍👦';
+
+/** Lock-edit / Export / Delete live behind the corner "⋯" menu — open it first. */
+const openNoteMenu = () => fireEvent.click(screen.getByTestId('journal-menu'));
 
 afterEach(() => {
   cleanup();
   state.entry = null;
   state.months = [];
+  state.loading = false;
   commandFns.clear();
+  store.clear(); // per-day lock state persists across mounts by design
 });
 
 describe('MarkdownView — sanitized rendering (D2)', () => {
@@ -114,11 +124,20 @@ describe('DayJournalPanel — editor', () => {
     expect((screen.getByTestId('journal-rich') as HTMLTextAreaElement).value).toBe(`${ZWJ} family`);
   });
 
-  it('preview toggle renders the markdown', () => {
-    state.entry = { id: 'j1', content: '# Title', deleted_at: null };
-    render(createElement(DayJournalPanel, { date: '2026-06-11', ctx: CTX }));
+  it('the menu offers "Lock edit" while editable and "Edit" once the row is locked', () => {
+    state.entry = { id: 'j1', content: '# Title', deleted_at: null, locked: false };
+    const editable = render(createElement(DayJournalPanel, { date: '2026-06-11', ctx: CTX }));
+    openNoteMenu();
+    expect(screen.getByTestId('journal-preview-toggle').textContent).toBe('Lock edit');
     fireEvent.click(screen.getByTestId('journal-preview-toggle'));
+    expect(screen.queryByTestId('journal-menu-pop')).toBeNull(); // acting closes it
+    editable.unmount();
+
+    state.entry = { id: 'j1', content: '# Title', deleted_at: null, locked: true };
+    render(createElement(DayJournalPanel, { date: '2026-06-11', ctx: CTX }));
     expect(screen.getByTestId('journal-preview').querySelector('h1')?.textContent).toBe('Title');
+    openNoteMenu();
+    expect(screen.getByTestId('journal-preview-toggle').textContent).toBe('Edit');
   });
 
   it('Export .md downloads the current content as YYYY-MM-DD.md', async () => {
@@ -134,6 +153,7 @@ describe('DayJournalPanel — editor', () => {
       if (captured) captured.name = this.download;
     });
 
+    openNoteMenu();
     fireEvent.click(screen.getByTestId('journal-export'));
 
     expect(captured).not.toBeNull();
@@ -147,15 +167,207 @@ describe('DayJournalPanel — editor', () => {
   it('Delete calls journal.delete for the live row', () => {
     state.entry = { id: 'j1', content: 'x', deleted_at: null };
     render(createElement(DayJournalPanel, { date: '2026-06-11', ctx: CTX }));
+    openNoteMenu();
     fireEvent.click(screen.getByTestId('journal-delete'));
     expect(command('deleteJournal')).toHaveBeenCalledWith('j1');
+  });
+
+  it('the note actions are ONLY reachable through the corner menu', () => {
+    state.entry = { id: 'j1', content: 'x', deleted_at: null };
+    render(createElement(DayJournalPanel, { date: '2026-06-11', ctx: CTX }));
+    for (const id of ['journal-preview-toggle', 'journal-export', 'journal-delete']) {
+      expect(screen.queryByTestId(id)).toBeNull();
+    }
+    openNoteMenu();
+    for (const id of ['journal-preview-toggle', 'journal-export', 'journal-delete']) {
+      expect(screen.getByTestId(id)).toBeTruthy();
+    }
+  });
+
+  it('actions="lock" (the Agenda) shows ONE control and no menu at all', () => {
+    state.entry = { id: 'j1', content: '# Title', deleted_at: null, locked: false };
+    const editable = render(createElement(DayJournalPanel, { date: '2026-06-11', ctx: CTX, actions: 'lock' }));
+    for (const id of ['journal-menu', 'journal-export', 'journal-delete']) {
+      expect(screen.queryByTestId(id)).toBeNull();
+    }
+    // the icon IS the affordance: a padlock while editable, a pencil while locked
+    const toggle = screen.getByTestId('journal-preview-toggle');
+    expect(toggle.getAttribute('aria-pressed')).toBe('false');
+    expect(toggle.querySelector('use')?.getAttribute('href')).toBe('#i-lock');
+    expect(toggle.getAttribute('title')).toBe('Lock edit');
+    editable.unmount();
+
+    state.entry = { id: 'j1', content: '# Title', deleted_at: null, locked: true };
+    render(createElement(DayJournalPanel, { date: '2026-06-11', ctx: CTX, actions: 'lock' }));
+    expect(screen.getByTestId('journal-preview').querySelector('h1')?.textContent).toBe('Title');
+    const locked = screen.getByTestId('journal-preview-toggle');
+    expect(locked.getAttribute('aria-pressed')).toBe('true');
+    expect(locked.querySelector('use')?.getAttribute('href')).toBe('#i-pen');
+    expect(locked.getAttribute('title')).toBe('Edit');
+  });
+
+  it('renders the lock state from the SYNCED row, not local state', () => {
+    // `locked` is a field on the day's own row, so it arrives with the entry and
+    // is per-day by construction — the panel holds no lock state of its own.
+    state.entry = { id: 'j1', content: '# Mon', deleted_at: null, locked: true };
+    const locked = render(createElement(DayJournalPanel, { date: '2026-08-03', ctx: CTX, actions: 'lock' }));
+    expect(screen.getByTestId('journal-preview')).toBeTruthy();
+    expect(screen.getByTestId('journal-preview-toggle').getAttribute('aria-pressed')).toBe('true');
+    locked.unmount();
+
+    state.entry = { id: 'j2', content: '# Tue', deleted_at: null, locked: false };
+    render(createElement(DayJournalPanel, { date: '2026-08-04', ctx: CTX, actions: 'lock' }));
+    expect(screen.getByTestId('journal-rich')).toBeTruthy();
+    expect(screen.queryByTestId('journal-preview')).toBeNull();
+  });
+
+  it('a day with no row yet is editable', () => {
+    state.entry = null;
+    render(createElement(DayJournalPanel, { date: '2026-08-09', ctx: CTX, actions: 'lock' }));
+    expect(screen.getByTestId('journal-rich')).toBeTruthy();
+    expect(screen.getByTestId('journal-preview-toggle').getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('the lock toggle uploads journal.set_locked for THAT note', () => {
+    state.entry = { id: 'j1', content: 'x', deleted_at: null, locked: false };
+    render(createElement(DayJournalPanel, { date: '2026-08-07', ctx: CTX, actions: 'lock' }));
+    fireEvent.click(screen.getByTestId('journal-preview-toggle'));
+    expect(command('setJournalLocked')).toHaveBeenCalledWith('j1', true);
+  });
+
+  it('a day with no note cannot be locked — there is nothing to lock', () => {
+    state.entry = null;
+    render(createElement(DayJournalPanel, { date: '2026-08-09', ctx: CTX, actions: 'lock' }));
+    const toggle = screen.getByTestId('journal-preview-toggle') as HTMLButtonElement;
+    expect(toggle.disabled).toBe(true);
+    fireEvent.click(toggle);
+    expect(command('setJournalLocked')).not.toHaveBeenCalled();
+  });
+
+  it('the menu variant issues the same command', () => {
+    state.entry = { id: 'j1', content: 'x', deleted_at: null, locked: true };
+    render(createElement(DayJournalPanel, { date: '2026-08-07', ctx: CTX }));
+    openNoteMenu();
+    fireEvent.click(screen.getByTestId('journal-preview-toggle'));
+    expect(command('setJournalLocked')).toHaveBeenCalledWith('j1', false);
+  });
+
+  it('Delete is absent for a day with no saved note', () => {
+    state.entry = null;
+    render(createElement(DayJournalPanel, { date: '2026-06-11', ctx: CTX }));
+    openNoteMenu();
+    expect(screen.queryByTestId('journal-delete')).toBeNull();
+    expect(screen.getByTestId('journal-export')).toBeTruthy();
+  });
+
+  // --- an empty note is not a note -----------------------------------------
+
+  it('typing nothing on a blank day stores NOTHING', () => {
+    state.entry = null;
+    const { unmount } = render(createElement(DayJournalPanel, { date: '2026-08-11', ctx: CTX }));
+    fireEvent.change(screen.getByTestId('journal-rich'), { target: { value: '   \n\n' } });
+    unmount(); // flush
+    expect(command('writeJournal')).not.toHaveBeenCalled();
+    expect(command('deleteJournal')).not.toHaveBeenCalled();
+  });
+
+  it('clearing all the text DELETES the entry rather than storing a blank one', () => {
+    state.entry = { id: 'j1', content: 'had words', deleted_at: null, locked: false };
+    const { unmount } = render(createElement(DayJournalPanel, { date: '2026-08-11', ctx: CTX }));
+    fireEvent.change(screen.getByTestId('journal-rich'), { target: { value: '' } });
+    unmount();
+    expect(command('deleteJournal')).toHaveBeenCalledWith('j1');
+    expect(command('writeJournal')).not.toHaveBeenCalled();
+  });
+
+  it('a leftover bullet or heading marker still counts as empty', () => {
+    state.entry = { id: 'j1', content: 'had words', deleted_at: null, locked: false };
+    const { unmount } = render(createElement(DayJournalPanel, { date: '2026-08-11', ctx: CTX }));
+    fireEvent.change(screen.getByTestId('journal-rich'), { target: { value: '- \n\n#' } });
+    unmount();
+    expect(command('deleteJournal')).toHaveBeenCalledWith('j1');
+    expect(command('writeJournal')).not.toHaveBeenCalled();
+  });
+
+  // --- the editable title ---------------------------------------------------
+
+  it('defaults an untitled note to "Note · <date>" once it has loaded', () => {
+    state.entry = { id: 'j1', content: 'x', deleted_at: null, locked: false };
+    render(createElement(DayJournalPanel, { date: '2026-08-05', ctx: CTX, actions: 'lock' }));
+    expect((screen.getByTestId('journal-title') as HTMLInputElement).value).toBe('Note · 2026-08-05');
+    expect(screen.getByTestId('journal-date').textContent).toBe('2026-08-05');
+  });
+
+  it('is BLANK while the day is still loading — the default must not flash first', () => {
+    state.entry = null;
+    state.loading = true;
+    render(createElement(DayJournalPanel, { date: '2026-08-05', ctx: CTX, actions: 'lock' }));
+    const input = screen.getByTestId('journal-title') as HTMLInputElement;
+    expect(input.value).toBe('');
+    expect(input.placeholder).toBe(''); // nothing claimed about a note we do not have
+    expect(screen.getByTestId('journal-date').textContent).toBe('2026-08-05'); // the day IS known
+  });
+
+  it('an EMPTY row that is locked is still editable — not a dead end', () => {
+    // Rows predating the empty-note rule can be both empty and locked. Honouring
+    // the lock there would leave the day unusable: no title and no unlock
+    // (it is not a note), and no editor to type into (it is locked).
+    state.entry = { id: 'j1', content: '', deleted_at: null, locked: true };
+    render(createElement(DayJournalPanel, { date: '2026-08-07', ctx: CTX, actions: 'lock' }));
+    expect(screen.getByTestId('journal-rich')).toBeTruthy(); // the editor, not the read-only render
+    expect(screen.queryByTestId('journal-preview')).toBeNull();
+  });
+
+  it('is blank for a day that has no note at all', () => {
+    state.entry = null;
+    render(createElement(DayJournalPanel, { date: '2026-08-05', ctx: CTX, actions: 'lock' }));
+    const input = screen.getByTestId('journal-title') as HTMLInputElement;
+    expect(input.value).toBe('');
+    expect(input.disabled).toBe(true);
+  });
+
+  it('shows a stored title, with the date still visible', () => {
+    state.entry = { id: 'j1', content: 'x', deleted_at: null, locked: false, title: 'Trip planning' };
+    render(createElement(DayJournalPanel, { date: '2026-08-05', ctx: CTX, actions: 'lock' }));
+    expect((screen.getByTestId('journal-title') as HTMLInputElement).value).toBe('Trip planning');
+    expect(screen.getByTestId('journal-date').textContent).toBe('2026-08-05');
+  });
+
+  it('renaming uploads journal.set_title on blur', () => {
+    state.entry = { id: 'j1', content: 'x', deleted_at: null, locked: false };
+    render(createElement(DayJournalPanel, { date: '2026-08-05', ctx: CTX, actions: 'lock' }));
+    const input = screen.getByTestId('journal-title');
+    fireEvent.change(input, { target: { value: 'Trip planning' } });
+    fireEvent.blur(input);
+    expect(command('setJournalTitle')).toHaveBeenCalledWith('j1', 'Trip planning');
+  });
+
+  it('typing the default back clears the title, so it keeps tracking the date', () => {
+    state.entry = { id: 'j1', content: 'x', deleted_at: null, locked: false, title: 'Trip planning' };
+    render(createElement(DayJournalPanel, { date: '2026-08-05', ctx: CTX, actions: 'lock' }));
+    const input = screen.getByTestId('journal-title');
+    fireEvent.change(input, { target: { value: 'Note · 2026-08-05' } });
+    fireEvent.blur(input);
+    expect(command('setJournalTitle')).toHaveBeenCalledWith('j1', '');
+  });
+
+  it('a day with no note cannot be titled', () => {
+    state.entry = null;
+    render(createElement(DayJournalPanel, { date: '2026-08-11', ctx: CTX, actions: 'lock' }));
+    expect((screen.getByTestId('journal-title') as HTMLInputElement).disabled).toBe(true);
+  });
+
+  it('a loaded note with a title shows the TITLE, never the default', () => {
+    state.entry = { id: 'j1', content: 'x', deleted_at: null, locked: false, title: 'Trip planning' };
+    render(createElement(DayJournalPanel, { date: '2026-08-05', ctx: CTX, actions: 'lock' }));
+    expect((screen.getByTestId('journal-title') as HTMLInputElement).value).toBe('Trip planning');
   });
 
   it('flushes a pending debounced save on unmount (day switch, no blur) — last edit not lost', () => {
     state.entry = { id: 'j1', content: 'start', deleted_at: null };
     const { unmount } = render(createElement(DayJournalPanel, { date: '2026-06-11', ctx: CTX }));
     fireEvent.change(screen.getByTestId('journal-rich'), { target: { value: 'start + more' } });
-    expect(command('writeJournal')).not.toHaveBeenCalled(); // still inside the 800ms debounce
+    expect(command('writeJournal')).not.toHaveBeenCalled(); // still inside the debounce window
 
     unmount(); // switch day before the debounce fires AND without an onBlur flush
     expect(command('writeJournal')).toHaveBeenCalledWith({ existingId: 'j1', entryDate: '2026-06-11', content: 'start + more' });

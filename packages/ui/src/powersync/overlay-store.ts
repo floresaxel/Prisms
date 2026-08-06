@@ -254,7 +254,20 @@ export function createSqlOverlayStore(sql: SqlExecutor): OverlayStore {
           }
         }
         if (allArrived) {
+          // A confirmed DELETE supersedes every overlay still held for that row.
+          // Without this, writing a row and deleting it before the canonical row
+          // has synced down strands the earlier insert effect forever: its row
+          // can never "arrive" (it is gone server-side), so the insert/update
+          // branch above waits on it indefinitely and the merged read keeps
+          // resurrecting a note the user deleted. Clearing an insert on absence
+          // ALONE would be wrong — absence is also just "not downloaded yet",
+          // which is exactly the revert-flicker this design avoids (S7-F6) — so
+          // it is scoped to rows a CONFIRMED delete has settled.
+          const deleted = effects.filter((e) => e.op === 'delete');
           await sql.writeTransaction(async (tx) => {
+            for (const e of deleted) {
+              await tx.execute('DELETE FROM overlay_effects WHERE table_name = ? AND row_id = ?', [e.table_name, e.row_id]);
+            }
             await tx.execute('DELETE FROM overlay_effects WHERE command_id = ?', [commandId]);
             await tx.execute('DELETE FROM client_commands WHERE id = ?', [commandId]);
           });

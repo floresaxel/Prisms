@@ -4,7 +4,7 @@
  * `react-native-markdown-display`. Native iOS/Android emoji keyboards type straight
  * into the TextInput (plain Unicode → journal.write). Rendering executes NO HTML
  * (markdown-it, html:false) and link taps are allowlisted to http/https/mailto.
- * Save debounces (800ms) + flushes on blur; Delete soft-deletes; Share exports the
+ * Save debounces (SAVE_DEBOUNCE_MS) + flushes on blur; Delete soft-deletes; Share exports the
  * single day's `.md` via the RN Share sheet (the exportAndShare precedent).
  */
 import { useEffect, useRef, useState } from 'react';
@@ -13,12 +13,13 @@ import { Share, TextInput, View } from 'react-native';
 import Markdown from 'react-native-markdown-display';
 
 import { composeDayMarkdown } from '@prisms/core';
-import { applyMarkdownEdit, journalDayFilename, useCommands, useDayLog, useJournalDay, useUserSettings, type CommandContext, type MarkdownAction, type Selection } from '@prisms/ui';
+import { applyMarkdownEdit, isJournalContentEmpty, journalDayFilename, journalTitleOf, useCommands, useDayLog, useJournalDay, useUserSettings, type CommandContext, type MarkdownAction, type Selection } from '@prisms/ui';
 
 import { DayLogFooter } from '../components/DayLogFooter';
 import { Btn, Card, H2, Row, theme } from '../ui';
 
-const SAVE_DEBOUNCE_MS = 800;
+/** Kept in step with the web panel and the day-note sheet (see DayJournal.tsx). */
+const SAVE_DEBOUNCE_MS = 100;
 /** Allow only these link schemes to open; everything else is blocked. */
 const SAFE_URL = /^(https?:|mailto:)/i;
 
@@ -57,7 +58,12 @@ export function JournalDay({ date, ctx, onClose }: { date: string; ctx: CommandC
   const dayLog = useDayLog(date);
   const { timezone } = useUserSettings();
   const [draft, setDraft] = useState(entry?.content ?? '');
-  const [preview, setPreview] = useState(false);
+  /**
+   * Read-only state for THIS day. A SYNCED field on the day's row (migration
+   * 0013), not local UI state — a day locked on the web or desktop opens locked
+   * here, and vice versa.
+   */
+  const preview = entry?.locked ?? false;
   const [sel, setSel] = useState<Selection>({ start: 0, end: 0 });
   const dirty = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -66,12 +72,22 @@ export function JournalDay({ date, ctx, onClose }: { date: string; ctx: CommandC
   useEffect(() => {
     if (!dirty.current) setDraft(entry?.content ?? '');
   }, [entry?.content]);
-  const write = (content: string) => commands.writeJournal({ existingId, entryDate: date, content });
+  // An empty note is not a note: blank content deletes the row (and with it the
+  // title and lock) rather than storing a day that holds nothing. Same rule as
+  // the web panel — see DayJournal.tsx.
+  const write = (content: string) => {
+    if (isJournalContentEmpty(content)) {
+      if (existingId) void commands.deleteJournal(existingId);
+      return;
+    }
+    void commands.writeJournal({ existingId, entryDate: date, content });
+  };
+  const hasNote = existingId !== undefined && !isJournalContentEmpty(draft);
 
   // A pending debounced save must survive unmount (switching day). RN's
   // keyboardShouldPersistTaps can let a day-switch tap through WITHOUT blurring
   // the TextInput, so onBlur may never fire — flush the latest draft here or the
-  // last <800ms of typing is lost. Guarded on `timer` so an already-flushed day
+  // last SAVE_DEBOUNCE_MS of typing is lost. Guarded on `timer` so an already-flushed day
   // (blur fired) doesn't re-write. The ref holds the newest draft/write closure.
   const flushPending = useRef<() => void>(() => undefined);
   flushPending.current = () => {
@@ -113,8 +129,13 @@ export function JournalDay({ date, ctx, onClose }: { date: string; ctx: CommandC
   return (
     <Card testID={`journal-${date}`}>
       <Row>
-        <H2>Note · {date}</H2>
-        <Btn title={preview ? 'Edit' : 'Preview'} testID="journal-preview-toggle" onPress={() => setPreview((p) => !p)} />
+        <H2>{journalTitleOf(entry?.title, date)}</H2>
+        <Btn
+          title={preview ? 'Edit' : 'Lock edit'}
+          testID="journal-preview-toggle"
+          disabled={!hasNote}
+          onPress={() => existingId && void commands.setJournalLocked(existingId, !preview)}
+        />
         {onClose && <Btn title="Close" testID="journal-close" onPress={onClose} />}
       </Row>
 

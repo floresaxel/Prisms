@@ -24,6 +24,7 @@ import {
   checkStepParent,
   isCommandName,
   isoToEpochMillis,
+  MAX_VISIONS,
   softDeleteClosure,
 } from '../../src/index';
 import { buildEdgeIndex } from '../../src/graph/dag';
@@ -31,14 +32,16 @@ import { buildTreeIndex } from '../../src/graph/tree';
 import { idOf, makeEdge, makeEntry, makeNode } from '../helpers/fixtures';
 
 describe('catalog completeness + strictness (DoD schema test)', () => {
-  it('registers all 50 §8.1 verbs (incl. layout.renormalize_order) + 7 tag + 2 review + 2 journal + 5 step verbs and resolves names', () => {
-    expect(COMMAND_NAMES.length).toBe(66);
+  it('registers all 50 §8.1 verbs (incl. layout.renormalize_order) + 7 tag + 2 review + 4 journal + 5 step verbs and resolves names', () => {
+    expect(COMMAND_NAMES.length).toBe(68);
     expect(isCommandName('node.create')).toBe(true);
     expect(isCommandName('layout.renormalize_order')).toBe(true); // §7.10a, M1
     expect(isCommandName('review.resolve')).toBe(true); // §7.13 inbox close, M10
     expect(isCommandName('review.dismiss')).toBe(true);
     expect(isCommandName('journal.write')).toBe(true); // day note, J1
     expect(isCommandName('journal.delete')).toBe(true);
+    expect(isCommandName('journal.set_locked')).toBe(true); // per-day read-only, synced (0013)
+    expect(isCommandName('journal.set_title')).toBe(true); // editable heading (0014)
     expect(isCommandName('step.add')).toBe(true); // task checklist, W3/D4
     expect(isCommandName('step.toggle')).toBe(true);
     expect(isCommandName('step.remove')).toBe(true);
@@ -129,8 +132,8 @@ describe('invariant rejections — one per §6.7 invariant', () => {
     expect(checkNodeCreate(tree, { node_type: 'roadmap', parent_id: null }).ok).toBe(false);
   });
 
-  it('I2 max visions: a 5th vision is rejected', () => {
-    const visions = [0, 1, 2, 3].map((i) => makeNode({ id: idOf(10 + i), node_type: 'vision' }));
+  it('I2 max visions: one past MAX_VISIONS is rejected', () => {
+    const visions = Array.from({ length: MAX_VISIONS }, (_, i) => makeNode({ id: idOf(10 + i), node_type: 'vision' }));
     const r = checkNodeCreate(buildTreeIndex(visions), { node_type: 'vision', parent_id: null });
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error.code).toBe('E_MAX_VISIONS');

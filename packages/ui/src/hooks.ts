@@ -638,6 +638,20 @@ export interface TodoTask {
   schedulable: SchedulableTask;
 }
 
+export interface AgendaTask extends TodoTask {
+  /** False when the task carries no estimate of its own — `schedulable.estimateMinutes` is then `DEFAULT_DRAG_MINUTES`. */
+  estimated: boolean;
+  /** A committed block already exists for it. */
+  scheduled: boolean;
+  /**
+   * `activity` = captured into the Inbox and not yet promoted (§1.2): no parent,
+   * so no vision. It is still listed and still schedulable — a block on one is
+   * accepted and simply renders unjustified (the agenda's grey "No vision"
+   * state) until it is promoted under a project.
+   */
+  kind: 'task' | 'activity';
+}
+
 export interface Agenda {
   /** SchedulerInput (greedy) for `validWindowsFor` drag hints (§10). */
   input: SchedulerInput;
@@ -646,9 +660,23 @@ export interface Agenda {
   blocks: AgendaBlock[];
   /** Past `time_entries` as the historical event layer (§12.2). */
   entries: AgendaEntry[];
-  /** Schedulable tasks not yet placed — the to-do side panel. */
-  todo: TodoTask[];
+  /**
+   * Tasks not yet placed — the to-do side panel. Includes tasks with no estimate
+   * of their own (they carry `DEFAULT_DRAG_MINUTES`); requiring an estimate hid
+   * every task the web app itself creates.
+   */
+  todo: AgendaTask[];
+  /**
+   * EVERY live, not-done task AND Inbox activity — the Agenda's "All tasks"
+   * list. Unlike `todo` this keeps already-scheduled ones. Anything with no
+   * estimate carries `DEFAULT_DRAG_MINUTES` so it is still draggable onto the
+   * week; the drop creates a block of that length.
+   */
+  allTasks: AgendaTask[];
 }
+
+/** Assumed block length when dragging a task that has no estimate of its own. */
+export const DEFAULT_DRAG_MINUTES = 30;
 
 /**
  * Agenda data (§12.2, §10 client mode): mirrors the server's scheduler-context
@@ -748,12 +776,45 @@ export function useAgenda(now: Instant, horizonDays = 7): Agenda {
       }));
 
     const scheduledTaskIds = new Set(committed.map((b) => b.taskId));
-    const todo: TodoTask[] = tasks
-      .filter((t) => !scheduledTaskIds.has(t.id))
-      .map((t) => ({ task: tree.byId.get(t.id) as Node, schedulable: t }))
-      .sort((a, b) => (a.task.title < b.task.title ? -1 : a.task.title > b.task.title ? 1 : 0));
 
-    return { input, tasksById, blocks, entries, todo };
+    // The full list. Two things `tasks` above deliberately excludes have to come
+    // back here, because both are things the user thinks of as "my tasks":
+    //  - anything without a positive estimate (it gets DEFAULT_DRAG_MINUTES), and
+    //  - `activity` nodes — the Inbox. The web app's capture bar creates ONLY
+    //    those, so a tree walk restricted to node_type='task' showed a user none
+    //    of what they had just typed in.
+    // `tasks`/`input` stay tasks-only: that is the SCHEDULER's view, and an
+    // unpromoted activity has no justification to schedule against.
+    const allTasks: AgendaTask[] = [];
+    for (const node of tree.byId.values()) {
+      const kind = node.node_type === 'task' ? 'task' : node.node_type === 'activity' ? 'activity' : null;
+      if (kind === null || node.completed_at !== null) continue;
+      const existing = tasksById.get(node.id);
+      const own = node.estimate_minutes !== null && node.estimate_minutes > 0 ? node.estimate_minutes : null;
+      allTasks.push({
+        task: node,
+        schedulable: existing ?? {
+          id: node.id,
+          estimateMinutes: own ?? DEFAULT_DRAG_MINUTES,
+          dueDate: node.due_date,
+          dependencies: depsBySuccessor.get(node.id),
+          sprintMember: sprintMemberNodeIds.has(node.id),
+        },
+        estimated: existing !== undefined || own !== null,
+        scheduled: scheduledTaskIds.has(node.id),
+        kind,
+      });
+    }
+    allTasks.sort((a, b) => (a.task.title < b.task.title ? -1 : a.task.title > b.task.title ? 1 : 0));
+
+    // The to-schedule panel: every task not already placed. An estimate is NOT
+    // required to appear here. It used to be, and that silently emptied the panel
+    // the whole Agenda is built around: the app's own capture path
+    // (`activity.create` → `activity.promote`) never sets one, so every task a
+    // user made in the web UI was missing from it. Those get DEFAULT_DRAG_MINUTES.
+    const todo: AgendaTask[] = allTasks.filter((t) => !t.scheduled);
+
+    return { input, tasksById, blocks, entries, todo, allTasks };
   }, [ctx, edgeRows, blockRows, entryRows, sprintRows, membershipRows, now, horizonDays]);
 }
 
@@ -1574,14 +1635,22 @@ export function useJournalMonths(monthKeys: readonly string[]): JournalMonthsRea
   const db = usePowerSync();
   const key = useMemo(() => [...new Set(monthKeys)].sort(), [monthKeys.join('\0')]);
 
+  const mgr = journalSubsFor(db as unknown as object);
   useEffect(() => {
-    const mgr = journalSubsFor(db as unknown as object);
     const releases = key.map((m) => mgr.hold(m));
     return () => {
       for (const release of releases) release();
     };
-  }, [db, key]);
+  }, [mgr, key]);
 
+  /**
+   * `isLoading` deliberately reflects only the LOCAL read, never "has this month
+   * finished its first sync". Gating on first sync looks right online and is a
+   * trap offline: `waitForFirstSync` never resolves without a connection, so the
+   * day panel sat on "Loading…" forever with the note already in local SQLite —
+   * caught by the offline e2e. The title no longer needs that gate anyway: it is
+   * blank until the ENTRY exists, which is a fact the local read establishes.
+   */
   const sql = key.length
     ? `SELECT * FROM journal_entries WHERE deleted_at IS NULL AND month_key IN (${key.map(() => '?').join(',')})`
     : 'SELECT * FROM journal_entries WHERE 0';

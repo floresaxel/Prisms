@@ -1,12 +1,13 @@
 /**
  * S15 DoD e2e (Playwright). Register → seed data renders from local SQLite
  * (PowerSync sync-down) → airplane-mode reload still works → an optimistic
- * edit the server rejects (a 5th vision, I2) visibly rolls back.
+ * edit the server rejects (one vision past the I2 quota) visibly rolls back.
  *
  * Requires the live stack (see playwright.config.ts).
  */
 import { randomUUID } from 'node:crypto';
 
+import { MAX_VISIONS } from '@prisms/core';
 import { expect, test } from '@playwright/test';
 
 import { goto } from './util/nav';
@@ -35,18 +36,19 @@ test('login → seed renders, airplane reload, optimistic rollback', async ({ pa
   await expect(page.getByTestId('sync-state')).toBeVisible();
 
   // --- seed this user's data via the command API (shares the cookie) -----
+  // Fill the I2 quota exactly, so the click below is the one that overflows it.
+  const visionIds = Array.from({ length: MAX_VISIONS }, () => randomUUID());
   const ids = {
-    v1: randomUUID(), v2: randomUUID(), v3: randomUUID(), v4: randomUUID(),
+    v2: visionIds[1]!,
     roadmap: randomUUID(), project: randomUUID(), t1: randomUUID(), t2: randomUUID(),
   };
   const seed = await page.request.post('/sync/upload', {
     data: {
       device_id: 'e2e-seed',
       commands: [
-        cmd('node.create', { id: ids.v1, node_type: 'vision', title: 'Wellness', sort_order: 'a0' }),
-        cmd('node.create', { id: ids.v2, node_type: 'vision', title: 'Work', sort_order: 'a1' }),
-        cmd('node.create', { id: ids.v3, node_type: 'vision', title: 'Knowledge', sort_order: 'a2' }),
-        cmd('node.create', { id: ids.v4, node_type: 'vision', title: 'Expression', sort_order: 'a3' }),
+        ...visionIds.map((id, i) =>
+          cmd('node.create', { id, node_type: 'vision', title: `Vision ${i + 1}`, sort_order: `a${i}` }),
+        ),
         cmd('node.create', { id: ids.roadmap, node_type: 'roadmap', title: 'Roadmap', sort_order: 'a0', parent_id: ids.v2 }),
         cmd('node.create', { id: ids.project, node_type: 'project', title: 'Project', sort_order: 'a0', parent_id: ids.roadmap }),
         cmd('node.create', { id: ids.t1, node_type: 'task', title: 'Task One', sort_order: 'a0', parent_id: ids.project, estimate_minutes: 60 }),
@@ -68,10 +70,11 @@ test('login → seed renders, airplane reload, optimistic rollback', async ({ pa
 
   // --- DoD 3: an optimistic edit rejected by the server rolls back -------
   await goto(page, 'dashboard');
-  await expect(page.getByTestId('vision-count')).toHaveText('(4)');
+  await expect(page.getByTestId('vision-count')).toHaveText(`(${MAX_VISIONS})`);
   await page.getByTestId('new-vision').click();
-  // optimistic insert briefly shows 5; the server rejects (E_MAX_VISIONS) and
-  // the unchanged truth syncs back → reverts to 4, with a rejection toast.
+  // the optimistic insert briefly shows one over; the server rejects
+  // (E_MAX_VISIONS) and the unchanged truth syncs back → reverts to the limit,
+  // with a rejection toast.
   await expect(page.getByTestId('rejection-toast')).toBeVisible({ timeout: 20_000 });
-  await expect(page.getByTestId('vision-count')).toHaveText('(4)');
+  await expect(page.getByTestId('vision-count')).toHaveText(`(${MAX_VISIONS})`);
 });

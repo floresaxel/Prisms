@@ -1,16 +1,19 @@
 /**
- * Agenda (§12.2, §10 client mode): a week calendar beside a to-do panel.
- * Drag a to-do task onto the week — while dragging, the valid time windows
- * (core `validWindowsFor`, greedy mode) light up and everything else dims;
- * dropping in a valid slot creates a committed block. Committed blocks drag to
- * move; anchored blocks show a lock and refuse the drag (I7). Suggested blocks
- * render dashed with accept/reject (§2.6); blocks whose ancestry reaches no
- * vision render dark grey (§12.2); past time_entries are a faint history layer.
+ * Agenda (§12.2, §10 client mode): a to-do panel on the LEFT, the week calendar
+ * in the middle, the day's note on the RIGHT. The left panel holds "To schedule"
+ * (unplaced tasks) above a scrollable "All tasks" list — every live task, the
+ * already-scheduled ones included. Both lists drag onto the week: while dragging,
+ * the valid time windows (core `validWindowsFor`, greedy mode) light up and
+ * everything else dims; dropping in a valid slot creates a committed block.
+ * Committed blocks drag to move; anchored blocks show a lock and refuse the drag
+ * (I7). Suggested blocks render dashed with accept/reject (§2.6); blocks whose
+ * ancestry reaches no vision render dark grey (§12.2); past time_entries are a
+ * faint history layer.
  *
  * Drag is pointer-based (mousedown→mouseup) rather than HTML5 DnD so the live
  * window-hint state is observable mid-drag and it drives reliably in tests.
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type RefObject } from 'react';
 
 import {
   addDays,
@@ -25,6 +28,7 @@ import {
 } from '@prisms/core';
 import {
   Ic,
+  isJournalContentEmpty,
   Skeleton,
   truncatePlain,
   useAgenda,
@@ -34,10 +38,12 @@ import {
   useJournalMonths,
   useTagCatalog,
   type AgendaBlock,
+  type AgendaTask,
   type BlockTagView,
   type CommandContext,
 } from '@prisms/ui';
 
+import { agendaLayout, DAY_SPANS, DEFAULT_SPAN, GUTTER_W, isDaySpan } from '../agenda-layout';
 import { DayJournalPanel } from '../components/DayJournal';
 import { WhyButton } from '../components/Why';
 
@@ -48,13 +54,57 @@ const MS_PER_MIN = 60_000;
 const BODY_HEIGHT = (GRID_END_HOUR - GRID_START_HOUR) * HOUR_PX;
 const DAY_LABEL = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
+const SPAN_KEY = 'prisms.agenda.span';
+
+/** Hover text for a to-do row: what it is, and what a drop would actually make. */
+function rowTitle(t: AgendaTask): string {
+  const parts = [t.task.title];
+  if (t.kind === 'activity') parts.push('Inbox item — not under a project yet, so a block on it has no vision');
+  if (!t.estimated) parts.push(`no estimate, drops as a ${t.schedulable.estimateMinutes}-minute event`);
+  return parts.join(' — ');
+}
+
+/**
+ * The section's own width, observed — drives both the stacking and the day count.
+ * Measured rather than read off the viewport because the sidebar's rail toggle
+ * changes the room available without the window resizing at all.
+ */
+function useMeasuredWidth(): [RefObject<HTMLElement | null>, number] {
+  const ref = useRef<HTMLElement | null>(null);
+  const [width, setWidth] = useState(0);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    setWidth(el.clientWidth);
+    // The one-shot measurement above is enough to render; only the LIVE reflow
+    // needs an observer, so an environment without one (jsdom) still works.
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver((entries) => {
+      const w = entries[0]?.contentRect.width;
+      if (w != null) setWidth(w);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  return [ref, width];
+}
+
 interface DragState {
   taskId: string;
   durationMs: number;
   /** Set when moving an existing block rather than placing a new one. */
   blockId?: string;
   valid: Interval[];
+  /** Shown on the card that follows the cursor. */
+  title: string;
+  /** Where the grab started, so the card appears under the cursor immediately. */
+  originX: number;
+  originY: number;
 }
+
+/** Offset from the cursor so the card never sits under the pointer itself. */
+const GHOST_DX = 14;
+const GHOST_DY = 12;
 
 function fmtHour(h: number): string {
   const ampm = h < 12 || h === 24 ? 'am' : 'pm';
@@ -167,9 +217,29 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
     return () => clearInterval(t);
   }, []);
 
-  const [weekOffset, setWeekOffset] = useState(0);
+  const [pageOffset, setPageOffset] = useState(0);
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  const [span, setSpan] = useState<number>(() => {
+    try {
+      const stored = Number(localStorage.getItem(SPAN_KEY));
+      return isDaySpan(stored) ? stored : DEFAULT_SPAN;
+    } catch {
+      return DEFAULT_SPAN;
+    }
+  });
+  const chooseSpan = (value: number) => {
+    setSpan(value);
+    setPageOffset(0); // pages are span-sized, so the old offset means something else
+    try {
+      localStorage.setItem(SPAN_KEY, String(value));
+    } catch {
+      /* preference is best-effort */
+    }
+  };
+
+  const [viewRef, width] = useMeasuredWidth();
+  const { stacked, narrow, perRow, rowCount, shownDays } = agendaLayout(width, span);
   const agenda = useAgenda(now);
   const commands = useCommands(ctx);
   const hydrated = useIsHydrated();
@@ -218,9 +288,15 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
   }, [resize, commands]);
 
   const days = useMemo(() => {
-    const base = addDays(bucketDate(now, 0, tz), weekOffset * 7);
-    return Array.from({ length: 7 }, (_, i) => addDays(base, i));
-  }, [now, tz, weekOffset]);
+    const base = addDays(bucketDate(now, 0, tz), pageOffset * shownDays);
+    return Array.from({ length: shownDays }, (_, i) => addDays(base, i));
+  }, [now, tz, pageOffset, shownDays]);
+
+  /** `days` split into the rendered rows (one grid each). */
+  const dayRows = useMemo(
+    () => Array.from({ length: rowCount }, (_, r) => days.slice(r * perRow, (r + 1) * perRow)),
+    [days, rowCount, perRow],
+  );
 
   // The journal panel shows today's note by default; a day-header click swaps it
   // to that day and a block click swaps it to the block's tags. todayDate is
@@ -233,7 +309,13 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
   // the viewed months ever syncs.
   const months = useMemo(() => [...new Set(days.map((d) => d.slice(0, 7)))], [days]);
   const journal = useJournalMonths(months);
-  const noteByDate = useMemo(() => new Map(journal.entries.map((e) => [e.entry_date, e.content])), [journal.entries]);
+  // Keyed on TEXT, not on row presence: a day whose note is empty is not a day
+  // with a note, so it must not wear the marker. (New writes never store a blank
+  // note, but rows predating that rule — and a not-yet-synced delete — can be.)
+  const noteByDate = useMemo(
+    () => new Map(journal.entries.filter((e) => !isJournalContentEmpty(e.content)).map((e) => [e.entry_date, e.content])),
+    [journal.entries],
+  );
 
   const colIndexOf = (start: Instant): number => days.indexOf(bucketDate(start, 0, tz));
 
@@ -246,16 +328,56 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
     return { col, top, height };
   }
 
-  function startTaskDrag(task: SchedulableTask) {
-    setDrag({ taskId: task.id, durationMs: task.estimateMinutes * MS_PER_MIN, valid: validWindowsFor(task, agenda.input) });
+  function startTaskDrag(task: SchedulableTask, title: string, e: ReactMouseEvent) {
+    setDrag({
+      taskId: task.id,
+      durationMs: task.estimateMinutes * MS_PER_MIN,
+      valid: validWindowsFor(task, agenda.input),
+      title,
+      originX: e.clientX,
+      originY: e.clientY,
+    });
   }
 
-  function startBlockDrag(block: AgendaBlock) {
+  /** Drag lookup over EVERYTHING listed, not just `tasksById` — that map is the
+   *  scheduler's view (estimated tasks only), so a block on an estimate-less task
+   *  or an Inbox item would otherwise be un-draggable once placed. */
+  const schedulableById = useMemo(
+    () => new Map(agenda.allTasks.map((t) => [t.task.id, t.schedulable])),
+    [agenda.allTasks],
+  );
+
+  function startBlockDrag(block: AgendaBlock, e: ReactMouseEvent) {
     if (block.anchored) return; // I7: anchored blocks refuse the drag
-    const task = agenda.tasksById.get(block.taskId);
+    const task = schedulableById.get(block.taskId);
     if (!task) return;
-    setDrag({ taskId: block.taskId, blockId: block.id, durationMs: task.estimateMinutes * MS_PER_MIN, valid: validWindowsFor(task, agenda.input) });
+    setDrag({
+      taskId: block.taskId,
+      blockId: block.id,
+      durationMs: task.estimateMinutes * MS_PER_MIN,
+      valid: validWindowsFor(task, agenda.input),
+      title: block.title,
+      originX: e.clientX,
+      originY: e.clientY,
+    });
   }
+
+  /**
+   * The card that follows the cursor. Positioned IMPERATIVELY on mousemove: the
+   * Agenda re-render is heavy (a week of blocks plus two task lists), and doing
+   * it per pointer sample would make the drag stutter. React owns whether the
+   * card exists; the mouse owns where it is.
+   */
+  const ghostRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!drag) return;
+    const onMove = (e: MouseEvent) => {
+      const el = ghostRef.current;
+      if (el) el.style.transform = `translate3d(${e.clientX + GHOST_DX}px, ${e.clientY + GHOST_DY}px, 0)`;
+    };
+    window.addEventListener('mousemove', onMove);
+    return () => window.removeEventListener('mousemove', onMove);
+  }, [drag]);
 
   const cellValid = (cellStart: Instant, durationMs: number, valid: Interval[]): boolean =>
     valid.some((w) => w.start <= cellStart && cellStart + durationMs <= w.end);
@@ -271,19 +393,36 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
   }
 
   return (
-    <section className="px-agenda-view">
+    <section className="px-agenda-view" ref={viewRef as RefObject<HTMLElement>}>
       <div className="px-page-head">
         <h1>Agenda</h1>
-        <span className="px-page-sub" data-testid="week-range">{days[0]} – {days[6]}</span>
+        <span className="px-page-sub" data-testid="week-range">{days[0]} – {days.at(-1)}</span>
+        {shownDays < span && (
+          <span className="px-page-sub" data-testid="span-capped">showing {shownDays} of {span} — widen the window for more</span>
+        )}
         <div className="px-head-actions">
-          <button className="px-btn px-btn--icon" data-testid="week-prev" aria-label="previous week" onClick={() => setWeekOffset((w) => w - 1)}><Ic name="chevl" /></button>
-          <button className="px-btn" data-testid="week-today" onClick={() => setWeekOffset(0)}>Today</button>
-          <button className="px-btn px-btn--icon" data-testid="week-next" aria-label="next week" onClick={() => setWeekOffset((w) => w + 1)}><Ic name="chevr" /></button>
+          <div className="px-seg" role="group" aria-label="days shown" data-testid="span-picker">
+            {DAY_SPANS.map((s) => (
+              <button
+                key={s.value}
+                className={`px-seg-btn${span === s.value ? ' px-seg-btn--on' : ''}`}
+                data-testid={`span-${s.value}`}
+                aria-pressed={span === s.value}
+                title={s.label}
+                onClick={() => chooseSpan(s.value)}
+              >
+                {s.short}
+              </button>
+            ))}
+          </div>
+          <button className="px-btn px-btn--icon" data-testid="week-prev" aria-label="previous period" onClick={() => setPageOffset((w) => w - 1)}><Ic name="chevl" /></button>
+          <button className="px-btn" data-testid="week-today" onClick={() => setPageOffset(0)}>Today</button>
+          <button className="px-btn px-btn--icon" data-testid="week-next" aria-label="next period" onClick={() => setPageOffset((w) => w + 1)}><Ic name="chevr" /></button>
         </div>
       </div>
 
       <div className="px-ag-bar">
-        <span className="px-page-sub">Drag a to-do onto the week — valid windows light up, everything else dims.</span>
+        <span className="px-page-sub">Drag any task onto the week — valid windows light up, everything else dims.</span>
         <div className="px-ag-legend">
           <span className="px-lg"><span className="px-ag-sw px-ag-sw--committed" />Committed</span>
           <span className="px-lg"><span className="px-ag-sw px-ag-sw--anchored" />Anchored 🔒</span>
@@ -293,33 +432,98 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
         </div>
       </div>
 
-      <div className="px-agenda" style={drag || resize ? { userSelect: 'none' } : undefined}>
-        {/* journal / event-tags panel (left) */}
-        <div className="px-agenda-journal">
-          {selectedBlock ? (
-            <>
-              <div className="px-why-inline" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span className="px-muted">{selectedBlock.status === 'suggested' ? 'Suggested event' : 'Event'}</span>
-                <WhyButton row={selectedBlock.provenance} suggestionReason={selectedBlock.suggestionReason} testId={`why-block-${selectedBlock.id}`} />
+      <div
+        className={`px-agenda${stacked ? ' px-agenda--stack' : ''}${narrow ? ' px-agenda--narrow' : ''}`}
+        data-testid="agenda-layout"
+        data-layout={stacked ? (narrow ? 'narrow' : 'stack') : 'cols'}
+        style={drag || resize ? { userSelect: 'none' } : undefined}
+      >
+        {/* to-schedule + all tasks (left) — every row drags onto the week */}
+        <div className="px-agenda-todo">
+          <h2>To schedule <span className="px-muted">{agenda.todo.length}</span></h2>
+          <div data-testid="todo-list" className="px-list">
+            {agenda.todo.length === 0 &&
+              (hydrated ? <div className="px-list-empty">Nothing to place.</div> : <Skeleton testId="todo-skeleton" rows={4} />)}
+            {agenda.todo.map((t: AgendaTask) => (
+              <div
+                key={t.task.id}
+                className={`px-todo-item${t.kind === 'activity' ? ' px-todo-item--inbox' : ''}${drag?.taskId === t.task.id ? ' px-todo-item--dragging' : ''}`}
+                data-testid={`todo-${t.task.id}`}
+                data-kind={t.kind}
+                title={rowTitle(t)}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  startTaskDrag(t.schedulable, t.task.title, e);
+                }}
+              >
+                <span className="px-todo-title">{t.task.title}</span>
+                <span className="px-todo-sub">
+                  {t.kind === 'activity' && <span className="px-tag px-tag--grey px-todo-flag">inbox</span>}
+                  {t.estimated ? '' : '~'}{t.schedulable.estimateMinutes}m
+                </span>
               </div>
-              <BlockTagsPanel blockId={selectedBlock.id} title={selectedBlock.title} ctx={ctx} />
-            </>
-          ) : (
-            // key by day so the editor re-initializes per day (J4/D3); defaults to today.
-            <DayJournalPanel key={journalDay} date={journalDay} ctx={ctx} />
-          )}
+            ))}
+          </div>
+
+          {/* Everything still open, scheduled ones included — bounded scroller so
+              the panel never outgrows the week grid. */}
+          <div className="px-ag-all">
+            <h2>All tasks <span className="px-muted">{agenda.allTasks.length}</span></h2>
+            <div className="px-ag-scroll" data-testid="all-tasks-list">
+              {agenda.allTasks.length === 0 &&
+                (hydrated ? <div className="px-list-empty">No open tasks.</div> : <Skeleton testId="all-tasks-skeleton" rows={4} />)}
+              {agenda.allTasks.map((t: AgendaTask) => (
+                <div
+                  key={t.task.id}
+                  className={`px-todo-item${t.scheduled ? ' px-todo-item--placed' : ''}${t.kind === 'activity' ? ' px-todo-item--inbox' : ''}${drag?.taskId === t.task.id ? ' px-todo-item--dragging' : ''}`}
+                  data-testid={`alltask-${t.task.id}`}
+                  data-kind={t.kind}
+                  title={rowTitle(t)}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    startTaskDrag(t.schedulable, t.task.title, e);
+                  }}
+                >
+                  <span className="px-todo-title">{t.task.title}</span>
+                  <span className="px-todo-sub">
+                    {t.kind === 'activity' && <span className="px-tag px-tag--grey px-todo-flag">inbox</span>}
+                    {t.scheduled ? 'scheduled · ' : ''}
+                    {t.estimated ? '' : '~'}
+                    {t.schedulable.estimateMinutes}m
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <p className="px-muted px-drag-hint">Anchored blocks refuse the drag (🔒). A drop outside a valid window snaps back.</p>
         </div>
 
         <div className="px-agenda-cal">
-        <div className="px-cal-grid">
+        {/* one grid per row — a span over a week wraps, and a narrow window
+            simply gets fewer columns rather than a sideways scrollbar. */}
+        <div className="px-cal-rows">
+        {dayRows.map((rowDays, r) => (
+        <div
+          key={r}
+          className="px-cal-grid"
+          data-testid={`cal-row-${r}`}
+          style={{ gridTemplateColumns: `${GUTTER_W}px repeat(${rowDays.length}, minmax(0, 1fr))` }}
+        >
           <div className="px-cal-gutter" style={{ height: BODY_HEIGHT }}>
             {Array.from({ length: GRID_END_HOUR - GRID_START_HOUR }, (_, i) => (
               <div key={i} className="px-cal-hour-label" style={{ top: i * HOUR_PX }}>{fmtHour(GRID_START_HOUR + i)}</div>
             ))}
           </div>
 
-          {days.map((date, col) => (
-            <div key={date} className="px-cal-col" data-testid={`day-${col}`}>
+          {rowDays.map((date, i) => {
+            const col = r * perRow + i;
+            return (
+            <div
+              key={date}
+              className={`px-cal-col${selectedDay === date ? ' px-cal-col--sel' : ''}`}
+              data-testid={`day-${col}`}
+              data-selected={selectedDay === date ? 'true' : undefined}
+            >
               <div
                 className={`px-cal-col-head${selectedDay === date ? ' px-cal-col-head--sel' : ''}`}
                 data-testid={`day-head-${col}`}
@@ -332,7 +536,12 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
                 }}
               >
                 {DAY_LABEL[new Date(`${date}T00:00:00Z`).getUTCDay()]} {date.slice(8)}
-                {noteByDate.has(date) && <span className="px-note-dot" data-testid={`note-dot-${date}`} aria-label="has note" />}
+                {/* testid keeps the `note-dot-` name the specs already address it by. */}
+                {noteByDate.has(date) && (
+                  <span className="px-note-ic" data-testid={`note-dot-${date}`} role="img" aria-label="has note">
+                    <Ic name="note" />
+                  </span>
+                )}
               </div>
               <div className="px-cal-col-body" style={{ height: BODY_HEIGHT }}>
                 {/* hour grid lines */}
@@ -374,7 +583,7 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
                       onMouseDown={(e) => {
                         if (b.status !== 'committed') return;
                         e.preventDefault();
-                        startBlockDrag(b);
+                        startBlockDrag(b, e);
                       }}
                       onClick={() => {
                         setSelectedBlockId(b.id);
@@ -429,34 +638,47 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
                 )}
               </div>
             </div>
-          ))}
+            );
+          })}
+        </div>
+        ))}
         </div>
       </div>
 
-        {/* to-schedule panel (right) — the unscheduled to-dos */}
-        <div className="px-agenda-todo">
-          <h2>To schedule <span className="px-muted">{agenda.todo.length}</span></h2>
-          <div data-testid="todo-list" className="px-list">
-            {agenda.todo.length === 0 &&
-              (hydrated ? <div className="px-list-empty">Nothing to place.</div> : <Skeleton testId="todo-skeleton" rows={4} />)}
-            {agenda.todo.map(({ task, schedulable }) => (
-              <div
-                key={task.id}
-                className="px-todo-item"
-                data-testid={`todo-${task.id}`}
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  startTaskDrag(schedulable);
-                }}
-              >
-                <span>{task.title}</span>
-                <span className="px-muted">{schedulable.estimateMinutes}m</span>
+        {/* journal / event-tags panel (right) */}
+        <div className="px-agenda-journal">
+          {selectedBlock ? (
+            <>
+              <div className="px-why-inline" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span className="px-muted">{selectedBlock.status === 'suggested' ? 'Suggested event' : 'Event'}</span>
+                <WhyButton row={selectedBlock.provenance} suggestionReason={selectedBlock.suggestionReason} testId={`why-block-${selectedBlock.id}`} />
               </div>
-            ))}
-          </div>
-          <p className="px-muted px-drag-hint">Anchored blocks refuse the drag (🔒). A drop outside a valid window snaps back.</p>
+              <BlockTagsPanel blockId={selectedBlock.id} title={selectedBlock.title} ctx={ctx} />
+            </>
+          ) : (
+            // key by day so the editor re-initializes per day (J4/D3); defaults to today.
+            // `lock`: just the lock/pencil toggle here — managing the note
+            // (export, delete) belongs to the Journal screen.
+            <DayJournalPanel key={journalDay} date={journalDay} ctx={ctx} actions="lock" />
+          )}
         </div>
       </div>
+
+      {/* The grabbed item, following the cursor until it is dropped. `pointer-events:
+          none` is load-bearing: without it the card sits under the pointer and eats
+          the mouseup that the calendar cell needs to receive the drop. */}
+      {drag && (
+        <div
+          ref={ghostRef}
+          className="px-drag-ghost"
+          data-testid="drag-ghost"
+          aria-hidden="true"
+          style={{ transform: `translate3d(${drag.originX + GHOST_DX}px, ${drag.originY + GHOST_DY}px, 0)` }}
+        >
+          <span className="px-drag-ghost-title">{drag.title}</span>
+          <span className="px-drag-ghost-dur">{Math.round(drag.durationMs / MS_PER_MIN)}m</span>
+        </div>
+      )}
     </section>
   );
 }

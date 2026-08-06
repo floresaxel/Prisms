@@ -38,7 +38,7 @@ export const PARENTLESS_ALLOWED: Record<NodeType, boolean> = {
 };
 
 /** I2: max non-deleted vision nodes per user. */
-export const MAX_VISIONS = 4;
+export const MAX_VISIONS = 10;
 
 /**
  * I1 for `node.create` / `node.retype` / `node.move`: is `parentId` a legal

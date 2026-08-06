@@ -12,6 +12,7 @@
  * are untouched — only the storage path moved from replica `db.execute` to the
  * overlay.
  */
+import type { VisionColor, VisionHorizon } from '../format';
 import { newId } from './client-runtime';
 import { buildAcceptSuggestionEffects, type AcceptSuggestionBlock, type EffectSpec } from './effects';
 import { createExecuteCommand, type ExecuteDeps } from './execute';
@@ -52,9 +53,29 @@ export function createCommands(store: OverlayStore, ctx: CommandContext, deps: E
       // authoritatively and the descendants reconcile tombstoned.
       await run('node.soft_delete', { id: taskId });
     },
-    async createVision(title: string): Promise<string> {
+    /**
+     * A vision, optionally with a colour and an expected (dateless) timeline.
+     * Both ride in `attributes` — a type-specific extra the node schema already
+     * carries, so no new column and no new verb — and are read back through
+     * `visionColorOf` / `readVisionHorizon`.
+     */
+    async createVision(
+      title: string,
+      opts?: { color?: VisionColor; horizon?: VisionHorizon; description?: string; sortOrder?: string },
+    ): Promise<string> {
       const id = newId();
-      await run('node.create', { id, node_type: 'vision', title, sort_order: 'a0' });
+      const attributes = {
+        ...(opts?.color ? { color: opts.color } : {}),
+        ...(opts?.horizon ? { horizon: { unit: opts.horizon.unit, amount: opts.horizon.amount } } : {}),
+      };
+      await run('node.create', {
+        id,
+        node_type: 'vision',
+        title,
+        sort_order: opts?.sortOrder ?? 'a0',
+        ...(opts?.description ? { description: opts.description } : {}),
+        ...(Object.keys(attributes).length > 0 ? { attributes } : {}),
+      });
       return id;
     },
     /** Inbox item (§1.2): a parentless `activity` node, justification deferred until promote. */
@@ -66,6 +87,18 @@ export function createCommands(store: OverlayStore, ctx: CommandContext, deps: E
     /** activity.promote (§8.1, I3): an inbox item becomes a real task by gaining a justification. */
     async promoteActivity(id: string, target: { parentId: string } | { habitId: string }): Promise<void> {
       await run('activity.promote', 'parentId' in target ? { id, parent_id: target.parentId } : { id, habit_id: target.habitId });
+    },
+    /** A project under a roadmap (I1: `project`'s only legal parent). Roadmap tab. */
+    async createProject(input: { id?: string; roadmapId: string; title: string; sortOrder: string }): Promise<string> {
+      const id = input.id ?? newId();
+      await run('node.create', { id, parent_id: input.roadmapId, node_type: 'project', title: input.title, sort_order: input.sortOrder });
+      return id;
+    },
+    /** A roadmap under a vision (I1: `roadmap`'s only legal parent). */
+    async createRoadmap(input: { id?: string; visionId: string; title: string; sortOrder: string }): Promise<string> {
+      const id = input.id ?? newId();
+      await run('node.create', { id, parent_id: input.visionId, node_type: 'roadmap', title: input.title, sort_order: input.sortOrder });
+      return id;
     },
     async createTask(input: { id?: string; parentId: string; title: string; sortOrder: string; estimateMinutes?: number }): Promise<string> {
       const id = input.id ?? newId();
@@ -259,6 +292,22 @@ export function createCommands(store: OverlayStore, ctx: CommandContext, deps: E
     },
     async deleteJournal(id: string): Promise<void> {
       await run('journal.delete', { id });
+    },
+    /**
+     * Lock/unlock a day's note. SYNCED, so the lock follows the user to every
+     * device. Requires the row to exist — an empty note is never stored, so a
+     * day with no text has nothing to lock.
+     */
+    async setJournalLocked(id: string, locked: boolean): Promise<void> {
+      await run('journal.set_locked', { id, locked });
+    },
+    /**
+     * Rename a day's note; '' restores the untitled default. Requires the row to
+     * exist — an empty note is never stored, so there is nothing to title until
+     * the note has text.
+     */
+    async setJournalTitle(id: string, title: string): Promise<void> {
+      await run('journal.set_title', { id, title });
     },
 
     // --- task steps (checklist on a task, W3/D4) ----------------------------

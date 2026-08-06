@@ -9,6 +9,7 @@
  */
 import { randomUUID } from 'node:crypto';
 
+import { MAX_VISIONS } from '@prisms/core';
 import { loadRootEnv, runMigrations } from '@prisms/db';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
@@ -120,12 +121,17 @@ describe.skipIf(!adminUrl)('S11 command dispatcher (§8 pipeline, full catalog)'
     expect(r).toMatchObject({ result: 'rejected', reject_code: 'E_HIERARCHY' });
   });
 
-  it('I2 max visions: the 5th vision is rejected E_MAX_VISIONS', async () => {
+  it('I2 max visions: one past MAX_VISIONS is rejected E_MAX_VISIONS', async () => {
     const u = randomUUID();
-    const four = [0, 1, 2, 3].map(() => cmd('node.create', { id: randomUUID(), node_type: 'vision', title: 'v', sort_order: 'a0' }));
-    expect((await results(four, u)).every((r) => r.result === 'applied')).toBe(true);
-    const [fifth] = await results([cmd('node.create', { id: randomUUID(), node_type: 'vision', title: 'v5', sort_order: 'a0' })], u);
-    expect(fifth).toMatchObject({ result: 'rejected', reject_code: 'E_MAX_VISIONS' });
+    const atLimit = Array.from({ length: MAX_VISIONS }, (_, i) =>
+      cmd('node.create', { id: randomUUID(), node_type: 'vision', title: `v${i}`, sort_order: `a${i}` }),
+    );
+    expect((await results(atLimit, u)).every((r) => r.result === 'applied')).toBe(true);
+    const [overflow] = await results(
+      [cmd('node.create', { id: randomUUID(), node_type: 'vision', title: 'one too many', sort_order: 'b0' })],
+      u,
+    );
+    expect(overflow).toMatchObject({ result: 'rejected', reject_code: 'E_MAX_VISIONS' });
   });
 
   it('I4 DAG: type mismatch and cycle edges are rejected', async () => {

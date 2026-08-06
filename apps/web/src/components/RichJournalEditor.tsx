@@ -48,6 +48,9 @@ const TOOLBAR: ToolItem[] = [
   { key: 'ordered', label: '1.', title: 'Numbered list', run: (e) => e.chain().focus().toggleOrderedList().run() },
   { key: 'task', label: '☑', title: 'Task list', run: (e) => e.chain().focus().toggleTaskList().run() },
   { key: 'quote', label: '❝', title: 'Quote', run: (e) => e.chain().focus().toggleBlockquote().run() },
+  // StarterKit's horizontalRule; tiptap-markdown serializes it to `---`, so the
+  // divider survives the round trip to storage, the .md export and every client.
+  { key: 'divider', label: '—', title: 'Section divider', run: (e) => e.chain().focus().setHorizontalRule().run() },
   { key: 'code', label: '‹›', title: 'Inline code', run: (e) => e.chain().focus().toggleCode().run() },
   { key: 'codeBlock', label: '{ }', title: 'Code block', run: (e) => e.chain().focus().toggleCodeBlock().run() },
 ];

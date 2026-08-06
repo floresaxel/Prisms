@@ -1276,6 +1276,40 @@ export function createDispatcher(
         }
         return applied();
       }
+      case 'journal.set_locked': {
+        const p = payload as Payload<'journal.set_locked'>;
+        // Acts on an existing row and never mints one: an empty note is not
+        // stored, so there is nothing to lock on a day that holds nothing. Only
+        // ever touches `locked`, so a lock racing an edit of the same day settles
+        // per FIELD and neither clobbers the other.
+        const lockRow = await one(tx.select().from(journal_entries).where(eq(journal_entries.id, p.id)).limit(1));
+        const ownLock = ownershipReject('journal entry', p.id, lockRow, userId);
+        if (ownLock) return ownLock;
+        const winLock = await lwwFields(tx, hlc, userId, 'journal_entries', p.id, { locked: p.locked });
+        if (Object.keys(winLock).length > 0) {
+          await tx.update(journal_entries).set({ ...winLock, ...sys }).where(eq(journal_entries.id, p.id));
+          rec('journal_entries', p.id, 'update', Object.keys(winLock));
+        } else {
+          rec('journal_entries', p.id, 'update', []);
+        }
+        return applied();
+      }
+      case 'journal.set_title': {
+        const p = payload as Payload<'journal.set_title'>;
+        // A title belongs to a note that exists — an empty note is never stored —
+        // so unlike set_locked this never mints a row.
+        const row = await one(tx.select().from(journal_entries).where(eq(journal_entries.id, p.id)).limit(1));
+        const ownTitle = ownershipReject('journal entry', p.id, row, userId);
+        if (ownTitle) return ownTitle;
+        const winTitle = await lwwFields(tx, hlc, userId, 'journal_entries', p.id, { title: p.title });
+        if (Object.keys(winTitle).length > 0) {
+          await tx.update(journal_entries).set({ ...winTitle, ...sys }).where(eq(journal_entries.id, p.id));
+          rec('journal_entries', p.id, 'update', Object.keys(winTitle));
+        } else {
+          rec('journal_entries', p.id, 'update', []);
+        }
+        return applied();
+      }
       case 'journal.delete': {
         const p = payload as Payload<'journal.delete'>;
         const own = ownershipReject('journal entry', p.id, await one(tx.select().from(journal_entries).where(eq(journal_entries.id, p.id)).limit(1)), userId);

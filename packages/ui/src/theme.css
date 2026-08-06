@@ -42,16 +42,62 @@ body {
   font-family: var(--px-font);
   background: var(--px-bg);
   color: var(--px-text);
+  /* The I-beam pointer and the blinking caret belong to text-entry surfaces
+     ONLY. Both are inherited properties, so setting them here neutralizes them
+     app-wide; the rules below hand them back to real inputs, and the explicit
+     cursors on buttons/links/drag handles win over this inherited default. */
+  cursor: default;
+  caret-color: transparent;
 }
+input, textarea, [contenteditable]:not([contenteditable='false']) { caret-color: auto; }
+textarea,
+[contenteditable]:not([contenteditable='false']),
+input:not([type='button']):not([type='checkbox']):not([type='color']):not([type='file']):not([type='image']):not([type='radio']):not([type='range']):not([type='reset']):not([type='submit']) { cursor: text; }
 
 /* ── app shell v2 (web redesign W1): sidebar with grouped nav + topbar. Ported
    from docs/mockups/web-layout-redesign.html (.app/.sb/.topbar), px-prefixed. ── */
-.px-app { display: flex; min-height: 100vh; }
-.px-sidebar { width: 234px; flex: none; display: flex; flex-direction: column; padding: 12px 10px 10px; background: var(--px-sb-bg); border-right: 1px solid var(--px-border); }
+/* The shell fills the viewport EXACTLY and never grows past it, so the only
+   thing that scrolls is `.px-content`. With `min-height` the app grew with its
+   content, the whole page scrolled, and the sidebar's foot (Settings, the user,
+   sign-out) rode down out of sight on any tall screen. `dvh` after `vh` so a
+   mobile browser's collapsing chrome does not clip it. */
+.px-app { display: flex; height: 100vh; height: 100dvh; overflow: hidden; }
+.px-sidebar { width: 234px; flex: none; display: flex; flex-direction: column; padding: 12px 10px 10px; background: var(--px-sb-bg); border-right: 1px solid var(--px-border); transition: width 140ms ease; }
 .px-brand { display: flex; align-items: center; gap: 8px; padding: 2px 8px 10px; font-weight: 650; font-size: 14px; letter-spacing: 0.1px; }
+
+/* Collapsed rail: icons + badges only, labels become tooltips. The width is
+   DERIVED from the icon rather than a round number — a 16px glyph inside a
+   square hit target (kept at/above the 24px WCAG 2.2 minimum) plus a hair of
+   sidebar padding. Nothing in here is wider than that, so the rail is exactly
+   as wide as the icons need. */
+.px-sidebar--rail {
+  --px-rail-ic: 16px;   /* the glyph */
+  --px-rail-ring: 9px;  /* hit area around it → 34px square */
+  --px-rail-pad: 3px;   /* sidebar gutter */
+  width: calc(var(--px-rail-ic) + 2 * var(--px-rail-ring) + 2 * var(--px-rail-pad));
+  padding-left: var(--px-rail-pad);
+  padding-right: var(--px-rail-pad);
+}
+.px-sidebar--rail .px-brand { padding: 2px 0 10px; justify-content: center; }
+.px-sidebar--rail .px-brand-lbl,
+.px-sidebar--rail .px-nav-group,
+.px-sidebar--rail .px-navlink-lbl,
+.px-sidebar--rail .px-sidebar-email,
+.px-sidebar--rail .px-sidebar-actions { display: none; }
+.px-sidebar--rail .px-navlink { justify-content: center; gap: 0; padding: var(--px-rail-ring) 0; margin: 2px 0; position: relative; }
+/* the count rides the icon's top-right corner; it is the one thing that would
+   otherwise dictate a wider rail. */
+.px-sidebar--rail .px-nav-badge { position: absolute; top: 0; right: 0; margin: 0; font-size: 9px; font-weight: 640; padding: 0 3px; min-width: 13px; text-align: center; line-height: 13px; border-radius: 7px; }
+.px-sidebar--rail .px-sidebar-user { justify-content: center; padding: 7px 0 3px; }
+.px-sidebar--rail .px-sidebar-foot { align-items: center; }
+.px-sidebar-actions { display: flex; flex-direction: column; gap: 4px; }
+.px-rail-toggle { flex: none; margin-left: -6px; color: var(--px-text-dim); }
+@media (prefers-reduced-motion: reduce) { .px-sidebar { transition: none; } }
 .px-brand-logo { width: 22px; height: 22px; border-radius: 6px; background: var(--px-blue); color: #fff; display: flex; align-items: center; justify-content: center; flex: none; }
 .px-brand-logo .px-ic { width: 13px; height: 13px; }
-.px-nav { flex: 1; overflow-y: auto; padding-bottom: 8px; }
+/* min-height:0 — a flex item defaults to min-height:auto, which refuses to
+   shrink below its content and would push the foot out of the column again. */
+.px-nav { flex: 1; min-height: 0; overflow-y: auto; padding-bottom: 8px; }
 .px-nav-group { margin: 14px 8px 4px; font-size: 10.5px; font-weight: 640; letter-spacing: 0.7px; color: var(--px-faint); text-transform: uppercase; }
 .px-navlink { display: flex; align-items: center; gap: 9px; padding: 6px 9px; margin: 1px 0; border-radius: 7px; color: var(--px-text-dim); text-decoration: none; font-size: 13px; font-weight: 480; cursor: pointer; }
 .px-navlink .px-ic { width: 16px; height: 16px; color: var(--px-faint); }
@@ -66,7 +112,7 @@ body {
 .px-avatar { width: 24px; height: 24px; border-radius: 50%; background: var(--px-teal); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 640; flex: none; }
 
 /* main column: topbar over a scrolling content area */
-.px-shell { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.px-shell { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .px-topbar { height: 50px; flex: none; background: var(--px-surface); border-bottom: 1px solid var(--px-border); display: flex; align-items: center; gap: 12px; padding: 0 20px; }
 .px-crumb { font-size: 13px; color: var(--px-faint); }
 .px-crumb b { color: var(--px-text); font-weight: 600; }
@@ -153,14 +199,61 @@ body {
 .px-ag-sw--novision { background: var(--px-slate-bg); border-color: var(--px-border-2); }
 .px-ag-sw--history { background: var(--px-surface-2); border: 1px dashed var(--px-border-2); }
 
-.px-agenda { display: grid; grid-template-columns: 264px minmax(0, 1fr) 232px; gap: 18px; align-items: start; }
+/* Column order: to-schedule (left) · week grid · note (right). Below ~1040px of
+   MEASURED screen width the two panels move under the calendar, and below ~720px
+   they stop sharing a row — the JS that measures also sheds day columns, so the
+   page never scrolls sideways. */
+.px-agenda { display: grid; grid-template-columns: 248px minmax(0, 1fr) 286px; gap: 18px; align-items: start; }
+.px-agenda--stack { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.px-agenda--stack .px-agenda-cal { grid-column: 1 / -1; order: 0; }
+.px-agenda--stack .px-agenda-todo { order: 1; }
+.px-agenda--stack .px-agenda-journal { order: 2; }
+.px-agenda--narrow { grid-template-columns: minmax(0, 1fr); }
+.px-agenda-cal { min-width: 0; }
+/* multi-row spans (2 weeks) stack their grids */
+.px-cal-rows { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+
+/* segmented control — how many days the calendar shows */
+.px-seg { display: inline-flex; border: 1px solid var(--px-border); background: var(--px-surface); border-radius: 8px; overflow: hidden; box-shadow: var(--px-shadow); }
+.px-seg-btn { font: inherit; font-size: 12px; font-weight: 560; color: var(--px-text-dim); background: none; border: none; border-right: 1px solid var(--px-border); padding: 6px 10px; cursor: pointer; min-width: 34px; }
+.px-seg-btn:last-child { border-right: none; }
+.px-seg-btn:hover { background: var(--px-surface-2); color: var(--px-text); }
+.px-seg-btn--on { background: var(--px-blue-bg); color: var(--px-blue-deep); font-weight: 640; }
 .px-agenda-journal, .px-agenda-todo { background: var(--px-surface); border: 1px solid var(--px-border); border-radius: 10px; padding: 12px 14px; box-shadow: var(--px-shadow); min-width: 0; }
 .px-agenda-journal h2, .px-agenda-todo h2 { margin-top: 0; font-size: 14px; }
 .px-drag-hint { font-size: 11px; margin: 10px 0 0; }
 .px-todo-item { display: flex; justify-content: space-between; gap: 8px; padding: 9px 11px; margin-bottom: 7px; background: var(--px-surface); border: 1px solid var(--px-border); border-radius: 8px; font-size: 12.5px; cursor: grab; user-select: none; box-shadow: var(--px-shadow); }
 .px-todo-item:hover { border-color: var(--px-accent); }
+/* "All tasks" — every live task, scheduled ones included, in a bounded scroller
+   so the panel never outgrows the week grid beside it. */
+.px-ag-all { margin-top: 16px; border-top: 1px solid var(--px-border); padding-top: 10px; }
+.px-ag-scroll { max-height: 268px; overflow-y: auto; padding-right: 2px; }
+.px-todo-item--placed { background: var(--px-surface-2); color: var(--px-text-dim); box-shadow: none; }
+/* Inbox items (captured, not yet promoted): listed and draggable, but flagged —
+   they sit under no project, so a block on one renders "No vision". */
+.px-todo-item--inbox { border-style: dashed; }
+.px-todo-flag { margin-right: 6px; font-size: 10px; padding: 1px 5px; }
+.px-todo-sub { font-size: 11px; color: var(--px-faint); white-space: nowrap; }
+.px-todo-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-.px-cal-grid { display: grid; grid-template-columns: 48px repeat(7, 1fr); gap: 0; border: 1px solid var(--px-border); border-radius: var(--px-radius); overflow: hidden; }
+/* the grabbed item, riding the cursor until it is dropped on a slot.
+   `pointer-events: none` keeps it from swallowing the drop's mouseup. */
+.px-drag-ghost {
+  position: fixed; top: 0; left: 0; z-index: 60; pointer-events: none;
+  display: flex; align-items: center; gap: 10px; max-width: 260px;
+  padding: 7px 11px; font-size: 12.5px;
+  background: var(--px-surface); color: var(--px-text);
+  border: 1px solid var(--px-accent); border-radius: 8px;
+  box-shadow: var(--px-shadow-pop); opacity: 0.96;
+  transform: translate3d(-9999px, -9999px, 0); /* off-screen until first placed */
+}
+.px-drag-ghost-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 550; }
+.px-drag-ghost-dur { color: var(--px-text-dim); font-variant-numeric: tabular-nums; flex: none; }
+/* the row it came from stays put but reads as lifted */
+.px-todo-item--dragging { opacity: 0.4; }
+
+/* the column template is set inline — the day count is measured, not fixed. */
+.px-cal-grid { display: grid; grid-template-columns: 48px repeat(7, minmax(0, 1fr)); gap: 0; border: 1px solid var(--px-border); border-radius: var(--px-radius); overflow: hidden; min-width: 0; }
 .px-cal-gutter { position: relative; border-right: 1px solid var(--px-border); margin-top: 28px; }
 .px-cal-hour-label { position: absolute; right: 6px; font-size: 10px; color: var(--px-text-dim); transform: translateY(-6px); }
 .px-cal-col { border-right: 1px solid var(--px-border); }
@@ -261,7 +354,22 @@ body {
 .px-scrim { position: fixed; inset: 0; background: rgba(16,24,40,0.45); display: flex; align-items: center; justify-content: center; z-index: 50; }
 .px-modal { background: var(--px-surface); border: 1px solid var(--px-border); border-radius: var(--px-radius); padding: 22px; width: min(440px, 92vw); box-shadow: var(--px-shadow-pop); }
 .px-modal-title { margin: 0 0 12px; font-size: 18px; }
+.px-modal-sub { margin: -6px 0 18px; font-size: 13px; color: var(--px-text-dim); line-height: 1.55; }
 .px-modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+
+/* full-screen dialog: the page behind is blurred and dimmed, the form itself
+   stays a readable column centered in the viewport. */
+.px-scrim--blur { background: rgba(246,247,249,0.62); backdrop-filter: blur(14px) saturate(120%); -webkit-backdrop-filter: blur(14px) saturate(120%); }
+/* `scrollbar-gutter: both-edges` keeps the column optically centered when the
+   form is taller than the viewport and the dialog grows a scrollbar. */
+.px-modal--full { width: 100%; height: 100%; max-width: none; border: none; border-radius: 0; background: transparent; box-shadow: none; padding: 0; overflow-y: auto; scrollbar-gutter: stable both-edges; display: flex; align-items: center; justify-content: center; }
+.px-modal-inner { width: min(660px, 92vw); margin: auto; padding: 40px 0 48px; }
+.px-modal--full .px-modal-title { font-size: 26px; letter-spacing: -0.3px; margin-bottom: 8px; }
+.px-modal--full .px-modal-actions { margin-top: 28px; }
+@media (prefers-reduced-motion: no-preference) {
+  .px-modal--full .px-modal-inner { animation: px-rise 160ms ease-out; }
+}
+@keyframes px-rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 
 .px-auth { max-width: 360px; margin: 12vh auto; padding: 28px; background: var(--px-surface); border: 1px solid var(--px-border); border-radius: var(--px-radius); }
 .px-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
@@ -269,31 +377,66 @@ body {
 .px-error { color: var(--px-danger); font-size: 13px; margin: 8px 0; }
 .px-muted { color: var(--px-text-dim); }
 
+/* editable note title with the day beneath it — renaming never hides the date */
+.px-jn-head { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.px-jn-title { font: inherit; font-size: 15px; font-weight: 620; color: var(--px-text); background: none; border: 1px solid transparent; border-radius: 6px; padding: 2px 6px; margin: -2px -6px; width: 100%; }
+.px-jn-title:hover:not(:disabled) { border-color: var(--px-border); }
+.px-jn-title:focus { outline: none; border-color: var(--px-accent); background: var(--px-surface); }
+.px-jn-title:disabled { color: var(--px-text); opacity: 1; }
+.px-jn-date { font-size: 11.5px; color: var(--px-faint); font-variant-numeric: tabular-nums; padding-left: 0; }
+
 /* journal (D2/D3/J7): day-header note affordance + TipTap WYSIWYG editor + toolbar + markdown preview */
 .px-cal-col-head { cursor: pointer; gap: 4px; }
 .px-cal-col-head:hover { color: var(--px-text); }
-.px-cal-col-head--sel { color: var(--px-text); background: var(--px-surface-2); }
-.px-note-dot { width: 6px; height: 6px; border-radius: 999px; background: var(--px-accent); display: inline-block; }
+/* The selected day: an accent-tinted header with an underline, and the thin rule
+   down EACH side of its column accented too. The left-hand rule is not the
+   column's own — it is the previous column's right border (or the hour gutter's)
+   — so recolour that existing line rather than adding a second one beside it. */
+.px-cal-col-head--sel { color: var(--px-blue-deep); background: var(--px-blue-bg); font-weight: 620; box-shadow: inset 0 -2px 0 var(--px-blue); }
+.px-cal-col--sel { border-right-color: var(--px-blue); }
+.px-cal-col:has(+ .px-cal-col--sel), .px-cal-gutter:has(+ .px-cal-col--sel) { border-right-color: var(--px-blue); }
+/* the last column has no right border (the grid's own edge stands in), so draw it */
+.px-cal-col--sel:last-child { box-shadow: inset -1px 0 0 var(--px-blue); }
+/* "this day has a note" marker in a day header */
+.px-note-ic { display: inline-flex; align-items: center; color: var(--px-accent); flex: none; }
+.px-note-ic .px-ic { width: 11px; height: 11px; }
 .px-journal-rich-wrap { margin-top: 8px; }
-.px-journal-rich { min-height: 200px; line-height: 1.5; cursor: text; }
+/* line-height is `.px-md`'s job (same element, later rule would win otherwise) */
+.px-journal-rich { min-height: 200px; cursor: text; }
 .px-journal-rich:focus, .px-journal-rich:focus-visible { outline: none; border-color: var(--px-accent); }
 .px-md-toolbar { display: flex; flex-wrap: wrap; gap: 4px; }
 .px-md-toolbar .px-btn { padding: 4px 8px; font-size: 12px; min-width: 30px; }
 .px-md { background: var(--px-surface); border: 1px solid var(--px-border); border-radius: var(--px-radius); padding: 2px 14px; margin-top: 8px; }
+/* Note-body type. It used to inherit the browser defaults — 16px, 1.5, and 1em
+   paragraph margins — which made the note the largest and loosest text in an app
+   whose chrome sits at 12.5–13px. Applies to the editor and its read-only render
+   alike, since both are `.px-md`. */
+.px-md { font-size: 14px; line-height: 1.45; }
+.px-md p { margin: 6px 0; }
+.px-md h1, .px-md h2, .px-md h3, .px-md h4, .px-md h5, .px-md h6 { margin: 12px 0 4px; line-height: 1.25; }
+.px-md h1 { font-size: 1.32em; }
+.px-md h2 { font-size: 1.18em; }
+.px-md h3 { font-size: 1.06em; }
+.px-md li { margin: 1px 0; }
+.px-md li > p { margin: 2px 0; }
 .px-md > :first-child { margin-top: 6px; }
+.px-md > :last-child { margin-bottom: 6px; }
 .px-md pre { background: var(--px-bg); padding: 10px 12px; border-radius: 8px; overflow-x: auto; }
 .px-md code { background: var(--px-surface-2); padding: 1px 5px; border-radius: 4px; font-size: 0.92em; }
 .px-md pre code { background: none; padding: 0; }
 .px-md a { color: var(--px-accent); }
-.px-md blockquote { border-left: 3px solid var(--px-border); margin: 8px 0; padding-left: 12px; color: var(--px-text-dim); }
-.px-md ul, .px-md ol { padding-left: 22px; }
+.px-md blockquote { border-left: 3px solid var(--px-border); margin: 7px 0; padding-left: 12px; color: var(--px-text-dim); }
+.px-md ul, .px-md ol { margin: 6px 0; padding-left: 20px; }
+/* section divider (the toolbar's — button) */
+.px-md hr { border: none; border-top: 1px solid var(--px-border-2); margin: 13px 0; }
+.px-md hr.ProseMirror-selectednode { border-top-color: var(--px-accent); }
 .px-md input[type='checkbox'] { margin-right: 6px; }
 /* interactive task-list checkboxes (J7): flex so the box sits inline with its text */
 .px-md ul[data-type='taskList'] { list-style: none; padding-left: 2px; }
 .px-md ul[data-type='taskList'] li { display: flex; align-items: flex-start; gap: 6px; }
 .px-md ul[data-type='taskList'] li > label { margin-top: 3px; }
 .px-md ul[data-type='taskList'] li > div { flex: 1 1 auto; }
-.px-md ul[data-type='taskList'] li > div > p { margin: 6px 0; }
+.px-md ul[data-type='taskList'] li > div > p { margin: 2px 0; }
 
 /* generated journal day log (Annex L). Read-only by construction: no control in
    here is focusable, and the section sits OUTSIDE the editor. */
@@ -543,9 +686,13 @@ body {
 .px-set-lbl span { font-size: 11.5px; color: var(--px-faint); line-height: 1.45; }
 .px-set-ctl { flex: 1; }
 
-/* ── W8 polish — keyboard focus-visible, reduced motion, desktop min-width ── */
-/* the shell is a desktop-first 3-column IA; below this it scrolls rather than collapsing. */
-.px-app { min-width: 1024px; }
+/* ── W8 polish — keyboard focus-visible, reduced motion ── */
+/* The shell used to be pinned at `min-width: 1024px`, so a narrow window scrolled
+   sideways instead of adapting. It now reflows: the sidebar drops to a rail and
+   the Agenda restacks + sheds day columns (see .px-agenda--stack below). */
+/* min-height:0 lets it actually shrink inside the fixed-height shell, which is
+   what makes IT the scroller instead of the page. */
+.px-content { min-width: 0; min-height: 0; }
 /* a visible focus ring for KEYBOARD navigation only (mouse clicks don't trigger it). */
 :focus-visible { outline: 2px solid var(--px-accent); outline-offset: 2px; }
 .px-navlink:focus-visible,
@@ -578,3 +725,66 @@ body {
 .px-jn-d--sel .px-jn-d-date { color: var(--px-blue-deep); }
 .px-jn-d-title { font-size: 12.5px; color: var(--px-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .px-jn-editor { background: var(--px-surface); border: 1px solid var(--px-border); border-radius: 10px; padding: 4px 16px 16px; box-shadow: var(--px-shadow); min-width: 0; }
+
+/* ── overflow ("⋯") menu — secondary actions tucked into a corner ── */
+.px-menu { position: relative; display: inline-flex; }
+.px-menu-btn { padding: 4px 7px; line-height: 0; color: var(--px-text-dim); }
+.px-menu-pop { position: absolute; z-index: 30; top: calc(100% + 6px); right: 0; min-width: 176px; padding: 4px; background: var(--px-surface); border: 1px solid var(--px-border); border-radius: 9px; box-shadow: var(--px-shadow-pop); display: flex; flex-direction: column; }
+.px-menu-item { display: flex; align-items: center; gap: 9px; width: 100%; text-align: left; background: none; border: none; font: inherit; font-size: 12.5px; color: var(--px-text); padding: 7px 9px; border-radius: 6px; cursor: pointer; }
+.px-menu-item .px-ic { width: 14px; height: 14px; color: var(--px-faint); }
+.px-menu-item:hover { background: var(--px-surface-2); }
+.px-menu-item--danger { color: var(--px-danger); }
+.px-menu-item--danger .px-ic { color: var(--px-danger); }
+.px-menu-sep { height: 1px; background: var(--px-border); margin: 4px 2px; }
+
+/* ── Roadmap tab — a top-to-bottom graph of a roadmap's projects, grouped and
+   tinted by the owning VISION's colour (stored in the vision's attributes) ── */
+.px-rm-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.px-flow-canvas--tall { height: 560px; }
+.px-rm-empty { padding: 26px 20px; color: var(--px-text-dim); background: var(--px-surface); border: 1px dashed var(--px-border-2); border-radius: var(--px-radius); display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.px-rm-empty p { margin: 0; font-size: 12.5px; text-align: center; max-width: 52ch; line-height: 1.55; }
+.px-flow-node--root { width: 190px; }
+
+/* colour swatches (vision colour picker + the active-vision indicator).
+   `--px-vc` carries the vision's own hex; softer surfaces are mixed from it. */
+.px-swatches { display: grid; grid-template-columns: repeat(10, 1fr); gap: 8px; max-width: 420px; }
+.px-swatch { width: 100%; aspect-ratio: 1; border-radius: 8px; border: 2px solid transparent; padding: 0; cursor: pointer; box-shadow: inset 0 0 0 1px rgba(16,24,40,.1); position: relative; }
+.px-swatch--on { border-color: var(--px-text); }
+.px-swatch--on::after { content: ''; position: absolute; inset: 0; margin: auto; width: 7px; height: 7px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 1px rgba(16,24,40,.25); }
+/* a colour another vision already wears: struck through and not selectable */
+.px-swatch:disabled { cursor: not-allowed; opacity: 0.28; }
+.px-swatch:disabled::after { content: ''; position: absolute; inset: 0; margin: auto; width: 130%; height: 2px; background: var(--px-text); transform: rotate(-45deg); transform-origin: center; }
+.px-swatch--sm { width: 12px; height: 12px; aspect-ratio: auto; border-radius: 4px; border: none; flex: none; cursor: inherit; box-shadow: none; }
+.px-swatch-name { font-size: 12px; color: var(--px-text-dim); }
+
+/* create-a-vision dialog: description + the dateless expected timeline */
+.px-vd-field { margin-bottom: 20px; }
+.px-vd-lbl { display: block; font-size: 12px; font-weight: 640; letter-spacing: 0.4px; text-transform: uppercase; color: var(--px-text-dim); margin-bottom: 7px; }
+.px-vd-hint { font-size: 11.5px; color: var(--px-faint); margin: 6px 0 0; line-height: 1.5; }
+.px-vd-input { width: 100%; font: inherit; padding: 10px 13px; border-radius: 9px; border: 1px solid var(--px-border); background: var(--px-surface); color: var(--px-text); }
+.px-vd-input::placeholder { color: var(--px-faint); }
+.px-vd-input:focus { outline: none; border-color: var(--px-accent); }
+textarea.px-vd-input { min-height: 92px; resize: vertical; line-height: 1.55; }
+.px-vd-units { display: inline-flex; gap: 2px; padding: 3px; background: var(--px-surface-2); border-radius: 9px; }
+.px-vd-unit { font: inherit; font-size: 12.5px; font-weight: 560; padding: 5px 14px; border-radius: 7px; border: none; background: none; color: var(--px-text-dim); cursor: pointer; }
+.px-vd-unit--on { background: var(--px-surface); color: var(--px-text); box-shadow: var(--px-shadow); }
+.px-vd-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.px-vd-presets { display: inline-flex; gap: 6px; }
+.px-vd-preset { font: inherit; font-size: 12.5px; font-weight: 560; min-width: 38px; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--px-border); background: var(--px-surface); color: var(--px-text-dim); cursor: pointer; }
+.px-vd-preset:hover { border-color: var(--px-border-2); }
+.px-vd-preset--on { background: var(--px-blue-bg); border-color: var(--px-blue-brd); color: var(--px-blue-deep); }
+.px-vd-amount { width: 84px; font: inherit; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--px-border); background: var(--px-surface); color: var(--px-text); }
+.px-vd-amount:focus { outline: none; border-color: var(--px-accent); }
+.px-vd-sep { font-size: 12px; color: var(--px-faint); }
+.px-vd-preview { font-size: 13px; font-weight: 560; }
+.px-vd-err { color: var(--px-danger); font-size: 12px; margin: 8px 0 0; }
+
+/* the vision group: every roadmap that shares this vision's colour */
+.px-rm-group { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 14px; }
+.px-rm-group-lbl { font-size: 11px; font-weight: 640; letter-spacing: 0.5px; text-transform: uppercase; color: var(--px-faint); }
+.px-rm-chip { font: inherit; font-size: 12px; font-weight: 560; border: 1px solid; border-radius: 20px; padding: 3px 11px; cursor: pointer; }
+.px-rm-chip--on { font-weight: 640; }
+
+/* inline create-a-roadmap / create-a-vision forms */
+.px-rm-form { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 14px; padding: 12px 14px; background: var(--px-surface); border: 1px solid var(--px-border); border-radius: 10px; box-shadow: var(--px-shadow); }
+.px-rm-form .px-input { min-width: 200px; }

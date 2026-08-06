@@ -1,14 +1,16 @@
 /**
  * DayJournal (J4/J7, D2/D3/D7): the left-panel editor for a calendar day's note.
  * The edit surface is the TipTap WYSIWYG (`RichJournalEditor`, J7) bound to the
- * markdown `content` field; a Preview toggle renders the same markdown read-only
- * via `react-markdown`+`remark-gfm` (the exact sanitized output shared with the
- * `.md` export and other clients). Mobile keeps the J4 toolbar/textarea editor.
+ * markdown `content` field; locking renders the same markdown read-only via
+ * `react-markdown`+`remark-gfm` (the exact sanitized output shared with the `.md`
+ * export and other clients). The chrome around it depends on where the panel is
+ * mounted — see the `actions` prop. Mobile keeps the J4 toolbar/textarea editor
+ * and its own Preview/Export/Delete buttons.
  *
  * Rendering is SANITIZED (D2): raw HTML in the markdown is NEVER rendered
  * (react-markdown default — we deliberately do NOT add rehype-raw), link hrefs are
  * allowlisted to http/https/mailto (anything else, e.g. `javascript:`, is dropped),
- * and task-list checkboxes render disabled. Saves debounce (800ms) + flush on blur
+ * and task-list checkboxes render disabled. Saves debounce (SAVE_DEBOUNCE_MS) + flush on blur
  * (and on unmount) via `journal.write`; an explicit Delete soft-deletes; empty
  * saves are allowed.
  */
@@ -18,12 +20,28 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
 import { composeDayMarkdown } from '@prisms/core';
-import { journalDayFilename, useCommands, useDayLog, useJournalDay, useUserSettings, type CommandContext } from '@prisms/ui';
+import {
+  Ic,
+  isJournalContentEmpty,
+  journalDayFilename,
+  journalTitleOf,
+  useCommands,
+  useDayLog,
+  useJournalDay,
+  useUserSettings,
+  type CommandContext,
+} from '@prisms/ui';
 
 import { DayLogFooter } from './DayLogFooter';
 import { RichJournalEditor } from './RichJournalEditor';
 
-const SAVE_DEBOUNCE_MS = 800;
+/**
+ * How long after the last keystroke a note is written. Deliberately short: the
+ * debounce exists to coalesce a typing burst into one command, and a shorter
+ * window trades command volume for a note that reaches the server (and the
+ * user's other devices) sooner. A blur still flushes immediately regardless.
+ */
+const SAVE_DEBOUNCE_MS = 100;
 
 /** Allow only these link schemes; everything else (javascript:, data:, …) is dropped. */
 const SAFE_URL = /^(https?:|mailto:)/i;
@@ -49,7 +67,23 @@ export function MarkdownView({ markdown }: { markdown: string }) {
  * clobbers an in-progress edit (`dirty`). `existingId` (the live row id) is passed
  * to `writeJournal` so edits patch that row — a new day mints one.
  */
-export function DayJournalPanel({ date, ctx }: { date: string; ctx: CommandContext }) {
+export function DayJournalPanel({
+  date,
+  ctx,
+  actions = 'menu',
+}: {
+  date: string;
+  ctx: CommandContext;
+  /**
+   * Which chrome the panel carries.
+   * - `menu` (default, the Journal screen): the "⋯" menu — lock/edit, Export .md,
+   *   Delete. That screen is where a note is managed, so it keeps the full set.
+   * - `lock`: a single lock/pencil toggle and nothing else. The Agenda uses this
+   *   — there the note is a side panel next to the week, and export/delete are a
+   *   click away on the Journal screen.
+   */
+  actions?: 'menu' | 'lock';
+}) {
   const { entry, isLoading } = useJournalDay(date);
   const commands = useCommands(ctx);
   // Annex L: derived at render from the warm provider — null when the built-in
@@ -57,16 +91,84 @@ export function DayJournalPanel({ date, ctx }: { date: string; ctx: CommandConte
   const dayLog = useDayLog(date);
   const { timezone } = useUserSettings();
   const [draft, setDraft] = useState(entry?.content ?? '');
-  const [preview, setPreview] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const dirty = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const existingId = entry?.id;
+  const menuRef = useRef<HTMLDivElement | null>(null);
+
+  /** The heading: the stored title, else "Note · <date>". */
+  const heading = journalTitleOf(entry?.title, date);
+  /** Title and lock belong to a note that EXISTS; a blank day has neither. */
+  const hasNote = existingId !== undefined && !isJournalContentEmpty(draft);
+  /**
+   * The LOCKED (read-only) state of THIS day, surfaced as "Lock edit" ⇄ "Edit".
+   * It is a SYNCED field on the day's row (`journal_entries.locked`), not local
+   * UI state, so a day locked here opens locked on every other device.
+   *
+   * Gated on `hasNote`: a row with no text is not a note, and a row that is BOTH
+   * empty and locked would otherwise be a dead end — the empty-note rule denies
+   * it a title or an unlock, while the lock denies it an editor to type into.
+   * Such rows cannot be created any more, but they exist in databases that
+   * predate that rule, so an empty one is simply editable.
+   */
+  const preview = hasNote && (entry?.locked ?? false);
+  const [titleDraft, setTitleDraft] = useState<string | null>(null);
+
+  function commitTitle() {
+    if (titleDraft === null) return; // nothing typed
+    // typing the default back is the same as clearing it — stay untitled so the
+    // heading keeps tracking the date.
+    const typed = titleDraft.trim();
+    const next = typed === journalTitleOf('', date) ? '' : typed;
+    setTitleDraft(null);
+    if (!existingId || next === (entry?.title ?? '')) return;
+    void commands.setJournalTitle(existingId, next);
+  }
+
+  function toggleLock() {
+    if (!existingId) return;
+    void commands.setJournalLocked(existingId, !preview);
+  }
+
+  // Dismiss the overflow menu on an outside click or Escape.
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (!menuRef.current?.contains(e.target as HTMLElement)) setMenuOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMenuOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [menuOpen]);
 
   // Adopt synced content when it arrives, unless the user has already edited.
   useEffect(() => {
     if (!dirty.current) setDraft(entry?.content ?? '');
   }, [entry?.content]);
-  const write = (content: string) => commands.writeJournal({ existingId, entryDate: date, content });
+
+  /**
+   * An empty note is not a note. Writing blank content used to store a row that
+   * showed up as a note everywhere (the day marker, the month list, the export),
+   * so:
+   *   - blank + no row  → nothing happens; the day stays untouched.
+   *   - blank + a row   → the row is soft-deleted, taking its title and lock with
+   *                       it. Typing again re-creates it (the §7.7 partial unique
+   *                       permits re-creating a soft-deleted day).
+   */
+  const write = (content: string) => {
+    if (isJournalContentEmpty(content)) {
+      if (existingId) void commands.deleteJournal(existingId);
+      return;
+    }
+    void commands.writeJournal({ existingId, entryDate: date, content });
+  };
 
   // Flush a pending debounced save if the panel unmounts (day switch) before the
   // debounce fires and without an onBlur — otherwise the last edit is dropped.
@@ -119,11 +221,113 @@ export function DayJournalPanel({ date, ctx }: { date: string; ctx: CommandConte
 
   return (
     <div className="px-journal" data-testid={`journal-${date}`} style={{ marginTop: 16 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <h2 style={{ margin: 0, flex: 1 }}>Note · {date}</h2>
-        <button className="px-btn" data-testid="journal-preview-toggle" aria-pressed={preview} onClick={() => setPreview((p) => !p)}>
-          {preview ? 'Edit' : 'Preview'}
-        </button>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+        {/* The title is editable; the DATE moves below it, so renaming a note
+            never costs you the day it belongs to. */}
+        <div className="px-jn-head">
+          {/* The heading is the note's title, or "Note · <date>" when it has
+              none — but ONLY once the note has loaded and that absence is a
+              fact. While the row is still arriving we know neither, so the field
+              stays blank rather than showing the default for a moment and then
+              correcting itself. */}
+          <input
+            className="px-jn-title"
+            data-testid="journal-title"
+            aria-label="note title"
+            value={titleDraft ?? (hasNote ? heading : '')}
+            disabled={!hasNote || preview}
+            title={hasNote ? heading : 'Write something first — an empty day is not saved'}
+            onChange={(e) => setTitleDraft(e.target.value)}
+            onBlur={commitTitle}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') e.currentTarget.blur();
+              if (e.key === 'Escape') setTitleDraft(null);
+            }}
+          />
+          <span className="px-jn-date" data-testid="journal-date">{date}</span>
+        </div>
+        {/* `lock`: one button, nothing else — the icon is the affordance for what
+            the click DOES (a padlock while editing, a pencil while locked). */}
+        {actions === 'lock' ? (
+          <button
+            className="px-btn px-btn--icon"
+            data-testid="journal-preview-toggle"
+            aria-pressed={preview}
+            disabled={!hasNote}
+            aria-label={preview ? 'Edit this note' : 'Lock this note from editing'}
+            title={hasNote ? (preview ? 'Edit' : 'Lock edit') : 'Nothing to lock — this day has no note'}
+            onClick={toggleLock}
+          >
+            <Ic name={preview ? 'pen' : 'lock'} />
+          </button>
+        ) : (
+        /* Lock/edit, export and delete all live in this corner menu so the note
+           itself is the only thing competing for the panel. */
+        <div className="px-menu" ref={menuRef}>
+          <button
+            className="px-btn px-menu-btn"
+            data-testid="journal-menu"
+            aria-label="note options"
+            aria-haspopup="menu"
+            aria-expanded={menuOpen}
+            onClick={() => setMenuOpen((o) => !o)}
+          >
+            <Ic name="dots" />
+          </button>
+          {menuOpen && (
+            <div className="px-menu-pop" role="menu" data-testid="journal-menu-pop">
+              <button
+                className="px-menu-item"
+                role="menuitem"
+                data-testid="journal-preview-toggle"
+                aria-pressed={preview}
+                disabled={!hasNote}
+                onClick={() => {
+                  toggleLock();
+                  setMenuOpen(false);
+                }}
+              >
+                <Ic name={preview ? 'pen' : 'lock'} />
+                {preview ? 'Edit' : 'Lock edit'}
+              </button>
+              <button
+                className="px-menu-item"
+                role="menuitem"
+                data-testid="journal-export"
+                // Exporting mid-load wrote the file from an empty `draft` — a
+                // silently blank .md for a note that has text. A day-log-only day
+                // exports fine; it is the LOADING window that must be refused.
+                disabled={isLoading}
+                title={isLoading ? 'Still loading this day' : undefined}
+                onClick={() => {
+                  exportDay();
+                  setMenuOpen(false);
+                }}
+              >
+                <Ic name="down" />
+                Export .md
+              </button>
+              {existingId && (
+                <>
+                  <div className="px-menu-sep" />
+                  <button
+                    className="px-menu-item px-menu-item--danger"
+                    role="menuitem"
+                    data-testid="journal-delete"
+                    onClick={() => {
+                      remove();
+                      setMenuOpen(false);
+                    }}
+                  >
+                    <Ic name="trash" />
+                    Delete
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+        )}
       </div>
 
       {isLoading ? (
@@ -137,13 +341,6 @@ export function DayJournalPanel({ date, ctx }: { date: string; ctx: CommandConte
       {/* OUTSIDE the editor and the preview, in both modes — never part of the
           document the user types into. */}
       {!isLoading && <DayLogFooter entries={dayLog} timezone={timezone} />}
-
-      <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-        <button className="px-btn" data-testid="journal-export" onClick={exportDay}>Export .md</button>
-        {existingId && (
-          <button className="px-btn px-btn--danger" data-testid="journal-delete" onClick={remove}>Delete</button>
-        )}
-      </div>
     </div>
   );
 }

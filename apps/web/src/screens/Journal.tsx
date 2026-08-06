@@ -11,7 +11,7 @@
 import { useMemo, useState } from 'react';
 
 import { asEpochMillis, type Instant, type JournalEntry } from '@prisms/core';
-import { Ic, truncatePlain, useFactContext, useJournalMonths, type CommandContext } from '@prisms/ui';
+import { Ic, isJournalContentEmpty, journalTitleOf, truncatePlain, useFactContext, useJournalMonths, type CommandContext } from '@prisms/ui';
 
 import { DayJournalPanel } from '../components/DayJournal';
 import { downloadJournalArchive } from '../portability';
@@ -67,6 +67,8 @@ export function Journal({ ctx }: { ctx: CommandContext }) {
   const daysByMonth = useMemo(() => {
     const m = new Map<string, JournalEntry[]>();
     for (const e of entries) {
+      // an empty note is not a note — it must not appear as a day in the month
+      if (isJournalContentEmpty(e.content)) continue;
       const k = e.entry_date.slice(0, 7);
       let list = m.get(k);
       if (!list) { list = []; m.set(k, list); }
@@ -135,7 +137,11 @@ export function Journal({ ctx }: { ctx: CommandContext }) {
                         onClick={() => setSelectedDay(e.entry_date)}
                       >
                         <span className="px-jn-d-date">{dayLabel(e.entry_date)}</span>
-                        <span className="px-jn-d-title">{noteTitle(e.content) || '—'}</span>
+                        {/* a named note shows its NAME; an untitled one still shows
+                            its first line, which is more use than "Note · <date>". */}
+                        <span className="px-jn-d-title">
+                          {e.title.trim() || noteTitle(e.content) || journalTitleOf(e.title, e.entry_date)}
+                        </span>
                       </button>
                     ))}
                   </div>

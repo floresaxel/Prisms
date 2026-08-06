@@ -304,6 +304,8 @@ export const toJournalEntry = (r: Row): JournalEntry => ({
   entry_date: String(r['entry_date']),
   month_key: String(r['month_key'] ?? ''),
   content: String(r['content'] ?? ''),
+  locked: bool(r['locked']),
+  title: String(r['title'] ?? ''),
   created_at: String(r['created_at'] ?? ''),
   updated_at: String(r['updated_at'] ?? ''),
   deleted_at: str(r['deleted_at']),

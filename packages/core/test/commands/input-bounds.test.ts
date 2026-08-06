@@ -8,8 +8,10 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { COMMAND_SCHEMAS, MAX_RENORMALIZE_NODES, MAX_TITLE_LENGTH } from '../../src/commands/payloads';
+import { COMMAND_SCHEMAS, MAX_RENORMALIZE_NODES } from '../../src/commands/payloads';
 import { MAX_DEPENDS_ON, commandEnvelopeSchema } from '../../src/commands/envelope';
+// MAX_TITLE_LENGTH moved to domain/entities (the entity schemas need it too).
+import { MAX_TITLE_LENGTH } from '../../src/domain/entities';
 import {
   MAX_JSON_DEPTH,
   MAX_JSON_NODES,

@@ -266,6 +266,12 @@ export function buildOptimisticEffects(name: CommandName, payload: unknown, ctx:
       const entryDate = String(p['entry_date'] ?? '');
       return [ins('journal_entries', p['id'], { entry_date: entryDate, month_key: entryDate.slice(0, 7), content: p['content'] ?? '' })];
     }
+    case 'journal.set_locked':
+      // patches an existing row (a lock never mints one — see the payload doc).
+      return [upd('journal_entries', id, { locked: b(p['locked']) })];
+    case 'journal.set_title':
+      // patches an existing row (a title never mints one — see the payload doc).
+      return [upd('journal_entries', id, { title: p['title'] })];
     case 'journal.delete':
       return [del('journal_entries', id)];
 
