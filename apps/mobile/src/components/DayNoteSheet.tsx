@@ -23,7 +23,7 @@ import { SheetBase } from './SheetBase';
 import { theme } from '../ui';
 
 /** J-feature precedent: the same debounce the JournalDay screen uses. */
-const SAVE_DEBOUNCE_MS = 800;
+const SAVE_DEBOUNCE_MS = 100;
 /** Rule spacing = the input's line height, so the text sits ON the lines. */
 const RULE_STEP = 28;
 /**

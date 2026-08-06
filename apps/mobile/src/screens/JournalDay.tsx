@@ -4,7 +4,7 @@
  * `react-native-markdown-display`. Native iOS/Android emoji keyboards type straight
  * into the TextInput (plain Unicode → journal.write). Rendering executes NO HTML
  * (markdown-it, html:false) and link taps are allowlisted to http/https/mailto.
- * Save debounces (800ms) + flushes on blur; Delete soft-deletes; Share exports the
+ * Save debounces (SAVE_DEBOUNCE_MS) + flushes on blur; Delete soft-deletes; Share exports the
  * single day's `.md` via the RN Share sheet (the exportAndShare precedent).
  */
 import { useEffect, useRef, useState } from 'react';
@@ -18,7 +18,8 @@ import { applyMarkdownEdit, journalDayFilename, useCommands, useDayLog, useJourn
 import { DayLogFooter } from '../components/DayLogFooter';
 import { Btn, Card, H2, Row, theme } from '../ui';
 
-const SAVE_DEBOUNCE_MS = 800;
+/** Kept in step with the web panel and the day-note sheet (see DayJournal.tsx). */
+const SAVE_DEBOUNCE_MS = 100;
 /** Allow only these link schemes to open; everything else is blocked. */
 const SAFE_URL = /^(https?:|mailto:)/i;
 
@@ -76,7 +77,7 @@ export function JournalDay({ date, ctx, onClose }: { date: string; ctx: CommandC
   // A pending debounced save must survive unmount (switching day). RN's
   // keyboardShouldPersistTaps can let a day-switch tap through WITHOUT blurring
   // the TextInput, so onBlur may never fire — flush the latest draft here or the
-  // last <800ms of typing is lost. Guarded on `timer` so an already-flushed day
+  // last SAVE_DEBOUNCE_MS of typing is lost. Guarded on `timer` so an already-flushed day
   // (blur fired) doesn't re-write. The ref holds the newest draft/write closure.
   const flushPending = useRef<() => void>(() => undefined);
   flushPending.current = () => {

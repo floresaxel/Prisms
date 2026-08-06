@@ -10,7 +10,7 @@
  * Rendering is SANITIZED (D2): raw HTML in the markdown is NEVER rendered
  * (react-markdown default — we deliberately do NOT add rehype-raw), link hrefs are
  * allowlisted to http/https/mailto (anything else, e.g. `javascript:`, is dropped),
- * and task-list checkboxes render disabled. Saves debounce (800ms) + flush on blur
+ * and task-list checkboxes render disabled. Saves debounce (SAVE_DEBOUNCE_MS) + flush on blur
  * (and on unmount) via `journal.write`; an explicit Delete soft-deletes; empty
  * saves are allowed.
  */
@@ -25,7 +25,13 @@ import { Ic, journalDayFilename, useCommands, useDayLog, useJournalDay, useUserS
 import { DayLogFooter } from './DayLogFooter';
 import { RichJournalEditor } from './RichJournalEditor';
 
-const SAVE_DEBOUNCE_MS = 800;
+/**
+ * How long after the last keystroke a note is written. Deliberately short: the
+ * debounce exists to coalesce a typing burst into one command, and a shorter
+ * window trades command volume for a note that reaches the server (and the
+ * user's other devices) sooner. A blur still flushes immediately regardless.
+ */
+const SAVE_DEBOUNCE_MS = 100;
 
 /** Allow only these link schemes; everything else (javascript:, data:, …) is dropped. */
 const SAFE_URL = /^(https?:|mailto:)/i;

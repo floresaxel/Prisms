@@ -260,7 +260,7 @@ describe('DayJournalPanel — editor', () => {
     state.entry = { id: 'j1', content: 'start', deleted_at: null };
     const { unmount } = render(createElement(DayJournalPanel, { date: '2026-06-11', ctx: CTX }));
     fireEvent.change(screen.getByTestId('journal-rich'), { target: { value: 'start + more' } });
-    expect(command('writeJournal')).not.toHaveBeenCalled(); // still inside the 800ms debounce
+    expect(command('writeJournal')).not.toHaveBeenCalled(); // still inside the debounce window
 
     unmount(); // switch day before the debounce fires AND without an onBlur flush
     expect(command('writeJournal')).toHaveBeenCalledWith({ existingId: 'j1', entryDate: '2026-06-11', content: 'start + more' });
