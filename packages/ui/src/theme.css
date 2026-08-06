@@ -401,25 +401,42 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
 .px-note-ic { display: inline-flex; align-items: center; color: var(--px-accent); flex: none; }
 .px-note-ic .px-ic { width: 11px; height: 11px; }
 .px-journal-rich-wrap { margin-top: 8px; }
-.px-journal-rich { min-height: 200px; line-height: 1.5; cursor: text; }
+/* line-height is `.px-md`'s job (same element, later rule would win otherwise) */
+.px-journal-rich { min-height: 200px; cursor: text; }
 .px-journal-rich:focus, .px-journal-rich:focus-visible { outline: none; border-color: var(--px-accent); }
 .px-md-toolbar { display: flex; flex-wrap: wrap; gap: 4px; }
 .px-md-toolbar .px-btn { padding: 4px 8px; font-size: 12px; min-width: 30px; }
 .px-md { background: var(--px-surface); border: 1px solid var(--px-border); border-radius: var(--px-radius); padding: 2px 14px; margin-top: 8px; }
+/* Note-body type. It used to inherit the browser defaults — 16px, 1.5, and 1em
+   paragraph margins — which made the note the largest and loosest text in an app
+   whose chrome sits at 12.5–13px. Applies to the editor and its read-only render
+   alike, since both are `.px-md`. */
+.px-md { font-size: 14px; line-height: 1.45; }
+.px-md p { margin: 6px 0; }
+.px-md h1, .px-md h2, .px-md h3, .px-md h4, .px-md h5, .px-md h6 { margin: 12px 0 4px; line-height: 1.25; }
+.px-md h1 { font-size: 1.32em; }
+.px-md h2 { font-size: 1.18em; }
+.px-md h3 { font-size: 1.06em; }
+.px-md li { margin: 1px 0; }
+.px-md li > p { margin: 2px 0; }
 .px-md > :first-child { margin-top: 6px; }
+.px-md > :last-child { margin-bottom: 6px; }
 .px-md pre { background: var(--px-bg); padding: 10px 12px; border-radius: 8px; overflow-x: auto; }
 .px-md code { background: var(--px-surface-2); padding: 1px 5px; border-radius: 4px; font-size: 0.92em; }
 .px-md pre code { background: none; padding: 0; }
 .px-md a { color: var(--px-accent); }
-.px-md blockquote { border-left: 3px solid var(--px-border); margin: 8px 0; padding-left: 12px; color: var(--px-text-dim); }
-.px-md ul, .px-md ol { padding-left: 22px; }
+.px-md blockquote { border-left: 3px solid var(--px-border); margin: 7px 0; padding-left: 12px; color: var(--px-text-dim); }
+.px-md ul, .px-md ol { margin: 6px 0; padding-left: 20px; }
+/* section divider (the toolbar's — button) */
+.px-md hr { border: none; border-top: 1px solid var(--px-border-2); margin: 13px 0; }
+.px-md hr.ProseMirror-selectednode { border-top-color: var(--px-accent); }
 .px-md input[type='checkbox'] { margin-right: 6px; }
 /* interactive task-list checkboxes (J7): flex so the box sits inline with its text */
 .px-md ul[data-type='taskList'] { list-style: none; padding-left: 2px; }
 .px-md ul[data-type='taskList'] li { display: flex; align-items: flex-start; gap: 6px; }
 .px-md ul[data-type='taskList'] li > label { margin-top: 3px; }
 .px-md ul[data-type='taskList'] li > div { flex: 1 1 auto; }
-.px-md ul[data-type='taskList'] li > div > p { margin: 6px 0; }
+.px-md ul[data-type='taskList'] li > div > p { margin: 2px 0; }
 
 /* generated journal day log (Annex L). Read-only by construction: no control in
    here is focusable, and the section sits OUTSIDE the editor. */
