@@ -2,7 +2,7 @@
  * Reactive hooks (§12.2): PowerSync reactive queries → core selectors → React.
  * No view caches derived status; it recomputes on data change (microseconds).
  */
-import { useCallback, useEffect, useMemo, useSyncExternalStore } from 'react';
+import { useEffect, useMemo, useSyncExternalStore } from 'react';
 
 import { usePowerSync, useQuery } from '@powersync/react';
 import {
@@ -1644,18 +1644,13 @@ export function useJournalMonths(monthKeys: readonly string[]): JournalMonthsRea
   }, [mgr, key]);
 
   /**
-   * Have the held months finished their first sync? Until they have, an empty
-   * result means "not downloaded yet", NOT "this day has no note" — and a reader
-   * that confuses the two renders the day as blank and then corrects itself. The
-   * day panel showed "Note · <date>" for ~half a second before the real title
-   * replaced it, because the local query resolves long before the rows land.
+   * `isLoading` deliberately reflects only the LOCAL read, never "has this month
+   * finished its first sync". Gating on first sync looks right online and is a
+   * trap offline: `waitForFirstSync` never resolves without a connection, so the
+   * day panel sat on "Loading…" forever with the note already in local SQLite —
+   * caught by the offline e2e. The title no longer needs that gate anyway: it is
+   * blank until the ENTRY exists, which is a fact the local read establishes.
    */
-  const monthsSettled = useSyncExternalStore(
-    useCallback((onChange: () => void) => mgr.onSettledChange(onChange), [mgr]),
-    () => key.every((m) => mgr.isSettled(m)),
-    () => true, // SSR//no-store: nothing to wait for
-  );
-
   const sql = key.length
     ? `SELECT * FROM journal_entries WHERE deleted_at IS NULL AND month_key IN (${key.map(() => '?').join(',')})`
     : 'SELECT * FROM journal_entries WHERE 0';
@@ -1668,7 +1663,7 @@ export function useJournalMonths(monthKeys: readonly string[]): JournalMonthsRea
         .sort((a, b) => (a.entry_date < b.entry_date ? -1 : a.entry_date > b.entry_date ? 1 : 0)),
     [read.data, key],
   );
-  return { entries, isLoading: read.isLoading || !monthsSettled };
+  return { entries, isLoading: read.isLoading };
 }
 
 export interface JournalDayRead {

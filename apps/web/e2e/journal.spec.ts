@@ -113,9 +113,12 @@ test('create → reload → edit → delete (WYSIWYG) with emoji; day Export .md
   await expect(page.getByTestId('journal-menu')).toHaveCount(0); // no menu on the Agenda
   await page.getByTestId('journal-preview-toggle').click(); // back to editing
 
-  // Export .md downloads exactly the stored markdown, named <today>.md.
+  // Export .md downloads exactly the stored markdown, named <today>.md. Wait for
+  // the note's TEXT, not just the panel: the panel mounts before its row loads,
+  // and exporting in that window would write the file from an empty draft.
   await goto(page, 'journal');
   await expect(page.getByTestId(`journal-${today}`)).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId('journal-rich')).toContainText('Standup notes', { timeout: 30_000 });
   await page.getByTestId('journal-menu').click();
   const [dl] = await Promise.all([page.waitForEvent('download'), page.getByTestId('journal-export').click()]);
   expect(dl.suggestedFilename()).toBe(`${today}.md`);

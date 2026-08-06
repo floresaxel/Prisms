@@ -294,6 +294,11 @@ export function DayJournalPanel({
                 className="px-menu-item"
                 role="menuitem"
                 data-testid="journal-export"
+                // Exporting mid-load wrote the file from an empty `draft` — a
+                // silently blank .md for a note that has text. A day-log-only day
+                // exports fine; it is the LOADING window that must be refused.
+                disabled={isLoading}
+                title={isLoading ? 'Still loading this day' : undefined}
                 onClick={() => {
                   exportDay();
                   setMenuOpen(false);
