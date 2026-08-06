@@ -15,6 +15,7 @@ import {
   anchorTypeSchema,
   completionDispositionSchema,
   edgeTypeSchema,
+  MAX_TITLE_LENGTH,
   nodeTypeSchema,
   streakModeSchema,
   tagAnswerValueSchema,
@@ -31,7 +32,8 @@ const idOnly = z.strictObject({ id: uuidSchema });
 // worse, becomes the SUBJECT a blocker rule's `matches` regex is tested against
 // (SEC-4/F2), where input length is what turns backtracking into an outage.
 // These are generous next to real use; they exist to have a ceiling at all.
-export const MAX_TITLE_LENGTH = 500;
+// MAX_TITLE_LENGTH now lives in domain/entities (the entity schemas need it too,
+// and this module already imports that one — see the note there).
 export const MAX_DESCRIPTION_LENGTH = 20_000;
 export const MAX_LABEL_LENGTH = 200;
 /** Fractional index keys (§7.10a) — a handful of chars in practice. */
@@ -266,10 +268,28 @@ export const journalDeleteSchema = idOnly; // journal entry row id
  * row — and deliberately a SEPARATE verb from the content write: locking is not
  * an edit, so the two fields resolve independently under per-field LWW.
  */
+/**
+ * Lock/unlock a day's note (read-only). Like `journal.set_title` it acts on a row
+ * that already exists and never mints one: a note with no text is not stored at
+ * all, and there is nothing to protect on a day that holds nothing.
+ */
 export const journalSetLockedSchema = z.strictObject({
   id: uuidSchema,
-  entry_date: isoDateSchema,
   locked: z.boolean(),
+});
+/**
+ * Rename a day's note. '' clears it back to untitled (the client then renders
+ * the "Note · <date>" default). A separate verb from `journal.write` so the
+ * heading and the prose resolve independently under per-field LWW — renaming on
+ * one device never rolls back an edit made on another.
+ *
+ * Unlike `journal.set_locked` this does NOT carry `entry_date`: a title belongs
+ * to a note that already exists, and an empty note is not stored at all, so
+ * there is no row to mint.
+ */
+export const journalSetTitleSchema = z.strictObject({
+  id: uuidSchema,
+  title: titleSchema,
 });
 
 // --- task steps (checklist on a task, W3/D4) --------------------------------
@@ -423,6 +443,7 @@ export const COMMAND_SCHEMAS = {
   'journal.write': journalWriteSchema,
   'journal.delete': journalDeleteSchema,
   'journal.set_locked': journalSetLockedSchema,
+  'journal.set_title': journalSetTitleSchema,
   'step.add': stepAddSchema,
   'step.rename': stepRenameSchema,
   'step.toggle': stepToggleSchema,

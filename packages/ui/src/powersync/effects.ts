@@ -266,12 +266,12 @@ export function buildOptimisticEffects(name: CommandName, payload: unknown, ctx:
       const entryDate = String(p['entry_date'] ?? '');
       return [ins('journal_entries', p['id'], { entry_date: entryDate, month_key: entryDate.slice(0, 7), content: p['content'] ?? '' })];
     }
-    case 'journal.set_locked': {
-      // Mirrors journal.write's upsert: `ins` with the LIVE row id patches that
-      // row, and a day with no note yet is genuinely created (locked, empty).
-      const lockDate = String(p['entry_date'] ?? '');
-      return [ins('journal_entries', p['id'], { entry_date: lockDate, month_key: lockDate.slice(0, 7), locked: b(p['locked']) })];
-    }
+    case 'journal.set_locked':
+      // patches an existing row (a lock never mints one — see the payload doc).
+      return [upd('journal_entries', id, { locked: b(p['locked']) })];
+    case 'journal.set_title':
+      // patches an existing row (a title never mints one — see the payload doc).
+      return [upd('journal_entries', id, { title: p['title'] })];
     case 'journal.delete':
       return [del('journal_entries', id)];
 

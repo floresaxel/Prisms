@@ -13,7 +13,7 @@ import { Share, TextInput, View } from 'react-native';
 import Markdown from 'react-native-markdown-display';
 
 import { composeDayMarkdown } from '@prisms/core';
-import { applyMarkdownEdit, journalDayFilename, useCommands, useDayLog, useJournalDay, useUserSettings, type CommandContext, type MarkdownAction, type Selection } from '@prisms/ui';
+import { applyMarkdownEdit, isJournalContentEmpty, journalDayFilename, journalTitleOf, useCommands, useDayLog, useJournalDay, useUserSettings, type CommandContext, type MarkdownAction, type Selection } from '@prisms/ui';
 
 import { DayLogFooter } from '../components/DayLogFooter';
 import { Btn, Card, H2, Row, theme } from '../ui';
@@ -72,7 +72,17 @@ export function JournalDay({ date, ctx, onClose }: { date: string; ctx: CommandC
   useEffect(() => {
     if (!dirty.current) setDraft(entry?.content ?? '');
   }, [entry?.content]);
-  const write = (content: string) => commands.writeJournal({ existingId, entryDate: date, content });
+  // An empty note is not a note: blank content deletes the row (and with it the
+  // title and lock) rather than storing a day that holds nothing. Same rule as
+  // the web panel — see DayJournal.tsx.
+  const write = (content: string) => {
+    if (isJournalContentEmpty(content)) {
+      if (existingId) void commands.deleteJournal(existingId);
+      return;
+    }
+    void commands.writeJournal({ existingId, entryDate: date, content });
+  };
+  const hasNote = existingId !== undefined && !isJournalContentEmpty(draft);
 
   // A pending debounced save must survive unmount (switching day). RN's
   // keyboardShouldPersistTaps can let a day-switch tap through WITHOUT blurring
@@ -119,11 +129,12 @@ export function JournalDay({ date, ctx, onClose }: { date: string; ctx: CommandC
   return (
     <Card testID={`journal-${date}`}>
       <Row>
-        <H2>Note · {date}</H2>
+        <H2>{journalTitleOf(entry?.title, date)}</H2>
         <Btn
           title={preview ? 'Edit' : 'Lock edit'}
           testID="journal-preview-toggle"
-          onPress={() => void commands.setJournalLocked({ existingId, entryDate: date, locked: !preview })}
+          disabled={!hasNote}
+          onPress={() => existingId && void commands.setJournalLocked(existingId, !preview)}
         />
         {onClose && <Btn title="Close" testID="journal-close" onPress={onClose} />}
       </Row>

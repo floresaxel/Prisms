@@ -66,6 +66,8 @@ export {
 } from './markdown';
 export {
   projectTone,
+  journalTitleOf,
+  isJournalContentEmpty,
   visionColorOf,
   visionHex,
   firstFreeVisionColor,

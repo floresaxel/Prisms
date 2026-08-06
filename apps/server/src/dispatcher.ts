@@ -1278,49 +1278,35 @@ export function createDispatcher(
       }
       case 'journal.set_locked': {
         const p = payload as Payload<'journal.set_locked'>;
-        // Same upsert-by-day contract as journal.write (a day can be locked
-        // before it has prose, which mints the row), but it only ever touches
-        // `locked` — so a lock racing an edit of the same day settles per FIELD
-        // and neither clobbers the other.
-        const month_key = p.entry_date.slice(0, 7);
-        const existingById = await one(tx.select().from(journal_entries).where(eq(journal_entries.id, p.id)).limit(1));
-        const ownExisting = existingById ? ownershipReject('journal entry', p.id, existingById, userId) : null;
-        if (ownExisting) return ownExisting;
-        if (existingById && existingById.entry_date !== p.entry_date) {
-          return reject('E_DUPLICATE', 'journal.set_locked id already belongs to a different day');
-        }
-        const liveLockedByDay = () =>
-          one(
-            tx
-              .select()
-              .from(journal_entries)
-              .where(and(eq(journal_entries.user_id, userId), eq(journal_entries.entry_date, p.entry_date), isNull(journal_entries.deleted_at)))
-              .limit(1),
-          );
-        let live = existingById ?? (await liveLockedByDay());
-        if (!live) {
-          // Guard the §7.7 partial-unique arbiter race exactly as journal.write does.
-          const inserted = await tx
-            .insert(journal_entries)
-            .values({ id: p.id, user_id: userId, entry_date: p.entry_date, month_key, content: '', locked: p.locked, ...born })
-            .onConflictDoNothing({ target: [journal_entries.user_id, journal_entries.entry_date], where: isNull(journal_entries.deleted_at) })
-            .returning({ id: journal_entries.id });
-          if (inserted.length > 0) {
-            await lwwFields(tx, hlc, userId, 'journal_entries', p.id, { locked: p.locked });
-            rec('journal_entries', p.id, 'insert');
-            return applied();
-          }
-          live = await liveLockedByDay(); // lost the race — merge onto the winner
-          if (!live) return applied();
-        }
-        const winLock = await lwwFields(tx, hlc, userId, 'journal_entries', live.id, { locked: p.locked });
+        // Acts on an existing row and never mints one: an empty note is not
+        // stored, so there is nothing to lock on a day that holds nothing. Only
+        // ever touches `locked`, so a lock racing an edit of the same day settles
+        // per FIELD and neither clobbers the other.
+        const lockRow = await one(tx.select().from(journal_entries).where(eq(journal_entries.id, p.id)).limit(1));
+        const ownLock = ownershipReject('journal entry', p.id, lockRow, userId);
+        if (ownLock) return ownLock;
+        const winLock = await lwwFields(tx, hlc, userId, 'journal_entries', p.id, { locked: p.locked });
         if (Object.keys(winLock).length > 0) {
-          await tx.update(journal_entries).set({ ...winLock, ...sys }).where(eq(journal_entries.id, live.id));
-          rec('journal_entries', live.id, 'update', Object.keys(winLock));
+          await tx.update(journal_entries).set({ ...winLock, ...sys }).where(eq(journal_entries.id, p.id));
+          rec('journal_entries', p.id, 'update', Object.keys(winLock));
         } else {
-          // lost on HLC; still echo the authoritative row so the client reconciles
-          // an optimistic insert of a losing duplicate id (the journal.write path).
-          rec('journal_entries', live.id, 'update', []);
+          rec('journal_entries', p.id, 'update', []);
+        }
+        return applied();
+      }
+      case 'journal.set_title': {
+        const p = payload as Payload<'journal.set_title'>;
+        // A title belongs to a note that exists — an empty note is never stored —
+        // so unlike set_locked this never mints a row.
+        const row = await one(tx.select().from(journal_entries).where(eq(journal_entries.id, p.id)).limit(1));
+        const ownTitle = ownershipReject('journal entry', p.id, row, userId);
+        if (ownTitle) return ownTitle;
+        const winTitle = await lwwFields(tx, hlc, userId, 'journal_entries', p.id, { title: p.title });
+        if (Object.keys(winTitle).length > 0) {
+          await tx.update(journal_entries).set({ ...winTitle, ...sys }).where(eq(journal_entries.id, p.id));
+          rec('journal_entries', p.id, 'update', Object.keys(winTitle));
+        } else {
+          rec('journal_entries', p.id, 'update', []);
         }
         return applied();
       }

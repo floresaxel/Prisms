@@ -24,6 +24,13 @@ import {
   uuidSchema,
 } from './primitives';
 
+/**
+ * Free-text title ceiling (SEC-3/F6), shared by node titles and journal titles.
+ * Defined HERE rather than in `commands/payloads` because entity schemas need it
+ * and payloads already imports this module — the other direction would cycle.
+ */
+export const MAX_TITLE_LENGTH = 500;
+
 /** Provenance origin (1.3 §7.8). `legacy` = pre-migration rows ("origin unknown"). */
 export const SOURCE_KINDS = ['user', 'automation', 'scheduler', 'server_job', 'import', 'system', 'legacy'] as const;
 export const sourceKindSchema = z.enum(SOURCE_KINDS);
@@ -523,6 +530,13 @@ export const journalEntrySchema = z.strictObject({
    * per-field HLC last-writer settles the same day being toggled from both.
    */
   locked: z.boolean(),
+  /**
+   * User-editable heading (migration 0014). '' = untitled, which is what every
+   * note is until renamed; clients render the default ("Note · <entry_date>")
+   * for those rather than storing it, so an untitled note never freezes a stale
+   * literal and the date stays the note's identity regardless of the title.
+   */
+  title: z.string().max(MAX_TITLE_LENGTH),
 });
 export type JournalEntry = z.infer<typeof journalEntrySchema>;
 

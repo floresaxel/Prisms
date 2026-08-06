@@ -62,13 +62,18 @@ describe.skipIf(!adminUrl)('J2 journal dispatcher + export', () => {
     if (res.kind !== 'ok') throw new Error(`upload not ok: ${res.kind}`);
     return res.results;
   };
-  const setLocked = (userId: string, id: string, entry_date: string, locked: boolean, hlc: string, device = 'deva') =>
+  const setLocked = (userId: string, id: string, locked: boolean, hlc: string, device = 'deva') =>
     dispatcher.handleUpload(userId, {
       device_id: device,
-      commands: [{ id: randomUUID(), name: 'journal.set_locked', hlc, payload: { id, entry_date, locked }, schema_version: 1 }],
+      commands: [{ id: randomUUID(), name: 'journal.set_locked', hlc, payload: { id, locked }, schema_version: 1 }],
+    });
+  const setTitle = (userId: string, id: string, title: string, hlc: string, device = 'deva') =>
+    dispatcher.handleUpload(userId, {
+      device_id: device,
+      commands: [{ id: randomUUID(), name: 'journal.set_title', hlc, payload: { id, title }, schema_version: 1 }],
     });
   const liveRows = (userId: string, date: string) =>
-    sql`SELECT id, content, month_key, locked FROM journal_entries WHERE user_id = ${userId} AND entry_date = ${date} AND deleted_at IS NULL`;
+    sql`SELECT id, content, month_key, locked, title FROM journal_entries WHERE user_id = ${userId} AND entry_date = ${date} AND deleted_at IS NULL`;
   const conflicts = (userId: string) =>
     sql`SELECT detail FROM sync_review_items WHERE user_id = ${userId} AND item_type = 'hlc_conflict'`;
 
@@ -185,27 +190,24 @@ describe.skipIf(!adminUrl)('J2 journal dispatcher + export', () => {
   // It exists to be SHARED across devices, so what matters is that it lands in
   // Postgres on the day's own row and resolves independently of the prose.
 
-  it('locks a day that has no note yet, minting the row', async () => {
+  it('a lock on a day with NO note is rejected — an empty note is never stored', async () => {
     const u = randomUUID();
-    ok(await setLocked(u, randomUUID(), '2026-09-01', true, hlcOf(1)));
-    const rows = await liveRows(u, '2026-09-01');
-    expect(rows).toHaveLength(1);
-    expect(rows[0]!['locked']).toBe(true);
-    expect(rows[0]!['content']).toBe(''); // locked, but no prose invented
-    expect(rows[0]!['month_key']).toBe('2026-09');
+    const [r] = ok(await setLocked(u, randomUUID(), true, hlcOf(1)));
+    expect(r).toMatchObject({ result: 'rejected', reject_code: 'E_NOT_FOUND' });
+    expect(await liveRows(u, '2026-09-01')).toHaveLength(0); // nothing minted
   });
 
   it('locks/unlocks an existing day WITHOUT touching its content', async () => {
     const u = randomUUID();
     const row = randomUUID();
     ok(await write(u, row, '2026-09-02', 'the prose', hlcOf(1)));
-    ok(await setLocked(u, row, '2026-09-02', true, hlcOf(2)));
+    ok(await setLocked(u, row, true, hlcOf(2)));
     let rows = await liveRows(u, '2026-09-02');
     expect(rows).toHaveLength(1);
     expect(rows[0]!['locked']).toBe(true);
     expect(rows[0]!['content']).toBe('the prose');
 
-    ok(await setLocked(u, row, '2026-09-02', false, hlcOf(3)));
+    ok(await setLocked(u, row, false, hlcOf(3)));
     rows = await liveRows(u, '2026-09-02');
     expect(rows[0]!['locked']).toBe(false);
     expect(rows[0]!['content']).toBe('the prose');
@@ -213,9 +215,11 @@ describe.skipIf(!adminUrl)('J2 journal dispatcher + export', () => {
 
   it('locking is per DAY: one day locked leaves its neighbours alone', async () => {
     const u = randomUUID();
-    ok(await setLocked(u, randomUUID(), '2026-09-04', true, hlcOf(1)));
-    ok(await write(u, randomUUID(), '2026-09-03', 'monday', hlcOf(2)));
-    ok(await write(u, randomUUID(), '2026-09-05', 'wednesday', hlcOf(3)));
+    const mid = randomUUID();
+    ok(await write(u, mid, '2026-09-04', 'tuesday', hlcOf(1)));
+    ok(await setLocked(u, mid, true, hlcOf(2)));
+    ok(await write(u, randomUUID(), '2026-09-03', 'monday', hlcOf(3)));
+    ok(await write(u, randomUUID(), '2026-09-05', 'wednesday', hlcOf(4)));
     for (const [date, locked] of [['2026-09-03', false], ['2026-09-04', true], ['2026-09-05', false]] as const) {
       const rows = await liveRows(u, date);
       expect(rows[0]!['locked']).toBe(locked);
@@ -229,7 +233,7 @@ describe.skipIf(!adminUrl)('J2 journal dispatcher + export', () => {
     // device B locks; device A then edits the prose with a LATER hlc. Because the
     // two fields version independently, the later content write must not carry the
     // lock back to false.
-    ok(await setLocked(u, row, '2026-09-06', true, hlcOf(2, 'devb'), 'devb'));
+    ok(await setLocked(u, row, true, hlcOf(2, 'devb'), 'devb'));
     ok(await write(u, row, '2026-09-06', 'second', hlcOf(3, 'deva')));
     const rows = await liveRows(u, '2026-09-06');
     expect(rows).toHaveLength(1);
@@ -240,10 +244,47 @@ describe.skipIf(!adminUrl)('J2 journal dispatcher + export', () => {
   it('an older lock loses to a newer one on the same day (HLC)', async () => {
     const u = randomUUID();
     const row = randomUUID();
-    ok(await setLocked(u, row, '2026-09-07', true, hlcOf(5, 'devb'), 'devb'));
-    ok(await setLocked(u, row, '2026-09-07', false, hlcOf(2, 'deva'))); // stale unlock
+    ok(await write(u, row, '2026-09-07', 'prose', hlcOf(1)));
+    ok(await setLocked(u, row, true, hlcOf(5, 'devb'), 'devb'));
+    ok(await setLocked(u, row, false, hlcOf(2, 'deva'))); // stale unlock
     const rows = await liveRows(u, '2026-09-07');
     expect(rows[0]!['locked']).toBe(true); // the newer lock stands
+  });
+
+  // --- the editable title (migration 0014) ---------------------------------
+
+  it('renames a note and clears back to untitled, leaving the content alone', async () => {
+    const u = randomUUID();
+    const row = randomUUID();
+    ok(await write(u, row, '2026-09-08', 'the prose', hlcOf(1)));
+    expect((await liveRows(u, '2026-09-08'))[0]!['title']).toBe(''); // untitled by default
+
+    ok(await setTitle(u, row, 'Trip planning 🧭', hlcOf(2)));
+    let rows = await liveRows(u, '2026-09-08');
+    expect(rows[0]!['title']).toBe('Trip planning 🧭');
+    expect(rows[0]!['content']).toBe('the prose');
+    expect(rows[0]!['entry_date' as never] ?? '2026-09-08').toBeTruthy(); // the day still owns it
+
+    ok(await setTitle(u, row, '', hlcOf(3)));
+    rows = await liveRows(u, '2026-09-08');
+    expect(rows[0]!['title']).toBe(''); // back to untitled; the client re-derives the default
+  });
+
+  it('a title on a day with no note is rejected — nothing to name', async () => {
+    const u = randomUUID();
+    const [r] = ok(await setTitle(u, randomUUID(), 'ghost', hlcOf(1)));
+    expect(r).toMatchObject({ result: 'rejected', reject_code: 'E_NOT_FOUND' });
+  });
+
+  it('a rename and a content edit from two devices BOTH survive (per-field LWW)', async () => {
+    const u = randomUUID();
+    const row = randomUUID();
+    ok(await write(u, row, '2026-09-09', 'first', hlcOf(1, 'deva')));
+    ok(await setTitle(u, row, 'Named on B', hlcOf(2, 'devb'), 'devb'));
+    ok(await write(u, row, '2026-09-09', 'second', hlcOf(3, 'deva')));
+    const rows = await liveRows(u, '2026-09-09');
+    expect(rows[0]!['content']).toBe('second');
+    expect(rows[0]!['title']).toBe('Named on B');
   });
 
   it('server-derives month_key = entry_date.slice(0,7)', async () => {

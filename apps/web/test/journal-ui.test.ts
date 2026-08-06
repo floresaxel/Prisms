@@ -16,7 +16,7 @@ import { strFromU8, unzipSync } from 'fflate';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const state = {
-  entry: null as null | { id: string; content: string; deleted_at: null; locked?: boolean },
+  entry: null as null | { id: string; content: string; deleted_at: null; locked?: boolean; title?: string },
   months: [] as { entry_date: string; content: string }[],
 };
 const commandFns = new Map<string, ReturnType<typeof vi.fn>>();
@@ -226,18 +226,20 @@ describe('DayJournalPanel — editor', () => {
     expect(screen.getByTestId('journal-preview-toggle').getAttribute('aria-pressed')).toBe('false');
   });
 
-  it('the lock toggle uploads journal.set_locked for THAT day', () => {
+  it('the lock toggle uploads journal.set_locked for THAT note', () => {
     state.entry = { id: 'j1', content: 'x', deleted_at: null, locked: false };
     render(createElement(DayJournalPanel, { date: '2026-08-07', ctx: CTX, actions: 'lock' }));
     fireEvent.click(screen.getByTestId('journal-preview-toggle'));
-    expect(command('setJournalLocked')).toHaveBeenCalledWith({ existingId: 'j1', entryDate: '2026-08-07', locked: true });
+    expect(command('setJournalLocked')).toHaveBeenCalledWith('j1', true);
   });
 
-  it('locking a day that has no row yet mints one (no existingId)', () => {
+  it('a day with no note cannot be locked — there is nothing to lock', () => {
     state.entry = null;
     render(createElement(DayJournalPanel, { date: '2026-08-09', ctx: CTX, actions: 'lock' }));
-    fireEvent.click(screen.getByTestId('journal-preview-toggle'));
-    expect(command('setJournalLocked')).toHaveBeenCalledWith({ existingId: undefined, entryDate: '2026-08-09', locked: true });
+    const toggle = screen.getByTestId('journal-preview-toggle') as HTMLButtonElement;
+    expect(toggle.disabled).toBe(true);
+    fireEvent.click(toggle);
+    expect(command('setJournalLocked')).not.toHaveBeenCalled();
   });
 
   it('the menu variant issues the same command', () => {
@@ -245,7 +247,7 @@ describe('DayJournalPanel — editor', () => {
     render(createElement(DayJournalPanel, { date: '2026-08-07', ctx: CTX }));
     openNoteMenu();
     fireEvent.click(screen.getByTestId('journal-preview-toggle'));
-    expect(command('setJournalLocked')).toHaveBeenCalledWith({ existingId: 'j1', entryDate: '2026-08-07', locked: false });
+    expect(command('setJournalLocked')).toHaveBeenCalledWith('j1', false);
   });
 
   it('Delete is absent for a day with no saved note', () => {
@@ -254,6 +256,75 @@ describe('DayJournalPanel — editor', () => {
     openNoteMenu();
     expect(screen.queryByTestId('journal-delete')).toBeNull();
     expect(screen.getByTestId('journal-export')).toBeTruthy();
+  });
+
+  // --- an empty note is not a note -----------------------------------------
+
+  it('typing nothing on a blank day stores NOTHING', () => {
+    state.entry = null;
+    const { unmount } = render(createElement(DayJournalPanel, { date: '2026-08-11', ctx: CTX }));
+    fireEvent.change(screen.getByTestId('journal-rich'), { target: { value: '   \n\n' } });
+    unmount(); // flush
+    expect(command('writeJournal')).not.toHaveBeenCalled();
+    expect(command('deleteJournal')).not.toHaveBeenCalled();
+  });
+
+  it('clearing all the text DELETES the entry rather than storing a blank one', () => {
+    state.entry = { id: 'j1', content: 'had words', deleted_at: null, locked: false };
+    const { unmount } = render(createElement(DayJournalPanel, { date: '2026-08-11', ctx: CTX }));
+    fireEvent.change(screen.getByTestId('journal-rich'), { target: { value: '' } });
+    unmount();
+    expect(command('deleteJournal')).toHaveBeenCalledWith('j1');
+    expect(command('writeJournal')).not.toHaveBeenCalled();
+  });
+
+  it('a leftover bullet or heading marker still counts as empty', () => {
+    state.entry = { id: 'j1', content: 'had words', deleted_at: null, locked: false };
+    const { unmount } = render(createElement(DayJournalPanel, { date: '2026-08-11', ctx: CTX }));
+    fireEvent.change(screen.getByTestId('journal-rich'), { target: { value: '- \n\n#' } });
+    unmount();
+    expect(command('deleteJournal')).toHaveBeenCalledWith('j1');
+    expect(command('writeJournal')).not.toHaveBeenCalled();
+  });
+
+  // --- the editable title ---------------------------------------------------
+
+  it('defaults the title to "Note · <date>" and shows the date separately', () => {
+    state.entry = { id: 'j1', content: 'x', deleted_at: null, locked: false };
+    render(createElement(DayJournalPanel, { date: '2026-08-05', ctx: CTX, actions: 'lock' }));
+    expect((screen.getByTestId('journal-title') as HTMLInputElement).value).toBe('Note · 2026-08-05');
+    expect(screen.getByTestId('journal-date').textContent).toBe('2026-08-05');
+  });
+
+  it('shows a stored title, with the date still visible', () => {
+    state.entry = { id: 'j1', content: 'x', deleted_at: null, locked: false, title: 'Trip planning' };
+    render(createElement(DayJournalPanel, { date: '2026-08-05', ctx: CTX, actions: 'lock' }));
+    expect((screen.getByTestId('journal-title') as HTMLInputElement).value).toBe('Trip planning');
+    expect(screen.getByTestId('journal-date').textContent).toBe('2026-08-05');
+  });
+
+  it('renaming uploads journal.set_title on blur', () => {
+    state.entry = { id: 'j1', content: 'x', deleted_at: null, locked: false };
+    render(createElement(DayJournalPanel, { date: '2026-08-05', ctx: CTX, actions: 'lock' }));
+    const input = screen.getByTestId('journal-title');
+    fireEvent.change(input, { target: { value: 'Trip planning' } });
+    fireEvent.blur(input);
+    expect(command('setJournalTitle')).toHaveBeenCalledWith('j1', 'Trip planning');
+  });
+
+  it('typing the default back clears the title, so it keeps tracking the date', () => {
+    state.entry = { id: 'j1', content: 'x', deleted_at: null, locked: false, title: 'Trip planning' };
+    render(createElement(DayJournalPanel, { date: '2026-08-05', ctx: CTX, actions: 'lock' }));
+    const input = screen.getByTestId('journal-title');
+    fireEvent.change(input, { target: { value: 'Note · 2026-08-05' } });
+    fireEvent.blur(input);
+    expect(command('setJournalTitle')).toHaveBeenCalledWith('j1', '');
+  });
+
+  it('a day with no note cannot be titled', () => {
+    state.entry = null;
+    render(createElement(DayJournalPanel, { date: '2026-08-11', ctx: CTX, actions: 'lock' }));
+    expect((screen.getByTestId('journal-title') as HTMLInputElement).disabled).toBe(true);
   });
 
   it('flushes a pending debounced save on unmount (day switch, no blur) — last edit not lost', () => {

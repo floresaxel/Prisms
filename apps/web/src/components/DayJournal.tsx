@@ -20,7 +20,17 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
 import { composeDayMarkdown } from '@prisms/core';
-import { Ic, journalDayFilename, useCommands, useDayLog, useJournalDay, useUserSettings, type CommandContext } from '@prisms/ui';
+import {
+  Ic,
+  isJournalContentEmpty,
+  journalDayFilename,
+  journalTitleOf,
+  useCommands,
+  useDayLog,
+  useJournalDay,
+  useUserSettings,
+  type CommandContext,
+} from '@prisms/ui';
 
 import { DayLogFooter } from './DayLogFooter';
 import { RichJournalEditor } from './RichJournalEditor';
@@ -96,8 +106,24 @@ export function DayJournalPanel({
   const existingId = entry?.id;
   const menuRef = useRef<HTMLDivElement | null>(null);
 
+  /** The heading: the stored title, else "Note · <date>". */
+  const heading = journalTitleOf(entry?.title, date);
+  /** Title and lock belong to a note that EXISTS; a blank day has neither. */
+  const hasNote = existingId !== undefined && !isJournalContentEmpty(draft);
+  const [titleDraft, setTitleDraft] = useState<string | null>(null);
+
+  function commitTitle() {
+    const next = (titleDraft ?? '').trim();
+    setTitleDraft(null);
+    if (!existingId || next === heading) return;
+    // typing the default back is the same as clearing it — stay untitled so the
+    // heading keeps tracking the date.
+    void commands.setJournalTitle(existingId, next === journalTitleOf('', date) ? '' : next);
+  }
+
   function toggleLock() {
-    void commands.setJournalLocked({ existingId, entryDate: date, locked: !preview });
+    if (!existingId) return;
+    void commands.setJournalLocked(existingId, !preview);
   }
 
   // Dismiss the overflow menu on an outside click or Escape.
@@ -121,7 +147,23 @@ export function DayJournalPanel({
   useEffect(() => {
     if (!dirty.current) setDraft(entry?.content ?? '');
   }, [entry?.content]);
-  const write = (content: string) => commands.writeJournal({ existingId, entryDate: date, content });
+
+  /**
+   * An empty note is not a note. Writing blank content used to store a row that
+   * showed up as a note everywhere (the day marker, the month list, the export),
+   * so:
+   *   - blank + no row  → nothing happens; the day stays untouched.
+   *   - blank + a row   → the row is soft-deleted, taking its title and lock with
+   *                       it. Typing again re-creates it (the §7.7 partial unique
+   *                       permits re-creating a soft-deleted day).
+   */
+  const write = (content: string) => {
+    if (isJournalContentEmpty(content)) {
+      if (existingId) void commands.deleteJournal(existingId);
+      return;
+    }
+    void commands.writeJournal({ existingId, entryDate: date, content });
+  };
 
   // Flush a pending debounced save if the panel unmounts (day switch) before the
   // debounce fires and without an onBlur — otherwise the last edit is dropped.
@@ -174,8 +216,26 @@ export function DayJournalPanel({
 
   return (
     <div className="px-journal" data-testid={`journal-${date}`} style={{ marginTop: 16 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <h2 style={{ margin: 0, flex: 1 }}>Note · {date}</h2>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+        {/* The title is editable; the DATE moves below it, so renaming a note
+            never costs you the day it belongs to. */}
+        <div className="px-jn-head">
+          <input
+            className="px-jn-title"
+            data-testid="journal-title"
+            aria-label="note title"
+            value={titleDraft ?? heading}
+            disabled={!hasNote || preview}
+            title={hasNote ? undefined : 'Write something first — an empty day is not saved'}
+            onChange={(e) => setTitleDraft(e.target.value)}
+            onBlur={commitTitle}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') e.currentTarget.blur();
+              if (e.key === 'Escape') setTitleDraft(null);
+            }}
+          />
+          <span className="px-jn-date" data-testid="journal-date">{date}</span>
+        </div>
         {/* `lock`: one button, nothing else — the icon is the affordance for what
             the click DOES (a padlock while editing, a pencil while locked). */}
         {actions === 'lock' ? (
@@ -183,8 +243,9 @@ export function DayJournalPanel({
             className="px-btn px-btn--icon"
             data-testid="journal-preview-toggle"
             aria-pressed={preview}
+            disabled={!hasNote}
             aria-label={preview ? 'Edit this note' : 'Lock this note from editing'}
-            title={preview ? 'Edit' : 'Lock edit'}
+            title={hasNote ? (preview ? 'Edit' : 'Lock edit') : 'Nothing to lock — this day has no note'}
             onClick={toggleLock}
           >
             <Ic name={preview ? 'pen' : 'lock'} />
@@ -210,6 +271,7 @@ export function DayJournalPanel({
                 role="menuitem"
                 data-testid="journal-preview-toggle"
                 aria-pressed={preview}
+                disabled={!hasNote}
                 onClick={() => {
                   toggleLock();
                   setMenuOpen(false);

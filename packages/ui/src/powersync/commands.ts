@@ -295,11 +295,19 @@ export function createCommands(store: OverlayStore, ctx: CommandContext, deps: E
     },
     /**
      * Lock/unlock a day's note. SYNCED, so the lock follows the user to every
-     * device. Upsert-by-day like `writeJournal`: pass the live row's id when the
-     * day already has one, else a new id is minted and the day is created locked.
+     * device. Requires the row to exist — an empty note is never stored, so a
+     * day with no text has nothing to lock.
      */
-    async setJournalLocked(input: { existingId?: string; entryDate: string; locked: boolean }): Promise<void> {
-      await run('journal.set_locked', { id: input.existingId ?? newId(), entry_date: input.entryDate, locked: input.locked });
+    async setJournalLocked(id: string, locked: boolean): Promise<void> {
+      await run('journal.set_locked', { id, locked });
+    },
+    /**
+     * Rename a day's note; '' restores the untitled default. Requires the row to
+     * exist — an empty note is never stored, so there is nothing to title until
+     * the note has text.
+     */
+    async setJournalTitle(id: string, title: string): Promise<void> {
+      await run('journal.set_title', { id, title });
     },
 
     // --- task steps (checklist on a task, W3/D4) ----------------------------

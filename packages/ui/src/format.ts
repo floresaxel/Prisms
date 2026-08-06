@@ -21,6 +21,34 @@ export function projectTone(projectId: string | null): DotTone {
 }
 
 /**
+ * The heading shown for a day's note. A stored `title` wins; otherwise the
+ * default names the day, which is what the panel showed before titles existed.
+ *
+ * The default is DERIVED, never stored: an untitled note keeps `title = ''`, so
+ * it cannot freeze a stale literal, and the date remains the note's identity no
+ * matter what it is renamed to.
+ */
+export function journalTitleOf(title: string | null | undefined, date: string): string {
+  const t = (title ?? '').trim();
+  return t.length > 0 ? t : `Note · ${date}`;
+}
+
+/**
+ * Is this note empty — i.e. should no row exist for it? Markdown whitespace and
+ * a lone bullet/heading marker left behind by an editor still count as empty, so
+ * clearing a note in a WYSIWYG really does remove it.
+ */
+/** Zero-width joiners/spaces + BOM a WYSIWYG leaves behind when you clear it.
+ *  Built from an escaped string so no invisible character sits in this source. */
+const ZERO_WIDTH = new RegExp('[\\u200B-\\u200D\\uFEFF]', 'g');
+/** A line holding nothing but a list bullet, quote caret or heading hash. */
+const MARKER_ONLY_LINE = /^[ \t>#*+-]+$/gm;
+
+export function isJournalContentEmpty(content: string | null | undefined): boolean {
+  return (content ?? '').replace(ZERO_WIDTH, '').replace(MARKER_ONLY_LINE, '').trim().length === 0;
+}
+
+/**
  * A vision's colour. Chosen by the user when the vision is created and stored in
  * the node's `attributes.color` (a type-specific extra — no schema change, and
  * `node.create` already carries `attributes`). Everything under a vision reads

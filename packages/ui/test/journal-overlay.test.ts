@@ -50,6 +50,42 @@ const setCanonical = (id: string, content: string) =>
     .run(id, 'u1', DAY, '2026-06', content, 't', 't');
 const dayRows = async () => (await readMergedRows(store, 'journal_entries')).filter((r) => r['entry_date'] === DAY);
 
+describe('write then delete before the canonical row has synced down', () => {
+  const delEffect = (commandId: string, hlc: string, rowId: string): OverlayEffect => ({
+    command_id: commandId, hlc, table: 'journal_entries', row_id: rowId, op: 'delete', seq: 0, fields: {},
+  });
+
+  it('does NOT resurrect the note once the delete is confirmed', async () => {
+    // Type a note: an optimistic insert the server accepts…
+    await store.enqueue(cmd('cmdWrite', 'hlc1'), [insEffect('cmdWrite', 'hlc1', 'row1', 'temporary thought')]);
+    await store.markApplied('cmdWrite');
+    expect(await dayRows()).toHaveLength(1);
+
+    // …then clear it, which deletes the row — BEFORE the canonical row ever
+    // arrived. Its insert effect can therefore never be confirmed the normal way:
+    // the row it waits for is gone server-side and will never sync down.
+    await store.enqueue({ ...cmd('cmdDelete', 'hlc2'), name: 'journal.delete' }, [delEffect('cmdDelete', 'hlc2', 'row1')]);
+    await store.markApplied('cmdDelete');
+    expect(await dayRows()).toHaveLength(0); // the pending delete hides it
+
+    // The delete confirms (the row is absent from the replica). The stale insert
+    // must go with it — otherwise the merged read brings the note back.
+    const { cleared } = await store.reconcileConfirmed();
+    expect(cleared).toContain('cmdDelete');
+    expect(await dayRows()).toHaveLength(0);
+    expect(await store.effectsFor('journal_entries')).toHaveLength(0);
+  });
+
+  it('still waits for a plain insert whose row simply has not downloaded yet', async () => {
+    // The guard above must not degrade into "clear on absence" — that would
+    // reintroduce the ack→download revert flicker (S7-F6).
+    await store.enqueue(cmd('cmdWrite', 'hlc1'), [insEffect('cmdWrite', 'hlc1', 'row1', 'still in flight')]);
+    await store.markApplied('cmdWrite');
+    expect(await store.reconcileConfirmed()).toEqual({ cleared: [] });
+    expect(await dayRows()).toHaveLength(1); // overlay held; no flicker
+  });
+});
+
 describe('D5 ack-rewrite convergence (divergent authoritative row id)', () => {
   it('rewrites the overlay to the server id → exactly one row before AND after canonical arrival', async () => {
     // Device A optimistically creates the day as idA (its overlay insert).

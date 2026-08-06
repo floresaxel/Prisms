@@ -28,6 +28,7 @@ import {
 } from '@prisms/core';
 import {
   Ic,
+  isJournalContentEmpty,
   Skeleton,
   truncatePlain,
   useAgenda,
@@ -299,7 +300,13 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
   // the viewed months ever syncs.
   const months = useMemo(() => [...new Set(days.map((d) => d.slice(0, 7)))], [days]);
   const journal = useJournalMonths(months);
-  const noteByDate = useMemo(() => new Map(journal.entries.map((e) => [e.entry_date, e.content])), [journal.entries]);
+  // Keyed on TEXT, not on row presence: a day whose note is empty is not a day
+  // with a note, so it must not wear the marker. (New writes never store a blank
+  // note, but rows predating that rule — and a not-yet-synced delete — can be.)
+  const noteByDate = useMemo(
+    () => new Map(journal.entries.filter((e) => !isJournalContentEmpty(e.content)).map((e) => [e.entry_date, e.content])),
+    [journal.entries],
+  );
 
   const colIndexOf = (start: Instant): number => days.indexOf(bucketDate(start, 0, tz));
 
