@@ -302,13 +302,23 @@ describe('DayJournalPanel — editor', () => {
     expect(screen.getByTestId('journal-date').textContent).toBe('2026-08-05');
   });
 
-  it('shows a skeleton instead of a heading while the day is still loading', () => {
+  it('is BLANK while the day is still loading — no default, no title', () => {
     state.entry = null;
     state.loading = true;
     render(createElement(DayJournalPanel, { date: '2026-08-05', ctx: CTX, actions: 'lock' }));
-    expect(screen.queryByTestId('journal-title')).toBeNull(); // nothing asserted
-    expect(screen.getByTestId('journal-title-loading')).toBeTruthy();
-    expect(screen.getByTestId('journal-date').textContent).toBe('2026-08-05'); // the day is known
+    const input = screen.getByTestId('journal-title') as HTMLInputElement;
+    expect(input.value).toBe('');
+    expect(input.placeholder).toBe(''); // nothing claimed about a note we do not have
+    expect(screen.getByTestId('journal-date').textContent).toBe('2026-08-05'); // the day IS known
+  });
+
+  it('is blank for a day that has no note at all', () => {
+    state.entry = null;
+    render(createElement(DayJournalPanel, { date: '2026-08-05', ctx: CTX, actions: 'lock' }));
+    const input = screen.getByTestId('journal-title') as HTMLInputElement;
+    expect(input.value).toBe('');
+    expect(input.placeholder).toBe('');
+    expect(input.disabled).toBe(true);
   });
 
   it('shows a stored title, with the date still visible', () => {
@@ -340,6 +350,12 @@ describe('DayJournalPanel — editor', () => {
     state.entry = null;
     render(createElement(DayJournalPanel, { date: '2026-08-11', ctx: CTX, actions: 'lock' }));
     expect((screen.getByTestId('journal-title') as HTMLInputElement).disabled).toBe(true);
+  });
+
+  it('offers the default only once the note exists', () => {
+    state.entry = { id: 'j1', content: 'x', deleted_at: null, locked: false };
+    render(createElement(DayJournalPanel, { date: '2026-08-05', ctx: CTX, actions: 'lock' }));
+    expect((screen.getByTestId('journal-title') as HTMLInputElement).placeholder).toBe('Note · 2026-08-05');
   });
 
   it('flushes a pending debounced save on unmount (day switch, no blur) — last edit not lost', () => {

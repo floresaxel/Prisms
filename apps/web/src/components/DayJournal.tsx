@@ -222,36 +222,27 @@ export function DayJournalPanel({
         {/* The title is editable; the DATE moves below it, so renaming a note
             never costs you the day it belongs to. */}
         <div className="px-jn-head">
-          {/* Until the day's row has loaded we do NOT know its title, and the
-              default is a claim about the note ("it is untitled") — rendering it
-              early flashed "Note · <date>" for half a second before the real
-              title replaced it. A placeholder asserts nothing. */}
-          {isLoading ? (
-            <span className="px-skeleton px-jn-title-skel" data-testid="journal-title-loading" aria-label="loading note title" role="img" />
-          ) : (
-            /* The default is the PLACEHOLDER, not the value: an untitled note
-               genuinely has no title, and rendering the default as a value
-               asserted a name the note did not have — which is what flashed and
-               then corrected itself while the row was still arriving. As a
-               placeholder it reads as "this is what it will be called", and a
-               title landing a beat later replaces muted grey rather than
-               overwriting a confident wrong heading. */
-            <input
-              className="px-jn-title"
-              data-testid="journal-title"
-              aria-label="note title"
-              value={titleDraft ?? entry?.title ?? ''}
-              placeholder={heading}
-              disabled={!hasNote || preview}
-              title={hasNote ? heading : 'Write something first — an empty day is not saved'}
-              onChange={(e) => setTitleDraft(e.target.value)}
-              onBlur={commitTitle}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') e.currentTarget.blur();
-                if (e.key === 'Escape') setTitleDraft(null);
-              }}
-            />
-          )}
+          {/* BLANK until the note is actually known. Both the value and the
+              default heading are claims about a note: while the row is still
+              arriving we have neither, so the field shows nothing at all rather
+              than flashing "Note · <date>" and correcting itself. Once the note
+              exists, an untitled one offers the default as a PLACEHOLDER — a
+              suggestion, not a name it already has. */}
+          <input
+            className="px-jn-title"
+            data-testid="journal-title"
+            aria-label="note title"
+            value={titleDraft ?? entry?.title ?? ''}
+            placeholder={hasNote ? journalTitleOf('', date) : ''}
+            disabled={!hasNote || preview}
+            title={hasNote ? heading : 'Write something first — an empty day is not saved'}
+            onChange={(e) => setTitleDraft(e.target.value)}
+            onBlur={commitTitle}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') e.currentTarget.blur();
+              if (e.key === 'Escape') setTitleDraft(null);
+            }}
+          />
           <span className="px-jn-date" data-testid="journal-date">{date}</span>
         </div>
         {/* `lock`: one button, nothing else — the icon is the affordance for what

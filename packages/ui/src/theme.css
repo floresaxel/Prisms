@@ -370,8 +370,6 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
 /* the untitled default reads as a suggestion, not as the note's name */
 .px-jn-title::placeholder { color: var(--px-text-dim); font-weight: 560; opacity: 1; }
 .px-jn-date { font-size: 11.5px; color: var(--px-faint); font-variant-numeric: tabular-nums; padding-left: 0; }
-/* stands in for the title while the day's row loads — same box, no claim */
-.px-jn-title-skel { display: block; height: 19px; width: min(190px, 65%); border-radius: 6px; margin: 2px 0 1px; }
 
 /* journal (D2/D3/J7): day-header note affordance + TipTap WYSIWYG editor + toolbar + markdown preview */
 .px-cal-col-head { cursor: pointer; gap: 4px; }
