@@ -91,15 +91,6 @@ export function DayJournalPanel({
   const dayLog = useDayLog(date);
   const { timezone } = useUserSettings();
   const [draft, setDraft] = useState(entry?.content ?? '');
-  /**
-   * The LOCKED (read-only) state of THIS day, surfaced as "Lock edit" ⇄ "Edit".
-   * It is a SYNCED field on the day's row (`journal_entries.locked`), not local
-   * UI state, so a day locked here opens locked on every other device. Read
-   * straight from the entry — the optimistic overlay makes the toggle instant,
-   * and a rejected command rolls back by dropping that overlay.
-   */
-  const preview = entry?.locked ?? false;
-
   const [menuOpen, setMenuOpen] = useState(false);
   const dirty = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -110,6 +101,18 @@ export function DayJournalPanel({
   const heading = journalTitleOf(entry?.title, date);
   /** Title and lock belong to a note that EXISTS; a blank day has neither. */
   const hasNote = existingId !== undefined && !isJournalContentEmpty(draft);
+  /**
+   * The LOCKED (read-only) state of THIS day, surfaced as "Lock edit" ⇄ "Edit".
+   * It is a SYNCED field on the day's row (`journal_entries.locked`), not local
+   * UI state, so a day locked here opens locked on every other device.
+   *
+   * Gated on `hasNote`: a row with no text is not a note, and a row that is BOTH
+   * empty and locked would otherwise be a dead end — the empty-note rule denies
+   * it a title or an unlock, while the lock denies it an editor to type into.
+   * Such rows cannot be created any more, but they exist in databases that
+   * predate that rule, so an empty one is simply editable.
+   */
+  const preview = hasNote && (entry?.locked ?? false);
   const [titleDraft, setTitleDraft] = useState<string | null>(null);
 
   function commitTitle() {

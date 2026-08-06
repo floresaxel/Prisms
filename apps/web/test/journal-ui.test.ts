@@ -308,6 +308,16 @@ describe('DayJournalPanel — editor', () => {
     expect(screen.getByTestId('journal-date').textContent).toBe('2026-08-05'); // the day IS known
   });
 
+  it('an EMPTY row that is locked is still editable — not a dead end', () => {
+    // Rows predating the empty-note rule can be both empty and locked. Honouring
+    // the lock there would leave the day unusable: no title and no unlock
+    // (it is not a note), and no editor to type into (it is locked).
+    state.entry = { id: 'j1', content: '', deleted_at: null, locked: true };
+    render(createElement(DayJournalPanel, { date: '2026-08-07', ctx: CTX, actions: 'lock' }));
+    expect(screen.getByTestId('journal-rich')).toBeTruthy(); // the editor, not the read-only render
+    expect(screen.queryByTestId('journal-preview')).toBeNull();
+  });
+
   it('is blank for a day that has no note at all', () => {
     state.entry = null;
     render(createElement(DayJournalPanel, { date: '2026-08-05', ctx: CTX, actions: 'lock' }));
