@@ -38,7 +38,7 @@ vi.mock('@prisms/ui', async (importOriginal) => {
   return {
     ...actual,
     useCommands: () => commands,
-    useJournalDay: () => ({ entry: state.entry, isLoading: false }),
+    useJournalDay: () => ({ entry: state.entry, isLoading: false, isSettled: true }),
     useDayLog: () => (state.journalDayLog ? state.dayLog : null),
     useUserSettings: () => ({ hasRow: true, dayResetHour: 4, timezone: NY, weatherLocation: null, journalDayLog: state.journalDayLog }),
   };

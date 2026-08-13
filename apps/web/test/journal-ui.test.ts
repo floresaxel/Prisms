@@ -19,6 +19,8 @@ const state = {
   entry: null as null | { id: string; content: string; deleted_at: null; locked?: boolean; title?: string },
   months: [] as { entry_date: string; content: string }[],
   loading: false,
+  /** Has the day's row actually been READ (vs. cached/in-flight rows standing in)? */
+  settled: true,
 };
 const commandFns = new Map<string, ReturnType<typeof vi.fn>>();
 const command = (name: string) => {
@@ -32,8 +34,8 @@ vi.mock('@prisms/ui', async (importOriginal) => {
   return {
     ...actual,
     useCommands: () => commands,
-    useJournalDay: () => ({ entry: state.entry, isLoading: state.loading }),
-    useJournalMonths: () => ({ entries: state.months, isLoading: false }),
+    useJournalDay: () => ({ entry: state.entry, isLoading: state.loading, isSettled: state.settled }),
+    useJournalMonths: () => ({ entries: state.months, isLoading: false, isSettled: true }),
     useAgenda: () => ({
       input: { tasks: [], committed: [], windows: [], timezone: 'UTC', horizon: { from: 0, to: 0 }, mode: 'greedy' },
       tasksById: new Map(),
@@ -88,6 +90,7 @@ afterEach(() => {
   state.entry = null;
   state.months = [];
   state.loading = false;
+  state.settled = true;
   commandFns.clear();
   store.clear(); // per-day lock state persists across mounts by design
 });
@@ -306,6 +309,28 @@ describe('DayJournalPanel — editor', () => {
     expect(input.value).toBe('');
     expect(input.placeholder).toBe(''); // nothing claimed about a note we do not have
     expect(screen.getByTestId('journal-date').textContent).toBe('2026-08-05'); // the day IS known
+  });
+
+  it('is BLANK for an unsettled read — the default must not be assumed from stale rows', () => {
+    // The gap `isLoading` cannot express: rows ARE on screen (ROWS_CACHE standing
+    // in for a mount that has not re-produced), so nothing reads as "loading", yet
+    // their `title` has not been confirmed. Painting "Note · <date>" here is the
+    // flash — it is overwritten the moment the live row lands.
+    state.entry = { id: 'j1', content: 'x', deleted_at: null, locked: false };
+    state.loading = false;
+    state.settled = false;
+    render(createElement(DayJournalPanel, { date: '2026-08-05', ctx: CTX, actions: 'lock' }));
+    expect((screen.getByTestId('journal-title') as HTMLInputElement).value).toBe('');
+  });
+
+  it('shows a stored title even before the read settles — a real title is never wrong', () => {
+    // The other side of the gate: only the DEFAULT is a claim about absence. A
+    // title the row already carries cannot be contradicted by a later read, so
+    // waiting on it would be a needless blank.
+    state.entry = { id: 'j1', content: 'x', deleted_at: null, locked: false, title: 'Trip planning' };
+    state.settled = false;
+    render(createElement(DayJournalPanel, { date: '2026-08-05', ctx: CTX, actions: 'lock' }));
+    expect((screen.getByTestId('journal-title') as HTMLInputElement).value).toBe('Trip planning');
   });
 
   it('an EMPTY row that is locked is still editable — not a dead end', () => {

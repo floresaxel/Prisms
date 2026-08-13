@@ -84,7 +84,7 @@ export function DayJournalPanel({
    */
   actions?: 'menu' | 'lock';
 }) {
-  const { entry, isLoading } = useJournalDay(date);
+  const { entry, isLoading, isSettled } = useJournalDay(date);
   const commands = useCommands(ctx);
   // Annex L: derived at render from the warm provider — null when the built-in
   // automation is off or the day holds nothing.
@@ -97,10 +97,24 @@ export function DayJournalPanel({
   const existingId = entry?.id;
   const menuRef = useRef<HTMLDivElement | null>(null);
 
-  /** The heading: the stored title, else "Note · <date>". */
-  const heading = journalTitleOf(entry?.title, date);
   /** Title and lock belong to a note that EXISTS; a blank day has neither. */
   const hasNote = existingId !== undefined && !isJournalContentEmpty(draft);
+  const storedTitle = (entry?.title ?? '').trim();
+  /**
+   * The heading: the stored title, else "Note · <date>" — but the two are NOT
+   * equally safe to render early, so they are gated differently.
+   *
+   * A stored title is shown the instant it arrives: it is the note's own value,
+   * so it can never be contradicted by a later read.
+   *
+   * The default is the opposite — it asserts that this note has NO title, which
+   * is only true once the row has actually been read. Deriving it from
+   * `entry?.title` alone assumes the absence: `entry` also carries an empty
+   * `title` while the read is unsettled (a cold load, or `ROWS_CACHE` standing in
+   * with rows this mount has not re-produced), so the default would paint for a
+   * frame and then be overwritten by the real title. It waits for `isSettled`.
+   */
+  const heading = storedTitle || (isSettled && hasNote ? journalTitleOf('', date) : '');
   /**
    * The LOCKED (read-only) state of THIS day, surfaced as "Lock edit" ⇄ "Edit".
    * It is a SYNCED field on the day's row (`journal_entries.locked`), not local
@@ -225,18 +239,18 @@ export function DayJournalPanel({
         {/* The title is editable; the DATE moves below it, so renaming a note
             never costs you the day it belongs to. */}
         <div className="px-jn-head">
-          {/* The heading is the note's title, or "Note · <date>" when it has
-              none — but ONLY once the note has loaded and that absence is a
-              fact. While the row is still arriving we know neither, so the field
-              stays blank rather than showing the default for a moment and then
-              correcting itself. */}
+          {/* Blank until we KNOW what to put here (see `heading`): a note with no
+              title reads "Note · <date>", but only once the row has been read.
+              An unsettled read carries an empty title too, and painting the
+              default from that would flash it for a frame before the real title
+              lands. */}
           <input
             className="px-jn-title"
             data-testid="journal-title"
             aria-label="note title"
             value={titleDraft ?? (hasNote ? heading : '')}
             disabled={!hasNote || preview}
-            title={hasNote ? heading : 'Write something first — an empty day is not saved'}
+            title={hasNote ? heading || undefined : 'Write something first — an empty day is not saved'}
             onChange={(e) => setTitleDraft(e.target.value)}
             onBlur={commitTitle}
             onKeyDown={(e) => {

@@ -51,7 +51,7 @@ const mdStyles = {
 };
 
 export function JournalDay({ date, ctx, onClose }: { date: string; ctx: CommandContext; onClose?: () => void }) {
-  const { entry } = useJournalDay(date);
+  const { entry, isSettled } = useJournalDay(date);
   const commands = useCommands(ctx);
   // Annex L: derived at render from the shared provider. Mobile has no toggle —
   // it obeys the synced flag (the switch is web/desktop-only, D4).
@@ -83,6 +83,19 @@ export function JournalDay({ date, ctx, onClose }: { date: string; ctx: CommandC
     void commands.writeJournal({ existingId, entryDate: date, content });
   };
   const hasNote = existingId !== undefined && !isJournalContentEmpty(draft);
+  /**
+   * The heading, under the same rule as the web panel (DayJournal.tsx): a stored
+   * title is the row's own value and shows the moment it arrives, while
+   * "Note · <date>" asserts that this note has NO title and so waits until the row
+   * has actually been read. Deriving it straight from `entry?.title` assumed that
+   * absence — an unloaded day reads as untitled — so every open of a NAMED note
+   * painted the default for a frame before the real title replaced it.
+   *
+   * Unlike the web panel this keeps the default for a day with no note at all:
+   * here the heading is the screen's only day identifier, so blanking it would
+   * leave a new day with no header.
+   */
+  const heading = (entry?.title ?? '').trim() || (isSettled ? journalTitleOf('', date) : '');
 
   // A pending debounced save must survive unmount (switching day). RN's
   // keyboardShouldPersistTaps can let a day-switch tap through WITHOUT blurring
@@ -129,7 +142,7 @@ export function JournalDay({ date, ctx, onClose }: { date: string; ctx: CommandC
   return (
     <Card testID={`journal-${date}`}>
       <Row>
-        <H2>{journalTitleOf(entry?.title, date)}</H2>
+        <H2>{heading}</H2>
         <Btn
           title={preview ? 'Edit' : 'Lock edit'}
           testID="journal-preview-toggle"
