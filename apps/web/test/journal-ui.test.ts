@@ -304,6 +304,7 @@ describe('DayJournalPanel — editor', () => {
   it('is BLANK while the day is still loading — the default must not flash first', () => {
     state.entry = null;
     state.loading = true;
+    state.settled = false; // loading is, by definition, not yet settled
     render(createElement(DayJournalPanel, { date: '2026-08-05', ctx: CTX, actions: 'lock' }));
     const input = screen.getByTestId('journal-title') as HTMLInputElement;
     expect(input.value).toBe('');
@@ -343,11 +344,15 @@ describe('DayJournalPanel — editor', () => {
     expect(screen.queryByTestId('journal-preview')).toBeNull();
   });
 
-  it('is blank for a day that has no note at all', () => {
+  it('names a day that has no note yet, but leaves it uneditable', () => {
+    // Both screens open on TODAY, which usually holds nothing — blanking here
+    // left the Agenda's note panel headerless in its most common state. The
+    // default names the day the note WILL be filed under; `disabled` keeps it a
+    // heading rather than a value that has been filled in for you.
     state.entry = null;
     render(createElement(DayJournalPanel, { date: '2026-08-05', ctx: CTX, actions: 'lock' }));
     const input = screen.getByTestId('journal-title') as HTMLInputElement;
-    expect(input.value).toBe('');
+    expect(input.value).toBe('Note · 2026-08-05');
     expect(input.disabled).toBe(true);
   });
 

@@ -113,8 +113,15 @@ export function DayJournalPanel({
    * `title` while the read is unsettled (a cold load, or `ROWS_CACHE` standing in
    * with rows this mount has not re-produced), so the default would paint for a
    * frame and then be overwritten by the real title. It waits for `isSettled`.
+   *
+   * A day with NO note yet gets the default too — it names the day the note WILL
+   * be filed under. The panel used to blank there on the reasoning that a title
+   * belongs to a note that exists, but both screens open on TODAY, which usually
+   * has nothing written yet: the common view of the Agenda's note panel was a
+   * headerless box. The input stays disabled, so this reads as a heading rather
+   * than an editable value that has been filled in for you.
    */
-  const heading = storedTitle || (isSettled && hasNote ? journalTitleOf('', date) : '');
+  const heading = storedTitle || (isSettled ? journalTitleOf('', date) : '');
   /**
    * The LOCKED (read-only) state of THIS day, surfaced as "Lock edit" ⇄ "Edit".
    * It is a SYNCED field on the day's row (`journal_entries.locked`), not local
@@ -239,16 +246,16 @@ export function DayJournalPanel({
         {/* The title is editable; the DATE moves below it, so renaming a note
             never costs you the day it belongs to. */}
         <div className="px-jn-head">
-          {/* Blank until we KNOW what to put here (see `heading`): a note with no
-              title reads "Note · <date>", but only once the row has been read.
-              An unsettled read carries an empty title too, and painting the
-              default from that would flash it for a frame before the real title
-              lands. */}
+          {/* Blank until we KNOW what to put here (see `heading`): an untitled
+              note — or a day with nothing written yet — reads "Note · <date>",
+              but only once the row has been read. An unsettled read carries an
+              empty title too, and painting the default from that would flash it
+              for a frame before the real title lands. */}
           <input
             className="px-jn-title"
             data-testid="journal-title"
             aria-label="note title"
-            value={titleDraft ?? (hasNote ? heading : '')}
+            value={titleDraft ?? heading}
             disabled={!hasNote || preview}
             title={hasNote ? heading || undefined : 'Write something first — an empty day is not saved'}
             onChange={(e) => setTitleDraft(e.target.value)}
