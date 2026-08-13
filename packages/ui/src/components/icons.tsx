@@ -12,7 +12,7 @@ export type IconName =
   | 'chart' | 'zap' | 'sliders' | 'search' | 'plus' | 'clock' | 'lock' | 'check'
   | 'x' | 'chevd' | 'chevl' | 'chevr' | 'play' | 'stop' | 'down' | 'up' | 'info'
   | 'alert' | 'flame' | 'trash' | 'cols' | 'gantt' | 'net' | 'scale' | 'list' | 'pen'
-  | 'dots' | 'route' | 'note';
+  | 'dots' | 'route' | 'note' | 'tasklist';
 
 /** Mount once, high in the tree (the app shell). Renders no visible output. */
 export function IconSprite() {
@@ -57,6 +57,11 @@ export function IconSprite() {
       {/* a page with two lines of writing — legible down to ~11px, where a
           book/journal glyph turns to mush. */}
       <symbol id="i-note" viewBox="0 0 24 24"><path d="M6 3h8l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z" /><path d="M14 3v5h5" /><path d="M9 13h6M9 17h4" /></symbol>
+      {/* checked box — the journal toolbar's "Task list". A drawn icon, not the
+          ☑ character (U+2611): Inter has no glyph for it, so the font stack fell
+          through to Segoe UI Emoji and rendered a COLOUR emoji that ignores
+          `color` — the one non-monochrome mark in the editor chrome. */}
+      <symbol id="i-tasklist" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" /><path d="m9 12 2 2 4-4" /></symbol>
     </svg>
   );
 }

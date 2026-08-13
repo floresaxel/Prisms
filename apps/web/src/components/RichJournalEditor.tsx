@@ -17,12 +17,14 @@
  * Rendered in a browser only; the jsdom component tests mock this module (TipTap
  * needs a real DOM), and Playwright e2e exercises the live editor.
  */
-import { useEffect } from 'react';
+import { useEffect, type ReactNode } from 'react';
 
 import { TaskItem, TaskList } from '@tiptap/extension-list';
 import { EditorContent, useEditor, type Editor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Markdown, type MarkdownStorage } from 'tiptap-markdown';
+
+import { Ic } from '@prisms/ui';
 
 /** Link schemes allowed in a note; everything else is refused (matches MarkdownView, D2). */
 const SAFE_PROTOCOLS = ['http', 'https', 'mailto'];
@@ -33,7 +35,14 @@ const getMd = (editor: Editor): string =>
 
 interface ToolItem {
   key: string;
-  label: string;
+  /**
+   * What the button shows. Plain text where a normal character carries the
+   * meaning (B, H2, •, 1.) — those render in the button's own `color`. Anything
+   * needing a pictogram uses the shared SVG sprite rather than a symbol
+   * character: a glyph Inter lacks falls through the font stack to Segoe UI
+   * Emoji, which paints a COLOUR emoji that `color` cannot touch.
+   */
+  label: ReactNode;
   title: string;
   run: (editor: Editor) => void;
 }
@@ -46,7 +55,7 @@ const TOOLBAR: ToolItem[] = [
   { key: 'h2', label: 'H2', title: 'Heading', run: (e) => e.chain().focus().toggleHeading({ level: 2 }).run() },
   { key: 'bullet', label: '•', title: 'Bullet list', run: (e) => e.chain().focus().toggleBulletList().run() },
   { key: 'ordered', label: '1.', title: 'Numbered list', run: (e) => e.chain().focus().toggleOrderedList().run() },
-  { key: 'task', label: '☑', title: 'Task list', run: (e) => e.chain().focus().toggleTaskList().run() },
+  { key: 'task', label: <Ic name="tasklist" />, title: 'Task list', run: (e) => e.chain().focus().toggleTaskList().run() },
   { key: 'quote', label: '❝', title: 'Quote', run: (e) => e.chain().focus().toggleBlockquote().run() },
   // StarterKit's horizontalRule; tiptap-markdown serializes it to `---`, so the
   // divider survives the round trip to storage, the .md export and every client.
