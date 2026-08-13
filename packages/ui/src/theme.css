@@ -198,6 +198,7 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
 .px-ag-sw--suggested { background: var(--px-surface); border: 1.5px dashed var(--px-blue); }
 .px-ag-sw--novision { background: var(--px-slate-bg); border-color: var(--px-border-2); }
 .px-ag-sw--history { background: var(--px-surface-2); border: 1px dashed var(--px-border-2); }
+.px-ag-sw-ic { width: 12px; height: 12px; flex: none; color: var(--px-amber); stroke-width: 2.4; }
 
 /* Column order: to-schedule (left) · week grid · note (right). Below ~1040px of
    MEASURED screen width the two panels move under the calendar, and below ~720px
@@ -262,7 +263,10 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
 .px-cal-col-body { position: relative; }
 .px-cal-line { position: absolute; left: 0; right: 0; border-top: 1px dashed var(--px-border); opacity: 0.5; }
 
-.px-cal-block { position: absolute; left: 3px; right: 3px; padding: 3px 6px; border-radius: 6px; font-size: 12px; overflow: hidden; background: var(--px-blue-bg); border: 1px solid var(--px-blue-brd); color: var(--px-blue-deep); display: flex; flex-direction: column; gap: 2px; }
+/* left/right come from the LANE (set inline): overlapping blocks now split the
+   column between them, and the 3px gutter that used to be baked into them is a
+   margin so it survives any lane width. */
+.px-cal-block { position: absolute; margin: 0 3px; padding: 3px 6px; border-radius: 6px; font-size: 12px; overflow: hidden; background: var(--px-blue-bg); border: 1px solid var(--px-blue-brd); color: var(--px-blue-deep); display: flex; flex-direction: column; gap: 2px; }
 .px-cal-block-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .px-cal-block-actions { display: flex; gap: 4px; }
 .px-cal-block-actions .px-btn { padding: 1px 6px; font-size: 11px; }
@@ -271,16 +275,39 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
 .px-cal-block--anchored { border-color: var(--px-ok); }
 .px-cal-block--superseded { opacity: 0.5; border-style: dotted; text-decoration: line-through; }
 .px-cal-block-stale { font-size: 9px; text-transform: uppercase; letter-spacing: 0.4px; color: var(--px-amber); }
+/* A placement is never refused now, so a block can legitimately overlap or sit
+   outside your hours: it says so in its own top-right corner instead. The title
+   yields the corner rather than running under the glyph. */
+.px-cal-block--clash { border-color: var(--px-amber); }
+.px-cal-block--clash .px-cal-block-title { padding-right: 13px; }
+.px-cal-warn { position: absolute; top: 2px; right: 3px; line-height: 0; color: var(--px-amber); }
+.px-cal-warn .px-ic { width: 12px; height: 12px; stroke-width: 2.4; }
 .px-cal-resize { position: absolute; left: 0; right: 0; bottom: 0; height: 7px; cursor: ns-resize; border-bottom-left-radius: 6px; border-bottom-right-radius: 6px; }
 .px-cal-resize:hover { background: rgba(16,24,40,0.08); }
 .px-cal-entry { position: absolute; left: 3px; right: 3px; padding: 2px 6px; border-radius: 6px; font-size: 11px; background: var(--px-surface-2); border: 1px dashed var(--px-border-2); color: var(--px-text-dim); overflow: hidden; }
 
-.px-cal-drop { position: absolute; inset: 0; z-index: 5; }
-.px-cal-cell { position: absolute; left: 0; right: 0; }
-.px-cal-cell--valid { background: var(--px-green-bg); outline: 1px solid var(--px-ok); cursor: copy; }
-.px-cal-cell--invalid { background: rgba(16,24,40,0.06); }
-/* the hour the drop would fall in, whichever way the window hint reads */
-.px-cal-cell--hot { background: var(--px-blue-bg); outline: 1px solid var(--px-accent); }
+/* Mid-drag the whole column dims — ONE layer, not an hour-by-hour tint — and
+   the stretches the item actually fits into are lifted back out of it below. */
+.px-cal-drop { position: absolute; inset: 0; z-index: 5; cursor: copy; background: rgba(16,24,40,0.06); }
+
+/* Where it fits: one shape per CONTINUOUS free stretch, breathing so the eye
+   finds it without the grid of stacked rectangles this replaced. */
+.px-cal-free {
+  position: absolute; left: 2px; right: 2px; border-radius: 8px;
+  background: var(--px-green-bg); border: 1px solid var(--px-ok);
+  animation: px-cal-glow 2.2s ease-in-out infinite;
+}
+@keyframes px-cal-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(22,163,74,0.30), inset 0 0 8px rgba(22,163,74,0.06); }
+  50% { box-shadow: 0 0 9px 2px rgba(22,163,74,0.38), inset 0 0 14px rgba(22,163,74,0.14); }
+}
+@media (prefers-reduced-motion: reduce) {
+  /* the outline still reads as "here"; only the breathing stops */
+  .px-cal-free { animation: none; box-shadow: 0 0 7px 1px rgba(22,163,74,0.34); }
+}
+
+/* the hour the drop would fall in — one band, drawn only under the pointer */
+.px-cal-hot { position: absolute; left: 0; right: 0; background: var(--px-blue-bg); outline: 1px solid var(--px-accent); opacity: 0.75; }
 
 /* where the drop would land: the item's real footprint, at the snapped minute.
    `pointer-events: none` keeps it out of the way of the mouseup it describes. */
@@ -292,10 +319,13 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
   background: color-mix(in srgb, var(--px-accent) 12%, transparent);
   border: 1.5px dashed var(--px-accent); color: var(--px-blue-deep);
 }
-.px-cal-preview--invalid {
-  background: color-mix(in srgb, var(--px-danger) 10%, transparent);
-  border-color: var(--px-danger); color: var(--px-danger);
+/* Amber, not red: the drop is going to be ACCEPTED — this is the same caution
+   the block will then wear, shown a moment early. */
+.px-cal-preview--clash {
+  background: color-mix(in srgb, var(--px-amber) 14%, transparent);
+  border-color: var(--px-amber); color: #92600a;
 }
+.px-cal-preview-warn { width: 11px; height: 11px; stroke-width: 2.4; vertical-align: -1px; margin-right: 3px; }
 .px-cal-preview-time { font-weight: 640; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .px-cal-preview-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: 0.85; }
 

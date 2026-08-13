@@ -50,11 +50,13 @@ to. Every task can answer *why?* by tracing its ancestry back to a vision. A
 running timer lifts into a global pill you can clock out of from any screen.
 
 **Agenda** is a week calendar beside your to-do list. Drag a task onto the week
-and the valid time windows light up while everything else dims; drop it in a
-valid slot and it becomes a committed block. The task rides your cursor as you
-drag, and an outline shows exactly where it would land — its real length, the
-hour lit up behind it, the start and end times written on it — snapped to
-15-minute steps, or whatever interval you pick in Settings. Anchored blocks
+and each continuous stretch of free time glows while everything else dims. The
+task rides your cursor, and an outline shows exactly where it would land — its
+real length, the hour lit up behind it, the start and end times written on it —
+snapped to 15-minute steps, or whatever interval you pick in Settings. Drop it
+anywhere: the calendar advises, it doesn't refuse. A block that overlaps another
+or falls outside your hours is placed all the same, keeps a caution mark, and is
+drawn beside what it clashes with so neither hides the other. Anchored blocks
 refuse the drag. Past time entries render as a faint history layer behind the
 plan.
 

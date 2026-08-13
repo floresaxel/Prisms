@@ -26,6 +26,7 @@ import {
   asEpochMillis,
   bucketDate,
   epochMillisToIso,
+  expandWindows,
   localInstant,
   validWindowsFor,
   type Instant,
@@ -49,6 +50,7 @@ import {
   type CommandContext,
 } from '@prisms/ui';
 
+import { conflictMessage, fitProblems, laneLayout, regionsInDay, type FitProblem } from '../agenda-fit';
 import { agendaLayout, DAY_SPANS, DEFAULT_SPAN, GUTTER_W, isDaySpan } from '../agenda-layout';
 import { fmtGridClock, pointerMinutes, snapMinutes, useSnapPref } from '../agenda-snap';
 import { DayJournalPanel } from '../components/DayJournal';
@@ -416,8 +418,59 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
     return () => window.removeEventListener('mousemove', onMove);
   }, [drag]);
 
-  const cellValid = (cellStart: Instant, durationMs: number, valid: Interval[]): boolean =>
-    valid.some((w) => w.start <= cellStart && cellStart + durationMs <= w.end);
+  /**
+   * The hours work may land in, over the DISPLAYED days rather than the
+   * scheduler's horizon — otherwise paging back a week would leave every block
+   * on it with no window to be inside of, and the whole page would wear a
+   * caution.
+   */
+  const dayHours = useMemo(
+    () =>
+      expandWindows(agenda.input.windows, tz, {
+        from: localInstant(days[0]!, 0, tz),
+        to: localInstant(days.at(-1)!, 24, tz),
+      }),
+    [agenda.input.windows, tz, days],
+  );
+
+  /** Committed blocks are what a placement can collide with. */
+  const committedSpans = useMemo(
+    () =>
+      agenda.blocks
+        .filter((b) => b.status === 'committed')
+        .map((b) => ({ id: b.id, start: b.startsAt, end: b.endsAt })),
+    [agenda.blocks],
+  );
+
+  /**
+   * §I7-adjacent: a drop is no longer refused, so what used to be an invalid
+   * region is now merely a clash — computed once per block and worn as a
+   * caution glyph. Excludes the block itself; a block cannot clash with itself.
+   */
+  const problemsByBlock = useMemo(() => {
+    const map = new Map<string, FitProblem[]>();
+    for (const b of agenda.blocks) {
+      const others = committedSpans.filter((s) => s.id !== b.id);
+      map.set(b.id, fitProblems({ start: b.startsAt, end: b.endsAt }, others, dayHours));
+    }
+    return map;
+  }, [agenda.blocks, committedSpans, dayHours]);
+
+  /** Overlapping blocks share the column instead of hiding one another. */
+  const lanes = useMemo(
+    () => laneLayout(agenda.blocks.map((b) => ({ id: b.id, start: b.startsAt, end: b.endsAt }))),
+    [agenda.blocks],
+  );
+
+  /**
+   * Where the dragged item actually fits, per day column, as one merged shape
+   * per continuous stretch. Recomputed once per drag (the drag object's
+   * identity is stable through the pointer's travel), not per pointer sample.
+   */
+  const fitRegions = useMemo(
+    () => (drag ? days.map((d) => regionsInDay(drag.valid, localInstant(d, GRID_START_HOUR, tz), BODY_MINUTES)) : null),
+    [drag, days, tz],
+  );
 
   /**
    * Pointer → the snapped start it means, as minutes from the top of the grid.
@@ -431,9 +484,23 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
   /** Minutes from the top of the grid → the instant that reads as on `date`. */
   const instantAt = (date: string, minutes: number): Instant => localInstant(date, GRID_START_HOUR, tz, minutes);
 
+  /**
+   * What would be wrong with dropping the held item at `start` — the same
+   * question `problemsByBlock` asks of a block that has already landed, so the
+   * outline's warning and the block's caution always agree. A block being MOVED
+   * does not collide with the copy of itself it is about to leave behind.
+   */
+  const problemsAt = (start: Instant, d: DragState): FitProblem[] =>
+    fitProblems(
+      { start, end: start + d.durationMs },
+      committedSpans.filter((s) => s.id !== d.blockId),
+      dayHours,
+    );
+
+  /** A drop is never refused (§12.2): anywhere is allowed, a clash is flagged. */
   async function dropAt(cellStart: Instant) {
     const d = dragRef.current;
-    if (!d || !cellValid(cellStart, d.durationMs, d.valid)) return;
+    if (!d) return;
     const startsAt = epochMillisToIso(cellStart);
     const endsAt = epochMillisToIso(asEpochMillis(cellStart + d.durationMs));
     if (d.blockId) await commands.moveBlock(d.blockId, startsAt, endsAt);
@@ -472,13 +539,14 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
       </div>
 
       <div className="px-ag-bar">
-        <span className="px-page-sub">Drag any task onto the week — valid windows light up, everything else dims.</span>
+        <span className="px-page-sub">Drag any task onto the week — the free stretches glow. Drop anywhere; a clash is flagged, not refused.</span>
         <div className="px-ag-legend">
           <span className="px-lg"><span className="px-ag-sw px-ag-sw--committed" />Committed</span>
           <span className="px-lg"><span className="px-ag-sw px-ag-sw--anchored" />Anchored 🔒</span>
           <span className="px-lg"><span className="px-ag-sw px-ag-sw--suggested" />Suggested</span>
           <span className="px-lg"><span className="px-ag-sw px-ag-sw--novision" />No vision</span>
           <span className="px-lg"><span className="px-ag-sw px-ag-sw--history" />History</span>
+          <span className="px-lg"><Ic name="alert" className="px-ag-sw-ic" />Clash</span>
         </div>
       </div>
 
@@ -547,7 +615,8 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
           </div>
           <p className="px-muted px-drag-hint" data-testid="drag-hint">
             Drops snap to {snap === 60 ? '1 hour' : `${snap} minutes`} — change that in Settings. Anchored blocks refuse
-            the drag (🔒), and a drop outside a valid window snaps back.
+            the drag (🔒); everywhere else takes a drop, and one that overlaps or falls outside your hours keeps a
+            caution ⚠ until you move it.
           </p>
         </div>
 
@@ -623,12 +692,16 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
                   const endForDisplay = resizing ? (resizeEnd as Instant) : b.endsAt;
                   const p = place(b.startsAt, endForDisplay);
                   if (p === null || p.col !== col) return null;
+                  const problems = problemsByBlock.get(b.id) ?? [];
+                  const clash = conflictMessage(problems);
+                  const { lane, lanes: laneCount } = lanes.get(b.id) ?? { lane: 0, lanes: 1 };
                   const cls = [
                     'px-cal-block',
                     b.status === 'suggested' ? 'px-cal-block--suggested' : '',
                     b.superseded ? 'px-cal-block--superseded' : '',
                     !b.justified ? 'px-cal-block--unjustified' : '',
                     b.anchored ? 'px-cal-block--anchored' : '',
+                    clash ? 'px-cal-block--clash' : '',
                   ].filter(Boolean).join(' ');
                   return (
                     <div
@@ -636,7 +709,17 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
                       className={cls}
                       data-testid={`block-${b.id}`}
                       data-duration-min={Math.round((endForDisplay - b.startsAt) / MS_PER_MIN)}
-                      style={{ top: p.top, height: p.height, cursor: b.anchored ? 'not-allowed' : 'grab', outline: b.id === selectedBlockId ? '2px solid var(--px-accent, #4c8bf5)' : undefined }}
+                      data-conflict={clash ? 'true' : 'false'}
+                      style={{
+                        top: p.top,
+                        height: p.height,
+                        // lanes, so a clashing block sits BESIDE what it clashes
+                        // with rather than under it — hiding its own caution.
+                        left: `${(lane / laneCount) * 100}%`,
+                        right: `${((laneCount - lane - 1) / laneCount) * 100}%`,
+                        cursor: b.anchored ? 'not-allowed' : 'grab',
+                        outline: b.id === selectedBlockId ? '2px solid var(--px-accent, #4c8bf5)' : undefined,
+                      }}
                       onMouseDown={(e) => {
                         if (b.status !== 'committed') return;
                         e.preventDefault();
@@ -647,6 +730,12 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
                         setSelectedDay(null);
                       }}
                     >
+                      {clash && (
+                        <span className="px-cal-warn" data-testid={`conflict-${b.id}`} data-problems={problems.join(' ')}>
+                          {/* `title` is both the hover text and the icon's accessible name */}
+                          <Ic name="alert" title={clash} />
+                        </span>
+                      )}
                       <span className="px-cal-block-title">{b.anchored && <span aria-label="anchored">🔒 </span>}{b.title}</span>
                       {b.superseded && (
                         <span className="px-cal-block-stale" data-testid={`superseded-${b.id}`}>superseded</span>
@@ -694,37 +783,47 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
                       void dropAt(instantAt(date, min));
                     }}
                   >
-                    {Array.from({ length: GRID_END_HOUR - GRID_START_HOUR }, (_, i) => {
-                      const hour = GRID_START_HOUR + i;
-                      const cellStart = localInstant(date, hour, tz);
-                      const ok = cellValid(cellStart, drag.durationMs, drag.valid);
-                      const hot = hour === previewHour;
-                      return (
-                        <div
-                          key={i}
-                          className={`px-cal-cell ${ok ? 'px-cal-cell--valid' : 'px-cal-cell--invalid'}${hot ? ' px-cal-cell--hot' : ''}`}
-                          data-testid={`cell-${col}-${hour}`}
-                          data-valid={ok ? 'true' : 'false'}
-                          data-hot={hot ? 'true' : undefined}
-                          style={{ top: i * HOUR_PX, height: HOUR_PX }}
-                        />
-                      );
-                    })}
+                    {/* where it fits: ONE glowing outline per continuous free
+                        stretch, not a stack of hour-sized rectangles. */}
+                    {(fitRegions?.[col] ?? []).map((r) => (
+                      <div
+                        key={r.startMin}
+                        className="px-cal-free"
+                        data-testid={`free-${col}-${r.startMin}`}
+                        data-span-min={r.endMin - r.startMin}
+                        aria-hidden="true"
+                        style={{ top: (r.startMin / 60) * HOUR_PX, height: ((r.endMin - r.startMin) / 60) * HOUR_PX }}
+                      />
+                    ))}
+
+                    {/* the hour the drop would fall in */}
+                    {previewHour >= 0 && (
+                      <div
+                        className="px-cal-hot"
+                        data-testid={`hot-hour-${col}`}
+                        data-hour={previewHour}
+                        aria-hidden="true"
+                        style={{ top: (previewHour - GRID_START_HOUR) * HOUR_PX, height: HOUR_PX }}
+                      />
+                    )}
 
                     {/* what the drop would make, drawn where it would go */}
                     {preview !== null && (() => {
                       const durMin = drag.durationMs / MS_PER_MIN;
-                      const ok = cellValid(instantAt(date, preview), drag.durationMs, drag.valid);
+                      const problems = problemsAt(instantAt(date, preview), drag);
+                      const clash = conflictMessage(problems);
                       return (
                         <div
-                          className={`px-cal-preview${ok ? '' : ' px-cal-preview--invalid'}`}
+                          className={`px-cal-preview${clash ? ' px-cal-preview--clash' : ''}`}
                           data-testid={`drop-preview-${col}`}
                           data-start-min={preview}
-                          data-valid={ok ? 'true' : 'false'}
+                          data-conflict={clash ? 'true' : 'false'}
+                          data-problems={problems.join(' ')}
                           aria-hidden="true"
                           style={{ top: (preview / 60) * HOUR_PX, height: Math.max(16, (durMin / 60) * HOUR_PX) }}
                         >
                           <span className="px-cal-preview-time">
+                            {clash && <Ic name="alert" className="px-cal-preview-warn" />}
                             {fmtGridClock(GRID_START_HOUR, preview)} – {fmtGridClock(GRID_START_HOUR, preview + durMin)}
                           </span>
                           <span className="px-cal-preview-title">{drag.title}</span>
