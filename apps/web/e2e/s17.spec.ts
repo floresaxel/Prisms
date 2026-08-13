@@ -135,6 +135,15 @@ test('agenda: drag→valid windows→drop commits; anchored refuses; suggestion 
     await expect(grid.locator('.px-cal-free')).toHaveCount(1);
     await expect(page.locator('.px-cal-cell')).toHaveCount(0);
 
+    // …and it is an OUTLINE: no fill over the calendar, and it holds still
+    const free = await grid.locator('.px-cal-free').first().evaluate((el) => {
+      const cs = getComputedStyle(el);
+      return { animation: cs.animationName, fill: cs.backgroundColor, halo: cs.boxShadow };
+    });
+    expect(free.animation).toBe('none');
+    expect(free.fill).toBe('rgba(0, 0, 0, 0)');
+    expect(free.halo).not.toBe('none'); // it keeps a faint one
+
     // the grabbed item rides the cursor for as long as the drag is live
     await expect(page.getByTestId('drag-ghost')).toContainText('Drag Me');
 
