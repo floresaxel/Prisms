@@ -193,15 +193,15 @@ describe('DayJournalPanel — editor', () => {
     for (const id of ['journal-menu', 'journal-export', 'journal-delete']) {
       expect(screen.queryByTestId(id)).toBeNull();
     }
-    // The icon shows the note's STATE: an open padlock while it can be edited, a
-    // closed one once locked. BOTH are always in the DOM — they are stacked and
-    // cross-faded — so `data-state` is what says which one is showing, not which
-    // <use> happens to be present.
+    // The icon shows the note's STATE: the shackle stands open while the note is
+    // editable and drops shut once locked. It is ONE padlock drawn as two parts —
+    // a static body and a shackle that swings — so `data-state` is what says which
+    // way it is hanging; the parts in the DOM never change.
     const toggle = screen.getByTestId('journal-preview-toggle');
     const hrefs = (el: Element) => [...el.querySelectorAll('use')].map((u) => u.getAttribute('href'));
     expect(toggle.getAttribute('aria-pressed')).toBe('false');
     expect(toggle.getAttribute('data-state')).toBe('unlocked');
-    expect(hrefs(toggle)).toEqual(['#i-unlock', '#i-lock']); // both padlocks, to cross-fade between
+    expect(hrefs(toggle)).toEqual(['#i-lockbody', '#i-lockshackle']);
     expect(toggle.getAttribute('title')).toBe('Lock edit');
     editable.unmount();
 
@@ -211,6 +211,7 @@ describe('DayJournalPanel — editor', () => {
     const locked = screen.getByTestId('journal-preview-toggle');
     expect(locked.getAttribute('aria-pressed')).toBe('true');
     expect(locked.getAttribute('data-state')).toBe('locked');
+    expect(hrefs(locked)).toEqual(['#i-lockbody', '#i-lockshackle']); // same parts, swung shut
     expect(locked.getAttribute('title')).toBe('Edit');
   });
 

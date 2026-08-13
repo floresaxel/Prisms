@@ -268,9 +268,10 @@ export function DayJournalPanel({
             }}
           />
           {/* `lock`: one button, nothing else. The icon shows the note's STATE —
-              an open padlock while it can be edited, a closed one once it is
-              locked — and the two cross-fade into each other so a toggle reads as
-              one control changing rather than two icons swapping.
+              the shackle stands open while the note can be edited and drops shut
+              once it is locked. Body and shackle are drawn as separate parts so
+              the shackle can actually swing on its hinge; the body never moves,
+              which is what keeps the icon centred in the button while it animates.
 
               It is INVISIBLE until there is something to lock, but keeps its slot
               (opacity, not display), so becoming lockable never nudges the title
@@ -291,8 +292,8 @@ export function DayJournalPanel({
               onClick={toggleLock}
             >
               <span className="px-jn-lock-ic" aria-hidden="true">
-                <Ic name="unlock" className="px-ic px-jn-lk px-jn-lk--open" />
-                <Ic name="lock" className="px-ic px-jn-lk px-jn-lk--shut" />
+                <Ic name="lockbody" className="px-ic px-jn-lk" />
+                <Ic name="lockshackle" className="px-ic px-jn-lk px-jn-shackle" />
               </span>
             </button>
           ) : (

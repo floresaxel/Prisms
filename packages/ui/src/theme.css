@@ -418,17 +418,33 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
    the tab order and off the a11y tree. */
 .px-jn-lock { opacity: 0; pointer-events: none; transition: opacity 180ms ease-out; }
 .px-jn-lock[data-ready='true'] { opacity: 1; pointer-events: auto; }
-/* the two padlocks occupy the SAME 14px box, stacked, so the swap is a cross-fade
-   in place rather than a reflow. The wrapper carries the size; the icons are
-   absolutely positioned inside it. */
+/* Body and shackle are two icons stacked in the SAME 14px box, assembling into
+   one padlock. The wrapper carries the size; the parts pin to it. */
 .px-jn-lock-ic { position: relative; display: inline-block; width: 14px; height: 14px; }
-.px-jn-lk { position: absolute; inset: 0; width: 14px; height: 14px; transition: opacity 180ms ease-out, transform 180ms ease-out; }
-/* Only the OUTGOING lock moves: it shrinks and tips away while the incoming one
-   settles upright, which reads as the shackle snapping rather than a dissolve. */
-.px-jn-lock[data-state='unlocked'] .px-jn-lk--shut { opacity: 0; transform: scale(0.72) rotate(12deg); }
-.px-jn-lock[data-state='locked'] .px-jn-lk--open { opacity: 0; transform: scale(0.72) rotate(-12deg); }
+.px-jn-lk { position: absolute; inset: 0; width: 14px; height: 14px; }
+/* The shackle is the only thing that moves. It pivots where its left leg meets
+   the body (8,11 in icon units) — a real hinge — so unlocking swings the free leg
+   up and AWAY from the body and locking drops it back onto it. `transform-box:
+   view-box` makes the origin and any lengths here read in viewBox units rather
+   than rendered pixels, so the hinge stays put at every icon size. */
+.px-jn-shackle use {
+  transform-box: view-box;
+  transform-origin: 8px 11px;
+  transition: transform 220ms cubic-bezier(0.34, 1.28, 0.64, 1);
+}
+/* Swinging about a hinge on ONE side carries the shackle's ink off the body's
+   axis, which reads as the whole icon drifting left as it opens. The translate is
+   the counter-shift that puts its centre back over the button's centre, so only
+   the swing is visible. It follows the rotate in source order, i.e. it is applied
+   AFTER it, in the body's own upright frame.
+   2.73 is MEASURED, not derived: the naive figure from the path's own coordinates
+   (1.5) leaves it 0.72px light at 14px, because the 1.8-unit stroke and its round
+   caps put ink outside the nominal geometry. */
+.px-jn-lock[data-state='unlocked'] .px-jn-shackle use { transform: translateX(2.73px) rotate(-32deg); }
+/* the body is static, so the closed state is simply the untransformed drawing */
+.px-jn-lock[data-state='locked'] .px-jn-shackle use { transform: none; }
 @media (prefers-reduced-motion: reduce) {
-  .px-jn-lock, .px-jn-lk { transition: none; }
+  .px-jn-lock, .px-jn-shackle use { transition: none; }
 }
 
 /* journal (D2/D3/J7): day-header note affordance + TipTap WYSIWYG editor + toolbar + markdown preview */
