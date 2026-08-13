@@ -3,6 +3,10 @@
  * that drive every "today/daily" computation (§7.2). Writes settings.update;
  * a fresh account has no row yet, so the first save inserts one (id = user_id,
  * which the server upserts on).
+ *
+ * Not everything here is account data: the agenda snap grid is a property of
+ * the pointer in front of you, so it is stored per device and applies the
+ * moment it is picked — no Save, nothing to sync. Its row says so.
  */
 import { useEffect, useRef, useState } from 'react';
 
@@ -10,6 +14,7 @@ import { usePowerSync } from '@powersync/react';
 import type { ImportReport } from '@prisms/core';
 import { Ic, subscribeHistory, useCommands, useUserSettings, type CommandContext, type StreamSubscriber } from '@prisms/ui';
 
+import { setSnapPref, SNAP_OPTIONS, useSnapPref } from '../agenda-snap';
 import { isDesktop } from '../desktop';
 import { downloadExport, downloadJournalArchive, dryRunImport, fetchExport, readImportFile, restoreImport } from '../portability';
 
@@ -20,6 +25,7 @@ export function Settings({ ctx }: { ctx: CommandContext }) {
   const commands = useCommands(ctx);
   const hasRow = settings.hasRow;
 
+  const snap = useSnapPref();
   const [hour, setHour] = useState(String(settings.dayResetHour));
   const [tz, setTz] = useState(settings.timezone);
   const [saved, setSaved] = useState(false);
@@ -76,6 +82,28 @@ export function Settings({ ctx }: { ctx: CommandContext }) {
             <div className="px-set-ctl">
               <button className="px-btn px-btn--primary" data-testid="settings-save" onClick={() => void save()}>Save</button>
               {saved && <span className="px-muted" data-testid="settings-saved" style={{ marginLeft: 10 }}>Saved ✓</span>}
+            </div>
+          </div>
+          <div className="px-set-row">
+            <div className="px-set-lbl">
+              <b>Agenda snap</b>
+              <span>The grid a dragged task snaps to on the Agenda. This device only — it applies straight away.</span>
+            </div>
+            <div className="px-set-ctl">
+              <div className="px-seg" role="group" aria-label="agenda snap interval" data-testid="settings-snap">
+                {SNAP_OPTIONS.map((o) => (
+                  <button
+                    key={o.value}
+                    className={`px-seg-btn${snap === o.value ? ' px-seg-btn--on' : ''}`}
+                    data-testid={`snap-${o.value}`}
+                    aria-pressed={snap === o.value}
+                    title={o.label}
+                    onClick={() => setSnapPref(o.value)}
+                  >
+                    {o.short}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         </div>

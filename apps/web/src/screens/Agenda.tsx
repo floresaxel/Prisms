@@ -12,6 +12,12 @@
  *
  * Drag is pointer-based (mousedown→mouseup) rather than HTML5 DnD so the live
  * window-hint state is observable mid-drag and it drives reliably in tests.
+ *
+ * While a drag is live the calendar shows exactly where the drop would land: a
+ * dashed outline at the pointer's snapped position (its real duration, its real
+ * start/end times) and the containing hour cell lit. The snap grid is the
+ * Settings preference — 15 minutes unless changed — so the pointer places
+ * things at a minute, not at an o'clock.
  */
 import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type RefObject } from 'react';
 
@@ -44,6 +50,7 @@ import {
 } from '@prisms/ui';
 
 import { agendaLayout, DAY_SPANS, DEFAULT_SPAN, GUTTER_W, isDaySpan } from '../agenda-layout';
+import { fmtGridClock, pointerMinutes, snapMinutes, useSnapPref } from '../agenda-snap';
 import { DayJournalPanel } from '../components/DayJournal';
 import { WhyButton } from '../components/Why';
 
@@ -52,6 +59,7 @@ const GRID_END_HOUR = 22;
 const HOUR_PX = 44;
 const MS_PER_MIN = 60_000;
 const BODY_HEIGHT = (GRID_END_HOUR - GRID_START_HOUR) * HOUR_PX;
+const BODY_MINUTES = (GRID_END_HOUR - GRID_START_HOUR) * 60;
 const DAY_LABEL = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 const SPAN_KEY = 'prisms.agenda.span';
@@ -100,6 +108,13 @@ interface DragState {
   /** Where the grab started, so the card appears under the cursor immediately. */
   originX: number;
   originY: number;
+  /**
+   * How far into the item the pointer grabbed it, in minutes. A block held by
+   * its middle keeps that hold: the outline stays under the hand rather than
+   * snapping its top up to the cursor. Always 0 for a fresh task, which has no
+   * shape on the grid yet to hold.
+   */
+  grabOffsetMin: number;
 }
 
 /** Offset from the cursor so the card never sits under the pointer itself. */
@@ -250,9 +265,28 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
   const dragRef = useRef<DragState | null>(null);
   dragRef.current = drag;
 
+  /**
+   * Where the drop would land right now: the day column under the pointer and
+   * the snapped start, as minutes from the top of the grid. Two primitives
+   * rather than one object on purpose — React bails out of the re-render when a
+   * `useState` setter is handed the value it already holds, so the (heavy)
+   * Agenda re-renders once per crossed snap line rather than once per pointer
+   * sample. The same trick keeps the resize drag below cheap.
+   */
+  const snap = useSnapPref();
+  const [previewCol, setPreviewCol] = useState<number | null>(null);
+  const [previewMin, setPreviewMin] = useState<number | null>(null);
+  const clearPreview = () => {
+    setPreviewCol(null);
+    setPreviewMin(null);
+  };
+
   // cancel a drag that ends anywhere other than a valid cell
   useEffect(() => {
-    const onUp = () => setDrag(null);
+    const onUp = () => {
+      setDrag(null);
+      clearPreview();
+    };
     window.addEventListener('mouseup', onUp);
     return () => window.removeEventListener('mouseup', onUp);
   }, []);
@@ -336,6 +370,7 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
       title,
       originX: e.clientX,
       originY: e.clientY,
+      grabOffsetMin: 0, // a list row has no height on the grid to hold on to
     });
   }
 
@@ -351,6 +386,7 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
     if (block.anchored) return; // I7: anchored blocks refuse the drag
     const task = schedulableById.get(block.taskId);
     if (!task) return;
+    const top = e.currentTarget.getBoundingClientRect().top;
     setDrag({
       taskId: block.taskId,
       blockId: block.id,
@@ -359,6 +395,7 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
       title: block.title,
       originX: e.clientX,
       originY: e.clientY,
+      grabOffsetMin: ((e.clientY - top) / HOUR_PX) * 60,
     });
   }
 
@@ -382,6 +419,18 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
   const cellValid = (cellStart: Instant, durationMs: number, valid: Interval[]): boolean =>
     valid.some((w) => w.start <= cellStart && cellStart + durationMs <= w.end);
 
+  /**
+   * Pointer → the snapped start it means, as minutes from the top of the grid.
+   * The last snap line is left clear of the grid's end so the last slot of the
+   * day is always reachable; an item longer than the room left simply overhangs
+   * the bottom, exactly as an equivalent block would.
+   */
+  const minutesAt = (clientY: number, rectTop: number, d: DragState): number =>
+    snapMinutes(pointerMinutes(clientY, rectTop, HOUR_PX, d.grabOffsetMin), snap, BODY_MINUTES - snap);
+
+  /** Minutes from the top of the grid → the instant that reads as on `date`. */
+  const instantAt = (date: string, minutes: number): Instant => localInstant(date, GRID_START_HOUR, tz, minutes);
+
   async function dropAt(cellStart: Instant) {
     const d = dragRef.current;
     if (!d || !cellValid(cellStart, d.durationMs, d.valid)) return;
@@ -390,6 +439,7 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
     if (d.blockId) await commands.moveBlock(d.blockId, startsAt, endsAt);
     else await commands.createBlock({ taskId: d.taskId, startsAt, endsAt });
     setDrag(null);
+    clearPreview();
   }
 
   return (
@@ -495,7 +545,10 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
               ))}
             </div>
           </div>
-          <p className="px-muted px-drag-hint">Anchored blocks refuse the drag (🔒). A drop outside a valid window snaps back.</p>
+          <p className="px-muted px-drag-hint" data-testid="drag-hint">
+            Drops snap to {snap === 60 ? '1 hour' : `${snap} minutes`} — change that in Settings. Anchored blocks refuse
+            the drag (🔒), and a drop outside a valid window snaps back.
+          </p>
         </div>
 
         <div className="px-agenda-cal">
@@ -517,6 +570,10 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
 
           {rowDays.map((date, i) => {
             const col = r * perRow + i;
+            // The drop preview belongs to whichever column the pointer is over:
+            // minutes from the top of the grid, and the hour that contains them.
+            const preview = drag && previewCol === col && previewMin !== null ? previewMin : null;
+            const previewHour = preview === null ? -1 : GRID_START_HOUR + Math.floor(preview / 60);
             return (
             <div
               key={date}
@@ -616,24 +673,64 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
                   );
                 })}
 
-                {/* drop overlay — only live during a drag */}
+                {/* drop overlay — only live during a drag. The pointer is read
+                    on the overlay rather than per cell, because a snapped drop
+                    can start anywhere inside an hour (or, once grabbed
+                    mid-block, inside the one above it). */}
                 {drag && (
-                  <div className="px-cal-drop" data-testid={`drop-col-${col}`}>
+                  <div
+                    className="px-cal-drop"
+                    data-testid={`drop-col-${col}`}
+                    onMouseMove={(e) => {
+                      const min = minutesAt(e.clientY, e.currentTarget.getBoundingClientRect().top, drag);
+                      setPreviewCol(col);
+                      setPreviewMin(min);
+                    }}
+                    // guarded: the pointer enters the next column before this
+                    // fires, so an unguarded clear would blank that fresh preview
+                    onMouseLeave={() => setPreviewCol((c) => (c === col ? null : c))}
+                    onMouseUp={(e) => {
+                      const min = minutesAt(e.clientY, e.currentTarget.getBoundingClientRect().top, drag);
+                      void dropAt(instantAt(date, min));
+                    }}
+                  >
                     {Array.from({ length: GRID_END_HOUR - GRID_START_HOUR }, (_, i) => {
                       const hour = GRID_START_HOUR + i;
                       const cellStart = localInstant(date, hour, tz);
                       const ok = cellValid(cellStart, drag.durationMs, drag.valid);
+                      const hot = hour === previewHour;
                       return (
                         <div
                           key={i}
-                          className={`px-cal-cell ${ok ? 'px-cal-cell--valid' : 'px-cal-cell--invalid'}`}
+                          className={`px-cal-cell ${ok ? 'px-cal-cell--valid' : 'px-cal-cell--invalid'}${hot ? ' px-cal-cell--hot' : ''}`}
                           data-testid={`cell-${col}-${hour}`}
                           data-valid={ok ? 'true' : 'false'}
+                          data-hot={hot ? 'true' : undefined}
                           style={{ top: i * HOUR_PX, height: HOUR_PX }}
-                          onMouseUp={() => void dropAt(cellStart)}
                         />
                       );
                     })}
+
+                    {/* what the drop would make, drawn where it would go */}
+                    {preview !== null && (() => {
+                      const durMin = drag.durationMs / MS_PER_MIN;
+                      const ok = cellValid(instantAt(date, preview), drag.durationMs, drag.valid);
+                      return (
+                        <div
+                          className={`px-cal-preview${ok ? '' : ' px-cal-preview--invalid'}`}
+                          data-testid={`drop-preview-${col}`}
+                          data-start-min={preview}
+                          data-valid={ok ? 'true' : 'false'}
+                          aria-hidden="true"
+                          style={{ top: (preview / 60) * HOUR_PX, height: Math.max(16, (durMin / 60) * HOUR_PX) }}
+                        >
+                          <span className="px-cal-preview-time">
+                            {fmtGridClock(GRID_START_HOUR, preview)} – {fmtGridClock(GRID_START_HOUR, preview + durMin)}
+                          </span>
+                          <span className="px-cal-preview-title">{drag.title}</span>
+                        </div>
+                      );
+                    })()}
                   </div>
                 )}
               </div>

@@ -123,12 +123,42 @@ test('agenda: drag→valid windows→drop commits; anchored refuses; suggestion 
     const cell = page.getByTestId('cell-5-9');
     await expect(cell).toHaveAttribute('data-valid', 'true');
     await expect(page.locator('.px-cal-cell--valid').first()).toBeVisible();
-    await cell.hover();
+
+    // the grabbed item rides the cursor for as long as the drag is live
+    await expect(page.getByTestId('drag-ghost')).toContainText('Drag Me');
+
+    // …and the calendar shows where it would land. 7px into the 9am hour (44px
+    // tall) is 9:09, which the default 15-minute grid rounds to 9:15 — the
+    // outline says so, and the hour it falls in lights up, before the drop.
+    // `hover` (not a raw mouse.move to a boundingBox) because the grid is often
+    // scrolled out of view here: only hover scrolls to the cell before moving.
+    await cell.hover({ position: { x: 20, y: 7 } });
+    const outline = page.getByTestId('drop-preview-5');
+    await expect(outline).toHaveAttribute('data-start-min', '195');
+    await expect(outline).toHaveAttribute('data-valid', 'true');
+    await expect(outline).toContainText('9:15am – 10:15am');
+    await expect(cell).toHaveAttribute('data-hot', 'true');
+
     await page.mouse.up();
+    await expect(outline).toHaveCount(0); // the drag furniture goes away with it
+    await expect(page.getByTestId('drag-ghost')).toHaveCount(0);
 
     // the task leaves the to-do panel and now has a committed block
     await expect(page.getByTestId(`todo-${ids.t1}`)).toHaveCount(0);
     await expect(page.locator('.px-cal-block', { hasText: 'Drag Me' })).toBeVisible();
+
+    // …and the outline was a promise about the drop: what reached Postgres
+    // starts at :15, not on the hour the pointer happened to be inside.
+    await expect
+      .poll(
+        async () => {
+          const rows = await sql<{ starts_at: Date }[]>`
+            SELECT starts_at FROM schedule_blocks WHERE task_id = ${ids.t1} AND deleted_at IS NULL`;
+          return rows[0] ? new Date(rows[0].starts_at).getUTCMinutes() : null;
+        },
+        { timeout: 30_000 },
+      )
+      .toBe(15);
 
     // --- DoD: accept a suggestion → it promotes to committed ------------
     const suggested = page.getByTestId(`block-${ids.suggested}`);
@@ -190,4 +220,75 @@ test('agenda: a committed block moves to another day and resizes (block.move)', 
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2 + 44, { steps: 6 });
   await page.mouse.up();
   await expect(page.getByTestId(`block-${ids.block}`)).toHaveAttribute('data-duration-min', '120');
+});
+
+/**
+ * The snap grid is a Settings preference and the calendar obeys it: one pixel,
+ * held still, reads as 9:15 on the default 15-minute grid and 9:00 on an hourly
+ * one. Proving it across a navigation also proves the preference outlives the
+ * screen that set it.
+ */
+test('agenda: the drop preview snaps to the interval chosen in Settings', async ({ page }) => {
+  const email = `e2e-s17c-${Date.now()}@prisms.test`;
+  await page.goto('/');
+  await page.getByRole('link', { name: 'Register' }).click();
+  await page.locator('input[autocomplete="name"]').fill('S17 User');
+  await page.getByTestId('email').fill(email);
+  await page.getByTestId('password').fill('e2e-password-123');
+  await page.getByTestId('submit').click();
+  await expect(page.getByTestId('sync-state')).toBeVisible();
+
+  const ids = { v: randomUUID(), r: randomUUID(), p: randomUUID(), task: randomUUID() };
+  const seed = await page.request.post('/sync/upload', {
+    data: {
+      device_id: 'e2e-seed',
+      commands: [
+        cmd('node.create', { id: ids.v, node_type: 'vision', title: 'Vision', sort_order: 'a0' }),
+        cmd('node.create', { id: ids.r, node_type: 'roadmap', title: 'Roadmap', sort_order: 'a0', parent_id: ids.v }),
+        cmd('node.create', { id: ids.p, node_type: 'project', title: 'Project', sort_order: 'a0', parent_id: ids.r }),
+        cmd('node.create', { id: ids.task, node_type: 'task', title: 'Snap Me', sort_order: 'a0', parent_id: ids.p, estimate_minutes: 60 }),
+      ],
+    },
+  });
+  expect(seed.ok()).toBeTruthy();
+
+  await goto(page, 'agenda');
+  await expect(page.getByTestId(`todo-${ids.task}`)).toBeVisible({ timeout: 30_000 });
+
+  /**
+   * Hold the task 7px into the 9am hour (= 9:09) and report what the outline
+   * says. `hover` rather than a mouse.move to a boundingBox: the grid is often
+   * scrolled out of view, and only hover scrolls to the cell before moving.
+   */
+  async function previewStartMin(): Promise<string | null> {
+    await page.getByTestId(`todo-${ids.task}`).hover();
+    await page.mouse.down();
+    await page.getByTestId('cell-5-9').hover({ position: { x: 20, y: 7 } });
+    const min = await page.getByTestId('drop-preview-5').getAttribute('data-start-min');
+    await page.mouse.move(4, 4); // off the calendar, so the release drops nothing
+    await page.mouse.up();
+    return min;
+  }
+
+  // default: a quarter-hour grid rounds 9:09 up to 9:15
+  await expect(page.getByTestId('drag-hint')).toContainText('snap to 15 minutes');
+  expect(await previewStartMin()).toBe('195');
+
+  await goto(page, 'settings');
+  await page.getByTestId('snap-60').click();
+  await expect(page.getByTestId('snap-60')).toHaveAttribute('aria-pressed', 'true');
+
+  // hourly: the same pixel now means 9:00
+  await goto(page, 'agenda');
+  await expect(page.getByTestId('drag-hint')).toContainText('snap to 1 hour');
+  expect(await previewStartMin()).toBe('180');
+
+  // and a 5-minute grid keeps the minute the pointer is actually on
+  await goto(page, 'settings');
+  await page.getByTestId('snap-5').click();
+  await goto(page, 'agenda');
+  expect(await previewStartMin()).toBe('190');
+
+  // nothing was committed by any of that — the drops all landed off-calendar
+  await expect(page.getByTestId(`todo-${ids.task}`)).toBeVisible();
 });

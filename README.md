@@ -51,8 +51,12 @@ running timer lifts into a global pill you can clock out of from any screen.
 
 **Agenda** is a week calendar beside your to-do list. Drag a task onto the week
 and the valid time windows light up while everything else dims; drop it in a
-valid slot and it becomes a committed block. Anchored blocks refuse the drag.
-Past time entries render as a faint history layer behind the plan.
+valid slot and it becomes a committed block. The task rides your cursor as you
+drag, and an outline shows exactly where it would land — its real length, the
+hour lit up behind it, the start and end times written on it — snapped to
+15-minute steps, or whatever interval you pick in Settings. Anchored blocks
+refuse the drag. Past time entries render as a faint history layer behind the
+plan.
 
 ![Agenda](docs/screenshots/agenda.png)
 
