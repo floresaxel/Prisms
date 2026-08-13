@@ -74,6 +74,15 @@ export const nodeCreateSchema = z.strictObject({
 
 export const nodeRenameSchema = z.strictObject({ id: uuidSchema, title: titleSchema });
 export const nodeSetDescriptionSchema = z.strictObject({ id: uuidSchema, description: descriptionSchema });
+/**
+ * The type-specific extras bag (a vision's colour + horizon today). REPLACES the
+ * whole object rather than merging keys, so the column stays one LWW field and a
+ * concurrent edit resolves as a whole bag instead of half of each — the caller
+ * sends the attributes it wants the node to end up with. Bounded by the same
+ * schema `node.create` already accepts for this column, so it grants no reach a
+ * create did not already have.
+ */
+export const nodeSetAttributesSchema = z.strictObject({ id: uuidSchema, attributes: boundedJsonObjectSchema });
 export const nodeMoveSchema = z.strictObject({
   id: uuidSchema,
   new_parent_id: uuidSchema.nullable(),
@@ -401,6 +410,7 @@ export const COMMAND_SCHEMAS = {
   'node.create': nodeCreateSchema,
   'node.rename': nodeRenameSchema,
   'node.set_description': nodeSetDescriptionSchema,
+  'node.set_attributes': nodeSetAttributesSchema,
   'node.move': nodeMoveSchema,
   'node.retype': nodeRetypeSchema,
   'node.set_dates': nodeSetDatesSchema,

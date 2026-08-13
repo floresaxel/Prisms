@@ -1,25 +1,25 @@
 /**
- * Roadmap tab — a roadmap and its PROJECTS as a top-to-bottom graph.
+ * Roadmap screen (Plan › Roadmap) — where a roadmap is managed ONE AT A TIME,
+ * and where its projects are laid out.
  *
- * A roadmap's elements are projects (I1: `project`'s only legal parent is a
- * roadmap), so this view is deliberately one level deep: the roadmap sits at the
- * top, its projects hang below it, and new projects are created from here. The
- * layout is derived, not stored — unlike the Graph tab there is no
- * `layout.set_position` here, so nodes are not draggable and nothing to persist.
- * Milestone/task structure and dependency editing stay in Projects › Graph.
+ * The picker on the left is grouped by VISION (I1: a roadmap's only legal
+ * parent) and painted in that vision's colour, so which vision you are working
+ * inside is readable at a glance; `visionColorOf` falls back to a stable
+ * id-derived colour for visions made before colours existed.
  *
- * Everything here is grouped by VISION (I1: a roadmap's only legal parent). A
- * vision owns a colour, picked when it is created and stored in the node's
- * `attributes.color`; every roadmap under it — the picker's group, the sibling
- * chips, the graph's root node and its edges — is painted that one colour, so
- * which vision you are working inside is readable at a glance. `visionColorOf`
- * falls back to a stable id-derived colour for visions made before colours.
+ * The right-hand side is the selected roadmap itself: its name, what it is for,
+ * which vision it belongs under (moving it re-tints everything below), and its
+ * projects — as a top-to-bottom graph, deliberately one level deep, because a
+ * roadmap's elements ARE projects (I1). The layout is derived, not stored:
+ * unlike Projects › Graph there is no `layout.set_position` here, so nodes are
+ * not draggable and there is nothing to persist. Milestone/task structure and
+ * dependency editing stay in Projects › Graph.
  *
- * The tab also creates the levels above it, because otherwise it is a dead end:
- * no vision ⇒ no roadmap ⇒ no project. A roadmap is a small inline form (name +
- * which vision); a vision is a full-screen dialog (NewVisionDialog) because it
- * asks for a description, a dateless timeline and a unique colour. I2 caps
- * visions at MAX_VISIONS.
+ * Visions themselves are managed one level up, in Plan › Vision; this screen
+ * only points there, so there is exactly one place to create or correct one.
+ *
+ * The selected roadmap rides in `location.hash`, so a roadmap is linkable —
+ * that is how Plan › Vision hands one over.
  */
 import { useEffect, useMemo, useState } from 'react';
 
@@ -36,7 +36,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
-import { childrenOf, initialSortOrder, MAX_VISIONS, sortOrderBetween, type Node } from '@prisms/core';
+import { childrenOf, descendantsOf, initialSortOrder, sortOrderBetween, type Node, type TreeIndex } from '@prisms/core';
 import {
   formatHorizon,
   Ic,
@@ -50,8 +50,6 @@ import {
   type CommandContext,
   type VisionColor,
 } from '@prisms/ui';
-
-import { NewVisionDialog, type NewVisionValues } from '../components/NewVisionDialog';
 
 /** Derived layout: the roadmap on one row, its projects on the next. */
 const NODE_W = 190;
@@ -70,7 +68,7 @@ const soft = (c: VisionColor) => `color-mix(in srgb, ${visionHex(c)} 12%, var(--
 const tint = (c: VisionColor) => `color-mix(in srgb, ${visionHex(c)} 38%, var(--px-surface))`;
 
 /** Next sibling key for a fractional-index insert at the end of `parentId`. */
-function nextSortOrder(tree: ReturnType<typeof useNodeTree>, parentId: string | null): string {
+function nextSortOrder(tree: TreeIndex, parentId: string | null): string {
   const last = childrenOf(tree, parentId).at(-1)?.sort_order ?? null;
   return last === null ? initialSortOrder() : sortOrderBetween(last, null);
 }
@@ -107,7 +105,7 @@ function RoadmapNode({ data }: { data: RoadmapNodeData }) {
 
 const nodeTypes = { roadmap: RoadmapNode };
 
-export function Roadmap({ ctx }: { ctx: CommandContext }) {
+export function Roadmap({ ctx, onNavigate }: { ctx: CommandContext; onNavigate: (href: string) => void }) {
   const tree = useNodeTree();
   const commands = useCommands(ctx);
   const hydrated = useIsHydrated();
@@ -127,56 +125,222 @@ export function Roadmap({ ctx }: { ctx: CommandContext }) {
     [tree],
   );
 
-  const [selected, setSelected] = useState('');
-  // Follow the tree when the chosen roadmap disappears (or none is chosen yet).
+  // The URL names the roadmap being managed (Plan › Vision links straight here).
+  const [selected, setSelected] = useState(() => window.location.hash.replace(/^#/, ''));
   const activeId = roadmaps.some((r) => r.id === selected) ? selected : (roadmaps[0]?.id ?? '');
   const active = activeId ? tree.byId.get(activeId) : undefined;
-  const vision = active?.parent_id ? tree.byId.get(active.parent_id) : undefined;
-  const color = visionColorOf(vision);
-  /** The vision's dateless expected timeline ("6 months", "3 years", …). */
-  const horizonLabel = formatHorizon(readVisionHorizon(vision?.attributes));
-  /** The active vision's other roadmaps — the group that shares this colour. */
-  const siblings = useMemo(
-    () => (vision ? roadmaps.filter((r) => r.parent_id === vision.id) : []),
-    [roadmaps, vision],
-  );
 
-  const projects: Node[] = useMemo(
-    () => (activeId ? childrenOf(tree, activeId).filter((n) => n.node_type === 'project') : []),
-    [tree, activeId],
-  );
+  function select(id: string) {
+    setSelected(id);
+    // replace, not push: switching roadmaps is not a browser-history step.
+    if (window.location.hash !== `#${id}`) window.history.replaceState({}, '', `${window.location.pathname}#${id}`);
+  }
 
-  const [title, setTitle] = useState('');
   const [busy, setBusy] = useState(false);
-  const [form, setForm] = useState<'roadmap' | null>(null);
-  const [visionOpen, setVisionOpen] = useState(false);
+  const [form, setForm] = useState(false);
   const [rmTitle, setRmTitle] = useState('');
   const [rmVision, setRmVision] = useState('');
+
+  async function addRoadmap() {
+    const t = rmTitle.trim();
+    const visionId = rmVision || visions[0]?.id;
+    if (!t || !visionId || busy) return;
+    setBusy(true);
+    try {
+      const id = await commands.createRoadmap({ visionId, title: t, sortOrder: nextSortOrder(tree, visionId) });
+      select(id);
+      setRmTitle('');
+      setForm(false);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const roadmapForm = (
+    <div className="px-rm-form" data-testid="rm-roadmap-form">
+      <input
+        className="px-input"
+        data-testid="rm-new-roadmap-title"
+        placeholder="Roadmap name…"
+        value={rmTitle}
+        onChange={(e) => setRmTitle(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') void addRoadmap();
+        }}
+      />
+      <label className="px-scope">
+        <span
+          className="px-swatch px-swatch--sm"
+          style={{ background: solid(visionColorOf(tree.byId.get(rmVision || visions[0]?.id || ''))) }}
+        />
+        <select data-testid="rm-roadmap-vision" value={rmVision || visions[0]?.id || ''} onChange={(e) => setRmVision(e.target.value)}>
+          {visions.map((v) => (
+            <option key={v.id} value={v.id}>{v.title}</option>
+          ))}
+        </select>
+      </label>
+      <button
+        className="px-btn px-btn--primary"
+        data-testid="rm-create-roadmap"
+        disabled={busy || rmTitle.trim() === ''}
+        onClick={() => void addRoadmap()}
+      >
+        Create roadmap
+      </button>
+      {roadmaps.length > 0 && (
+        <button className="px-btn" data-testid="rm-cancel-roadmap" onClick={() => setForm(false)}>Cancel</button>
+      )}
+    </div>
+  );
+
+  // Nothing to manage yet: send the user to the level that is missing rather
+  // than dead-ending them here.
+  if (roadmaps.length === 0) {
+    if (!hydrated) return <Skeleton testId="roadmap-skeleton" rows={4} />;
+    return (
+      <section>
+        <div className="px-page-head">
+          <h1>Roadmap</h1>
+        </div>
+        <div className="px-rm-empty" data-testid="roadmap-empty">
+          <p>
+            {visions.length === 0
+              ? 'A roadmap belongs to a vision, and there is no vision yet. Start one in Plan › Vision — every roadmap under it carries its colour.'
+              : 'No roadmaps yet. A roadmap holds your projects; it takes the colour of the vision you put it under.'}
+          </p>
+          {visions.length === 0 ? (
+            <button className="px-btn px-btn--primary" data-testid="rm-go-vision" onClick={() => onNavigate('/vision')}>
+              <Ic name="eye" /> Go to Vision
+            </button>
+          ) : (
+            roadmapForm
+          )}
+        </div>
+      </section>
+    );
+  }
+
+  /** Roadmaps under each vision, in vision order; orphans last under "No vision". */
+  const groups = [
+    ...visions.map((v) => ({ vision: v as Node | undefined, items: roadmaps.filter((r) => r.parent_id === v.id) })),
+    { vision: undefined, items: roadmaps.filter((r) => !r.parent_id || !tree.byId.get(r.parent_id)) },
+  ].filter((g) => g.items.length > 0);
+
+  return (
+    <section>
+      <div className="px-page-head">
+        <h1>Roadmap</h1>
+        <span className="px-page-sub" data-testid="rm-count">
+          {roadmaps.length} roadmap{roadmaps.length === 1 ? '' : 's'} across {visions.length} vision
+          {visions.length === 1 ? '' : 's'}
+        </span>
+        <div className="px-head-actions">
+          <button className="px-btn px-btn--primary" data-testid="rm-new-roadmap" onClick={() => setForm((f) => !f)}>
+            <Ic name="plus" /> New roadmap
+          </button>
+        </div>
+      </div>
+
+      {form && roadmapForm}
+
+      <div className="px-mgr">
+        <div className="px-mgr-list" data-testid="rm-list">
+          {groups.map((g) => {
+            const color = visionColorOf(g.vision);
+            const horizon = formatHorizon(readVisionHorizon(g.vision?.attributes));
+            return (
+              <div key={g.vision?.id ?? 'none'}>
+                <div className="px-mgr-group" title={g.vision?.description || undefined}>
+                  <span className="px-swatch px-swatch--sm" style={{ background: solid(color) }} />
+                  {g.vision ? g.vision.title : 'No vision'}
+                  {horizon && ` · ${horizon}`}
+                </div>
+                {g.items.map((r) => (
+                  <div
+                    key={r.id}
+                    className={`px-mgr-item${r.id === activeId ? ' px-mgr-item--on' : ''}`}
+                    data-testid={`rm-item-${r.id}`}
+                    data-color={color}
+                    style={r.id === activeId ? { borderColor: solid(color), background: soft(color) } : undefined}
+                  >
+                    <button className="px-mgr-pick" onClick={() => select(r.id)} aria-current={r.id === activeId}>
+                      <span className="px-mgr-item-main">
+                        <span className="px-mgr-item-title">{r.title}</span>
+                        <span className="px-mgr-item-sub">
+                          {childrenOf(tree, r.id).filter((n) => n.node_type === 'project').length} project
+                          {childrenOf(tree, r.id).filter((n) => n.node_type === 'project').length === 1 ? '' : 's'}
+                        </span>
+                      </span>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* keyed by id: the draft fields re-arm from the node whenever the
+            selection changes, instead of carrying the last roadmap's text over. */}
+        {active && (
+          <RoadmapDetail
+            key={active.id}
+            roadmap={active}
+            tree={tree}
+            visions={visions}
+            commands={commands}
+            onNavigate={onNavigate}
+          />
+        )}
+      </div>
+    </section>
+  );
+}
+
+/** The selected roadmap: what it is, which vision owns it, and its projects. */
+function RoadmapDetail({
+  roadmap,
+  tree,
+  visions,
+  commands,
+  onNavigate,
+}: {
+  roadmap: Node;
+  tree: TreeIndex;
+  visions: readonly Node[];
+  commands: ReturnType<typeof useCommands>;
+  onNavigate: (href: string) => void;
+}) {
+  const vision = roadmap.parent_id ? tree.byId.get(roadmap.parent_id) : undefined;
+  const color = visionColorOf(vision);
+  const projects = useMemo(
+    () => childrenOf(tree, roadmap.id).filter((n) => n.node_type === 'project'),
+    [tree, roadmap.id],
+  );
+
+  const [title, setTitle] = useState(roadmap.title);
+  const [description, setDescription] = useState(roadmap.description);
+  const [newProject, setNewProject] = useState('');
+  const [busy, setBusy] = useState(false);
 
   const [rfNodes, setRfNodes] = useNodesState<RFNode<RoadmapNodeData>>([]);
   const [rfEdges, setRfEdges] = useEdgesState<RFEdge>([]);
 
   // Re-derive the whole graph whenever the roadmap, its projects, or the colour change.
   useEffect(() => {
-    if (!active) {
-      setRfNodes([]);
-      setRfEdges([]);
-      return;
-    }
     const width = Math.max(1, projects.length) * (NODE_W + COL_GAP) - COL_GAP;
     setRfNodes([
       {
-        id: active.id,
+        id: roadmap.id,
         type: 'roadmap',
         draggable: false,
         position: { x: (width - NODE_W) / 2, y: 0 },
         data: {
-          label: active.title,
+          label: roadmap.title,
           kind: 'roadmap',
           childCount: projects.length,
           color,
           visionTitle: vision?.title ?? 'no vision',
-          nodeId: active.id,
+          nodeId: roadmap.id,
         },
       },
       ...projects.map((p, i) => ({
@@ -196,232 +360,159 @@ export function Roadmap({ ctx }: { ctx: CommandContext }) {
     ]);
     setRfEdges(
       projects.map((p) => ({
-        id: `${active.id}->${p.id}`,
-        source: active.id,
+        id: `${roadmap.id}->${p.id}`,
+        source: roadmap.id,
         target: p.id,
         style: { stroke: solid(color) },
       })),
     );
-  }, [active, projects, tree, color, vision, setRfNodes, setRfEdges]);
+  }, [roadmap, projects, tree, color, vision, setRfNodes, setRfEdges]);
+
+  function commitTitle() {
+    const t = title.trim();
+    if (t === '' || t === roadmap.title) {
+      setTitle(roadmap.title); // an empty name is not a rename — put the old one back
+      return;
+    }
+    void commands.rename(roadmap.id, t);
+  }
+
+  function commitDescription() {
+    if (description === roadmap.description) return;
+    void commands.setDescription(roadmap.id, description);
+  }
+
+  /** Re-parent onto another vision — the whole subtree re-tints with it. */
+  function moveToVision(visionId: string) {
+    if (visionId === roadmap.parent_id) return;
+    void commands.moveNode(roadmap.id, visionId, nextSortOrder(tree, visionId));
+  }
 
   async function addProject() {
-    const t = title.trim();
-    if (!t || !activeId || busy) return;
+    const t = newProject.trim();
+    if (!t || busy) return;
     setBusy(true);
     try {
-      await commands.createProject({ roadmapId: activeId, title: t, sortOrder: nextSortOrder(tree, activeId) });
-      setTitle('');
+      await commands.createProject({ roadmapId: roadmap.id, title: t, sortOrder: nextSortOrder(tree, roadmap.id) });
+      setNewProject('');
     } finally {
       setBusy(false);
     }
   }
 
-  async function addRoadmap() {
-    const t = rmTitle.trim();
-    const visionId = rmVision || visions[0]?.id;
-    if (!t || !visionId || busy) return;
-    setBusy(true);
-    try {
-      const id = await commands.createRoadmap({ visionId, title: t, sortOrder: nextSortOrder(tree, visionId) });
-      setSelected(id);
-      setRmTitle('');
-      setForm(null);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function addVision(values: NewVisionValues) {
-    if (busy || visions.length >= MAX_VISIONS) return;
-    setBusy(true);
-    try {
-      const id = await commands.createVision(values.title, {
-        color: values.color,
-        horizon: values.horizon,
-        description: values.description,
-        sortOrder: nextSortOrder(tree, null),
-      });
-      setVisionOpen(false);
-      setRmVision(id); // the new vision becomes the target for the next roadmap
-      setForm('roadmap');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  const visionDialog = (
-    <NewVisionDialog
-      open={visionOpen}
-      busy={busy}
-      existing={visions}
-      onClose={() => setVisionOpen(false)}
-      onCreate={(values) => void addVision(values)}
-    />
-  );
-
-  const roadmapForm = (
-    <div className="px-rm-form" data-testid="rm-roadmap-form">
-      <input
-        className="px-input"
-        data-testid="rm-new-roadmap-title"
-        placeholder="Roadmap name…"
-        value={rmTitle}
-        onChange={(e) => setRmTitle(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') void addRoadmap();
-        }}
-      />
-      <label className="px-scope">
-        <span className="px-swatch px-swatch--sm" style={{ background: solid(visionColorOf(tree.byId.get(rmVision || visions[0]?.id || ''))) }} />
-        <select data-testid="rm-roadmap-vision" value={rmVision || visions[0]?.id || ''} onChange={(e) => setRmVision(e.target.value)}>
-          {visions.map((v) => (
-            <option key={v.id} value={v.id}>{v.title}</option>
-          ))}
-        </select>
-      </label>
-      <button className="px-btn px-btn--primary" data-testid="rm-create-roadmap" disabled={busy || rmTitle.trim() === ''} onClick={() => void addRoadmap()}>
-        Create roadmap
-      </button>
-      {roadmaps.length > 0 && (
-        <button className="px-btn" data-testid="rm-cancel-roadmap" onClick={() => setForm(null)}>Cancel</button>
-      )}
-    </div>
-  );
-
-  // Nothing to show yet: create the missing level instead of a dead end.
-  if (roadmaps.length === 0) {
-    if (!hydrated) return <Skeleton testId="roadmap-skeleton" rows={4} />;
-    return (
-      <>
-        <div className="px-rm-empty" data-testid="roadmap-empty">
-          <p>
-            {visions.length === 0
-              ? 'A roadmap belongs to a vision, and there is no vision yet. Start one — name it, say what it means, give it a timeline and a colour. Every roadmap under it will carry that colour.'
-              : 'No roadmaps yet. A roadmap holds your projects; it takes the colour of the vision you put it under.'}
-          </p>
-          {visions.length === 0 ? (
-            <button className="px-btn px-btn--primary" data-testid="rm-new-vision" onClick={() => setVisionOpen(true)}>
-              <Ic name="plus" /> New vision
-            </button>
-          ) : (
-            roadmapForm
-          )}
-        </div>
-        {visionDialog}
-      </>
-    );
+  function remove() {
+    const tasks = descendantsOf(tree, roadmap.id).filter((n) => n.node_type === 'task').length;
+    const owned = `${projects.length} project${projects.length === 1 ? '' : 's'}, ${tasks} task${tasks === 1 ? '' : 's'}`;
+    if (!window.confirm(`Delete "${roadmap.title}"? Everything under it goes with it: ${owned}.`)) return;
+    void commands.softDelete(roadmap.id);
   }
 
   return (
-    <section>
-      <div className="px-rm-bar">
-        <label className="px-scope" style={{ borderColor: tint(color) }}>
+    <div className="px-mgr-detail" data-testid="rm-detail" data-roadmap={roadmap.id}>
+      <div className="px-mgr-card" style={{ borderTopColor: solid(color), borderTopWidth: 3 }}>
+        <div className="px-mgr-head">
           <span className="px-swatch px-swatch--sm" data-testid="rm-vision-swatch" data-color={color} style={{ background: solid(color) }} />
-          <select data-testid="roadmap-scope" value={activeId} onChange={(e) => setSelected(e.target.value)}>
-            {visions.map((v) => {
-              const owned = roadmaps.filter((r) => r.parent_id === v.id);
-              return owned.length === 0 ? null : (
-                <optgroup key={v.id} label={v.title}>
-                  {owned.map((r) => (
-                    <option key={r.id} value={r.id}>{r.title}</option>
-                  ))}
-                </optgroup>
-              );
-            })}
-            {/* a roadmap whose vision is gone still has to be selectable */}
-            {roadmaps.some((r) => !r.parent_id || !tree.byId.get(r.parent_id)) && (
-              <optgroup label="No vision">
-                {roadmaps
-                  .filter((r) => !r.parent_id || !tree.byId.get(r.parent_id))
-                  .map((r) => (
-                    <option key={r.id} value={r.id}>{r.title}</option>
-                  ))}
-              </optgroup>
-            )}
-          </select>
-        </label>
-        <span className="px-muted" data-testid="rm-project-count">
-          {projects.length} project{projects.length === 1 ? '' : 's'}
-        </span>
-        <div className="px-head-actions">
           <input
-            className="px-input"
-            data-testid="rm-new-project-title"
-            placeholder="New project…"
+            className="px-mgr-title-input"
+            data-testid="rm-title"
+            aria-label="roadmap name"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
+            onBlur={commitTitle}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') void addProject();
+              if (e.key === 'Enter') e.currentTarget.blur();
+              if (e.key === 'Escape') setTitle(roadmap.title);
             }}
           />
-          <button
-            className="px-btn px-btn--primary"
-            data-testid="rm-add-project"
-            disabled={busy || title.trim() === ''}
-            onClick={() => void addProject()}
-          >
-            <Ic name="plus" /> Add project
+          <button className="px-btn px-btn--sm px-btn--danger" data-testid="rm-delete" onClick={remove}>
+            <Ic name="trash" /> Delete
           </button>
+        </div>
+
+        <div className="px-mgr-row">
+          <label className="px-scope" style={{ borderColor: tint(color) }}>
+            <Ic name="eye" />
+            <select
+              data-testid="rm-vision"
+              aria-label="owning vision"
+              value={roadmap.parent_id ?? ''}
+              onChange={(e) => moveToVision(e.target.value)}
+            >
+              {/* an orphaned roadmap has to show SOMETHING selected until it is re-homed */}
+              {!roadmap.parent_id && <option value="">No vision</option>}
+              {visions.map((v) => (
+                <option key={v.id} value={v.id}>{v.title}</option>
+              ))}
+            </select>
+          </label>
+          <button className="px-btn px-btn--sm" data-testid="rm-manage-vision" onClick={() => onNavigate('/vision')}>
+            Manage visions
+          </button>
+        </div>
+
+        <div className="px-vd-field" style={{ margin: '14px 0 0' }}>
+          <label className="px-vd-lbl" htmlFor="rm-desc">What this roadmap is for</label>
+          <textarea
+            id="rm-desc"
+            className="px-vd-input"
+            data-testid="rm-description"
+            placeholder="What does this roadmap deliver, and when is it done?"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            onBlur={commitDescription}
+          />
+          <p className="px-vd-hint">Saved when you click away.</p>
         </div>
       </div>
 
-      {/* the group: every roadmap of the active vision, all in its one colour */}
-      <div className="px-rm-group" data-testid="rm-vision-group">
-        <span className="px-rm-group-lbl" title={vision?.description || undefined}>
-          {vision ? vision.title : 'No vision'}
-          {horizonLabel && ` · ${horizonLabel}`} · {siblings.length || 1} roadmap
-          {(siblings.length || 1) === 1 ? '' : 's'}
-        </span>
-        {(siblings.length > 0 ? siblings : active ? [active] : []).map((r) => (
-          <button
-            key={r.id}
-            className={`px-rm-chip${r.id === activeId ? ' px-rm-chip--on' : ''}`}
-            data-testid={`rm-chip-${r.id}`}
-            data-color={color}
-            style={{ background: soft(color), borderColor: r.id === activeId ? solid(color) : tint(color), color: solid(color) }}
-            onClick={() => setSelected(r.id)}
-          >
-            {r.title}
-          </button>
-        ))}
-        <div className="px-head-actions">
-          <button className="px-btn px-btn--sm" data-testid="rm-new-roadmap" onClick={() => setForm(form === 'roadmap' ? null : 'roadmap')}>
-            <Ic name="plus" /> New roadmap
-          </button>
-          <button
-            className="px-btn px-btn--sm"
-            data-testid="rm-new-vision"
-            disabled={visions.length >= MAX_VISIONS}
-            title={visions.length >= MAX_VISIONS ? `At most ${MAX_VISIONS} visions (I2)` : undefined}
-            onClick={() => setVisionOpen(true)}
-          >
-            <Ic name="plus" /> New vision
-          </button>
+      <div className="px-mgr-card">
+        <div className="px-mgr-head" style={{ marginBottom: 10 }}>
+          <b style={{ fontSize: 13 }} data-testid="rm-project-count">
+            {projects.length} project{projects.length === 1 ? '' : 's'}
+          </b>
+          <div className="px-head-actions">
+            <input
+              className="px-input"
+              data-testid="rm-new-project-title"
+              placeholder="New project…"
+              value={newProject}
+              onChange={(e) => setNewProject(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void addProject();
+              }}
+            />
+            <button
+              className="px-btn px-btn--primary px-btn--sm"
+              data-testid="rm-add-project"
+              disabled={busy || newProject.trim() === ''}
+              onClick={() => void addProject()}
+            >
+              <Ic name="plus" /> Add project
+            </button>
+          </div>
         </div>
+
+        <div className="px-flow-canvas px-flow-canvas--tall" data-testid="roadmap-canvas">
+          <ReactFlow nodes={rfNodes} edges={rfEdges} nodeTypes={nodeTypes} nodesDraggable={false} nodesConnectable={false} fitView>
+            <Background />
+            <Controls showInteractive={false} />
+          </ReactFlow>
+        </div>
+
+        {projects.length === 0 ? (
+          <p className="px-muted" data-testid="rm-no-projects" style={{ marginTop: 12, fontSize: 12.5 }}>
+            This roadmap has no projects yet — add one above and it appears under the roadmap.
+          </p>
+        ) : (
+          <p className="px-muted" style={{ marginTop: 12, fontSize: 12.5 }}>
+            Milestones, tasks and dependencies live in{' '}
+            <button className="px-linklike" data-testid="rm-open-projects" onClick={() => onNavigate('/projects')}>
+              Projects
+            </button>
+            .
+          </p>
+        )}
       </div>
-
-      {form === 'roadmap' && roadmapForm}
-      {visionDialog}
-
-      <div className="px-flow-canvas px-flow-canvas--tall" data-testid="roadmap-canvas">
-        <ReactFlow
-          nodes={rfNodes}
-          edges={rfEdges}
-          nodeTypes={nodeTypes}
-          nodesDraggable={false}
-          nodesConnectable={false}
-          fitView
-        >
-          <Background />
-          <Controls showInteractive={false} />
-        </ReactFlow>
-      </div>
-
-      {projects.length === 0 && (
-        <p className="px-muted" data-testid="rm-no-projects" style={{ marginTop: 12 }}>
-          This roadmap has no projects yet — add one above and it appears under the roadmap.
-        </p>
-      )}
-    </section>
+    </div>
   );
 }

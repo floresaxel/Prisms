@@ -151,6 +151,7 @@ const CONTEXT_WRITES: Partial<Record<CommandName, readonly ContextTable[]>> = {
   'activity.promote': ['nodes', 'edges'],
   'node.rename': ['nodes'],
   'node.set_description': ['nodes'],
+  'node.set_attributes': ['nodes'],
   'node.move': ['nodes'],
   'node.retype': ['nodes'],
   'node.set_dates': ['nodes'],
@@ -612,6 +613,13 @@ export function createDispatcher(
       case 'node.set_description': {
         const p = payload as Payload<'node.set_description'>;
         return updateNode(p.id, { description: p.description });
+      }
+      case 'node.set_attributes': {
+        const p = payload as Payload<'node.set_attributes'>;
+        // One LWW field for the whole bag (the verb replaces, never merges), so
+        // two devices editing a vision's colour and horizon converge on one of
+        // the two bags rather than a half-and-half node neither device wrote.
+        return updateNode(p.id, { attributes: p.attributes });
       }
       case 'node.move': {
         const p = payload as Payload<'node.move'>;

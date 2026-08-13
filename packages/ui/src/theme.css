@@ -836,7 +836,40 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
 .px-menu-item--danger .px-ic { color: var(--px-danger); }
 .px-menu-sep { height: 1px; background: var(--px-border); margin: 4px 2px; }
 
-/* ── Roadmap tab — a top-to-bottom graph of a roadmap's projects, grouped and
+/* ── Plan managers (Vision, Roadmap) — a picker list beside the selected
+   item's editable card. One level of the tree per screen (I1). ── */
+.px-mgr { display: grid; grid-template-columns: 268px minmax(0, 1fr); gap: 16px; align-items: start; margin-top: 14px; }
+.px-mgr-list { display: flex; flex-direction: column; gap: 6px; }
+.px-mgr-group { display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 640; letter-spacing: 0.5px; text-transform: uppercase; color: var(--px-faint); margin: 10px 2px 5px; }
+.px-mgr-group:first-child { margin-top: 0; }
+.px-mgr-item { display: flex; align-items: center; gap: 4px; padding: 2px 6px 2px 2px; border: 1px solid var(--px-border); border-radius: 10px; background: var(--px-surface); box-shadow: var(--px-shadow); }
+.px-mgr-item + .px-mgr-item { margin-top: 6px; }
+.px-mgr-item--on { border-color: var(--px-accent); }
+/* the row's hit target: everything but the reorder buttons selects the item */
+.px-mgr-pick { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; font: inherit; text-align: left; background: none; border: none; border-radius: 8px; padding: 8px 6px 8px 10px; color: var(--px-text); cursor: pointer; }
+.px-mgr-item-main { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.px-mgr-item-title { font-size: 13px; font-weight: 560; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.px-mgr-item-sub { font-size: 11.5px; color: var(--px-faint); }
+.px-mgr-order { display: flex; flex-direction: column; gap: 2px; flex: none; }
+.px-mgr-order .px-btn { padding: 2px 4px; box-shadow: none; }
+.px-mgr-order .px-ic { width: 13px; height: 13px; }
+.px-mgr-detail { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.px-mgr-card { background: var(--px-surface); border: 1px solid var(--px-border); border-radius: 12px; padding: 15px 17px; box-shadow: var(--px-shadow); }
+.px-mgr-head { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+/* the name reads as a heading until you reach for it, then it is a field */
+.px-mgr-title-input { flex: 1; min-width: 0; font: inherit; font-size: 16px; font-weight: 640; border: 1px solid transparent; border-radius: 8px; padding: 5px 8px; background: none; color: var(--px-text); }
+.px-mgr-title-input:hover { border-color: var(--px-border); }
+.px-mgr-title-input:focus { outline: none; border-color: var(--px-accent); background: var(--px-surface); }
+.px-mgr-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.px-mgr-stats { display: flex; gap: 22px; flex-wrap: wrap; font-size: 11.5px; color: var(--px-faint); }
+.px-mgr-stat { display: flex; flex-direction: column; gap: 1px; }
+.px-mgr-stat b { font-size: 17px; font-weight: 640; color: var(--px-text); }
+.px-mgr-chips { display: flex; gap: 8px; flex-wrap: wrap; }
+@media (max-width: 900px) {
+  .px-mgr { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ── Roadmap graph — a top-to-bottom graph of a roadmap's projects, grouped and
    tinted by the owning VISION's colour (stored in the vision's attributes) ── */
 .px-rm-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
 .px-flow-canvas--tall { height: 560px; }
