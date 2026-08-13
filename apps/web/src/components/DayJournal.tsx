@@ -242,10 +242,12 @@ export function DayJournalPanel({
 
   return (
     <div className="px-journal" data-testid={`journal-${date}`} style={{ marginTop: 16 }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-        {/* The title is editable; the DATE moves below it, so renaming a note
-            never costs you the day it belongs to. */}
-        <div className="px-jn-head">
+      {/* The title is editable; the DATE moves below it, so renaming a note
+          never costs you the day it belongs to. The action sits ON the title's
+          line (not the block's top edge) — the date underneath is a caption, and
+          top-aligning against it left the button floating above the title. */}
+      <div className="px-jn-head">
+        <div className="px-jn-titlerow">
           {/* Blank until we KNOW what to put here (see `heading`): an untitled
               note — or a day with nothing written yet — reads "Note · <date>",
               but only once the row has been read. An unsettled read carries an
@@ -265,23 +267,35 @@ export function DayJournalPanel({
               if (e.key === 'Escape') setTitleDraft(null);
             }}
           />
-          <span className="px-jn-date" data-testid="journal-date">{date}</span>
-        </div>
-        {/* `lock`: one button, nothing else — the icon is the affordance for what
-            the click DOES (a padlock while editing, a pencil while locked). */}
-        {actions === 'lock' ? (
-          <button
-            className="px-btn px-btn--icon"
-            data-testid="journal-preview-toggle"
-            aria-pressed={preview}
-            disabled={!hasNote}
-            aria-label={preview ? 'Edit this note' : 'Lock this note from editing'}
-            title={hasNote ? (preview ? 'Edit' : 'Lock edit') : 'Nothing to lock — this day has no note'}
-            onClick={toggleLock}
-          >
-            <Ic name={preview ? 'pen' : 'lock'} />
-          </button>
-        ) : (
+          {/* `lock`: one button, nothing else. The icon shows the note's STATE —
+              an open padlock while it can be edited, a closed one once it is
+              locked — and the two cross-fade into each other so a toggle reads as
+              one control changing rather than two icons swapping.
+
+              It is INVISIBLE until there is something to lock, but keeps its slot
+              (opacity, not display), so becoming lockable never nudges the title
+              sideways — the button fades in exactly where it already was. */}
+          {actions === 'lock' ? (
+            <button
+              className="px-btn px-btn--icon px-jn-lock"
+              data-testid="journal-preview-toggle"
+              data-state={preview ? 'locked' : 'unlocked'}
+              data-ready={hasNote ? 'true' : 'false'}
+              aria-pressed={preview}
+              disabled={!hasNote}
+              // Hidden from assistive tech too while it does nothing — a control
+              // announced but inoperable is worse than one that is not there.
+              aria-hidden={hasNote ? undefined : true}
+              aria-label={preview ? 'Edit this note' : 'Lock this note from editing'}
+              title={hasNote ? (preview ? 'Edit' : 'Lock edit') : 'Nothing to lock — this day has no note'}
+              onClick={toggleLock}
+            >
+              <span className="px-jn-lock-ic" aria-hidden="true">
+                <Ic name="unlock" className="px-ic px-jn-lk px-jn-lk--open" />
+                <Ic name="lock" className="px-ic px-jn-lk px-jn-lk--shut" />
+              </span>
+            </button>
+          ) : (
         /* Lock/edit, export and delete all live in this corner menu so the note
            itself is the only thing competing for the panel. */
         <div className="px-menu" ref={menuRef}>
@@ -348,7 +362,9 @@ export function DayJournalPanel({
             </div>
           )}
         </div>
-        )}
+          )}
+        </div>
+        <span className="px-jn-date" data-testid="journal-date">{date}</span>
       </div>
 
       {isLoading ? (

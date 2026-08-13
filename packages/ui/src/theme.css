@@ -398,11 +398,38 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
 
 /* editable note title with the day beneath it — renaming never hides the date */
 .px-jn-head { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
-.px-jn-title { font: inherit; font-size: 15px; font-weight: 620; color: var(--px-text); background: none; border: 1px solid transparent; border-radius: 6px; padding: 2px 6px; margin: -2px -6px; width: 100%; }
+/* The title and its action share a line. `center` puts the button on the title's
+   own axis; aligning to the block's top edge instead left it riding above the
+   text, because the block is two lines tall (title + date caption). */
+.px-jn-titlerow { display: flex; align-items: center; gap: 8px; }
+.px-jn-title { font: inherit; font-size: 15px; font-weight: 620; color: var(--px-text); background: none; border: 1px solid transparent; border-radius: 6px; padding: 2px 6px; margin: -2px 0 -2px -6px; flex: 1 1 auto; min-width: 0; }
 .px-jn-title:hover:not(:disabled) { border-color: var(--px-border); }
 .px-jn-title:focus { outline: none; border-color: var(--px-accent); background: var(--px-surface); }
 .px-jn-title:disabled { color: var(--px-text); opacity: 1; }
 .px-jn-date { font-size: 11.5px; color: var(--px-faint); font-variant-numeric: tabular-nums; padding-left: 0; }
+
+/* ── the note's lock ──
+   Hidden until the day HAS a note, because until then the control does nothing.
+   Hidden via opacity rather than `display`, so it holds its slot: the title keeps
+   the same width the whole time and nothing reflows at the moment a note becomes
+   lockable — the button simply fades in where it was always going to be.
+   `pointer-events: none` stops the invisible button from swallowing hovers (and
+   showing its tooltip); `disabled` + `aria-hidden` in the markup keep it out of
+   the tab order and off the a11y tree. */
+.px-jn-lock { opacity: 0; pointer-events: none; transition: opacity 180ms ease-out; }
+.px-jn-lock[data-ready='true'] { opacity: 1; pointer-events: auto; }
+/* the two padlocks occupy the SAME 14px box, stacked, so the swap is a cross-fade
+   in place rather than a reflow. The wrapper carries the size; the icons are
+   absolutely positioned inside it. */
+.px-jn-lock-ic { position: relative; display: inline-block; width: 14px; height: 14px; }
+.px-jn-lk { position: absolute; inset: 0; width: 14px; height: 14px; transition: opacity 180ms ease-out, transform 180ms ease-out; }
+/* Only the OUTGOING lock moves: it shrinks and tips away while the incoming one
+   settles upright, which reads as the shackle snapping rather than a dissolve. */
+.px-jn-lock[data-state='unlocked'] .px-jn-lk--shut { opacity: 0; transform: scale(0.72) rotate(12deg); }
+.px-jn-lock[data-state='locked'] .px-jn-lk--open { opacity: 0; transform: scale(0.72) rotate(-12deg); }
+@media (prefers-reduced-motion: reduce) {
+  .px-jn-lock, .px-jn-lk { transition: none; }
+}
 
 /* journal (D2/D3/J7): day-header note affordance + TipTap WYSIWYG editor + toolbar + markdown preview */
 .px-cal-col-head { cursor: pointer; gap: 4px; }
@@ -449,7 +476,14 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
 /* section divider (the toolbar's — button) */
 .px-md hr { border: none; border-top: 1px solid var(--px-border-2); margin: 13px 0; }
 .px-md hr.ProseMirror-selectednode { border-top-color: var(--px-accent); }
-.px-md input[type='checkbox'] { margin-right: 6px; }
+/* Monochrome tick: a checked box fills with the note's own ink instead of the
+   browser/OS accent, which was the one hue in an otherwise black-on-white note
+   (and differed per machine). `accent-color` keeps the NATIVE control — the
+   browser still draws the check glyph, picks a contrasting colour for it, and
+   keeps the platform focus ring and disabled shading, all of which a redrawn
+   `appearance: none` box would have to reimplement. Applies to both note
+   surfaces: the TipTap editor and the locked read-only render. */
+.px-md input[type='checkbox'] { margin-right: 6px; accent-color: var(--px-text); }
 /* interactive task-list checkboxes (J7): flex so the box sits inline with its text */
 .px-md ul[data-type='taskList'] { list-style: none; padding-left: 2px; }
 .px-md ul[data-type='taskList'] li { display: flex; align-items: flex-start; gap: 6px; }

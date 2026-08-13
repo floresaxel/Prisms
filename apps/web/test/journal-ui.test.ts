@@ -193,10 +193,15 @@ describe('DayJournalPanel — editor', () => {
     for (const id of ['journal-menu', 'journal-export', 'journal-delete']) {
       expect(screen.queryByTestId(id)).toBeNull();
     }
-    // the icon IS the affordance: a padlock while editable, a pencil while locked
+    // The icon shows the note's STATE: an open padlock while it can be edited, a
+    // closed one once locked. BOTH are always in the DOM — they are stacked and
+    // cross-faded — so `data-state` is what says which one is showing, not which
+    // <use> happens to be present.
     const toggle = screen.getByTestId('journal-preview-toggle');
+    const hrefs = (el: Element) => [...el.querySelectorAll('use')].map((u) => u.getAttribute('href'));
     expect(toggle.getAttribute('aria-pressed')).toBe('false');
-    expect(toggle.querySelector('use')?.getAttribute('href')).toBe('#i-lock');
+    expect(toggle.getAttribute('data-state')).toBe('unlocked');
+    expect(hrefs(toggle)).toEqual(['#i-unlock', '#i-lock']); // both padlocks, to cross-fade between
     expect(toggle.getAttribute('title')).toBe('Lock edit');
     editable.unmount();
 
@@ -205,8 +210,41 @@ describe('DayJournalPanel — editor', () => {
     expect(screen.getByTestId('journal-preview').querySelector('h1')?.textContent).toBe('Title');
     const locked = screen.getByTestId('journal-preview-toggle');
     expect(locked.getAttribute('aria-pressed')).toBe('true');
-    expect(locked.querySelector('use')?.getAttribute('href')).toBe('#i-pen');
+    expect(locked.getAttribute('data-state')).toBe('locked');
     expect(locked.getAttribute('title')).toBe('Edit');
+  });
+
+  it('the lock is hidden — but still holds its slot — until the day has a note', () => {
+    // `data-ready` drives opacity, NOT display: the button occupies its space the
+    // whole time, so the title does not resize the instant a note becomes
+    // lockable. It is also off the a11y tree while inoperable.
+    state.entry = null;
+    const empty = render(createElement(DayJournalPanel, { date: '2026-08-09', ctx: CTX, actions: 'lock' }));
+    const hidden = screen.getByTestId('journal-preview-toggle');
+    expect(hidden.getAttribute('data-ready')).toBe('false');
+    expect(hidden.getAttribute('aria-hidden')).toBe('true');
+    expect((hidden as HTMLButtonElement).disabled).toBe(true);
+    empty.unmount();
+
+    state.entry = { id: 'j1', content: 'something', deleted_at: null, locked: false };
+    render(createElement(DayJournalPanel, { date: '2026-08-09', ctx: CTX, actions: 'lock' }));
+    const shown = screen.getByTestId('journal-preview-toggle');
+    expect(shown.getAttribute('data-ready')).toBe('true');
+    expect(shown.getAttribute('aria-hidden')).toBeNull();
+    expect((shown as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('the lock sits on the title row, not above it', () => {
+    // Alignment is CSS, but the STRUCTURE it needs is pinned here: the button has
+    // to be a sibling of the title inside the title row. Top-aligning it against
+    // the title+date block is what left it floating above the title.
+    state.entry = { id: 'j1', content: 'x', deleted_at: null, locked: false };
+    render(createElement(DayJournalPanel, { date: '2026-08-05', ctx: CTX, actions: 'lock' }));
+    const row = screen.getByTestId('journal-title').closest('.px-jn-titlerow');
+    expect(row).not.toBeNull();
+    expect(row!.contains(screen.getByTestId('journal-preview-toggle'))).toBe(true);
+    // the date is a caption BELOW the row, not part of it
+    expect(row!.contains(screen.getByTestId('journal-date'))).toBe(false);
   });
 
   it('renders the lock state from the SYNCED row, not local state', () => {

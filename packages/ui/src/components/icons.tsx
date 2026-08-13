@@ -12,7 +12,7 @@ export type IconName =
   | 'chart' | 'zap' | 'sliders' | 'search' | 'plus' | 'clock' | 'lock' | 'check'
   | 'x' | 'chevd' | 'chevl' | 'chevr' | 'play' | 'stop' | 'down' | 'up' | 'info'
   | 'alert' | 'flame' | 'trash' | 'cols' | 'gantt' | 'net' | 'scale' | 'list' | 'pen'
-  | 'dots' | 'route' | 'note' | 'tasklist';
+  | 'dots' | 'route' | 'note' | 'tasklist' | 'unlock';
 
 /** Mount once, high in the tree (the app shell). Renders no visible output. */
 export function IconSprite() {
@@ -33,6 +33,10 @@ export function IconSprite() {
       <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></symbol>
       <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></symbol>
       <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></symbol>
+      {/* The same padlock with the shackle swung open — deliberately the SAME
+          body and arc radius as i-lock, so cross-fading one into the other reads
+          as a single lock moving rather than two different icons. */}
+      <symbol id="i-unlock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 7.5-1.3" /></symbol>
       <symbol id="i-check" viewBox="0 0 24 24"><path d="m4 12 5 5L20 7" /></symbol>
       <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18" /></symbol>
       <symbol id="i-chevd" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6" /></symbol>
