@@ -12,7 +12,7 @@ export type IconName =
   | 'chart' | 'zap' | 'sliders' | 'search' | 'plus' | 'clock' | 'lock' | 'check'
   | 'x' | 'chevd' | 'chevl' | 'chevr' | 'play' | 'stop' | 'down' | 'up' | 'info'
   | 'alert' | 'flame' | 'trash' | 'cols' | 'gantt' | 'net' | 'scale' | 'list' | 'pen'
-  | 'dots' | 'route' | 'note' | 'tasklist' | 'eye' | 'lockbody' | 'lockshackle';
+  | 'dots' | 'route' | 'note' | 'tasklist' | 'eye' | 'lockbody' | 'lockshackle' | 'pin';
 
 /** Mount once, high in the tree (the app shell). Renders no visible output. */
 export function IconSprite() {
@@ -74,6 +74,9 @@ export function IconSprite() {
       <symbol id="i-pen" viewBox="0 0 24 24"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" /></symbol>
       <symbol id="i-dots" viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.4" /><circle cx="12" cy="12" r="1.4" /><circle cx="12" cy="19" r="1.4" /></symbol>
       <symbol id="i-route" viewBox="0 0 24 24"><circle cx="6" cy="19" r="3" /><circle cx="18" cy="5" r="3" /><path d="M9 19h5a4 4 0 0 0 0-8h-4a4 4 0 0 1 0-8h5" /></symbol>
+      {/* a pushpin seen head-on: cap, tapering body, needle. Drawn upright so it
+          reads the same pressed or not — the sidebar's "keep this open". */}
+      <symbol id="i-pin" viewBox="0 0 24 24"><path d="M9 3h6" /><path d="M10 3v6l-3 4h10l-3-4V3" /><path d="M12 13v8" /></symbol>
       {/* a page with two lines of writing — legible down to ~11px, where a
           book/journal glyph turns to mush. */}
       <symbol id="i-note" viewBox="0 0 24 24"><path d="M6 3h8l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z" /><path d="M14 3v5h5" /><path d="M9 13h6M9 17h4" /></symbol>

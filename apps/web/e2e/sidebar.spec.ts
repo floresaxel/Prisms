@@ -1,0 +1,68 @@
+/**
+ * The sidebar's own controls, with a real pointer.
+ *
+ * The unit tests own the state machine; what only a browser can show is that
+ * the peek is driven by an actual cursor resting on the rail — that it does NOT
+ * open under a pointer merely passing through, that it opens once the 2.5s is
+ * up, and that it shuts again the moment the pointer goes elsewhere. The pin is
+ * the escape from all of that, so it is checked across a reload too.
+ *
+ * Requires the live stack (see playwright.config.ts).
+ */
+import { expect, test } from '@playwright/test';
+
+/** Comfortably inside the page, far from the sidebar. */
+const AWAY = { x: 900, y: 400 };
+
+test('sidebar: collapses from inside itself, peeks on a resting pointer, and pins open', async ({ page }) => {
+  const email = `e2e-sidebar-${Date.now()}@prisms.test`;
+  await page.goto('/');
+  await page.getByRole('link', { name: 'Register' }).click();
+  await page.locator('input[autocomplete="name"]').fill('Sidebar User');
+  await page.getByTestId('email').fill(email);
+  await page.getByTestId('password').fill('e2e-password-123');
+  await page.getByTestId('submit').click();
+  await expect(page.getByTestId('sync-state')).toBeVisible();
+
+  const sidebar = page.locator('.px-sidebar');
+  const toggle = page.getByTestId('sidebar-toggle');
+  const pin = page.getByTestId('sidebar-pin');
+
+  // --- the control lives in the sidebar, not the topbar ------------------
+  await expect(sidebar.getByTestId('sidebar-toggle')).toBeVisible();
+  await expect(page.locator('.px-topbar').getByTestId('sidebar-toggle')).toHaveCount(0);
+  await expect(sidebar).toHaveAttribute('data-state', 'open');
+
+  // --- collapse ----------------------------------------------------------
+  await toggle.click();
+  await expect(sidebar).toHaveAttribute('data-state', 'rail');
+  await expect(pin).toHaveCount(0); // nothing open to hold
+
+  // --- a pointer passing through must not open it ------------------------
+  await sidebar.hover();
+  await page.waitForTimeout(1200);
+  await expect(sidebar).toHaveAttribute('data-state', 'rail');
+
+  // --- …but resting there does, once the delay is up ---------------------
+  await expect(sidebar).toHaveAttribute('data-state', 'peek', { timeout: 5000 });
+  await expect(pin).toBeVisible();
+
+  // --- and it takes itself back when the pointer leaves ------------------
+  await page.mouse.move(AWAY.x, AWAY.y);
+  await expect(sidebar).toHaveAttribute('data-state', 'rail');
+
+  // --- pin the next peek open -------------------------------------------
+  await sidebar.hover();
+  await expect(sidebar).toHaveAttribute('data-state', 'peek', { timeout: 5000 });
+  await pin.click();
+  await page.mouse.move(AWAY.x, AWAY.y);
+  await expect(sidebar).toHaveAttribute('data-state', 'open'); // walking away no longer shuts it
+  await expect(sidebar).toHaveAttribute('data-pinned', 'true');
+  await expect(toggle).toBeDisabled(); // the pin outranks the button
+
+  // --- the pin survives a reload, and releases the old preference --------
+  await page.reload();
+  await expect(sidebar).toHaveAttribute('data-state', 'open');
+  await page.getByTestId('sidebar-pin').click();
+  await expect(sidebar).toHaveAttribute('data-state', 'rail'); // back to the collapse it was hiding
+});

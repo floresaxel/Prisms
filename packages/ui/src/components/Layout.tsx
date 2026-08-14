@@ -96,52 +96,153 @@ function NavLink({ item, active, onNavigate, rail }: { item: NavItemSpec; active
 }
 
 const RAIL_KEY = 'prisms.sidebar.collapsed';
+const PIN_KEY = 'prisms.sidebar.pinned';
 /** Below this the sidebar is a rail regardless of preference — a 234px nav on a
  *  narrow window costs more than it gives. */
 const RAIL_FORCE_W = 900;
+/** How long the pointer must rest on the rail before it opens itself. */
+export const PEEK_DELAY_MS = 2500;
+
+const readFlag = (key: string): boolean => {
+  try {
+    return localStorage.getItem(key) === '1';
+  } catch {
+    return false; // storage denied (private mode / desktop shell)
+  }
+};
+const writeFlag = (key: string, on: boolean): void => {
+  try {
+    localStorage.setItem(key, on ? '1' : '0');
+  } catch {
+    /* preference is best-effort */
+  }
+};
+
+interface SidebarState {
+  /** Rendered as the icons-only rail right now. */
+  rail: boolean;
+  /** The window is too narrow for the full nav — no preference can win. */
+  forced: boolean;
+  /** Held open: the rail cannot take it back, and neither can the button. */
+  pinned: boolean;
+  /** Open only because the pointer has been resting on the rail. */
+  peeking: boolean;
+  toggleRail: () => void;
+  togglePin: () => void;
+  setHovering: (on: boolean) => void;
+}
 
 /**
- * Sidebar collapse state: the user's preference, overridden to `true` while the
- * window is too narrow to afford the full nav. Persisted so it survives reloads.
+ * What the sidebar is doing, from three inputs that can disagree.
+ *
+ *  - `collapsed` — the user's own preference, persisted.
+ *  - `pinned` — held open ON TOP of that preference, also persisted. Unpinning
+ *    restores whatever `collapsed` said, rather than guessing.
+ *  - `forced` — the window is too narrow, which overrules both.
+ *
+ * On top of those sits the PEEK: rest the pointer on the rail and it opens
+ * itself after `PEEK_DELAY_MS`, closing again when the pointer leaves. That is
+ * one derived condition (`canPeek`) driving one timer, which is what makes the
+ * awkward cases fall out for free — unpin while the pointer is still on the
+ * sidebar and the peek simply re-arms, instead of stranding it shut under a
+ * cursor that never left.
  */
-function useSidebarRail(): [boolean, boolean, () => void] {
-  const [pref, setPref] = useState(() => {
-    try {
-      return localStorage.getItem(RAIL_KEY) === '1';
-    } catch {
-      return false; // storage denied (private mode / desktop shell)
-    }
-  });
+function useSidebar(): SidebarState {
+  const [collapsed, setCollapsed] = useState(() => readFlag(RAIL_KEY));
+  const [pinned, setPinned] = useState(() => readFlag(PIN_KEY));
   const [forced, setForced] = useState(() => window.innerWidth < RAIL_FORCE_W);
+  const [hovering, setHovering] = useState(false);
+  const [peeking, setPeeking] = useState(false);
+
   useEffect(() => {
     const onResize = () => setForced(window.innerWidth < RAIL_FORCE_W);
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, []);
-  const toggle = () => {
-    setPref((p) => {
-      const next = !p;
-      try {
-        localStorage.setItem(RAIL_KEY, next ? '1' : '0');
-      } catch {
-        /* preference is best-effort */
-      }
-      return next;
-    });
+
+  // Only a sidebar that is actually shut has anything to open.
+  const canPeek = hovering && collapsed && !pinned && !forced;
+  useEffect(() => {
+    if (!canPeek) {
+      setPeeking(false);
+      return;
+    }
+    const t = setTimeout(() => setPeeking(true), PEEK_DELAY_MS);
+    return () => clearTimeout(t);
+  }, [canPeek]);
+
+  return {
+    rail: forced || (!pinned && collapsed && !peeking),
+    forced,
+    pinned,
+    peeking,
+    toggleRail: () =>
+      setCollapsed((c) => {
+        writeFlag(RAIL_KEY, !c);
+        return !c;
+      }),
+    togglePin: () =>
+      setPinned((p) => {
+        writeFlag(PIN_KEY, !p);
+        return !p;
+      }),
+    setHovering,
   };
-  return [pref || forced, forced, toggle];
 }
 
 export function Layout({ brand = 'Prisms', groups, foot, active, onNavigate, breadcrumb, sync, timer, user, footer, children }: LayoutProps) {
   const initial = (user?.name?.trim()?.[0] ?? user?.email?.[0] ?? '?').toUpperCase();
-  const [rail, railForced, toggleRail] = useSidebarRail();
+  const { rail, forced: railForced, pinned, peeking, toggleRail, togglePin, setHovering } = useSidebar();
   return (
     <div className={`px-app${rail ? ' px-app--rail' : ''}`}>
       <IconSprite />
-      <aside className={`px-sidebar${rail ? ' px-sidebar--rail' : ''}`}>
+      <aside
+        className={`px-sidebar${rail ? ' px-sidebar--rail' : ''}${peeking ? ' px-sidebar--peek' : ''}`}
+        data-state={rail ? 'rail' : peeking ? 'peek' : 'open'}
+        data-pinned={pinned ? 'true' : 'false'}
+        // the peek's whole input: resting here opens it, leaving closes it again
+        onMouseEnter={() => setHovering(true)}
+        onMouseLeave={() => setHovering(false)}
+      >
         <div className="px-brand">
           <span className="px-brand-logo"><Ic name="prism" /></span>
           <span className="px-brand-lbl">{brand}</span>
+          <div className="px-sidebar-ctl">
+            {/* the pin has nothing to say about a rail — it only ever holds
+                something OPEN, so it appears once the sidebar is showing. */}
+            {!rail && (
+              <button
+                className={`px-btn px-btn--icon px-pin-toggle${pinned ? ' px-pin-toggle--on' : ''}`}
+                data-testid="sidebar-pin"
+                aria-label={pinned ? 'unpin sidebar' : 'pin sidebar open'}
+                aria-pressed={pinned}
+                title={pinned ? 'Unpin — let the sidebar collapse again' : 'Pin — keep the sidebar expanded'}
+                onClick={togglePin}
+              >
+                <Ic name="pin" />
+              </button>
+            )}
+            <button
+              className="px-btn px-btn--icon px-rail-toggle"
+              data-testid="sidebar-toggle"
+              aria-label={rail ? 'expand sidebar' : 'collapse sidebar'}
+              aria-expanded={!rail}
+              // the window's verdict and the pin's both outrank this button
+              disabled={railForced || pinned}
+              title={
+                railForced
+                  ? 'The window is too narrow for the full sidebar'
+                  : pinned
+                    ? 'Pinned open — unpin it to collapse'
+                    : rail
+                      ? 'Expand sidebar'
+                      : 'Collapse sidebar'
+              }
+              onClick={toggleRail}
+            >
+              <Ic name={rail ? 'chevr' : 'chevl'} />
+            </button>
+          </div>
         </div>
         <nav className="px-nav">
           {groups.map((group, gi) => (
@@ -168,18 +269,8 @@ export function Layout({ brand = 'Prisms', groups, foot, active, onNavigate, bre
       </aside>
       <div className="px-shell">
         <header className="px-topbar">
-          <button
-            className="px-btn px-btn--icon px-rail-toggle"
-            data-testid="sidebar-toggle"
-            aria-label={rail ? 'expand sidebar' : 'collapse sidebar'}
-            aria-expanded={!rail}
-            // while the window forces the rail, the preference cannot win.
-            disabled={railForced}
-            title={railForced ? 'The window is too narrow for the full sidebar' : rail ? 'Expand sidebar' : 'Collapse sidebar'}
-            onClick={toggleRail}
-          >
-            <Ic name={rail ? 'chevr' : 'chevl'} />
-          </button>
+          {/* the collapse control used to live here; it belongs to the thing it
+              collapses, so it now sits in the sidebar's own brand row. */}
           <div className="px-crumb">
             <span>{breadcrumb.section}</span>
             <span className="px-crumb-sep">/</span>

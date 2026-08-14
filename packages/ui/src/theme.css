@@ -78,7 +78,10 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
   padding-left: var(--px-rail-pad);
   padding-right: var(--px-rail-pad);
 }
-.px-sidebar--rail .px-brand { padding: 2px 0 10px; justify-content: center; }
+/* Rail: the brand stacks over its own controls, because 40px has no room for
+   them side by side. */
+.px-sidebar--rail .px-brand { padding: 2px 0 8px; flex-direction: column; gap: 6px; align-items: center; }
+.px-sidebar--rail .px-sidebar-ctl { margin-left: 0; }
 .px-sidebar--rail .px-brand-lbl,
 .px-sidebar--rail .px-nav-group,
 .px-sidebar--rail .px-navlink-lbl,
@@ -91,7 +94,20 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
 .px-sidebar--rail .px-sidebar-user { justify-content: center; padding: 7px 0 3px; }
 .px-sidebar--rail .px-sidebar-foot { align-items: center; }
 .px-sidebar-actions { display: flex; flex-direction: column; gap: 4px; }
-.px-rail-toggle { flex: none; margin-left: -6px; color: var(--px-text-dim); }
+/* The sidebar's own controls, at the trailing edge of the brand row. These are
+   chrome rather than content, so they shed the button chassis and only take a
+   background on hover. Compound selectors throughout: the generic `.px-btn` is
+   defined further down the file and would otherwise win on source order. */
+.px-sidebar-ctl { margin-left: auto; display: flex; align-items: center; gap: 1px; flex: none; }
+.px-sidebar-ctl .px-btn { border: none; box-shadow: none; background: none; color: var(--px-faint); padding: 5px; border-radius: 6px; }
+.px-sidebar-ctl .px-btn:hover:not(:disabled) { background: var(--px-surface-2); color: var(--px-text); }
+.px-sidebar-ctl .px-btn:disabled { opacity: 0.35; cursor: default; }
+/* pinned reads as a held-down button, not merely a tinted glyph */
+.px-sidebar-ctl .px-pin-toggle--on,
+.px-sidebar-ctl .px-pin-toggle--on:hover { color: var(--px-blue); background: var(--px-blue-bg); }
+/* A peeked-open sidebar is floating over the page for a moment, so it says so
+   with a shadow — otherwise it looks identical to the pinned one it is not. */
+.px-sidebar--peek { box-shadow: var(--px-shadow-pop); }
 @media (prefers-reduced-motion: reduce) { .px-sidebar { transition: none; } }
 .px-brand-logo { width: 22px; height: 22px; border-radius: 6px; background: var(--px-blue); color: #fff; display: flex; align-items: center; justify-content: center; flex: none; }
 .px-brand-logo .px-ic { width: 13px; height: 13px; }
