@@ -21,7 +21,7 @@ import { useSyncQueue } from '@prisms/ui';
  * for the box to have started opening, so the room appears before the words that
  * need it. Shrinking runs the other way round (see `boxWidth`).
  */
-const TEXT_DELAY_MS = 100;
+const TEXT_DELAY_MS = 200;
 
 type SyncState = 'connecting' | 'syncing' | 'synced';
 const LABELS: Record<SyncState, string> = {

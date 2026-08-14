@@ -144,11 +144,14 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
    because a content-driven width is not a value CSS can transition between. */
 .px-sync-label { display: block; white-space: nowrap; overflow: hidden; transition: width 200ms cubic-bezier(0.4, 0, 0.2, 1); }
 @media (prefers-reduced-motion: reduce) { .px-sync-label { transition: none; } }
-.px-sync-chip--connecting .px-dot { background: var(--px-amber); }
-/* Work accepted here but not yet acknowledged by the server. Amber like
-   "connecting", because both mean the same thing to the reader — something of
-   yours is not safely across yet — and it pulses so a queue that is not draining
-   is visible rather than merely stated. */
+/* Grey, not amber: no connection is not a problem with your DATA. Nothing is at
+   risk and nothing needs attention — the queue simply waits. Amber is reserved
+   for "syncing", where there IS something of yours not yet across. */
+.px-sync-chip--connecting .px-dot { background: var(--px-faint); }
+/* Work accepted here but not yet acknowledged by the server — the one state
+   where something of yours is genuinely not safely across, hence amber where
+   "connecting" is only grey. It pulses so a queue that is not draining is
+   visible rather than merely stated. */
 .px-sync-chip--syncing .px-dot { background: var(--px-amber); animation: px-pulse 1.6s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) { .px-sync-chip--syncing .px-dot { animation: none; } }
 .px-content { flex: 1; overflow: auto; padding: 20px 26px 40px; }

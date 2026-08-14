@@ -44,7 +44,7 @@ describe('SyncChip', () => {
     expect(chip().getAttribute('data-sync')).toBe('connecting');
   });
 
-  it('recolours the dot immediately but lets the words trail by 100ms', () => {
+  it('recolours the dot immediately but lets the words trail by 200ms', () => {
     vi.useFakeTimers();
     const { rerender } = render(createElement(SyncChip, { connected: true }));
     expect(chip().textContent).toBe('synced');
@@ -55,7 +55,7 @@ describe('SyncChip', () => {
     expect(chip().getAttribute('data-sync')).toBe('syncing');
     expect(chip().textContent).toBe('synced'); // …the words have not caught up
 
-    act(() => { vi.advanceTimersByTime(99); });
+    act(() => { vi.advanceTimersByTime(199); });
     expect(chip().textContent).toBe('synced');
     act(() => { vi.advanceTimersByTime(2); });
     expect(chip().textContent).toBe('syncing…');
@@ -66,10 +66,10 @@ describe('SyncChip', () => {
     const { rerender } = render(createElement(SyncChip, { connected: true }));
     state.busy = true;
     act(() => { rerender(createElement(SyncChip, { connected: true })); });
-    act(() => { vi.advanceTimersByTime(40) }); // still mid-delay
+    act(() => { vi.advanceTimersByTime(90) }); // still mid-delay
     state.busy = false;
     act(() => { rerender(createElement(SyncChip, { connected: true })); });
-    act(() => { vi.advanceTimersByTime(200); });
+    act(() => { vi.advanceTimersByTime(400); });
     expect(chip().textContent).toBe('synced');
     expect(chip().getAttribute('data-sync')).toBe('synced');
   });
