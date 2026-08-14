@@ -9,7 +9,7 @@
  * shared read layer, so the shell composition lives in <Shell> (mounted BELOW
  * PrismsDataProvider) while db lifecycle + routing stay in <AuthedApp>.
  */
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 
 import type { PowerSyncDatabase } from '@powersync/web';
 import { PowerSyncContext } from '@powersync/react';
@@ -213,7 +213,11 @@ function Shell({
       sync={
         /* Connection state is NOT sync state: a connected client with a queue
            behind it is mid-sync. "synced" now means what it says — nothing of
-           yours is still waiting to reach the server. */
+           yours is still waiting to reach the server.
+           The chip reserves the width of its LONGEST label (see `.px-sync-label`),
+           so the status can change without the dot, the chip's edges or the clock
+           beside it moving. The widest string is passed down rather than written
+           into the stylesheet so all three stay together, here. */
         <div
           className={`px-sync-chip${!connected ? ' px-sync-chip--connecting' : syncBusy ? ' px-sync-chip--syncing' : ''}`}
           data-testid="sync-state"
@@ -221,7 +225,9 @@ function Shell({
           title={syncPending > 0 ? `${syncPending} change(s) not yet on the server` : undefined}
         >
           <span className="px-dot" />
-          {!connected ? 'connecting…' : syncBusy ? 'syncing…' : 'synced'}
+          <span className="px-sync-label" style={{ '--px-sync-widest': "'connecting…'" } as CSSProperties}>
+            {!connected ? 'connecting…' : syncBusy ? 'syncing…' : 'synced'}
+          </span>
         </div>
       }
       footer={
