@@ -310,7 +310,16 @@ export function DayJournalPanel({
   }
 
   return (
-    <div className="px-journal" data-testid={`journal-${date}`} style={{ marginTop: 16 }}>
+    /* `--ready` marks the day as READ, not merely mounted — the Agenda fades the
+       panel in on it. Keyed off loading rather than mount so the fade belongs to
+       the note arriving; fading a panel in while it still says "Loading…" would
+       animate the wrong moment, and the day's real content would then pop in
+       afterwards with no transition at all. */
+    <div
+      className={`px-journal${isLoading ? '' : ' px-journal--ready'}`}
+      data-testid={`journal-${date}`}
+      style={{ marginTop: 16 }}
+    >
       {/* The title is editable; the DATE moves below it, so renaming a note
           never costs you the day it belongs to. The action sits ON the title's
           line (not the block's top edge) — the date underneath is a caption, and

@@ -253,6 +253,16 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
 .px-seg-btn--on { background: var(--px-blue-bg); color: var(--px-blue-deep); font-weight: 640; }
 .px-agenda-journal, .px-agenda-todo { background: var(--px-surface); border: 1px solid var(--px-border); border-radius: 10px; padding: 12px 14px; box-shadow: var(--px-shadow); min-width: 0; }
 .px-agenda-journal h2, .px-agenda-todo h2 { margin-top: 0; font-size: 14px; }
+/* The day's note fades in as it arrives. Scoped to the AGENDA: there the panel
+   is a side car that reloads every time you pick another day in the week, so the
+   swap wants softening. The Journal screen mounts the same component beside a
+   month list where the day list is the subject and the note the destination —
+   there an instant swap reads as responsiveness, not abruptness.
+   `--ready` is set when the day has been READ, so this animates the note landing
+   rather than the panel mounting on top of a "Loading…". */
+@keyframes px-note-in { from { opacity: 0; } to { opacity: 1; } }
+.px-agenda-journal .px-journal--ready { animation: px-note-in 100ms ease-out; }
+@media (prefers-reduced-motion: reduce) { .px-agenda-journal .px-journal--ready { animation: none; } }
 .px-drag-hint { font-size: 11px; margin: 10px 0 0; }
 .px-todo-item { display: flex; justify-content: space-between; gap: 8px; padding: 9px 11px; margin-bottom: 7px; background: var(--px-surface); border: 1px solid var(--px-border); border-radius: 8px; font-size: 12.5px; cursor: grab; user-select: none; box-shadow: var(--px-shadow); }
 .px-todo-item:hover { border-color: var(--px-accent); }

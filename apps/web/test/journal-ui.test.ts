@@ -373,6 +373,24 @@ describe('DayJournalPanel — editor', () => {
     expect(toggle.getAttribute('data-state')).toBe('unlocked'); // reverted to the row
   });
 
+  it('marks the panel ready only once the day has been read', () => {
+    // The Agenda hangs its fade-in on this. While the day is still loading the
+    // panel must NOT be ready, or the fade plays over "Loading…" and the note
+    // itself then appears with no transition at all.
+    state.entry = null;
+    state.loading = true;
+    state.settled = false;
+    const loading = render(createElement(DayJournalPanel, { date: '2026-08-07', ctx: CTX, actions: 'lock' }));
+    expect(screen.getByTestId('journal-2026-08-07').className).not.toContain('px-journal--ready');
+    loading.unmount();
+
+    state.loading = false;
+    state.settled = true;
+    state.entry = { id: 'j1', content: 'x', deleted_at: null, locked: false };
+    render(createElement(DayJournalPanel, { date: '2026-08-07', ctx: CTX, actions: 'lock' }));
+    expect(screen.getByTestId('journal-2026-08-07').className).toContain('px-journal--ready');
+  });
+
   it('a day with no note cannot be locked — there is nothing to lock', () => {
     state.entry = null;
     render(createElement(DayJournalPanel, { date: '2026-08-09', ctx: CTX, actions: 'lock' }));
