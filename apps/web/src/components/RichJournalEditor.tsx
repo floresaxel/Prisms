@@ -135,10 +135,24 @@ export function RichJournalEditor({
     if (getMd(editor) !== value) editor.commands.setContent(value, { emitUpdate: false });
   }, [editor, value]);
 
-  // Locking is a SYNCED fact, so the editor has to honour it even while mounted:
-  // the toolbar going inert is not enough to stop typing into the note.
+  /**
+   * Locking is a SYNCED fact, so the editor has to honour it even while mounted:
+   * the toolbar going inert is not enough to stop typing into the note.
+   *
+   * The `false` is load-bearing. `setEditable(editable, emitUpdate = true)` emits
+   * an `update` by DEFAULT, and this editor's update handler is the note's save
+   * path — so the plain one-argument call cost every note its contents:
+   *   - it fired on mount, while the editor still held the empty string it was
+   *     created with (the synced text arrives a beat later),
+   *   - which ran `onChange('')` → the panel marked the note dirty and scheduled
+   *     a save of nothing,
+   *   - the empty save soft-DELETED the row, and the dirty flag then blocked the
+   *     panel from ever adopting the synced text, so the note did not come back.
+   * Editability is not a content change and must never be announced as one.
+   */
   useEffect(() => {
-    editor?.setEditable(!locked);
+    if (!editor || editor.isEditable === !locked) return;
+    editor.setEditable(!locked, false);
   }, [editor, locked]);
 
   const wrap =
