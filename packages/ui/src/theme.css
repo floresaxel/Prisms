@@ -129,26 +129,21 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
 .px-now-clock .px-ic { width: 14px; height: 14px; color: var(--px-faint); }
 .px-sync-chip { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--px-text-dim); border: 1px solid var(--px-border); border-radius: 8px; padding: 5px 10px; background: var(--px-surface); flex: none; }
 .px-sync-chip .px-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--px-green); flex: none; }
-/* The chip holds the width of its LONGEST status at all times, so switching
-   between them moves nothing: not the dot, not the chip's own edges, and not the
-   clock and timer sitting to its left. Without this the chip is sized to whatever
-   it currently says, and because the group is right-aligned the whole row shuffles
-   sideways on every status change.
+/* The chip lives in a SLOT as wide as its longest status, and is left-aligned in
+   it. The slot is what keeps the topbar still — nothing outside it moves — while
+   the chip itself stays tight around its own words, opening rightwards into the
+   reserved gap and closing again. The dot sits at the chip's fixed left edge, so
+   it never moves either.
 
-   The reservation is a zero-height copy of the longest label in an ::after.
-   Deliberately a pseudo-element: its text belongs to no node, so the chip still
-   reads exactly "synced" to `textContent` — which an e2e asserts on — and to a
-   screen reader. A hidden real element would have made it read
-   "connecting…syncing…synced". The string comes from App.tsx via the custom
-   property, so the labels and the width that reserves them stay together. */
-.px-sync-label { display: block; white-space: nowrap; }
-.px-sync-label::after {
-  content: var(--px-sync-widest, 'connecting…');
-  display: block;
-  height: 0;
-  overflow: hidden;
-  visibility: hidden;
-}
+   `--px-sync-reserve` is measured at runtime by SyncChip.tsx: the widest label
+   plus the chip's own chrome, the chrome derived by subtraction so the padding,
+   border, dot and gap below stay the only place those numbers live. Until it is
+   known the slot simply takes the chip's natural width. */
+.px-sync-slot { flex: none; display: flex; justify-content: flex-start; min-width: var(--px-sync-reserve, auto); }
+/* The width is set per status (SyncChip.tsx) rather than left to the content,
+   because a content-driven width is not a value CSS can transition between. */
+.px-sync-label { display: block; white-space: nowrap; overflow: hidden; transition: width 200ms cubic-bezier(0.4, 0, 0.2, 1); }
+@media (prefers-reduced-motion: reduce) { .px-sync-label { transition: none; } }
 .px-sync-chip--connecting .px-dot { background: var(--px-amber); }
 /* Work accepted here but not yet acknowledged by the server. Amber like
    "connecting", because both mean the same thing to the reader — something of

@@ -9,7 +9,7 @@
  * shared read layer, so the shell composition lives in <Shell> (mounted BELOW
  * PrismsDataProvider) while db lifecycle + routing stay in <AuthedApp>.
  */
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import type { PowerSyncDatabase } from '@powersync/web';
 import { PowerSyncContext } from '@powersync/react';
@@ -20,7 +20,6 @@ import {
   PrismsDataProvider,
   useActivityInbox,
   useReviewInbox,
-  useSyncQueue,
   type BreadcrumbSpec,
   type CommandContext,
   type CommandRejection,
@@ -31,6 +30,7 @@ import {
 import { getSession, signOut, type SessionUser } from './auth';
 import { GlobalTimer } from './components/GlobalTimer';
 import { ReviewBanner } from './components/ReviewBanner';
+import { SyncChip } from './components/SyncChip';
 import { isDesktop, osNotify } from './desktop';
 import { rejectionMessage } from './format';
 import { clearLocalAccount, connectDb, createDb } from './powersync';
@@ -147,7 +147,6 @@ function Shell({
 }) {
   const inboxCount = useActivityInbox().length;
   const reviewCount = useReviewInbox().length;
-  const { busy: syncBusy, pending: syncPending } = useSyncQueue();
 
   const groups: NavGroupSpec[] = [
     {
@@ -210,26 +209,7 @@ function Shell({
       breadcrumb={CRUMBS[route]}
       timer={<GlobalTimer ctx={ctx} />}
       user={{ name: user.name, email: user.email }}
-      sync={
-        /* Connection state is NOT sync state: a connected client with a queue
-           behind it is mid-sync. "synced" now means what it says — nothing of
-           yours is still waiting to reach the server.
-           The chip reserves the width of its LONGEST label (see `.px-sync-label`),
-           so the status can change without the dot, the chip's edges or the clock
-           beside it moving. The widest string is passed down rather than written
-           into the stylesheet so all three stay together, here. */
-        <div
-          className={`px-sync-chip${!connected ? ' px-sync-chip--connecting' : syncBusy ? ' px-sync-chip--syncing' : ''}`}
-          data-testid="sync-state"
-          data-sync={!connected ? 'connecting' : syncBusy ? 'syncing' : 'synced'}
-          title={syncPending > 0 ? `${syncPending} change(s) not yet on the server` : undefined}
-        >
-          <span className="px-dot" />
-          <span className="px-sync-label" style={{ '--px-sync-widest': "'connecting…'" } as CSSProperties}>
-            {!connected ? 'connecting…' : syncBusy ? 'syncing…' : 'synced'}
-          </span>
-        </div>
-      }
+      sync={<SyncChip connected={connected} />}
       footer={
         <>
           {isDesktop() && (
