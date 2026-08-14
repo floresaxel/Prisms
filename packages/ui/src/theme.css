@@ -78,10 +78,9 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
   padding-left: var(--px-rail-pad);
   padding-right: var(--px-rail-pad);
 }
-/* Rail: the brand stacks over its own controls, because 40px has no room for
-   them side by side. */
-.px-sidebar--rail .px-brand { padding: 2px 0 8px; flex-direction: column; gap: 6px; align-items: center; }
-.px-sidebar--rail .px-sidebar-ctl { margin-left: 0; }
+/* Rail: just the mark. Its controls are not rendered at all — resting the
+   pointer here is what opens it. */
+.px-sidebar--rail .px-brand { padding: 2px 0 10px; justify-content: center; }
 .px-sidebar--rail .px-brand-lbl,
 .px-sidebar--rail .px-nav-group,
 .px-sidebar--rail .px-navlink-lbl,

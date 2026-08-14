@@ -3,9 +3,10 @@
  *
  * The unit tests own the state machine; what only a browser can show is that
  * the peek is driven by an actual cursor resting on the rail — that it does NOT
- * open under a pointer merely passing through, that it opens once the 2.5s is
- * up, and that it shuts again the moment the pointer goes elsewhere. The pin is
- * the escape from all of that, so it is checked across a reload too.
+ * open under a pointer merely passing through, that it opens once the delay is
+ * up, and that it shuts again the moment the pointer goes elsewhere. Since the
+ * rail carries no button, focus is checked as the keyboard's only way in, and
+ * the pin as the escape from all of it — across a reload too.
  *
  * Requires the live stack (see playwright.config.ts).
  */
@@ -33,14 +34,15 @@ test('sidebar: collapses from inside itself, peeks on a resting pointer, and pin
   await expect(page.locator('.px-topbar').getByTestId('sidebar-toggle')).toHaveCount(0);
   await expect(sidebar).toHaveAttribute('data-state', 'open');
 
-  // --- collapse ----------------------------------------------------------
+  // --- collapse: the rail keeps no controls at all -----------------------
   await toggle.click();
   await expect(sidebar).toHaveAttribute('data-state', 'rail');
-  await expect(pin).toHaveCount(0); // nothing open to hold
+  await expect(toggle).toHaveCount(0); // resting on it is the way back, not a button
+  await expect(pin).toHaveCount(0);
 
   // --- a pointer passing through must not open it ------------------------
   await sidebar.hover();
-  await page.waitForTimeout(1200);
+  await page.waitForTimeout(700);
   await expect(sidebar).toHaveAttribute('data-state', 'rail');
 
   // --- …but resting there does, once the delay is up ---------------------
@@ -49,6 +51,16 @@ test('sidebar: collapses from inside itself, peeks on a resting pointer, and pin
 
   // --- and it takes itself back when the pointer leaves ------------------
   await page.mouse.move(AWAY.x, AWAY.y);
+  await expect(sidebar).toHaveAttribute('data-state', 'rail');
+
+  // --- the keyboard's way in, now that no button remains to tab to -------
+  // A real Tab, not a programmatic focus: the sidebar is the first thing in the
+  // document, so one press lands inside it — and it opens AT ONCE, without the
+  // pointer's wait, because a keyboard cannot rest on anything.
+  await page.keyboard.press('Tab');
+  await expect(sidebar).toHaveAttribute('data-state', 'peek');
+  expect(await sidebar.evaluate((el) => el.contains(document.activeElement))).toBe(true);
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
   await expect(sidebar).toHaveAttribute('data-state', 'rail');
 
   // --- pin the next peek open -------------------------------------------

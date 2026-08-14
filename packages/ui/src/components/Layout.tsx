@@ -101,7 +101,7 @@ const PIN_KEY = 'prisms.sidebar.pinned';
  *  narrow window costs more than it gives. */
 const RAIL_FORCE_W = 900;
 /** How long the pointer must rest on the rail before it opens itself. */
-export const PEEK_DELAY_MS = 2500;
+export const PEEK_DELAY_MS = 1500;
 
 const readFlag = (key: string): boolean => {
   try {
@@ -125,11 +125,12 @@ interface SidebarState {
   forced: boolean;
   /** Held open: the rail cannot take it back, and neither can the button. */
   pinned: boolean;
-  /** Open only because the pointer has been resting on the rail. */
+  /** Open only because the pointer (or the keyboard) is on the rail. */
   peeking: boolean;
   toggleRail: () => void;
   togglePin: () => void;
   setHovering: (on: boolean) => void;
+  setFocused: (on: boolean) => void;
 }
 
 /**
@@ -140,18 +141,23 @@ interface SidebarState {
  *    restores whatever `collapsed` said, rather than guessing.
  *  - `forced` — the window is too narrow, which overrules both.
  *
- * On top of those sits the PEEK: rest the pointer on the rail and it opens
- * itself after `PEEK_DELAY_MS`, closing again when the pointer leaves. That is
- * one derived condition (`canPeek`) driving one timer, which is what makes the
- * awkward cases fall out for free — unpin while the pointer is still on the
- * sidebar and the peek simply re-arms, instead of stranding it shut under a
- * cursor that never left.
+ * On top of those sits the PEEK, which is the ONLY way back from a rail: it
+ * carries no expand button, so resting the pointer there for `PEEK_DELAY_MS`
+ * is what opens it, and leaving closes it again. One derived condition driving
+ * one timer, which is what makes the awkward cases fall out for free — unpin
+ * while the pointer is still on the sidebar and the peek simply re-arms rather
+ * than stranding it shut under a cursor that never left.
+ *
+ * Focus peeks too, and WITHOUT the delay: a keyboard has no way to rest on
+ * anything, and with no button to tab to, a delayed focus-peek would leave the
+ * rail permanently shut for anyone not using a mouse.
  */
 function useSidebar(): SidebarState {
   const [collapsed, setCollapsed] = useState(() => readFlag(RAIL_KEY));
   const [pinned, setPinned] = useState(() => readFlag(PIN_KEY));
   const [forced, setForced] = useState(() => window.innerWidth < RAIL_FORCE_W);
   const [hovering, setHovering] = useState(false);
+  const [focused, setFocused] = useState(false);
   const [peeking, setPeeking] = useState(false);
 
   useEffect(() => {
@@ -160,39 +166,71 @@ function useSidebar(): SidebarState {
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
-  // Only a sidebar that is actually shut has anything to open.
-  const canPeek = hovering && collapsed && !pinned && !forced;
+  /**
+   * Is the keyboard driving? A press focuses whatever it lands on, so focus
+   * alone cannot mean "a keyboard arrived here" — clicking the pin, or a nav
+   * link, would otherwise hold the peek open long after the pointer had left.
+   * Tab says yes, the next press says no. (`:focus-visible` decides exactly
+   * this and decides it better, but it answers "no" to programmatic focus in
+   * both jsdom and a driven browser, so the behaviour could not be tested.)
+   */
+  const [keyNav, setKeyNav] = useState(false);
   useEffect(() => {
-    if (!canPeek) {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Tab') setKeyNav(true);
+    };
+    const onPress = () => setKeyNav(false);
+    window.addEventListener('keydown', onKey, true);
+    window.addEventListener('mousedown', onPress, true);
+    return () => {
+      window.removeEventListener('keydown', onKey, true);
+      window.removeEventListener('mousedown', onPress, true);
+    };
+  }, []);
+
+  // Only a sidebar that is actually shut has anything to open.
+  const openable = collapsed && !pinned && !forced;
+  const waiting = hovering && openable;
+  useEffect(() => {
+    if (!waiting) {
       setPeeking(false);
       return;
     }
     const t = setTimeout(() => setPeeking(true), PEEK_DELAY_MS);
     return () => clearTimeout(t);
-  }, [canPeek]);
+  }, [waiting]);
+
+  // the pointer waits its turn; the keyboard does not
+  const peek = peeking || (focused && keyNav && openable);
 
   return {
-    rail: forced || (!pinned && collapsed && !peeking),
+    rail: forced || (!pinned && collapsed && !peek),
     forced,
     pinned,
-    peeking,
-    toggleRail: () =>
-      setCollapsed((c) => {
-        writeFlag(RAIL_KEY, !c);
-        return !c;
-      }),
-    togglePin: () =>
-      setPinned((p) => {
-        writeFlag(PIN_KEY, !p);
-        return !p;
-      }),
+    peeking: peek,
+    toggleRail: () => {
+      setCollapsed(!collapsed);
+      writeFlag(RAIL_KEY, !collapsed);
+      // The button is ON the sidebar, so collapsing always happens with the
+      // pointer resting there — and the peek would open again a beat later,
+      // making the button look broken. The click counts as leaving; the next
+      // real entry re-arms it. Focus goes with it: the button is about to
+      // unmount, which fires no blur to clear it.
+      setHovering(false);
+      setFocused(false);
+    },
+    togglePin: () => {
+      setPinned(!pinned);
+      writeFlag(PIN_KEY, !pinned);
+    },
     setHovering,
+    setFocused,
   };
 }
 
 export function Layout({ brand = 'Prisms', groups, foot, active, onNavigate, breadcrumb, sync, timer, user, footer, children }: LayoutProps) {
   const initial = (user?.name?.trim()?.[0] ?? user?.email?.[0] ?? '?').toUpperCase();
-  const { rail, forced: railForced, pinned, peeking, toggleRail, togglePin, setHovering } = useSidebar();
+  const { rail, pinned, peeking, toggleRail, togglePin, setHovering, setFocused } = useSidebar();
   return (
     <div className={`px-app${rail ? ' px-app--rail' : ''}`}>
       <IconSprite />
@@ -203,14 +241,22 @@ export function Layout({ brand = 'Prisms', groups, foot, active, onNavigate, bre
         // the peek's whole input: resting here opens it, leaving closes it again
         onMouseEnter={() => setHovering(true)}
         onMouseLeave={() => setHovering(false)}
+        onFocus={() => setFocused(true)}
+        // focus-WITHIN: ignore the blur half of a move between two children,
+        // which would otherwise shut the rail between every pair of nav links
+        onBlur={(e) => {
+          if (!e.currentTarget.contains(e.relatedTarget)) setFocused(false);
+        }}
       >
         <div className="px-brand">
           <span className="px-brand-logo"><Ic name="prism" /></span>
           <span className="px-brand-lbl">{brand}</span>
-          <div className="px-sidebar-ctl">
-            {/* the pin has nothing to say about a rail — it only ever holds
-                something OPEN, so it appears once the sidebar is showing. */}
-            {!rail && (
+          {/* Both controls belong to a sidebar that is SHOWING. A rail carries
+              none — it is opened by resting on it, not by aiming at a 34px
+              chevron, and a button to expand something you are already hovering
+              is the one it can most afford to lose. */}
+          {!rail && (
+            <div className="px-sidebar-ctl">
               <button
                 className={`px-btn px-btn--icon px-pin-toggle${pinned ? ' px-pin-toggle--on' : ''}`}
                 data-testid="sidebar-pin"
@@ -221,28 +267,21 @@ export function Layout({ brand = 'Prisms', groups, foot, active, onNavigate, bre
               >
                 <Ic name="pin" />
               </button>
-            )}
-            <button
-              className="px-btn px-btn--icon px-rail-toggle"
-              data-testid="sidebar-toggle"
-              aria-label={rail ? 'expand sidebar' : 'collapse sidebar'}
-              aria-expanded={!rail}
-              // the window's verdict and the pin's both outrank this button
-              disabled={railForced || pinned}
-              title={
-                railForced
-                  ? 'The window is too narrow for the full sidebar'
-                  : pinned
-                    ? 'Pinned open — unpin it to collapse'
-                    : rail
-                      ? 'Expand sidebar'
-                      : 'Collapse sidebar'
-              }
-              onClick={toggleRail}
-            >
-              <Ic name={rail ? 'chevr' : 'chevl'} />
-            </button>
-          </div>
+              <button
+                className="px-btn px-btn--icon px-rail-toggle"
+                data-testid="sidebar-toggle"
+                aria-label="collapse sidebar"
+                aria-expanded
+                // a pinned sidebar refuses to collapse; a forced rail never
+                // renders this button at all, so only the pin can disable it
+                disabled={pinned}
+                title={pinned ? 'Pinned open — unpin it to collapse' : 'Collapse sidebar'}
+                onClick={toggleRail}
+              >
+                <Ic name="chevl" />
+              </button>
+            </div>
+          )}
         </div>
         <nav className="px-nav">
           {groups.map((group, gi) => (

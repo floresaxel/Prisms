@@ -23,7 +23,16 @@ import { installMemoryStorage } from './util/memory-storage';
 const RAIL_KEY = 'prisms.sidebar.collapsed';
 const PIN_KEY = 'prisms.sidebar.pinned';
 
-const GROUPS = [{ label: 'My work', items: [{ key: 'agenda', label: 'Agenda', href: '/agenda', icon: 'cal' as const }] }];
+// two items, so focus can be moved BETWEEN links inside the sidebar
+const GROUPS = [
+  {
+    label: 'My work',
+    items: [
+      { key: 'agenda', label: 'Agenda', href: '/agenda', icon: 'cal' as const },
+      { key: 'tasks', label: 'Tasks', href: '/tasks', icon: 'list' as const },
+    ],
+  },
+];
 
 let storage: Storage;
 
@@ -53,7 +62,9 @@ function mount() {
 const aside = () => document.querySelector('.px-sidebar') as HTMLElement;
 const state = () => aside().dataset.state;
 const toggle = () => screen.getByTestId('sidebar-toggle');
+const maybeToggle = () => screen.queryByTestId('sidebar-toggle');
 const pin = () => screen.queryByTestId('sidebar-pin');
+const navlink = () => document.querySelector('.px-navlink') as HTMLElement;
 
 /** Rest the pointer on the sidebar for `ms`, in one uninterrupted stay. */
 function hoverFor(ms: number) {
@@ -73,14 +84,11 @@ describe('where the controls live', () => {
     expect(aside().contains(pin()!)).toBe(true);
   });
 
-  it('collapses and expands on click, and says which it will do', () => {
+  it('collapses on click', () => {
     mount();
     expect(toggle().getAttribute('aria-label')).toBe('collapse sidebar');
     fireEvent.click(toggle());
     expect(state()).toBe('rail');
-    expect(toggle().getAttribute('aria-label')).toBe('expand sidebar');
-    fireEvent.click(toggle());
-    expect(state()).toBe('open');
   });
 
   it('remembers the collapse across a remount', () => {
@@ -92,10 +100,14 @@ describe('where the controls live', () => {
     expect(state()).toBe('rail');
   });
 
-  it('hides the pin on the rail — there is nothing open to hold', () => {
+  it('takes BOTH controls away on the rail', () => {
+    // the rail is opened by resting on it, not by aiming at a chevron; and the
+    // pin has nothing to hold open while it is shut
     mount();
     fireEvent.click(toggle());
+    expect(maybeToggle()).toBeNull();
     expect(pin()).toBeNull();
+    expect(aside().querySelector('.px-sidebar-ctl')).toBeNull();
   });
 });
 
@@ -111,8 +123,17 @@ describe('resting the pointer on the rail', () => {
     expect(state()).toBe('peek');
   });
 
-  it('waits 2.5 seconds', () => {
-    expect(PEEK_DELAY_MS).toBe(2500);
+  it('waits 1.5 seconds', () => {
+    expect(PEEK_DELAY_MS).toBe(1500);
+  });
+
+  it('is the only way back — a rail has no button to press', () => {
+    mount();
+    collapse();
+    expect(maybeToggle()).toBeNull();
+    hoverFor(PEEK_DELAY_MS);
+    expect(state()).toBe('peek');
+    expect(pin()).not.toBeNull(); // …and now there is something to press
   });
 
   it('shuts again when the pointer leaves', () => {
@@ -148,6 +169,26 @@ describe('resting the pointer on the rail', () => {
     mount();
     hoverFor(PEEK_DELAY_MS);
     expect(state()).toBe('open'); // not 'peek' — it was never shut
+  });
+
+  it('stays shut after a collapse, though the pointer never left the button', () => {
+    // the collapse button is ON the sidebar, so the pointer is always resting
+    // there when it is pressed. Re-arming from that would re-open what was just
+    // shut a beat later, and read as a broken button.
+    mount();
+    fireEvent.mouseEnter(aside());
+    fireEvent.click(toggle());
+    act(() => void vi.advanceTimersByTime(PEEK_DELAY_MS * 3));
+    expect(state()).toBe('rail');
+  });
+
+  it('…and opens again once the pointer has actually been away and back', () => {
+    mount();
+    fireEvent.mouseEnter(aside());
+    fireEvent.click(toggle());
+    fireEvent.mouseLeave(aside());
+    hoverFor(PEEK_DELAY_MS);
+    expect(state()).toBe('peek');
   });
 });
 
@@ -217,11 +258,11 @@ describe('a window too narrow for any of it', () => {
     window.innerWidth = 800;
   });
 
-  it('forces the rail and disables the button', () => {
+  it('forces the rail, controls and all', () => {
     mount();
     expect(state()).toBe('rail');
-    expect((toggle() as HTMLButtonElement).disabled).toBe(true);
-    expect(toggle().getAttribute('title')).toContain('too narrow');
+    expect(maybeToggle()).toBeNull();
+    expect(pin()).toBeNull();
   });
 
   it('outranks even the pin', () => {
@@ -234,5 +275,70 @@ describe('a window too narrow for any of it', () => {
     mount();
     hoverFor(PEEK_DELAY_MS);
     expect(state()).toBe('rail');
+  });
+
+  it('refuses a focus peek too', () => {
+    mount();
+    fireEvent.focus(navlink());
+    expect(state()).toBe('rail');
+  });
+});
+
+describe('reaching a rail by keyboard', () => {
+  // With no expand button left to tab to, focus is the ONLY key-driven way in.
+  // A focus only counts while the KEYBOARD is driving, so each of these tabs
+  // first — exactly as a keyboard user arrives.
+  const collapse = () => fireEvent.click(toggle());
+  const focusIn = (el: HTMLElement) =>
+    act(() => {
+      fireEvent.keyDown(window, { key: 'Tab' });
+      el.focus();
+    });
+  const focusOut = () => act(() => (document.activeElement as HTMLElement | null)?.blur());
+
+  it('opens it as soon as focus lands, without the pointer’s wait', () => {
+    mount();
+    collapse();
+    focusIn(navlink());
+    expect(state()).toBe('peek'); // no timer advanced
+  });
+
+  it('shuts it again when focus leaves the sidebar', () => {
+    mount();
+    collapse();
+    focusIn(navlink());
+    focusOut();
+    expect(state()).toBe('rail');
+  });
+
+  it('stays open while focus moves BETWEEN its own links', () => {
+    // React's onBlur is focusout: it fires on every internal move, and taking
+    // it at face value would shut the rail between each pair of links.
+    mount();
+    collapse();
+    const [first, second] = [...document.querySelectorAll('.px-navlink')] as HTMLElement[];
+    focusIn(first!);
+    focusIn(second!);
+    expect(state()).toBe('peek');
+  });
+
+  it('ignores focus that arrived by press rather than by Tab', () => {
+    // a press focuses whatever it lands on; treating that as a keyboard visit
+    // would let a click on the pin — or on a nav link — hold the rail open
+    // long after the pointer had gone
+    mount();
+    collapse();
+    fireEvent.mouseDown(window);
+    act(() => navlink().focus());
+    expect(state()).toBe('rail');
+  });
+
+  it('lets the keyboard pin what it opened', () => {
+    mount();
+    collapse();
+    focusIn(navlink());
+    fireEvent.click(pin()!);
+    focusOut();
+    expect(state()).toBe('open');
   });
 });
