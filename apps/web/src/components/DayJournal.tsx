@@ -43,6 +43,16 @@ import { RichJournalEditor } from './RichJournalEditor';
  */
 const SAVE_DEBOUNCE_MS = 100;
 
+/**
+ * How long the lock's fold runs, and therefore how long the lock ignores further
+ * clicks. It is the LONGEST duration in theme.css's lock set — the toolbar
+ * collapse and the field's min-height, both 243ms; the padlock's own turn (192ms
+ * shutting, 230ms opening) finishes inside it. Keep this in step with those: too
+ * short and a double click still gets through, too long and the control feels
+ * stuck after it has visibly settled.
+ */
+const LOCK_ANIM_MS = 243;
+
 /** Allow only these link schemes; everything else (javascript:, data:, …) is dropped. */
 const SAFE_URL = /^(https?:|mailto:)/i;
 const urlTransform = (url: string): string => (SAFE_URL.test(url) ? url : '');
@@ -159,10 +169,29 @@ export function DayJournalPanel({
    * mounted with `key={date}`.
    */
   const [lockWorked, setLockWorked] = useState(false);
+  /** Mid-transition: the lock is deaf until the fold it started has finished. */
+  const [lockBusy, setLockBusy] = useState(false);
+  const lockTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (lockTimer.current) clearTimeout(lockTimer.current); }, []);
 
+  /**
+   * Toggling is IGNORED while the fold it starts is still running. A double click
+   * would otherwise lock and immediately unlock — two commands and two half-played
+   * animations for what reads as one gesture — and, worse, the second command
+   * races the first to the server on a field that has no ordering of its own.
+   *
+   * Deliberately not `disabled`: the button greying out for a fifth of a second
+   * mid-animation looks like a fault. It simply stops answering.
+   */
   function toggleLock() {
-    if (!existingId) return;
+    if (!existingId || lockBusy) return;
     setLockWorked(true);
+    setLockBusy(true);
+    if (lockTimer.current) clearTimeout(lockTimer.current);
+    lockTimer.current = setTimeout(() => {
+      lockTimer.current = null;
+      setLockBusy(false);
+    }, LOCK_ANIM_MS);
     void commands.setJournalLocked(existingId, !preview);
   }
 

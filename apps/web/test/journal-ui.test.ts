@@ -11,7 +11,7 @@
 import { createElement } from 'react';
 
 import { addDays, asEpochMillis, bucketDate } from '@prisms/core';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { strFromU8, unzipSync } from 'fflate';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -307,6 +307,40 @@ describe('DayJournalPanel — editor', () => {
     render(createElement(DayJournalPanel, { date: '2026-08-07', ctx: CTX, actions: 'lock' }));
     fireEvent.click(screen.getByTestId('journal-preview-toggle'));
     expect(command('setJournalLocked')).toHaveBeenCalledWith('j1', true);
+  });
+
+  it('a double click locks once, not lock-then-unlock', () => {
+    // Two commands for one gesture is the visible half; the real hazard is that
+    // they race each other to the server on a field with no ordering of its own.
+    state.entry = { id: 'j1', content: 'x', deleted_at: null, locked: false };
+    render(createElement(DayJournalPanel, { date: '2026-08-07', ctx: CTX, actions: 'lock' }));
+    const toggle = screen.getByTestId('journal-preview-toggle');
+    fireEvent.click(toggle);
+    fireEvent.click(toggle);
+    fireEvent.click(toggle);
+    expect(command('setJournalLocked')).toHaveBeenCalledTimes(1);
+    expect(command('setJournalLocked')).toHaveBeenCalledWith('j1', true);
+  });
+
+  it('answers again once the fold has finished', async () => {
+    // The deafness is bounded by the animation, not by the command completing —
+    // a control that stayed dead until the server replied would feel broken
+    // offline, where the write is queued and there is nothing to wait for.
+    vi.useFakeTimers();
+    try {
+      state.entry = { id: 'j1', content: 'x', deleted_at: null, locked: false };
+      render(createElement(DayJournalPanel, { date: '2026-08-07', ctx: CTX, actions: 'lock' }));
+      const toggle = screen.getByTestId('journal-preview-toggle');
+      fireEvent.click(toggle);
+      fireEvent.click(toggle);
+      expect(command('setJournalLocked')).toHaveBeenCalledTimes(1);
+
+      await act(async () => { vi.advanceTimersByTime(400); });
+      fireEvent.click(toggle);
+      expect(command('setJournalLocked')).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('a day with no note cannot be locked — there is nothing to lock', () => {

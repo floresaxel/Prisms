@@ -563,7 +563,10 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
 
 /* Only ever animated when the lock was WORKED — see `lockWorked` in
    DayJournal.tsx. Arriving at a note that is already locked draws it locked;
-   without this it would fold itself shut in front of the reader. */
+   without this it would fold itself shut in front of the reader.
+   These 243ms are the LONGEST in the lock's set, so they are also how long the
+   control ignores further clicks — `LOCK_ANIM_MS` in DayJournal.tsx tracks this
+   number; change one and change the other. */
 .px-journal-rich-wrap--anim .px-md-toolbar-clip { transition: grid-template-rows 243ms cubic-bezier(0.4, 0, 0.2, 1); }
 .px-journal-rich-wrap--anim .px-md-toolbar { transition: transform 243ms cubic-bezier(0.4, 0, 0.2, 1), opacity 154ms ease-out; }
 .px-journal-rich-wrap--anim .px-jn-field { transition: min-height 243ms cubic-bezier(0.4, 0, 0.2, 1); }
