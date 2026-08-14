@@ -62,7 +62,9 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
    sign-out) rode down out of sight on any tall screen. `dvh` after `vh` so a
    mobile browser's collapsing chrome does not clip it. */
 .px-app { display: flex; height: 100vh; height: 100dvh; overflow: hidden; }
-.px-sidebar { width: 234px; flex: none; display: flex; flex-direction: column; padding: 12px 10px 10px; background: var(--px-sb-bg); border-right: 1px solid var(--px-border); transition: width 140ms ease; }
+/* `--px-rail-ms` is the beat the whole collapse moves on — width, labels, the
+   spacing of every row. Declared here so a change reaches all of them at once. */
+.px-sidebar { --px-rail-ms: 140ms; width: 234px; flex: none; display: flex; flex-direction: column; padding: 12px 10px 10px; background: var(--px-sb-bg); border-right: 1px solid var(--px-border); transition: width var(--px-rail-ms) ease; }
 .px-brand { display: flex; align-items: center; gap: 8px; padding: 2px 8px 10px; font-weight: 650; font-size: 14px; letter-spacing: 0.1px; }
 
 /* Collapsed rail: icons + badges only, labels become tooltips. The width is
@@ -80,17 +82,82 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
 }
 /* Rail: just the mark. Its controls are not rendered at all — resting the
    pointer here is what opens it. */
-.px-sidebar--rail .px-brand { padding: 2px 0 10px; justify-content: center; }
+/* ── collapsing and expanding, as one movement ──
+   Everything below runs on the SAME duration as the sidebar's own width, so the
+   thing reads as one object changing shape rather than a column that resizes
+   while its contents blink out of it.
+   `display: none` is what made that impossible — it cannot be transitioned, so
+   every label vanished on frame one and left the icons sliding through empty
+   space. Nothing here uses it. Labels beside an icon give up their WIDTH,
+   stacked blocks give up their HEIGHT, and both fade while they do.
+   Centring in the rail is done with PADDING rather than `justify-content`:
+   alignment keywords are discrete, so centring would snap on the first frame
+   and throw every icon ~32px sideways before the width had moved at all. The
+   rail's own ring is exactly the padding that centres a 16px glyph in it. */
+/* The gap goes too. A collapsed label still has the gap that separated it from
+   its icon, and the foot CENTRES its rows — so the user row stayed 8px wider
+   than the rail and hung out of the left edge. */
+.px-sidebar--rail .px-brand { padding: 2px 6px 10px; gap: 0; }
+
+/* Labels that sit BESIDE something in a row give up their width — collapsing
+   their height instead would leave them still taking the space they need to be
+   read, which is how the user row ended up 17px wider than the rail it lives in. */
+.px-brand-lbl,
+.px-navlink-lbl,
+.px-sidebar-email {
+  white-space: nowrap;
+  overflow: hidden;
+  max-width: 200px;
+  transition: opacity var(--px-rail-ms) ease, max-width var(--px-rail-ms) ease, visibility 0s;
+}
 .px-sidebar--rail .px-brand-lbl,
-.px-sidebar--rail .px-nav-group,
 .px-sidebar--rail .px-navlink-lbl,
-.px-sidebar--rail .px-sidebar-email,
-.px-sidebar--rail .px-sidebar-actions { display: none; }
-.px-sidebar--rail .px-navlink { justify-content: center; gap: 0; padding: var(--px-rail-ring) 0; margin: 2px 0; position: relative; }
+.px-sidebar--rail .px-sidebar-email {
+  opacity: 0;
+  max-width: 0;
+  /* hidden only once it has finished going, so it leaves the a11y tree and the
+     tab order without the fade having nothing to act on */
+  visibility: hidden;
+  transition-delay: 0s, 0s, var(--px-rail-ms);
+}
+
+/* Blocks that occupy a ROW OF THEIR OWN collapse downwards instead. The
+   max-heights only have to EXCEED the real ones — a heading, a button or two —
+   and it is `overflow: hidden` that makes them collapse rather than clip. */
+.px-nav-group,
+.px-sidebar-actions {
+  overflow: hidden;
+  transition: opacity var(--px-rail-ms) ease, max-height var(--px-rail-ms) ease, margin var(--px-rail-ms) ease, visibility 0s;
+}
+.px-nav-group { max-height: 44px; }
+.px-sidebar-actions { max-height: 160px; }
+.px-sidebar--rail .px-nav-group,
+.px-sidebar--rail .px-sidebar-actions {
+  opacity: 0;
+  max-height: 0;
+  margin-top: 0;
+  margin-bottom: 0;
+  visibility: hidden;
+  transition-delay: 0s, 0s, 0s, var(--px-rail-ms);
+}
+
+/* A note on the last half pixel: the rail's width formula counts the ring and the
+   gutter but not the 1px border, so the content box is 33 where the ring assumes
+   34, and a symmetrically padded glyph sits 0.5px right of true centre.
+   `justify-content` did not have that error — but it is a discrete keyword, so it
+   applied on the FIRST frame, while the label was still full width, throwing
+   every icon ~70px sideways before the sidebar had begun to move. Half a pixel
+   is the better trade, and it is invisible. */
+
+/* the rows the labels sat in re-space themselves over the same beat */
+.px-brand,
+.px-navlink,
+.px-sidebar-user { transition: gap var(--px-rail-ms) ease, padding var(--px-rail-ms) ease, margin var(--px-rail-ms) ease; }
+.px-sidebar--rail .px-navlink { gap: 0; padding: var(--px-rail-ring); margin: 2px 0; position: relative; }
 /* the count rides the icon's top-right corner; it is the one thing that would
    otherwise dictate a wider rail. */
 .px-sidebar--rail .px-nav-badge { position: absolute; top: 0; right: 0; margin: 0; font-size: 9px; font-weight: 640; padding: 0 3px; min-width: 13px; text-align: center; line-height: 13px; border-radius: 7px; }
-.px-sidebar--rail .px-sidebar-user { justify-content: center; padding: 7px 0 3px; }
+.px-sidebar--rail .px-sidebar-user { padding: 7px 4px 3px; gap: 0; }
 .px-sidebar--rail .px-sidebar-foot { align-items: center; }
 .px-sidebar-actions { display: flex; flex-direction: column; gap: 4px; }
 /* The sidebar's own controls, at the trailing edge of the brand row. These are
@@ -107,7 +174,11 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
 /* A peeked-open sidebar is floating over the page for a moment, so it says so
    with a shadow — otherwise it looks identical to the pinned one it is not. */
 .px-sidebar--peek { box-shadow: var(--px-shadow-pop); }
-@media (prefers-reduced-motion: reduce) { .px-sidebar { transition: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .px-sidebar, .px-brand, .px-navlink, .px-sidebar-user,
+  .px-brand-lbl, .px-navlink-lbl,
+  .px-nav-group, .px-sidebar-email, .px-sidebar-actions { transition: none; }
+}
 .px-brand-logo { width: 22px; height: 22px; border-radius: 6px; background: var(--px-blue); color: #fff; display: flex; align-items: center; justify-content: center; flex: none; }
 .px-brand-logo .px-ic { width: 13px; height: 13px; }
 /* min-height:0 — a flex item defaults to min-height:auto, which refuses to
