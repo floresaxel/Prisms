@@ -448,33 +448,33 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
    one padlock. The wrapper carries the size; the parts pin to it.
    It also carries the CENTRING. The open pose puts the shackle out to the left of
    the body (see below), so the assembled lock's ink is no longer symmetric about
-   the body — its ink runs 1.331 icon units light (closed spans 4.100→19.900,
-   centre 12.000; open spans 1.438→19.900, centre 10.669), which at 14px reads as
+   the body — its ink runs 1.750 icon units light (closed spans 4.100→19.900,
+   centre 12.000; open spans 0.600→19.900, centre 10.250), which at 14px reads as
    the whole icon sliding left as it opens. Shifting the WRAPPER (both parts
-   together) by the matching 0.78px keeps the composite centred on the button in
+   together) by the matching 1.02px keeps the composite centred on the button in
    both states, without disturbing the shackle's pose relative to its body.
    Both figures include the 1.8-unit stroke's half-width, which is what an earlier
    pass got wrong by working from the bare path coordinates. */
 .px-jn-lock-ic { position: relative; display: inline-block; width: 14px; height: 14px; transition: transform 220ms cubic-bezier(0.34, 1.28, 0.64, 1); }
-.px-jn-lock[data-state='unlocked'] .px-jn-lock-ic { transform: translateX(0.78px); }
+.px-jn-lock[data-state='unlocked'] .px-jn-lock-ic { transform: translateX(1.02px); }
 .px-jn-lk { position: absolute; inset: 0; width: 14px; height: 14px; }
-/* The shackle is the only thing that moves. `transform-box: view-box` makes the
-   origin and every length here read in viewBox units rather than rendered pixels,
-   so the pose holds at any icon size. */
+/* The shackle is the only thing that moves. `transform-box: view-box` makes every
+   length here read in viewBox units rather than rendered pixels, so the pose holds
+   at any icon size. */
 .px-jn-shackle use {
   transform-box: view-box;
-  transform-origin: 15.5px 11px;
   transition: transform 220ms cubic-bezier(0.34, 1.28, 0.64, 1);
 }
-/* Open, posed after a real padlock: the shackle stays essentially UPRIGHT and
-   rides up and to the LEFT, so its right leg still meets the body near the body's
-   top-left while the free left leg hangs clear OUTSIDE the body's left edge. Only
-   a slight counter-clockwise tilt — the shackle hangs, it does not swing out flat.
-      right leg → (10.0, 10.5): over the body, just off its top edge
-      free leg  → ( 3.1, 11.5): past the body's left edge (x=5), so it reads as out
-   An earlier version rotated it 32° about the LEFT leg, which tipped the whole U
-   over sideways — a shackle lying down, not one standing open. */
-.px-jn-lock[data-state='unlocked'] .px-jn-shackle use { transform: translate(-5.5px, -0.5px) rotate(-8deg); }
+/* Open: the shackle slides STRAIGHT out to the left. No rotation at all, so its
+   two legs stay parallel to the body's own sides and to each other — every
+   vertical in the icon reads as one set of parallel lines. Earlier passes tilted
+   it (8°, and before that 32°), and any tilt at this size just looks crooked
+   rather than dynamic.
+      right leg → x 9.5: still over the body, holding the shackle to it
+      free leg  → x 1.5: well past the body's left edge (x=5), plainly out
+   6.5 is as far as it can travel: the free leg's ink reaches x=0.6 and the
+   viewBox clips at 0. */
+.px-jn-lock[data-state='unlocked'] .px-jn-shackle use { transform: translateX(-6.5px); }
 /* the body is static, so the closed state is simply the untransformed drawing */
 .px-jn-lock[data-state='locked'] .px-jn-shackle use { transform: none; }
 @media (prefers-reduced-motion: reduce) {
