@@ -61,13 +61,30 @@ vi.mock('@prisms/ui', async (importOriginal) => {
 vi.mock('../src/components/RichJournalEditor', async () => {
   const { createElement: h } = await import('react');
   return {
-    RichJournalEditor: ({ value, onChange, onBlur }: { value: string; onChange: (m: string) => void; onBlur?: (m: string) => void }) =>
-      h('textarea', {
-        'data-testid': 'journal-rich',
-        value,
-        onChange: (e: { target: { value: string } }) => onChange(e.target.value),
-        onBlur: (e: { target: { value: string } }) => onBlur?.(e.target.value),
-      }),
+    // Mirrors the real component's contract: it owns BOTH bodies now (locking no
+    // longer swaps it out from above), and renders the injected read-only one
+    // when locked.
+    RichJournalEditor: ({
+      value,
+      onChange,
+      onBlur,
+      locked,
+      renderLocked,
+    }: {
+      value: string;
+      onChange: (m: string) => void;
+      onBlur?: (m: string) => void;
+      locked?: boolean;
+      renderLocked?: (m: string) => unknown;
+    }) =>
+      locked
+        ? renderLocked?.(value)
+        : h('textarea', {
+            'data-testid': 'journal-rich',
+            value,
+            onChange: (e: { target: { value: string } }) => onChange(e.target.value),
+            onBlur: (e: { target: { value: string } }) => onBlur?.(e.target.value),
+          }),
   };
 });
 

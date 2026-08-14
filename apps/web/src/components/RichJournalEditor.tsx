@@ -19,6 +19,7 @@
  */
 import { useEffect, type ReactNode } from 'react';
 
+
 import { TaskItem, TaskList } from '@tiptap/extension-list';
 import { EditorContent, useEditor, type Editor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
@@ -74,10 +75,31 @@ export function RichJournalEditor({
   value,
   onChange,
   onBlur,
+  locked = false,
+  animate = false,
+  renderLocked,
 }: {
   value: string;
   onChange: (markdown: string) => void;
   onBlur?: (markdown: string) => void;
+  /**
+   * Read-only. The toolbar STAYS MOUNTED and merely goes inert — it used to
+   * unmount with the editor, which made it vanish the instant a note locked.
+   * Keeping it lets it animate out, and lets it animate back.
+   */
+  locked?: boolean;
+  /**
+   * Whether a change of `locked` should animate. False on arrival, so a note that
+   * loads already locked is simply drawn locked rather than folding itself shut
+   * in front of the reader — the same reasoning as the padlock's own gate.
+   */
+  animate?: boolean;
+  /**
+   * The read-only body. Injected rather than imported so the SANITIZED renderer
+   * (D2 — no raw HTML, href allowlist) stays in DayJournal and this module keeps
+   * no opinion about how locked markdown is drawn.
+   */
+  renderLocked?: (markdown: string) => ReactNode;
 }) {
   const editor = useEditor({
     immediatelyRender: false, // client-only SPA; avoids any SSR-detection warning
@@ -113,26 +135,50 @@ export function RichJournalEditor({
     if (getMd(editor) !== value) editor.commands.setContent(value, { emitUpdate: false });
   }, [editor, value]);
 
+  // Locking is a SYNCED fact, so the editor has to honour it even while mounted:
+  // the toolbar going inert is not enough to stop typing into the note.
+  useEffect(() => {
+    editor?.setEditable(!locked);
+  }, [editor, locked]);
+
+  const wrap =
+    'px-journal-rich-wrap' +
+    (locked ? ' px-journal-rich-wrap--locked' : '') +
+    (animate ? ' px-journal-rich-wrap--anim' : '');
+
   return (
-    <div className="px-journal-rich-wrap">
-      <div className="px-md-toolbar" role="toolbar" aria-label="formatting">
-        {TOOLBAR.map((t) => (
-          <button
-            key={t.key}
-            type="button"
-            className="px-btn"
-            data-testid={`rt-${t.key}`}
-            title={t.title}
-            aria-label={t.title}
-            disabled={!editor}
-            onMouseDown={(e) => e.preventDefault()} // keep the editor selection on click
-            onClick={() => editor && t.run(editor)}
-          >
-            {t.label}
-          </button>
-        ))}
+    <div className={wrap}>
+      {/* The toolbar rides up under the title block and is clipped off there
+          rather than unmounting. The clip is the grid; the row collapses to 0fr,
+          which is the one way to animate to a CONTENT height — the toolbar wraps
+          to two rows at narrow widths, so its height is not a number we know. */}
+      <div className="px-md-toolbar-clip" aria-hidden={locked || undefined}>
+        <div className="px-md-toolbar" role="toolbar" aria-label="formatting">
+          {TOOLBAR.map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              className="px-btn"
+              data-testid={`rt-${t.key}`}
+              title={t.title}
+              aria-label={t.title}
+              // Inert while locked, in every sense: not clickable, not hoverable
+              // (the clip drops pointer-events), and out of the tab order.
+              disabled={!editor || locked}
+              onMouseDown={(e) => e.preventDefault()} // keep the editor selection on click
+              onClick={() => editor && t.run(editor)}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
       </div>
-      <EditorContent editor={editor} />
+      {/* The field's own min-height lives HERE, on the one element that survives
+          the editor⇄read-only swap, so its bottom edge can animate up to the last
+          line of text instead of jumping there. */}
+      <div className="px-jn-field" data-testid="journal-field">
+        {locked ? renderLocked?.(value) : <EditorContent editor={editor} className="px-jn-field-fill" />}
+      </div>
     </div>
   );
 }

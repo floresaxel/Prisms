@@ -383,12 +383,23 @@ export function DayJournalPanel({
         <span className="px-jn-date" data-testid="journal-date">{date}</span>
       </div>
 
+      {/* One body in both states, rather than swapping the editor out for the
+          read-only render: locking now FOLDS the editing chrome away — the
+          toolbar rides up under the title block and the field's bottom edge draws
+          up to the last line of text — and none of that can be animated by an
+          element that unmounts. The sanitized renderer is handed down rather than
+          imported there, so D2 stays this file's business. */}
       {isLoading ? (
         <p className="px-muted" data-testid="journal-loading">Loading…</p>
-      ) : preview ? (
-        <MarkdownView markdown={draft} />
       ) : (
-        <RichJournalEditor value={draft} onChange={change} onBlur={flush} />
+        <RichJournalEditor
+          value={draft}
+          onChange={change}
+          onBlur={flush}
+          locked={preview}
+          animate={lockWorked}
+          renderLocked={(markdown) => <MarkdownView markdown={markdown} />}
+        />
       )}
 
       {/* OUTSIDE the editor and the preview, in both modes — never part of the
