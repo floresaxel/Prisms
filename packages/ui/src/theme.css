@@ -448,75 +448,61 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
    one padlock. The wrapper carries the size; the parts pin to it.
    It also carries the CENTRING. The open pose puts the shackle out to the left of
    the body (see below), so the assembled lock's ink is no longer symmetric about
-   the body — its ink runs 1.750 icon units light (closed spans 4.100→19.900,
-   centre 12.000; open spans 0.600→19.900, centre 10.250), which at 14px reads as
+   the body — its ink runs 2.500 icon units light (closed spans 4.100→19.900,
+   centre 12.000; open spans -0.900→19.900, centre 9.500), which at 14px reads as
    the whole icon sliding left as it opens. Shifting the WRAPPER (both parts
-   together) by the matching 1.02px keeps the composite centred on the button in
+   together) by the matching 1.46px keeps the composite centred on the button in
    both states, without disturbing the shackle's pose relative to its body.
-   Both figures include the 1.8-unit stroke's half-width, which is what an earlier
-   pass got wrong by working from the bare path coordinates. */
-.px-jn-lock-ic { position: relative; display: inline-block; width: 14px; height: 14px; transition: transform 280ms cubic-bezier(0.34, 1.12, 0.64, 1); }
-.px-jn-lock[data-state='unlocked'] .px-jn-lock-ic { transform: translateX(1.02px); }
+   Both figures include the 1.8-unit stroke's half-width, and both are read at the
+   RESTING angles, where the turn below has no depth component (sin 0 = sin 180 =
+   0) and the projection is therefore exactly the flat geometry.
+   The wrapper also supplies the PERSPECTIVE the shackle turns in. It has to live
+   on the parent: an element cannot perspective its own 3D transform. */
+.px-jn-lock-ic { position: relative; display: inline-block; width: 14px; height: 14px; perspective: 64px; transition: transform 300ms cubic-bezier(0.34, 1.12, 0.64, 1); }
+.px-jn-lock[data-state='unlocked'] .px-jn-lock-ic { transform: translateX(1.46px); }
 .px-jn-lk { position: absolute; inset: 0; width: 14px; height: 14px; }
-/* The shackle is the only thing that moves. `transform-box: view-box` makes every
-   length here read in viewBox units rather than rendered pixels, so the pose holds
-   at any icon size, and puts the pivot on the RIGHT leg's base — the leg that
-   stays with the body, so the shackle swings on it like a real one. */
-.px-jn-shackle use {
-  transform-box: view-box;
-  transform-origin: 16px 11px;
-}
-/* Open: the shackle slides STRAIGHT out to the left. No rotation at all, so its
-   two legs stay parallel to the body's own sides and to each other — every
-   vertical in the icon reads as one set of parallel lines. Earlier passes tilted
-   it (8°, and before that 32°), and any tilt at this size just looks crooked
-   rather than dynamic.
-      right leg → x 9.5: still over the body, holding the shackle to it
-      free leg  → x 1.5: well past the body's left edge (x=5), plainly out
-   6.5 is as far as it can travel: the free leg's ink reaches x=0.6 and the
-   viewBox clips at 0. */
-.px-jn-lock[data-state='unlocked'] .px-jn-shackle use { transform: translateX(-6.5px); }
+/* ── the shackle turns, it does not travel ──
+   The shackle pivots about the VERTICAL LINE through the leg that stays in the
+   body, the way a real shackle turns in its hole. That line is x=8 of 24, hence
+   33.333%; the y-origin is irrelevant to a rotateY, so it is left centred.
 
-/* ── the swing ──
-   BOTH resting poses are upright, so a transition between them can only slide:
-   interpolating 0deg to 0deg is 0deg the whole way. The rotation has to live in
-   the middle of the motion, which means keyframes.
+   The whole turn is `rotateY`, applied to the shackle's own <svg> element rather
+   than to the <use> inside it: browsers only build a 3D rendering context for
+   HTML boxes, so a rotateY on an SVG child would flatten to a plain horizontal
+   squash with no depth. The svg IS an HTML-level box, so it turns properly in the
+   perspective its wrapper supplies.
 
-   Shutting is the one that snaps. The shackle swings back over the body leaning
-   into the travel, arrives slightly past its seat, and rebounds the last fraction
-   — the overshoot at 74% and the small counter-lean at 88% ARE the snap. Opening
-   is the gentler mirror: it tips out, then straightens as it settles.
+      locked    rotateY(0)    free leg at x=16, seated in the body
+      halfway   rotateY(-90)  cos 90 = 0, so the shackle has NO width: it reads as
+                              a single vertical line, edge-on at the pivot, and
+                              sin(-90) puts the free leg at +z — toward the viewer
+      unlocked  rotateY(-180) free leg back at x=0, out past the body's left edge
 
-   Both end at exactly the resting transform for their state, so whatever the
-   animation leaves on screen matches the static rule underneath it. */
-@keyframes px-lock-open {
-  0%   { transform: translateX(0) rotate(0deg); }
-  38%  { transform: translateX(-2.2px) rotate(-10deg); }
-  72%  { transform: translateX(-5.9px) rotate(-4deg); }
-  100% { transform: translateX(-6.5px) rotate(0deg); }
-}
-@keyframes px-lock-shut {
-  0%   { transform: translateX(-6.5px) rotate(0deg); }
-  42%  { transform: translateX(-3.4px) rotate(8deg); }
-  74%  { transform: translateX(0.55px) rotate(3deg); }
-  88%  { transform: translateX(-0.3px) rotate(-2deg); }
-  100% { transform: translateX(0) rotate(0deg); }
-}
+   Negative angles are what make it turn toward the viewer rather than away, and
+   locking runs -180 → -90 → 0, so the free leg sweeps steadily rightwards and
+   lands in its seat.
+
+   No keyframes needed, unlike the swing this replaces: the two resting poses now
+   differ in ROTATION, so an ordinary transition interpolates through edge-on all
+   by itself. `overflow: visible` because at -180 the free leg's stroke reaches
+   x=-0.9, just outside the viewBox. */
+.px-jn-shackle { overflow: visible; transform-origin: 33.333% 50%; }
+.px-jn-lock[data-state='locked'] .px-jn-shackle { transform: rotateY(0deg); }
+.px-jn-lock[data-state='unlocked'] .px-jn-shackle { transform: rotateY(-180deg); }
 /* `data-animate` is set on the CLICK, never on render — see `lockWorked` in
-   DayJournal.tsx. Keyframes fire whenever their selector starts matching, and CSS
-   cannot distinguish a state that just changed from one that was rendered that
-   way, so without this gate every locked note would swing itself open on arrival. */
-.px-jn-lock[data-animate='true'][data-state='unlocked'] .px-jn-shackle use {
-  animation: px-lock-open 300ms cubic-bezier(0.22, 0.61, 0.36, 1);
+   DayJournal.tsx. A transition fires whenever its property changes, and a note
+   that loads already locked changes `data-state` as it loads, so without this
+   gate every locked note would turn its own shackle shut on arrival.
+   The timing is read from the state being entered, which is what lets locking
+   land harder than unlocking: it carries a slight overshoot past its seat. */
+.px-jn-lock[data-animate='true'][data-state='locked'] .px-jn-shackle {
+  transition: transform 300ms cubic-bezier(0.34, 1.18, 0.64, 1);
 }
-.px-jn-lock[data-animate='true'][data-state='locked'] .px-jn-shackle use {
-  animation: px-lock-shut 260ms cubic-bezier(0.34, 1.12, 0.64, 1);
+.px-jn-lock[data-animate='true'][data-state='unlocked'] .px-jn-shackle {
+  transition: transform 360ms cubic-bezier(0.32, 0, 0.24, 1);
 }
-/* the body is static, so the closed state is simply the untransformed drawing */
-.px-jn-lock[data-state='locked'] .px-jn-shackle use { transform: none; }
 @media (prefers-reduced-motion: reduce) {
-  .px-jn-lock, .px-jn-lock-ic { transition: none; }
-  .px-jn-lock .px-jn-shackle use { animation: none; }
+  .px-jn-lock, .px-jn-lock-ic, .px-jn-lock .px-jn-shackle { transition: none; }
 }
 
 /* journal (D2/D3/J7): day-header note affordance + TipTap WYSIWYG editor + toolbar + markdown preview */
