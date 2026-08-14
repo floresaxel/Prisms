@@ -56,6 +56,7 @@ import { fmtGridClock, pointerMinutes, snapMinutes, useSnapPref } from '../agend
 import { DayJournalPanel } from '../components/DayJournal';
 import { WhyButton } from '../components/Why';
 
+import { NoteSwap } from '../components/NoteSwap';
 const GRID_START_HOUR = 6;
 const GRID_END_HOUR = 22;
 const HOUR_PX = 44;
@@ -854,8 +855,11 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
           ) : (
             // key by day so the editor re-initializes per day (J4/D3); defaults to today.
             // `lock`: just the lock/pencil toggle here — managing the note
-            // (export, delete) belongs to the Journal screen.
-            <DayJournalPanel key={journalDay} date={journalDay} ctx={ctx} actions="lock" />
+            // (export, delete) belongs to the Journal screen. NoteSwap holds the
+            // outgoing day on screen long enough to fade it out.
+            <NoteSwap swapKey={journalDay}>
+              <DayJournalPanel key={journalDay} date={journalDay} ctx={ctx} actions="lock" />
+            </NoteSwap>
           )}
         </div>
       </div>

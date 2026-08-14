@@ -281,6 +281,19 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
 @keyframes px-note-in { from { opacity: 0; } to { opacity: 1; } }
 .px-agenda-journal .px-journal--ready,
 .px-jn-editor .px-journal--ready { animation: px-note-in 200ms ease-out; }
+
+/* Leaving the other way: the day you came FROM fades out over the top of the one
+   you moved to, so the two overlap rather than one replacing the other. The
+   outgoing layer is taken out of flow — the container is sized by the incoming
+   note, and a leaving copy must not stretch it — and made inert, since it is a
+   picture of a note you are no longer on. `forwards` holds it transparent for
+   the instant between the animation ending and NoteSwap dropping it. */
+.px-note-swap { position: relative; }
+@keyframes px-note-out { from { opacity: 1; } to { opacity: 0; } }
+.px-note-layer--out { position: absolute; inset: 0; pointer-events: none; animation: px-note-out 100ms ease-in forwards; }
+/* the copy on its way out must not also play the ARRIVAL fade */
+.px-note-layer--out .px-journal--ready { animation: none; }
+@media (prefers-reduced-motion: reduce) { .px-note-layer--out { animation: none; opacity: 0; } }
 @media (prefers-reduced-motion: reduce) {
   .px-agenda-journal .px-journal--ready,
   .px-jn-editor .px-journal--ready { animation: none; }
