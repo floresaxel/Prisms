@@ -46,12 +46,12 @@ const SAVE_DEBOUNCE_MS = 100;
 /**
  * How long the lock's fold runs, and therefore how long the lock ignores further
  * clicks. It is the LONGEST duration in theme.css's lock set — the toolbar
- * collapse and the field's min-height, both 243ms; the padlock's own turn (192ms
- * shutting, 230ms opening) finishes inside it. Keep this in step with those: too
+ * collapse and the field's min-height, both 194ms; the padlock's own turn (154ms
+ * shutting, 184ms opening) finishes inside it. Keep this in step with those: too
  * short and a double click still gets through, too long and the control feels
  * stuck after it has visibly settled.
  */
-const LOCK_ANIM_MS = 243;
+const LOCK_ANIM_MS = 194;
 
 /** Allow only these link schemes; everything else (javascript:, data:, …) is dropped. */
 const SAFE_URL = /^(https?:|mailto:)/i;
