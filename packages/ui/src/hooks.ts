@@ -1529,10 +1529,75 @@ export function useAggregates(): AggregateRow[] {
 }
 
 /** Optimistic command writers bound to the live PowerSync database. */
+/**
+ * Commands DISPATCHED but not yet written to the queue.
+ *
+ * `client_commands` is the durable record of unsynced work, but a command only
+ * lands there once `store.enqueue` has completed its SQLite transaction — and a
+ * screen that paints optimistically is already showing the change before that.
+ * Without this counter the sync indicator reads "synced" across exactly the
+ * window in which the user has been shown a change that is not recorded
+ * anywhere yet. Same external-store shape as PRODUCED above.
+ */
+let inFlight = 0;
+const inFlightListeners = new Set<() => void>();
+function bumpInFlight(delta: number): void {
+  inFlight += delta;
+  for (const l of inFlightListeners) l();
+}
+function subscribeInFlight(cb: () => void): () => void {
+  inFlightListeners.add(cb);
+  return () => {
+    inFlightListeners.delete(cb);
+  };
+}
+
+/** Count a command from dispatch until it settles, however it settles. */
+function trackInFlight<T>(result: T): T {
+  if (!(result instanceof Promise)) return result;
+  bumpInFlight(1);
+  return result.finally(() => bumpInFlight(-1)) as T;
+}
+
 export function useCommands(ctx: CommandContext) {
   const db = usePowerSync();
   // The two-layer overlay store over PowerSync's SQLite (execute/getAll/writeTransaction).
-  return useMemo(() => createCommands(createSqlOverlayStore(db as unknown as SqlExecutor), ctx), [db, ctx]);
+  return useMemo(() => {
+    const base = createCommands(createSqlOverlayStore(db as unknown as SqlExecutor), ctx);
+    // Wrapped so EVERY command is counted while in flight, not just the ones a
+    // screen happens to remember to report. Behaviour is untouched: the same
+    // promise is returned, rejections included.
+    const tracked: Record<string, unknown> = {};
+    for (const [name, value] of Object.entries(base)) {
+      tracked[name] =
+        typeof value === 'function'
+          ? (...args: unknown[]) => trackInFlight((value as (...a: unknown[]) => unknown).apply(base, args))
+          : value;
+    }
+    return tracked as unknown as typeof base;
+  }, [db, ctx]);
+}
+
+export interface SyncQueueState {
+  /** Unsynced commands: queued on disk, plus any still being written to the queue. */
+  pending: number;
+  /** There is work this device has accepted but the server has not acknowledged. */
+  busy: boolean;
+}
+
+/**
+ * What the sync indicator should actually say. Connection state alone is not
+ * sync state: a connected client with a queue behind it is mid-sync, not synced.
+ */
+export function useSyncQueue(): SyncQueueState {
+  const queued = useQuery<{ n: number }>("SELECT count(*) AS n FROM client_commands WHERE status = 'pending'");
+  const dispatching = useSyncExternalStore(
+    subscribeInFlight,
+    () => inFlight,
+    () => 0,
+  );
+  const pending = (queued.data?.[0]?.n ?? 0) + dispatching;
+  return { pending, busy: pending > 0 };
 }
 
 export interface ReviewItemView {

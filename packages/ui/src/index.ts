@@ -142,6 +142,7 @@ export {
   useUserSettings,
   useAggregates,
   useCommands,
+  useSyncQueue,
   useReviewInbox,
   useTagCatalog,
   useBlockTags,
@@ -199,6 +200,7 @@ export {
   type ReviewItemView,
   type JournalMonthsRead,
   type JournalDayRead,
+  type SyncQueueState,
   type TodayItinerary,
 } from './hooks';
 export { groupWorklistBySchedule, type WorklistGroup } from './worklist-grouping';

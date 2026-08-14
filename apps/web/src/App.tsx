@@ -20,6 +20,7 @@ import {
   PrismsDataProvider,
   useActivityInbox,
   useReviewInbox,
+  useSyncQueue,
   type BreadcrumbSpec,
   type CommandContext,
   type CommandRejection,
@@ -146,6 +147,7 @@ function Shell({
 }) {
   const inboxCount = useActivityInbox().length;
   const reviewCount = useReviewInbox().length;
+  const { busy: syncBusy, pending: syncPending } = useSyncQueue();
 
   const groups: NavGroupSpec[] = [
     {
@@ -209,9 +211,17 @@ function Shell({
       timer={<GlobalTimer ctx={ctx} />}
       user={{ name: user.name, email: user.email }}
       sync={
-        <div className={`px-sync-chip${connected ? '' : ' px-sync-chip--connecting'}`} data-testid="sync-state">
+        /* Connection state is NOT sync state: a connected client with a queue
+           behind it is mid-sync. "synced" now means what it says — nothing of
+           yours is still waiting to reach the server. */
+        <div
+          className={`px-sync-chip${!connected ? ' px-sync-chip--connecting' : syncBusy ? ' px-sync-chip--syncing' : ''}`}
+          data-testid="sync-state"
+          data-sync={!connected ? 'connecting' : syncBusy ? 'syncing' : 'synced'}
+          title={syncPending > 0 ? `${syncPending} change(s) not yet on the server` : undefined}
+        >
           <span className="px-dot" />
-          {connected ? 'synced' : 'connecting…'}
+          {!connected ? 'connecting…' : syncBusy ? 'syncing…' : 'synced'}
         </div>
       }
       footer={

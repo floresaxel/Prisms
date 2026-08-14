@@ -143,7 +143,28 @@ export function DayJournalPanel({
    * Such rows cannot be created any more, but they exist in databases that
    * predate that rule, so an empty one is simply editable.
    */
-  const preview = hasNote && (entry?.locked ?? false);
+  /**
+   * The lock the user has ASKED for but the row has not caught up to yet, or null
+   * when there is nothing outstanding.
+   *
+   * The panel used to render straight off the synced field, which meant a click
+   * moved nothing until the command had been through zod, the overlay store's
+   * write transaction, the query invalidation and a re-render — all of it across
+   * a web worker. That whole round trip was dead air before the fold so much as
+   * began, and it does not shrink when the animation is shortened, so it grew
+   * more obvious with every speed-up.
+   *
+   * The intent paints immediately and is dropped the moment the synced value
+   * agrees with it — or the moment the command fails, which puts the note back
+   * where the server thinks it is rather than leaving a lie on screen.
+   */
+  const [lockIntent, setLockIntent] = useState<boolean | null>(null);
+  const syncedLocked = entry?.locked ?? false;
+  useEffect(() => {
+    if (lockIntent !== null && syncedLocked === lockIntent) setLockIntent(null);
+  }, [lockIntent, syncedLocked]);
+
+  const preview = hasNote && (lockIntent ?? syncedLocked);
   const [titleDraft, setTitleDraft] = useState<string | null>(null);
 
   function commitTitle() {
@@ -185,14 +206,19 @@ export function DayJournalPanel({
    */
   function toggleLock() {
     if (!existingId || lockBusy) return;
+    const next = !preview;
     setLockWorked(true);
     setLockBusy(true);
+    setLockIntent(next); // paints THIS frame; the command catches up behind it
     if (lockTimer.current) clearTimeout(lockTimer.current);
     lockTimer.current = setTimeout(() => {
       lockTimer.current = null;
       setLockBusy(false);
     }, LOCK_ANIM_MS);
-    void commands.setJournalLocked(existingId, !preview);
+    // The write is queued, not awaited — the sync indicator is what reports it as
+    // outstanding. A rejection puts the note back rather than stranding the
+    // optimistic state; the queue survives a reload either way.
+    void commands.setJournalLocked(existingId, next).catch(() => setLockIntent(null));
   }
 
   // Dismiss the overflow menu on an outside click or Escape.

@@ -343,6 +343,36 @@ describe('DayJournalPanel — editor', () => {
     }
   });
 
+  it('paints the lock on the CLICK, without waiting for the row to come back', () => {
+    // The command is queued, not awaited. `state.entry` is deliberately left
+    // unlocked here — this is exactly the window the panel used to sit dead in,
+    // waiting on a write transaction and a query invalidation across a worker.
+    state.entry = { id: 'j1', content: 'x', deleted_at: null, locked: false };
+    render(createElement(DayJournalPanel, { date: '2026-08-07', ctx: CTX, actions: 'lock' }));
+    const toggle = screen.getByTestId('journal-preview-toggle');
+    expect(toggle.getAttribute('data-state')).toBe('unlocked');
+
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute('data-state')).toBe('locked'); // same tick, row unchanged
+    expect(screen.getByTestId('journal-preview')).toBeTruthy(); // and the body has folded
+  });
+
+  it('puts the lock back if the command is rejected', async () => {
+    // An optimistic paint that survives a rejection is a lie on screen. The queue
+    // itself is durable, so nothing is lost by reverting the picture.
+    state.entry = { id: 'j1', content: 'x', deleted_at: null, locked: false };
+    command('setJournalLocked').mockImplementationOnce(async () => {
+      throw new Error('rejected');
+    });
+    render(createElement(DayJournalPanel, { date: '2026-08-07', ctx: CTX, actions: 'lock' }));
+    const toggle = screen.getByTestId('journal-preview-toggle');
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute('data-state')).toBe('locked'); // optimistic
+
+    await act(async () => undefined); // let the rejection settle and React re-render
+    expect(toggle.getAttribute('data-state')).toBe('unlocked'); // reverted to the row
+  });
+
   it('a day with no note cannot be locked — there is nothing to lock', () => {
     state.entry = null;
     render(createElement(DayJournalPanel, { date: '2026-08-09', ctx: CTX, actions: 'lock' }));

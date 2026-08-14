@@ -123,6 +123,12 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
 .px-sync-chip { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--px-text-dim); border: 1px solid var(--px-border); border-radius: 8px; padding: 5px 10px; background: var(--px-surface); }
 .px-sync-chip .px-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--px-green); }
 .px-sync-chip--connecting .px-dot { background: var(--px-amber); }
+/* Work accepted here but not yet acknowledged by the server. Amber like
+   "connecting", because both mean the same thing to the reader — something of
+   yours is not safely across yet — and it pulses so a queue that is not draining
+   is visible rather than merely stated. */
+.px-sync-chip--syncing .px-dot { background: var(--px-amber); animation: px-pulse 1.6s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .px-sync-chip--syncing .px-dot { animation: none; } }
 .px-content { flex: 1; overflow: auto; padding: 20px 26px 40px; }
 
 /* global running-timer pill in the topbar (D7): white with an amber outline */

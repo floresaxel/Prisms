@@ -49,12 +49,23 @@ describe('§7.14 persistent read layer — shared subscriptions live only in the
     }
   });
 
-  it('hooks.ts calls useQuery only inside the screen-local useRows primitive (not directly)', () => {
-    // The only useQuery calls left in hooks.ts are the TWO inside `useRows` (the
-    // screen-local replica read + its overlay read); every shared table moved to
-    // the provider. No screen hook opens its own base subscription.
-    const matches = hooksSrc.match(/useQuery</g) ?? [];
-    expect(matches.length, 'hooks.ts should call useQuery only twice (replica + overlay, both in useRows)').toBe(2);
+  it('hooks.ts calls useQuery only inside useRows — plus the local command queue', () => {
+    // The rule this guards is about the SHARED SYNCED tables: no screen hook may
+    // open its own base subscription over one, they all moved to the provider.
+    // The two permitted calls are the pair inside `useRows` — the screen-local
+    // replica read and its overlay read.
+    //
+    // `client_commands` is allowed beside them and is NOT a hole in the rule: it
+    // is this device's own outbound queue, never synced down, belonging to no
+    // screen. The sync indicator reads it to tell "synced" from "syncing", which
+    // it cannot do from connection state alone.
+    const all = hooksSrc.match(/useQuery</g) ?? [];
+    const queue = hooksSrc.match(/useQuery<[^>]*>\(\s*"SELECT count\(\*\) AS n FROM client_commands/g) ?? [];
+    expect(queue.length, 'the outbound-queue count should be the only extra useQuery').toBe(1);
+    expect(
+      all.length - queue.length,
+      'hooks.ts should otherwise call useQuery only twice (replica + overlay, both in useRows)',
+    ).toBe(2);
   });
 
   it('the provider subscribes exactly the 9 shared base tables (one each) + one overlay read', () => {
