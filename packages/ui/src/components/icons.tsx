@@ -32,7 +32,13 @@ export function IconSprite() {
       <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></symbol>
       <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></symbol>
       <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></symbol>
-      <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></symbol>
+      {/* The shackle is TALLER THAN IT IS WIDE, and its straight legs are longer
+          than the arch is deep — that ratio is what makes it read as a padlock.
+          The previous drawing had legs (4) exactly equal to the arch radius (4),
+          which at a 14px render is a semicircle sitting on almost nothing: it
+          read as a ring. Now legs 5 to a 3.5 radius (1.43, from the proportions
+          of a real padlock) and 7 wide by 8.5 tall. */}
+      <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8.5 11V6a3.5 3.5 0 0 1 7 0v5" /></symbol>
       {/* i-lock split into its two moving parts, for a padlock that ANIMATES open
           and shut (the journal note's lock). Same geometry as i-lock above, so the
           assembled pair is pixel-identical to it in the closed state — only now
@@ -40,7 +46,7 @@ export function IconSprite() {
           whole icon because a shackle that swings is one lock moving, where
           cross-fading two icons is two pictures trading places. */}
       <symbol id="i-lockbody" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2" /></symbol>
-      <symbol id="i-lockshackle" viewBox="0 0 24 24"><path d="M8 11V7a4 4 0 0 1 8 0v4" /></symbol>
+      <symbol id="i-lockshackle" viewBox="0 0 24 24"><path d="M8.5 11V6a3.5 3.5 0 0 1 7 0v5" /></symbol>
       <symbol id="i-check" viewBox="0 0 24 24"><path d="m4 12 5 5L20 7" /></symbol>
       <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18" /></symbol>
       <symbol id="i-chevd" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6" /></symbol>
