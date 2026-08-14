@@ -235,6 +235,21 @@ describe('DayJournalPanel — editor', () => {
     expect((shown as HTMLButtonElement).disabled).toBe(false);
   });
 
+  it('the shackle only swings once the lock has been WORKED, never on arrival', () => {
+    // The keyframes key off `data-state`, and CSS cannot tell a state that just
+    // changed from one that was rendered that way — so opening a locked note
+    // would swing the shackle open as if someone had just unlocked it. The flag
+    // is set on the click, so the animation belongs to the act, not the arrival.
+    state.entry = { id: 'j1', content: 'x', deleted_at: null, locked: true };
+    render(createElement(DayJournalPanel, { date: '2026-08-05', ctx: CTX, actions: 'lock' }));
+    const toggle = screen.getByTestId('journal-preview-toggle');
+    expect(toggle.getAttribute('data-state')).toBe('locked');
+    expect(toggle.getAttribute('data-animate')).toBeNull(); // arrived locked — no swing
+
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute('data-animate')).toBe('true');
+  });
+
   it('the lock sits on the title row, not above it', () => {
     // Alignment is CSS, but the STRUCTURE it needs is pinned here: the button has
     // to be a sibling of the title inside the title row. Top-aligning it against

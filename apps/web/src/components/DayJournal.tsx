@@ -147,8 +147,22 @@ export function DayJournalPanel({
     void commands.setJournalTitle(existingId, next);
   }
 
+  /**
+   * Has the lock been WORKED yet, this mounting of this day?
+   *
+   * Gates the swing animation. The keyframes are keyed off `data-state`, and CSS
+   * cannot tell "this attribute just changed" from "this attribute was rendered
+   * with that value" — so without a gate the shackle would swing itself open
+   * every time a locked day is opened, as if someone had just unlocked it. Set on
+   * the click, so the animation belongs to the act of locking rather than to
+   * arriving at a note that happens to be locked. Resets per day: the panel is
+   * mounted with `key={date}`.
+   */
+  const [lockWorked, setLockWorked] = useState(false);
+
   function toggleLock() {
     if (!existingId) return;
+    setLockWorked(true);
     void commands.setJournalLocked(existingId, !preview);
   }
 
@@ -282,6 +296,7 @@ export function DayJournalPanel({
               data-testid="journal-preview-toggle"
               data-state={preview ? 'locked' : 'unlocked'}
               data-ready={hasNote ? 'true' : 'false'}
+              data-animate={lockWorked ? 'true' : undefined}
               aria-pressed={preview}
               disabled={!hasNote}
               // Hidden from assistive tech too while it does nothing — a control
