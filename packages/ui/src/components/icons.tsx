@@ -45,7 +45,14 @@ export function IconSprite() {
           whole icon because a shackle that swings is one lock moving, where
           cross-fading two icons is two pictures trading places. */}
       <symbol id="i-lockbody" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2" /></symbol>
-      <symbol id="i-lockshackle" viewBox="0 0 24 24"><path d="M8 11V6a4 4 0 0 1 8 0v5" /></symbol>
+      {/* `non-scaling-stroke` is what makes the shackle a ROD rather than a strip
+          of paper: it is the one part that gets squashed as the lock turns, and
+          without this its stroke narrows with it — legs thinning to nothing at
+          edge-on, where a real rod's silhouette would not change at all. The
+          stroke is exempted from the transform, so only the geometry foreshortens.
+          Its width then reads in screen units, so the caller must state one; see
+          `--px-lock-size` in theme.css. */}
+      <symbol id="i-lockshackle" viewBox="0 0 24 24"><path d="M8 11V6a4 4 0 0 1 8 0v5" vectorEffect="non-scaling-stroke" /></symbol>
       <symbol id="i-check" viewBox="0 0 24 24"><path d="m4 12 5 5L20 7" /></symbol>
       <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18" /></symbol>
       <symbol id="i-chevd" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6" /></symbol>

@@ -456,53 +456,62 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
    Both figures include the 1.8-unit stroke's half-width, and both are read at the
    RESTING angles, where the turn below has no depth component (sin 0 = sin 180 =
    0) and the projection is therefore exactly the flat geometry.
-   The wrapper also supplies the PERSPECTIVE the shackle turns in. It has to live
-   on the parent: an element cannot perspective its own 3D transform. */
-.px-jn-lock-ic { position: relative; display: inline-block; width: 14px; height: 14px; perspective: 64px; transition: transform 300ms cubic-bezier(0.34, 1.12, 0.64, 1); }
+   The wrapper also declares the icon's SIZE, because the shackle's stroke has to
+   be derived from it (see below) rather than inherited. */
+.px-jn-lock-ic { --px-lock-size: 14px; position: relative; display: inline-block; width: var(--px-lock-size); height: var(--px-lock-size); transition: transform 300ms cubic-bezier(0.34, 1.12, 0.64, 1); }
 .px-jn-lock[data-state='unlocked'] .px-jn-lock-ic { transform: translateX(1.46px); }
-.px-jn-lk { position: absolute; inset: 0; width: 14px; height: 14px; }
+.px-jn-lk { position: absolute; inset: 0; width: var(--px-lock-size); height: var(--px-lock-size); }
 /* ── the shackle turns, it does not travel ──
    The shackle pivots about the VERTICAL LINE through the leg that stays in the
-   body, the way a real shackle turns in its hole. That line is x=8 of 24, hence
-   33.333%; the y-origin is irrelevant to a rotateY, so it is left centred.
+   body (x=8), the way a real shackle turns in its hole.
 
-   The whole turn is `rotateY`, applied to the shackle's own <svg> element rather
-   than to the <use> inside it: browsers only build a 3D rendering context for
-   HTML boxes, so a rotateY on an SVG child would flatten to a plain horizontal
-   squash with no depth. The svg IS an HTML-level box, so it turns properly in the
-   perspective its wrapper supplies.
+   The turn is a scaleX, not a rotateY. Turning a shape about a vertical axis
+   projects to exactly cos(angle) of its width — scaleX IS the rotation, seen
+   flat — and doing it in 2D inside the SVG is what lets the stroke opt out via
+   `non-scaling-stroke` (see i-lockshackle). A CSS rotateY cannot: it rasterises
+   the shackle and then turns the picture, so the ROD gets squashed along with
+   its path and the whole thing reads as a turning sheet of paper.
 
-      locked    rotateY(0)    free leg at x=16, seated in the body
-      halfway   rotateY(-90)  cos 90 = 0, so the shackle has NO width: it reads as
-                              a single vertical line, edge-on at the pivot, and
-                              sin(-90) puts the free leg at +z — toward the viewer
-      unlocked  rotateY(-180) free leg back at x=0, out past the body's left edge
+      locked    scaleX( 1)  free leg at x=16, seated in the body
+      halfway   scaleX( 0)  no width at all — the shackle collapses onto the
+                            pivot and reads as a single vertical line, still a
+                            full-thickness one, because the stroke does not scale
+      unlocked  scaleX(-1)  mirrored: free leg back out at x=0, past the body's
+                            left edge. The shackle is symmetric, so mirrored and
+                            rotated are the same picture.
 
-   Negative angles are what make it turn toward the viewer rather than away, and
-   locking runs -180 → -90 → 0, so the free leg sweeps steadily rightwards and
-   lands in its seat.
+   Locking runs -1 → 0 → 1, so the free leg sweeps steadily rightwards into its
+   seat. The easing is symmetric ease-in-out because that is what a constant
+   angular speed looks like once projected: cos moves slowest at the ends and
+   fastest through edge-on.
 
-   No keyframes needed, unlike the swing this replaces: the two resting poses now
-   differ in ROTATION, so an ordinary transition interpolates through edge-on all
-   by itself. `overflow: visible` because at -180 the free leg's stroke reaches
-   x=-0.9, just outside the viewBox. */
-.px-jn-shackle { overflow: visible; transform-origin: 33.333% 50%; }
-.px-jn-lock[data-state='locked'] .px-jn-shackle { transform: rotateY(0deg); }
-.px-jn-lock[data-state='unlocked'] .px-jn-shackle { transform: rotateY(-180deg); }
+   No keyframes: the resting poses differ in scale, so an ordinary transition
+   passes through edge-on by itself. `overflow: visible` because mirrored, the
+   free leg's stroke reaches x=-0.9, just outside the viewBox.
+
+   The stroke width is stated here rather than inherited: `non-scaling-stroke`
+   makes it a SCREEN measure, so the icon's own viewBox scaling no longer applies
+   to it and 1.8 would render at nearly double the body's weight. Deriving it from
+   --px-lock-size reproduces exactly what the body gets (1.8 * 14/24 = 1.05px) and
+   keeps the two in step if the size ever changes. */
+.px-jn-shackle { overflow: visible; stroke-width: calc(1.8 * var(--px-lock-size) / 24); }
+.px-jn-shackle use { transform-box: view-box; transform-origin: 8px 11px; }
+.px-jn-lock[data-state='locked'] .px-jn-shackle use { transform: scaleX(1); }
+.px-jn-lock[data-state='unlocked'] .px-jn-shackle use { transform: scaleX(-1); }
 /* `data-animate` is set on the CLICK, never on render — see `lockWorked` in
    DayJournal.tsx. A transition fires whenever its property changes, and a note
    that loads already locked changes `data-state` as it loads, so without this
    gate every locked note would turn its own shackle shut on arrival.
    The timing is read from the state being entered, which is what lets locking
    land harder than unlocking: it carries a slight overshoot past its seat. */
-.px-jn-lock[data-animate='true'][data-state='locked'] .px-jn-shackle {
-  transition: transform 300ms cubic-bezier(0.34, 1.18, 0.64, 1);
+.px-jn-lock[data-animate='true'][data-state='locked'] .px-jn-shackle use {
+  transition: transform 300ms cubic-bezier(0.45, 0, 0.55, 1);
 }
-.px-jn-lock[data-animate='true'][data-state='unlocked'] .px-jn-shackle {
-  transition: transform 360ms cubic-bezier(0.32, 0, 0.24, 1);
+.px-jn-lock[data-animate='true'][data-state='unlocked'] .px-jn-shackle use {
+  transition: transform 360ms cubic-bezier(0.45, 0, 0.55, 1);
 }
 @media (prefers-reduced-motion: reduce) {
-  .px-jn-lock, .px-jn-lock-ic, .px-jn-lock .px-jn-shackle { transition: none; }
+  .px-jn-lock, .px-jn-lock-ic, .px-jn-lock .px-jn-shackle use { transition: none; }
 }
 
 /* journal (D2/D3/J7): day-header note affordance + TipTap WYSIWYG editor + toolbar + markdown preview */
