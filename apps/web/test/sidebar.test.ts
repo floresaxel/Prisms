@@ -23,16 +23,20 @@ import { installMemoryStorage } from './util/memory-storage';
 const RAIL_KEY = 'prisms.sidebar.collapsed';
 const PIN_KEY = 'prisms.sidebar.pinned';
 
-// two items, so focus can be moved BETWEEN links inside the sidebar
+// two items, so focus can be moved BETWEEN links inside the sidebar. My Day is
+// appended (not prepended) so the two links the focus tests reach for stay first.
 const GROUPS = [
   {
     label: 'My work',
     items: [
       { key: 'agenda', label: 'Agenda', href: '/agenda', icon: 'cal' as const },
       { key: 'tasks', label: 'Tasks', href: '/tasks', icon: 'list' as const },
+      { key: 'myday', label: 'My Day', href: '/', icon: 'sun' as const },
     ],
   },
 ];
+/** Where the brand mark points once the sidebar is open. */
+const HOME = '/';
 
 let storage: Storage;
 
@@ -48,13 +52,14 @@ afterEach(() => {
   storage.clear();
 });
 
-function mount() {
+function mount(extra: Partial<Parameters<typeof Layout>[0]> = {}) {
   return render(
     createElement(Layout, {
       groups: GROUPS,
       active: '/agenda',
       breadcrumb: { section: 'My work', page: 'Agenda' },
       children: null,
+      ...extra,
     }),
   );
 }
@@ -65,6 +70,9 @@ const toggle = () => screen.getByTestId('sidebar-toggle');
 const maybeToggle = () => screen.queryByTestId('sidebar-toggle');
 const pin = () => screen.queryByTestId('sidebar-pin');
 const navlink = () => document.querySelector('.px-navlink') as HTMLElement;
+/** The brand mark in each of its two jobs. */
+const markExpand = () => screen.queryByTestId('brand-expand');
+const markHome = () => screen.queryByTestId('brand-home');
 
 /** Rest the pointer on the sidebar for `ms`, in one uninterrupted stay. */
 function hoverFor(ms: number) {
@@ -101,8 +109,10 @@ describe('where the controls live', () => {
   });
 
   it('takes BOTH controls away on the rail', () => {
-    // the rail is opened by resting on it, not by aiming at a chevron; and the
-    // pin has nothing to hold open while it is shut
+    // the chevron goes because the rail is opened by resting on it or by
+    // pressing the mark, not by aiming at a 34px target; and the pin has
+    // nothing to hold open while it is shut. The brand mark is not one of
+    // these — it stays, wearing its other job.
     mount();
     fireEvent.click(toggle());
     expect(maybeToggle()).toBeNull();
@@ -127,13 +137,13 @@ describe('resting the pointer on the rail', () => {
     expect(PEEK_DELAY_MS).toBe(1500);
   });
 
-  it('is the only way back — a rail has no button to press', () => {
+  it('opens a rail that has no chevron of its own', () => {
     mount();
     collapse();
-    expect(maybeToggle()).toBeNull();
+    expect(maybeToggle()).toBeNull(); // the brand mark is the only press left
     hoverFor(PEEK_DELAY_MS);
     expect(state()).toBe('peek');
-    expect(pin()).not.toBeNull(); // …and now there is something to press
+    expect(pin()).not.toBeNull(); // …and now there is something else to press
   });
 
   it('shuts again when the pointer leaves', () => {
@@ -253,6 +263,138 @@ describe('the pin', () => {
   });
 });
 
+describe('the brand mark', () => {
+  // One mark, two jobs, decided by what the sidebar is already doing: shut, it
+  // opens; open, there is nothing left to expand so it goes home.
+  const collapse = () => fireEvent.click(toggle());
+
+  it('opens the sidebar when it is shut', () => {
+    mount({ brandHref: HOME });
+    collapse();
+    expect(state()).toBe('rail');
+    expect(markHome()).toBeNull(); // not offering to navigate while it is shut
+    fireEvent.click(markExpand()!);
+    expect(state()).toBe('open');
+  });
+
+  it('opening it that way is a PREFERENCE, not a peek', () => {
+    // pressing the mark is a deliberate act, so it must outlive the pointer
+    // walking away — unlike a hover peek, which is not a choice at all.
+    mount({ brandHref: HOME });
+    collapse();
+    fireEvent.click(markExpand()!);
+    fireEvent.mouseLeave(aside());
+    expect(state()).toBe('open');
+    expect(storage.getItem(RAIL_KEY)).toBe('0');
+    cleanup();
+    mount({ brandHref: HOME });
+    expect(state()).toBe('open');
+  });
+
+  it('goes to My Day when the sidebar is already open', () => {
+    const onNavigate = vi.fn();
+    mount({ brandHref: HOME, onNavigate });
+    expect(markExpand()).toBeNull(); // nothing left to expand
+    fireEvent.click(markHome()!);
+    expect(onNavigate).toHaveBeenCalledWith(HOME);
+  });
+
+  it('takes its accessible name from the nav item it points at', () => {
+    // derived rather than passed, so the mark cannot come to disagree with the
+    // label the nav shows for the same route
+    mount({ brandHref: HOME });
+    expect(markHome()!.getAttribute('aria-label')).toBe('Prisms — go to My Day');
+    expect(markHome()!.getAttribute('href')).toBe(HOME);
+  });
+
+  it('navigates rather than expands during a peek — it looks open, so it acts open', () => {
+    const onNavigate = vi.fn();
+    mount({ brandHref: HOME, onNavigate });
+    collapse();
+    hoverFor(PEEK_DELAY_MS);
+    expect(state()).toBe('peek');
+    expect(markExpand()).toBeNull();
+    fireEvent.click(markHome()!);
+    expect(onNavigate).toHaveBeenCalledWith(HOME);
+  });
+
+  it('stays inert on an open sidebar with nowhere to point', () => {
+    mount(); // no brandHref
+    expect(markHome()).toBeNull();
+    expect(markExpand()).toBeNull();
+    expect(document.querySelector('.px-brand-logo')!.tagName).toBe('SPAN');
+  });
+
+  it('still opens a shut sidebar with no brandHref — that job needs no route', () => {
+    mount();
+    fireEvent.click(toggle());
+    fireEvent.click(markExpand()!);
+    expect(state()).toBe('open');
+  });
+
+  it('says which job it is doing', () => {
+    mount({ brandHref: HOME });
+    fireEvent.click(toggle());
+    expect(markExpand()!.getAttribute('aria-label')).toBe('expand sidebar');
+    expect(markExpand()!.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('survives being tabbed to — the focus peek must not pull it out from under the keyboard', () => {
+    // The mark is the rail's EXPLICIT way open, so it does not also peek. If it
+    // did, landing on it would open the sidebar, which swaps the button for a
+    // link — unmounting the element that holds focus, dropping focus to the
+    // body, and shutting the rail again under a keyboard that had just arrived.
+    mount({ brandHref: HOME });
+    collapse();
+    act(() => {
+      fireEvent.keyDown(window, { key: 'Tab' });
+      markExpand()!.focus();
+    });
+    expect(state()).toBe('rail'); // did NOT peek
+    expect(markExpand()).not.toBeNull(); // …so the button is still there
+    expect(document.activeElement).toBe(markExpand()); // …still holding focus
+  });
+
+  it('and pressing it from there opens the sidebar outright', () => {
+    mount({ brandHref: HOME });
+    collapse();
+    act(() => {
+      fireEvent.keyDown(window, { key: 'Tab' });
+      markExpand()!.focus();
+    });
+    fireEvent.click(markExpand()!);
+    expect(state()).toBe('open');
+  });
+
+  it('costs exactly one tab stop — the next one peeks as it always did', () => {
+    mount({ brandHref: HOME });
+    collapse();
+    act(() => {
+      fireEvent.keyDown(window, { key: 'Tab' });
+      markExpand()!.focus();
+    });
+    expect(state()).toBe('rail');
+    act(() => {
+      fireEvent.keyDown(window, { key: 'Tab' });
+      navlink().focus();
+    });
+    expect(state()).toBe('peek');
+  });
+
+  it('holds a peek open when focus moves BACK onto the mark', () => {
+    // the blur half of that move must not read as leaving the sidebar
+    mount({ brandHref: HOME });
+    collapse();
+    act(() => {
+      fireEvent.keyDown(window, { key: 'Tab' });
+      navlink().focus();
+    });
+    expect(state()).toBe('peek');
+    act(() => markHome()!.focus());
+    expect(state()).toBe('peek');
+  });
+});
+
 describe('a window too narrow for any of it', () => {
   beforeEach(() => {
     window.innerWidth = 800;
@@ -282,12 +424,24 @@ describe('a window too narrow for any of it', () => {
     fireEvent.focus(navlink());
     expect(state()).toBe('rail');
   });
+
+  it('gives the brand mark its OTHER job — an expand here could never work', () => {
+    // the width overrules every preference, so a mark offering to expand would
+    // be a button that visibly does nothing. Navigating at least works.
+    const onNavigate = vi.fn();
+    mount({ brandHref: HOME, onNavigate });
+    expect(markExpand()).toBeNull();
+    fireEvent.click(markHome()!);
+    expect(onNavigate).toHaveBeenCalledWith(HOME);
+    expect(state()).toBe('rail');
+  });
 });
 
 describe('reaching a rail by keyboard', () => {
-  // With no expand button left to tab to, focus is the ONLY key-driven way in.
-  // A focus only counts while the KEYBOARD is driving, so each of these tabs
-  // first — exactly as a keyboard user arrives.
+  // Focus alone opens it, without needing to find the brand mark first — the
+  // mark is one press, but landing anywhere on the rail should already show you
+  // what you are choosing between. A focus only counts while the KEYBOARD is
+  // driving, so each of these tabs first — exactly as a keyboard user arrives.
   const collapse = () => fireEvent.click(toggle());
   const focusIn = (el: HTMLElement) =>
     act(() => {

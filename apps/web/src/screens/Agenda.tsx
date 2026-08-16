@@ -2,7 +2,9 @@
  * Agenda (§12.2, §10 client mode): a to-do panel on the LEFT, the week calendar
  * in the middle, the day's note on the RIGHT. The left panel holds "To schedule"
  * (unplaced tasks) above a scrollable "All tasks" list — every live task, the
- * already-scheduled ones included. Both lists drag onto the week: while dragging,
+ * already-scheduled ones included. Both are dense flush lists rather than stacks
+ * of cards: hairline-separated rows, each with a three-dot grip at its trailing
+ * edge to say it picks up. Both lists drag onto the week: while dragging,
  * the valid time windows (core `validWindowsFor`, greedy mode) light up and
  * everything else dims; dropping in a valid slot creates a committed block.
  * Committed blocks drag to move; anchored blocks show a lock and refuse the drag
@@ -54,9 +56,9 @@ import { conflictMessage, fitProblems, laneLayout, regionsInDay, type FitProblem
 import { agendaLayout, DAY_SPANS, DEFAULT_SPAN, GUTTER_W, isDaySpan } from '../agenda-layout';
 import { fmtGridClock, pointerMinutes, snapMinutes, useSnapPref } from '../agenda-snap';
 import { DayJournalPanel } from '../components/DayJournal';
+import { NoteSwap } from '../components/NoteSwap';
 import { WhyButton } from '../components/Why';
 
-import { NoteSwap } from '../components/NoteSwap';
 const GRID_START_HOUR = 6;
 const GRID_END_HOUR = 22;
 const HOUR_PX = 44;
@@ -560,7 +562,7 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
         {/* to-schedule + all tasks (left) — every row drags onto the week */}
         <div className="px-agenda-todo">
           <h2>To schedule <span className="px-muted">{agenda.todo.length}</span></h2>
-          <div data-testid="todo-list" className="px-list">
+          <div data-testid="todo-list" className="px-todo-list">
             {agenda.todo.length === 0 &&
               (hydrated ? <div className="px-list-empty">Nothing to place.</div> : <Skeleton testId="todo-skeleton" rows={4} />)}
             {agenda.todo.map((t: AgendaTask) => (
@@ -580,6 +582,7 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
                   {t.kind === 'activity' && <span className="px-tag px-tag--grey px-todo-flag">inbox</span>}
                   {t.estimated ? '' : '~'}{t.schedulable.estimateMinutes}m
                 </span>
+                <span className="px-todo-grip"><Ic name="dots" /></span>
               </div>
             ))}
           </div>
@@ -588,7 +591,7 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
               the panel never outgrows the week grid. */}
           <div className="px-ag-all">
             <h2>All tasks <span className="px-muted">{agenda.allTasks.length}</span></h2>
-            <div className="px-ag-scroll" data-testid="all-tasks-list">
+            <div className="px-ag-scroll px-todo-list" data-testid="all-tasks-list">
               {agenda.allTasks.length === 0 &&
                 (hydrated ? <div className="px-list-empty">No open tasks.</div> : <Skeleton testId="all-tasks-skeleton" rows={4} />)}
               {agenda.allTasks.map((t: AgendaTask) => (
@@ -610,6 +613,7 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
                     {t.estimated ? '' : '~'}
                     {t.schedulable.estimateMinutes}m
                   </span>
+                  <span className="px-todo-grip"><Ic name="dots" /></span>
                 </div>
               ))}
             </div>

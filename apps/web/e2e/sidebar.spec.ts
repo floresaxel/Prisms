@@ -4,9 +4,10 @@
  * The unit tests own the state machine; what only a browser can show is that
  * the peek is driven by an actual cursor resting on the rail — that it does NOT
  * open under a pointer merely passing through, that it opens once the delay is
- * up, and that it shuts again the moment the pointer goes elsewhere. Since the
- * rail carries no button, focus is checked as the keyboard's only way in, and
- * the pin as the escape from all of it — across a reload too.
+ * up, and that it shuts again the moment the pointer goes elsewhere. Focus is
+ * checked as the keyboard's way in — past the brand mark, which is deliberately
+ * the one thing that does not peek — and the pin as the escape from all of it,
+ * across a reload too.
  *
  * Requires the live stack (see playwright.config.ts).
  */
@@ -34,11 +35,12 @@ test('sidebar: collapses from inside itself, peeks on a resting pointer, and pin
   await expect(page.locator('.px-topbar').getByTestId('sidebar-toggle')).toHaveCount(0);
   await expect(sidebar).toHaveAttribute('data-state', 'open');
 
-  // --- collapse: the rail keeps no controls at all -----------------------
+  // --- collapse: the rail keeps only the brand mark ----------------------
   await toggle.click();
   await expect(sidebar).toHaveAttribute('data-state', 'rail');
-  await expect(toggle).toHaveCount(0); // resting on it is the way back, not a button
+  await expect(toggle).toHaveCount(0); // the chevron goes; the mark takes over
   await expect(pin).toHaveCount(0);
+  await expect(page.getByTestId('brand-expand')).toBeVisible();
 
   // --- a pointer passing through must not open it ------------------------
   await sidebar.hover();
@@ -53,14 +55,27 @@ test('sidebar: collapses from inside itself, peeks on a resting pointer, and pin
   await page.mouse.move(AWAY.x, AWAY.y);
   await expect(sidebar).toHaveAttribute('data-state', 'rail');
 
-  // --- the keyboard's way in, now that no button remains to tab to -------
-  // A real Tab, not a programmatic focus: the sidebar is the first thing in the
-  // document, so one press lands inside it — and it opens AT ONCE, without the
-  // pointer's wait, because a keyboard cannot rest on anything.
+  // --- the keyboard's way in ---------------------------------------------
+  // Real Tabs, not programmatic focus: the sidebar is the first thing in the
+  // document, so the first press lands on the brand mark. That one does NOT
+  // peek — it is the explicit way open, and opening it there would unmount the
+  // button under the keyboard's own focus. The NEXT stop is a nav link, and
+  // that opens AT ONCE, without the pointer's wait, because a keyboard cannot
+  // rest on anything.
+  await page.keyboard.press('Tab');
+  await expect(page.getByTestId('brand-expand')).toBeFocused();
+  await expect(sidebar).toHaveAttribute('data-state', 'rail');
   await page.keyboard.press('Tab');
   await expect(sidebar).toHaveAttribute('data-state', 'peek');
   expect(await sidebar.evaluate((el) => el.contains(document.activeElement))).toBe(true);
   await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  await expect(sidebar).toHaveAttribute('data-state', 'rail');
+
+  // --- and the mark itself opens it, for a pointer or a press ------------
+  await page.getByTestId('brand-expand').click();
+  await expect(sidebar).toHaveAttribute('data-state', 'open');
+  await expect(page.getByTestId('brand-home')).toBeVisible(); // now it means home
+  await toggle.click(); // back to the rail for the pin checks below
   await expect(sidebar).toHaveAttribute('data-state', 'rail');
 
   // --- pin the next peek open -------------------------------------------

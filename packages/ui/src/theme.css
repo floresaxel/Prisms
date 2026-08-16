@@ -181,6 +181,16 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
 }
 .px-brand-logo { width: 22px; height: 22px; border-radius: 6px; background: var(--px-blue); color: #fff; display: flex; align-items: center; justify-content: center; flex: none; }
 .px-brand-logo .px-ic { width: 13px; height: 13px; }
+/* The mark as a control (expand the rail, or go home). It keeps the badge's
+   exact size and colour — only the cursor and a hover darkening say it presses,
+   so the sidebar's corner does not turn into another button to read past. */
+.px-brand-logo--act { border: none; padding: 0; font: inherit; cursor: pointer; text-decoration: none; position: relative; transition: background 120ms ease-out; }
+.px-brand-logo--act:hover { background: var(--px-accent-press); }
+/* WCAG 2.2 target size (24×24 minimum): the badge is 22px, so the PRESSABLE
+   area is grown past it on every side without moving or resizing anything
+   visible — the pseudo-element belongs to the control, so clicks on it land. */
+.px-brand-logo--act::after { content: ''; position: absolute; inset: -3px; border-radius: 8px; }
+@media (prefers-reduced-motion: reduce) { .px-brand-logo--act { transition: none; } }
 /* min-height:0 — a flex item defaults to min-height:auto, which refuses to
    shrink below its content and would push the foot out of the column again. */
 .px-nav { flex: 1; min-height: 0; overflow-y: auto; padding-bottom: 8px; }
@@ -357,10 +367,26 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
    outgoing layer is taken out of flow — the container is sized by the incoming
    note, and a leaving copy must not stretch it — and made inert, since it is a
    picture of a note you are no longer on. `forwards` holds it transparent for
-   the instant between the animation ending and NoteSwap dropping it. */
+   the instant between the animation ending and NoteSwap dropping it.
+
+   The gap above the note lives on the LAYER, not as a margin on `.px-journal`
+   and not as padding here. The two layers are positioned differently by
+   necessity (one in flow, one absolute), so any spacing that is not identical on
+   both makes them disagree — which is what made the note jump on every day
+   change: a margin on `.px-journal` collapses out of the in-flow layer but stays
+   inside the absolute one, landing the outgoing copy 16px low. Padding on this
+   container is no better the other way: `top: 0` resolves against the PADDING
+   box, whose top edge is ABOVE the padding, so the ghost ignores it while the
+   in-flow layer is pushed down. Putting it on `.px-note-layer` gives both copies
+   the same offset by construction, since both ARE that element. */
 .px-note-swap { position: relative; }
+.px-note-layer { padding-top: 16px; }
 @keyframes px-note-out { from { opacity: 1; } to { opacity: 0; } }
-.px-note-layer--out { position: absolute; inset: 0; pointer-events: none; animation: px-note-out 100ms ease-in forwards; }
+/* `top/left/right` rather than `inset: 0`: with `bottom` also pinned the ghost's
+   height is stretched to whatever the INCOMING note happens to be, so a longer
+   note left behind was squashed as it faded. Left auto it keeps its own shape,
+   and being out of flow it still cannot stretch the container. */
+.px-note-layer--out { position: absolute; top: 0; left: 0; right: 0; pointer-events: none; animation: px-note-out 100ms ease-in forwards; }
 /* the copy on its way out must not also play the ARRIVAL fade */
 .px-note-layer--out .px-journal--ready { animation: none; }
 @media (prefers-reduced-motion: reduce) { .px-note-layer--out { animation: none; opacity: 0; } }
@@ -369,19 +395,35 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
   .px-jn-editor .px-journal--ready { animation: none; }
 }
 .px-drag-hint { font-size: 11px; margin: 10px 0 0; }
-.px-todo-item { display: flex; justify-content: space-between; gap: 8px; padding: 9px 11px; margin-bottom: 7px; background: var(--px-surface); border: 1px solid var(--px-border); border-radius: 8px; font-size: 12.5px; cursor: grab; user-select: none; box-shadow: var(--px-shadow); }
-.px-todo-item:hover { border-color: var(--px-accent); }
+/* Both task lists read as ONE list rather than a stack of cards: rows sit flush
+   against each other with a hairline between them, and the list bleeds out to
+   the panel's own padding so the rule — and the hover — spans the full width.
+   The row keeps its 14px of inset as padding, so the text stays where it was. */
+.px-todo-list { display: flex; flex-direction: column; margin: 0 -14px; }
+.px-todo-item { display: flex; align-items: center; gap: 8px; padding: 4px 14px; font-size: 12.5px; line-height: 1.55; cursor: grab; user-select: none; }
+.px-todo-item + .px-todo-item { border-top: 1px solid var(--px-border); }
+.px-todo-item:hover { background: var(--px-surface-2); }
 /* "All tasks" — every live task, scheduled ones included, in a bounded scroller
-   so the panel never outgrows the week grid beside it. */
-.px-ag-all { margin-top: 16px; border-top: 1px solid var(--px-border); padding-top: 10px; }
-.px-ag-scroll { max-height: 268px; overflow-y: auto; padding-right: 2px; }
-.px-todo-item--placed { background: var(--px-surface-2); color: var(--px-text-dim); box-shadow: none; }
+   so the panel never outgrows the week grid beside it. Bled like the rows, so
+   the section rule and the row rules line up on the same edges. */
+.px-ag-all { margin: 16px -14px 0; border-top: 1px solid var(--px-border); padding: 10px 14px 0; }
+.px-ag-scroll { max-height: 268px; overflow-y: auto; }
+/* Already on the week: dimmed, not shaded — a per-row background in a list this
+   dense reads as accidental zebra striping. The row's own "scheduled ·" says it. */
+.px-todo-item--placed { color: var(--px-text-dim); }
 /* Inbox items (captured, not yet promoted): listed and draggable, but flagged —
-   they sit under no project, so a block on one renders "No vision". */
-.px-todo-item--inbox { border-style: dashed; }
+   they sit under no project, so a block on one renders "No vision". A rail down
+   the row's leading edge, now that there is no card border left to dash. */
+.px-todo-item--inbox { box-shadow: inset 2px 0 0 var(--px-border-2); }
 .px-todo-flag { margin-right: 6px; font-size: 10px; padding: 1px 5px; }
 .px-todo-sub { font-size: 11px; color: var(--px-faint); white-space: nowrap; }
-.px-todo-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.px-todo-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Three dots at the far edge: with the card gone, this is what says the row is a
+   thing you pick up. Purely a handle — the whole row is the drag surface, so it
+   is not a control and carries no accessible name of its own (`Ic` without a
+   `title` is aria-hidden). It darkens with the row on hover. */
+.px-todo-grip { flex: none; display: flex; color: var(--px-faint); }
+.px-todo-item:hover .px-todo-grip { color: var(--px-text-dim); }
 
 /* the grabbed item, riding the cursor until it is dropped on a slot.
    `pointer-events: none` keeps it from swallowing the drop's mouseup. */

@@ -335,10 +335,13 @@ export function DayJournalPanel({
        the note arriving; fading a panel in while it still says "Loading…" would
        animate the wrong moment, and the day's real content would then pop in
        afterwards with no transition at all. */
+    /* No margin of its own: the gap above the note belongs to `.px-note-swap`
+       (theme.css). A margin here COLLAPSES out of an in-flow layer but not out of
+       the absolutely-positioned outgoing one, so the two cross-fade layers landed
+       16px apart — the note visibly jumped as you moved between days. */
     <div
       className={`px-journal${isLoading ? '' : ' px-journal--ready'}`}
       data-testid={`journal-${date}`}
-      style={{ marginTop: 16 }}
     >
       {/* The title is editable; the DATE moves below it, so renaming a note
           never costs you the day it belongs to. The action sits ON the title's

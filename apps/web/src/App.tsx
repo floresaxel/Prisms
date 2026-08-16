@@ -204,6 +204,8 @@ function Shell({
     <Layout
       groups={groups}
       foot={foot}
+      // the brand mark opens a collapsed sidebar; once open it goes to My Day
+      brandHref="/"
       active={route}
       onNavigate={navigate}
       breadcrumb={CRUMBS[route]}

@@ -33,6 +33,14 @@ export interface BreadcrumbSpec {
 
 export interface LayoutProps {
   brand?: string;
+  /**
+   * Where the brand mark goes when the sidebar is already open (the app's home —
+   * My Day). Omit it and the mark stays inert there; on a RAIL it is a control
+   * either way, because opening the sidebar is then the more useful thing it can
+   * do. The destination's own nav label supplies the accessible name, so the two
+   * cannot drift apart.
+   */
+  brandHref?: string;
   groups: NavGroupSpec[];
   /** Nav items pinned to the sidebar foot (e.g. Settings). */
   foot?: NavItemSpec[];
@@ -228,9 +236,21 @@ function useSidebar(): SidebarState {
   };
 }
 
-export function Layout({ brand = 'Prisms', groups, foot, active, onNavigate, breadcrumb, sync, timer, user, footer, children }: LayoutProps) {
+export function Layout({ brand = 'Prisms', brandHref, groups, foot, active, onNavigate, breadcrumb, sync, timer, user, footer, children }: LayoutProps) {
   const initial = (user?.name?.trim()?.[0] ?? user?.email?.[0] ?? '?').toUpperCase();
-  const { rail, pinned, peeking, toggleRail, togglePin, setHovering, setFocused } = useSidebar();
+  const { rail, forced, pinned, peeking, toggleRail, togglePin, setHovering, setFocused } = useSidebar();
+  /**
+   * Can the mark still OPEN something? Only while the sidebar is shut by choice.
+   * A rail the window forced cannot be opened at all, so offering to would be a
+   * button that visibly does nothing — there it falls through to navigating,
+   * which at least works. A peek counts as open: it looks open, so the mark does
+   * what an open sidebar's mark does.
+   */
+  const marksExpands = rail && !forced;
+  /** The nav item the brand points at, for the mark's accessible name. */
+  const home = brandHref === undefined
+    ? undefined
+    : [...groups.flatMap((g) => g.items), ...(foot ?? [])].find((i) => i.href === brandHref);
   return (
     <div className={`px-app${rail ? ' px-app--rail' : ''}`}>
       <IconSprite />
@@ -241,7 +261,17 @@ export function Layout({ brand = 'Prisms', groups, foot, active, onNavigate, bre
         // the peek's whole input: resting here opens it, leaving closes it again
         onMouseEnter={() => setHovering(true)}
         onMouseLeave={() => setHovering(false)}
-        onFocus={() => setFocused(true)}
+        // The brand mark is the one thing here that does NOT peek. It is the
+        // rail's explicit way open, and a focus peek would open the sidebar the
+        // instant it was tabbed to — which swaps the mark from a button to a
+        // link, i.e. unmounts the element holding focus. Focus would fall to the
+        // body, the blur below would read that as leaving, and the rail would
+        // shut again under a keyboard that had just arrived. Skipping it costs
+        // one tab stop: the next stop is a nav link, which peeks as it always
+        // did, and pressing the mark opens the sidebar outright.
+        onFocus={(e) => {
+          if (!(e.target as Element).closest?.('[data-brand-mark]')) setFocused(true);
+        }}
         // focus-WITHIN: ignore the blur half of a move between two children,
         // which would otherwise shut the rail between every pair of nav links
         onBlur={(e) => {
@@ -249,7 +279,45 @@ export function Layout({ brand = 'Prisms', groups, foot, active, onNavigate, bre
         }}
       >
         <div className="px-brand">
-          <span className="px-brand-logo"><Ic name="prism" /></span>
+          {/* The mark carries whichever job the sidebar leaves it. Shut, it is
+              the way back open — the rail's chevron was removed on the grounds
+              that you are already pointing at the sidebar, and the mark is the
+              biggest thing on it. Open, there is nothing left to expand, so it
+              becomes what a logo usually is: the way home. Same 22px badge in
+              both, so nothing moves as the job changes. */}
+          {marksExpands ? (
+            <button
+              type="button"
+              className="px-brand-logo px-brand-logo--act"
+              data-testid="brand-expand"
+              data-brand-mark=""
+              aria-label="expand sidebar"
+              aria-expanded={false}
+              title="Expand sidebar"
+              onClick={toggleRail}
+            >
+              <Ic name="prism" />
+            </button>
+          ) : home !== undefined ? (
+            <a
+              href={home.href}
+              className="px-brand-logo px-brand-logo--act"
+              data-testid="brand-home"
+              data-brand-mark=""
+              aria-label={`${brand} — go to ${home.label}`}
+              title={`Go to ${home.label}`}
+              onClick={(e) => {
+                if (onNavigate) {
+                  e.preventDefault();
+                  onNavigate(home.href);
+                }
+              }}
+            >
+              <Ic name="prism" />
+            </a>
+          ) : (
+            <span className="px-brand-logo"><Ic name="prism" /></span>
+          )}
           <span className="px-brand-lbl">{brand}</span>
           {/* Both controls belong to a sidebar that is SHOWING. A rail carries
               none — it is opened by resting on it, not by aiming at a 34px
