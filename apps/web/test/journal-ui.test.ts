@@ -58,6 +58,13 @@ vi.mock('@prisms/ui', async (importOriginal) => {
 // TipTap needs a real browser DOM; jsdom can't run ProseMirror. Mock the rich
 // editor as a controlled textarea so the SHELL (save/flush/export/delete/preview)
 // stays unit-testable here — the real WYSIWYG is covered by Playwright e2e.
+/**
+ * The last `onBlur` the editor was handed. The real one fires a blur as its
+ * ProseMirror view is torn down — after a lock has already unmounted it — and
+ * there is no element left to blur by then, so a test reaches it through here.
+ */
+const editorProps: { onBlur?: (markdown: string) => void } = {};
+
 vi.mock('../src/components/RichJournalEditor', async () => {
   const { createElement: h } = await import('react');
   return {
@@ -76,15 +83,17 @@ vi.mock('../src/components/RichJournalEditor', async () => {
       onBlur?: (m: string) => void;
       locked?: boolean;
       renderLocked?: (m: string) => unknown;
-    }) =>
-      locked
+    }) => {
+      editorProps.onBlur = onBlur;
+      return locked
         ? renderLocked?.(value)
         : h('textarea', {
             'data-testid': 'journal-rich',
             value,
             onChange: (e: { target: { value: string } }) => onChange(e.target.value),
             onBlur: (e: { target: { value: string } }) => onBlur?.(e.target.value),
-          }),
+          });
+    },
   };
 });
 
@@ -307,6 +316,33 @@ describe('DayJournalPanel — editor', () => {
     render(createElement(DayJournalPanel, { date: '2026-08-07', ctx: CTX, actions: 'lock' }));
     fireEvent.click(screen.getByTestId('journal-preview-toggle'));
     expect(command('setJournalLocked')).toHaveBeenCalledWith('j1', true);
+  });
+
+  it('locking never writes — the editor tearing down must not delete the note', () => {
+    // Unmounting the editor fires a blur carrying empty content, and that handler
+    // is the save path: locking a note used to soft-delete it. Caught by the e2e
+    // (lock, unlock, editor blank), pinned here.
+    state.entry = { id: 'j1', content: 'real words', deleted_at: null, locked: false };
+    render(createElement(DayJournalPanel, { date: '2026-08-07', ctx: CTX, actions: 'lock' }));
+    fireEvent.click(screen.getByTestId('journal-preview-toggle'));
+    // …and now the editor's own teardown blur arrives, carrying nothing. There is
+    // no element left to blur by this point — which is the whole difficulty — so
+    // it comes through the handler the editor was given.
+    editorProps.onBlur?.('');
+    expect(command('deleteJournal')).not.toHaveBeenCalled();
+    expect(command('writeJournal')).not.toHaveBeenCalled();
+  });
+
+  it('flushes a pending edit BEFORE locking, so the lock cannot strand it', () => {
+    // The other side of the rule above: writes stop at the lock, so whatever is
+    // still in the debounce has to go first or it is lost.
+    state.entry = { id: 'j1', content: 'start', deleted_at: null, locked: false };
+    render(createElement(DayJournalPanel, { date: '2026-08-07', ctx: CTX, actions: 'lock' }));
+    fireEvent.change(screen.getByTestId('journal-rich'), { target: { value: 'start + more' } });
+    expect(command('writeJournal')).not.toHaveBeenCalled(); // still inside the debounce
+
+    fireEvent.click(screen.getByTestId('journal-preview-toggle'));
+    expect(command('writeJournal')).toHaveBeenCalledWith({ existingId: 'j1', entryDate: '2026-08-07', content: 'start + more' });
   });
 
   it('a double click locks once, not lock-then-unlock', () => {

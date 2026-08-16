@@ -57,10 +57,16 @@ export function NoteSwap({ swapKey, children }: { swapKey: string; children: Rea
     <div className="px-note-swap">
       {layers.map((l) => {
         const isGhost = ghost !== null && l.key === ghost.key;
+        /* For the length of the fade the page really does hold TWO note panels,
+           so anything reaching for "the editor" without saying which day is
+           ambiguous — a Playwright locator matches both. The ghost says what it
+           is: `aria-hidden` takes it off the a11y tree, and `data-note-ghost`
+           lets a test or a query exclude it by name. */
         return (
           <div
             key={l.key}
             className={`px-note-layer${isGhost ? ' px-note-layer--out' : ''}`}
+            data-note-ghost={isGhost || undefined}
             aria-hidden={isGhost || undefined}
           >
             {l.node}

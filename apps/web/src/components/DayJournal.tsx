@@ -207,6 +207,10 @@ export function DayJournalPanel({
   function toggleLock() {
     if (!existingId || lockBusy) return;
     const next = !preview;
+    // A locked note refuses to write, so anything still sitting in the debounce
+    // has to go NOW or it goes nowhere. Runs before the lock is set, while writes
+    // are still allowed.
+    if (next) flushPending.current();
     setLockWorked(true);
     setLockBusy(true);
     setLockIntent(next); // paints THIS frame; the command catches up behind it
@@ -252,7 +256,23 @@ export function DayJournalPanel({
    *                       it. Typing again re-creates it (the §7.7 partial unique
    *                       permits re-creating a soft-deleted day).
    */
+  /**
+   * A LOCKED note never writes, and the ref is what makes that true at the only
+   * moment it matters.
+   *
+   * Locking unmounts the editor, and tearing a ProseMirror view down fires a
+   * BLUR — whose handler is this save path. The content it reports as it goes is
+   * empty, which lands on the branch below and soft-deletes the row: lock a note,
+   * and it was gone. (Found by the e2e, which locked, unlocked, and then found
+   * the editor blank.) The teardown happens during React's commit, so a ref
+   * assigned in render is already true by then where a state value or an effect
+   * would not be.
+   */
+  const lockedRef = useRef(preview);
+  lockedRef.current = preview;
+
   const write = (content: string) => {
+    if (lockedRef.current) return;
     if (isJournalContentEmpty(content)) {
       if (existingId) void commands.deleteJournal(existingId);
       return;

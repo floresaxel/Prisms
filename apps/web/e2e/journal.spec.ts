@@ -111,7 +111,15 @@ test('create → reload → edit → delete (WYSIWYG) with emoji; day Export .md
   await expect(page.getByTestId('journal-preview')).toBeVisible();
   await expect(page.getByTestId('journal-rich')).toHaveCount(0);
   await expect(page.getByTestId('journal-menu')).toHaveCount(0); // no menu on the Agenda
+
+  // The lock stops answering for the length of the fold it starts, so that a
+  // double click cannot lock and immediately unlock again. The three assertions
+  // above run well inside that window, so clicking straight through them lands
+  // in it and is dropped — wait it out, then prove the unlock actually took
+  // rather than discovering it much later as an empty editor.
+  await page.waitForTimeout(300);
   await page.getByTestId('journal-preview-toggle').click(); // back to editing
+  await expect(page.getByTestId('journal-rich')).toBeVisible();
 
   // Export .md downloads exactly the stored markdown, named <today>.md. Wait for
   // the note's TEXT, not just the panel: the panel mounts before its row loads,
@@ -247,7 +255,12 @@ test('standalone Journal screen: lists the current month, opens a note, lazily l
   await page.getByTestId(`journal-month-${monthA}`).click();
   await expect(page.getByTestId(`journal-day-${pastA}`)).toBeVisible({ timeout: 30_000 });
   await page.getByTestId(`journal-day-${pastA}`).click();
-  await expect(page.getByTestId('journal-rich')).toContainText('past month note', { timeout: 15_000 });
+  // Scoped to the day: switching days cross-fades, so for ~100ms the panel you
+  // came FROM is still on screen behind the one you moved to and a bare
+  // `journal-rich` matches both. The day you asked for is the one to assert on.
+  await expect(page.getByTestId(`journal-${pastA}`).getByTestId('journal-rich')).toContainText('past month note', {
+    timeout: 15_000,
+  });
 
   // the archive is server-sourced, so it includes BOTH months (even the lazy one).
   const [dl] = await Promise.all([page.waitForEvent('download'), page.getByTestId('journal-archive').click()]);
