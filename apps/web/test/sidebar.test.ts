@@ -10,7 +10,9 @@
  * still collapsed.
  *
  * Driven through the real `Layout` from `@prisms/ui` (the web app is its only
- * consumer) with vitest's fake timers standing in for the 2.5s of patience.
+ * consumer) with vitest's fake timers standing in for the peek's patience. The
+ * length of that wait is pinned by its own case below rather than named here,
+ * where it had already gone stale.
  */
 import { createElement } from 'react';
 
@@ -143,8 +145,8 @@ describe('resting the pointer on the rail', () => {
     expect(state()).toBe('peek');
   });
 
-  it('waits a full second', () => {
-    expect(PEEK_DELAY_MS).toBe(1000);
+  it('waits half a second', () => {
+    expect(PEEK_DELAY_MS).toBe(500);
   });
 
   it('opens a rail that has no chevron of its own', () => {

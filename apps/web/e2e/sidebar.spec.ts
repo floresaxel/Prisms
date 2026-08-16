@@ -15,6 +15,18 @@ import { expect, test } from '@playwright/test';
 
 /** Comfortably inside the page, far from the sidebar. */
 const AWAY = { x: 900, y: 400 };
+/**
+ * A stay too short to count as resting — long enough to be a real pause, short
+ * enough that the rail must still be shut when it ends.
+ *
+ * It has to stay well under `PEEK_DELAY_MS` (500ms, `Layout.tsx`), and the two
+ * are not linked in code: importing the constant here would drag the browser
+ * bundle into a Node-side spec, so this is kept a fraction of it by hand.
+ * **Shorten the peek delay again and this has to come down with it** — it was
+ * 700ms against a 1500ms delay, which would have silently started asserting the
+ * opposite of what it means.
+ */
+const PASSING_THROUGH_MS = 200;
 
 test('sidebar: collapses from inside itself, peeks on a resting pointer, and pins open', async ({ page }) => {
   const email = `e2e-sidebar-${Date.now()}@prisms.test`;
@@ -44,7 +56,7 @@ test('sidebar: collapses from inside itself, peeks on a resting pointer, and pin
 
   // --- a pointer passing through must not open it ------------------------
   await sidebar.hover();
-  await page.waitForTimeout(700);
+  await page.waitForTimeout(PASSING_THROUGH_MS);
   await expect(sidebar).toHaveAttribute('data-state', 'rail');
 
   // --- …but resting there does, once the delay is up ---------------------
