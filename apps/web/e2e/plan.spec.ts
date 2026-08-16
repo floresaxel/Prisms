@@ -91,6 +91,19 @@ test('Plan › Vision manages one vision at a time: create, rename, re-colour, r
 
   await expectNoRejection(page);
 
+  // The preview above is the DRAFT: the field paints it from its own state, so it
+  // reads "9 months" whether or not a command was ever queued — it is no evidence
+  // the edit was kept. `vis-stats` renders the STORED node, so it only says 9 once
+  // the write is in the row, and the chip reports the QUEUE, so `synced` means the
+  // server took it. Read `data-sync` rather than the chip's words, which lag 200ms
+  // behind on purpose and would still say "synced" just after a fresh write.
+  //
+  // Without both, the reload below raced the write it was there to verify: it
+  // landed ~60ms after the click, before the command reached SQLite, and the edit
+  // was simply gone — while the draft preview happily claimed otherwise.
+  await expect(page.getByTestId('vis-stats')).toContainText('9 months');
+  await expect(page.getByTestId('sync-state')).toHaveAttribute('data-sync', 'synced', { timeout: 30_000 });
+
   // --- all four survive a reload: the server took them, nothing rolled back ---
   await page.reload();
   await expect(page.getByTestId('vis-title')).toHaveValue('Build a studio', { timeout: 30_000 });
