@@ -114,6 +114,22 @@ const parseJson = (value: unknown, fallback: unknown): unknown => {
   }
 };
 
+/**
+ * A UUIDv7 — the version nibble sits at index 14, and only v7 carries the
+ * leading millisecond timestamp that makes ids sort by mint time.
+ */
+const isUuidV7 = (id: string): boolean => id.length === 36 && id[14] === '7';
+
+/**
+ * `stamp` was minted AFTER `commandId`, i.e. the row already carries a write the
+ * server took later than ours. Ordering is only readable when BOTH ids are v7:
+ * a v4 id (an import, a seeded fixture, anything not minted by `newId`) is
+ * random, so comparing it would be a coin flip. Unreadable → not superseded,
+ * which falls back to the exact-stamp wait this replaced.
+ */
+const supersedes = (stamp: string, commandId: string): boolean =>
+  isUuidV7(stamp) && isUuidV7(commandId) && stamp > commandId;
+
 const toPendingCommand = (r: OverlayRow): PendingCommand => ({
   id: String(r['id']),
   name: String(r['name']),
@@ -249,8 +265,33 @@ export function createSqlOverlayStore(sql: SqlExecutor): OverlayStore {
             // (when the table carries provenance) stamped by THIS command (V2). A
             // table without last_modified_by_command_id falls back to presence.
             if (!canonical || canonical['deleted_at'] != null) { allArrived = false; break; }
+            /**
+             * Confirmed when the row is stamped by THIS command — or by one that
+             * came AFTER it.
+             *
+             * A row records only its LAST modifier, so two commands touching the
+             * same row left the earlier one unable to ever match: it waited on a
+             * stamp that had already moved on. Its overlay was then held forever,
+             * and since `mergeRow` replays effects over the canonical row in HLC
+             * order, that stranded older effect kept overwriting the newer truth
+             * underneath it — the row said 9, the screen said 3, permanently, and
+             * a reload made it worse rather than better because the queue was
+             * empty and nothing ran reconciliation again.
+             *
+             * Client command ids are UUIDv7, so they sort by mint time: a stamp
+             * GREATER than ours is a write the server took after ours, which
+             * means the row already carries work newer than the effect we are
+             * holding, and holding it can only revert. Anything else — an older
+             * stamp, or an id whose ordering is unreadable — is the old value
+             * still on its way down, so keep waiting, which is the revert-flicker
+             * this design exists to avoid (S7-F6).
+             *
+             * Ordering across devices is only as good as their clocks; a skewed
+             * peer can at worst make this clear one beat early (a flicker), where
+             * before it could strand an overlay permanently.
+             */
             const stamp = canonical['last_modified_by_command_id'];
-            if (stamp != null && String(stamp) !== commandId) { allArrived = false; break; }
+            if (stamp != null && String(stamp) !== commandId && !supersedes(String(stamp), commandId)) { allArrived = false; break; }
           }
         }
         if (allArrived) {
