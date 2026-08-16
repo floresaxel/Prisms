@@ -54,6 +54,7 @@ import {
 
 import { conflictMessage, fitProblems, laneLayout, regionsInDay, type FitProblem } from '../agenda-fit';
 import { agendaLayout, DAY_SPANS, DEFAULT_SPAN, GUTTER_W, isDaySpan } from '../agenda-layout';
+import { formatAgendaRange, useRangeFormatPref } from '../agenda-range';
 import { fmtGridClock, pointerMinutes, snapMinutes, useSnapPref } from '../agenda-snap';
 import { DayJournalPanel } from '../components/DayJournal';
 import { NoteSwap } from '../components/NoteSwap';
@@ -279,6 +280,7 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
    * sample. The same trick keeps the resize drag below cheap.
    */
   const snap = useSnapPref();
+  const rangeFormat = useRangeFormatPref();
   const [previewCol, setPreviewCol] = useState<number | null>(null);
   const [previewMin, setPreviewMin] = useState<number | null>(null);
   const clearPreview = () => {
@@ -516,7 +518,10 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
     <section className="px-agenda-view" ref={viewRef as RefObject<HTMLElement>}>
       <div className="px-page-head">
         <h1>Agenda</h1>
-        <span className="px-page-sub" data-testid="week-range">{days[0]} – {days.at(-1)}</span>
+        {/* The label's shape is a Settings preference; the days it names are not. */}
+        <span className="px-page-sub" data-testid="week-range">
+          {formatAgendaRange(days[0] ?? '', days.at(-1) ?? '', rangeFormat)}
+        </span>
         {shownDays < span && (
           <span className="px-page-sub" data-testid="span-capped">showing {shownDays} of {span} — widen the window for more</span>
         )}
