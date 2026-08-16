@@ -92,6 +92,16 @@ describe('where the controls live', () => {
     expect(aside().contains(pin()!)).toBe(true);
   });
 
+  it('lets nothing in it be picked up', () => {
+    // Every item here is an anchor, and an anchor drags by default: press and
+    // move and the browser peels a URL off it, which reads as a sidebar you can
+    // reorder — right up until dropping it does nothing.
+    mount({ brandHref: HOME });
+    const anchors = [...aside().querySelectorAll('a')];
+    expect(anchors.length).toBeGreaterThan(1); // the nav items, and the brand mark
+    for (const a of anchors) expect(a.getAttribute('draggable')).toBe('false');
+  });
+
   it('collapses on click', () => {
     mount();
     expect(toggle().getAttribute('aria-label')).toBe('collapse sidebar');

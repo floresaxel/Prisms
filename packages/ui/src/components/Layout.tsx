@@ -84,6 +84,11 @@ function NavLink({ item, active, onNavigate, rail }: { item: NavItemSpec; active
       href={item.href}
       data-testid={`nav-${item.key}`}
       className={`px-navlink${active ? ' px-navlink--active' : ''}`}
+      // A nav item is a place to go, not a thing to pick up. It is an anchor, so
+      // the browser would otherwise let a press-and-move peel a URL off it —
+      // which reads as the sidebar being reorderable, and looks like a bug when
+      // dropping it does nothing.
+      draggable={false}
       // collapsed, the label is gone — the native tooltip carries it instead.
       title={rail ? item.label : undefined}
       aria-label={rail ? item.label : undefined}
@@ -306,6 +311,7 @@ export function Layout({ brand = 'Prisms', brandHref, groups, foot, active, onNa
               data-brand-mark=""
               aria-label={`${brand} — go to ${home.label}`}
               title={`Go to ${home.label}`}
+              draggable={false} // the mark is a link too, and picks up the same way
               onClick={(e) => {
                 if (onNavigate) {
                   e.preventDefault();
