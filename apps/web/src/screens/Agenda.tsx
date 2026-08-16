@@ -1,6 +1,6 @@
 /**
- * Agenda (§12.2, §10 client mode): a to-do panel on the LEFT, the week calendar
- * in the middle, the day's note on the RIGHT. The left panel holds "To schedule"
+ * Agenda (§12.2, §10 client mode): the day's note on the LEFT, the week calendar
+ * in the middle, a to-do panel on the RIGHT. The right panel holds "To schedule"
  * (unplaced tasks) above a scrollable "All tasks" list — every live task, the
  * already-scheduled ones included. Both are dense flush lists rather than stacks
  * of cards: hairline-separated rows, each with a three-dot grip at its trailing
@@ -564,70 +564,25 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
         data-layout={stacked ? (narrow ? 'narrow' : 'stack') : 'cols'}
         style={drag || resize ? { userSelect: 'none' } : undefined}
       >
-        {/* to-schedule + all tasks (left) — every row drags onto the week */}
-        <div className="px-agenda-todo">
-          <h2>To schedule <span className="px-muted">{agenda.todo.length}</span></h2>
-          <div data-testid="todo-list" className="px-todo-list">
-            {agenda.todo.length === 0 &&
-              (hydrated ? <div className="px-list-empty">Nothing to place.</div> : <Skeleton testId="todo-skeleton" rows={4} />)}
-            {agenda.todo.map((t: AgendaTask) => (
-              <div
-                key={t.task.id}
-                className={`px-todo-item${t.kind === 'activity' ? ' px-todo-item--inbox' : ''}${drag?.taskId === t.task.id ? ' px-todo-item--dragging' : ''}`}
-                data-testid={`todo-${t.task.id}`}
-                data-kind={t.kind}
-                title={rowTitle(t)}
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  startTaskDrag(t.schedulable, t.task.title, e);
-                }}
-              >
-                <span className="px-todo-title">{t.task.title}</span>
-                <span className="px-todo-sub">
-                  {t.kind === 'activity' && <span className="px-tag px-tag--grey px-todo-flag">inbox</span>}
-                  {t.estimated ? '' : '~'}{t.schedulable.estimateMinutes}m
-                </span>
-                <span className="px-todo-grip"><Ic name="dots" /></span>
+        {/* journal / event-tags panel (left) */}
+        <div className="px-agenda-journal">
+          {selectedBlock ? (
+            <>
+              <div className="px-why-inline" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span className="px-muted">{selectedBlock.status === 'suggested' ? 'Suggested event' : 'Event'}</span>
+                <WhyButton row={selectedBlock.provenance} suggestionReason={selectedBlock.suggestionReason} testId={`why-block-${selectedBlock.id}`} />
               </div>
-            ))}
-          </div>
-
-          {/* Everything still open, scheduled ones included — bounded scroller so
-              the panel never outgrows the week grid. */}
-          <div className="px-ag-all">
-            <h2>All tasks <span className="px-muted">{agenda.allTasks.length}</span></h2>
-            <div className="px-ag-scroll px-todo-list" data-testid="all-tasks-list">
-              {agenda.allTasks.length === 0 &&
-                (hydrated ? <div className="px-list-empty">No open tasks.</div> : <Skeleton testId="all-tasks-skeleton" rows={4} />)}
-              {agenda.allTasks.map((t: AgendaTask) => (
-                <div
-                  key={t.task.id}
-                  className={`px-todo-item${t.scheduled ? ' px-todo-item--placed' : ''}${t.kind === 'activity' ? ' px-todo-item--inbox' : ''}${drag?.taskId === t.task.id ? ' px-todo-item--dragging' : ''}`}
-                  data-testid={`alltask-${t.task.id}`}
-                  data-kind={t.kind}
-                  title={rowTitle(t)}
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    startTaskDrag(t.schedulable, t.task.title, e);
-                  }}
-                >
-                  <span className="px-todo-title">{t.task.title}</span>
-                  <span className="px-todo-sub">
-                    {t.kind === 'activity' && <span className="px-tag px-tag--grey px-todo-flag">inbox</span>}
-                    {t.scheduled ? 'scheduled · ' : ''}
-                    {t.estimated ? '' : '~'}
-                    {t.schedulable.estimateMinutes}m
-                  </span>
-                  <span className="px-todo-grip"><Ic name="dots" /></span>
-                </div>
-              ))}
-            </div>
-          </div>
-          <p className="px-muted px-drag-hint" data-testid="drag-hint">
-            Drops snap to {snap === 60 ? '1 hour' : `${snap} minutes`} — change that in Settings. Anchored blocks refuse
-            the drag (🔒); everywhere else takes a drop, and one that overlaps or falls outside your hours keeps a
-            caution ⚠ until you move it.
-          </p>
+              <BlockTagsPanel blockId={selectedBlock.id} title={selectedBlock.title} ctx={ctx} />
+            </>
+          ) : (
+            // key by day so the editor re-initializes per day (J4/D3); defaults to today.
+            // `lock`: just the lock/pencil toggle here — managing the note
+            // (export, delete) belongs to the Journal screen. NoteSwap holds the
+            // outgoing day on screen long enough to fade it out.
+            <NoteSwap swapKey={journalDay}>
+              <DayJournalPanel key={journalDay} date={journalDay} ctx={ctx} actions="lock" />
+            </NoteSwap>
+          )}
         </div>
 
         <div className="px-agenda-cal">
@@ -851,25 +806,70 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
         </div>
       </div>
 
-        {/* journal / event-tags panel (right) */}
-        <div className="px-agenda-journal">
-          {selectedBlock ? (
-            <>
-              <div className="px-why-inline" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span className="px-muted">{selectedBlock.status === 'suggested' ? 'Suggested event' : 'Event'}</span>
-                <WhyButton row={selectedBlock.provenance} suggestionReason={selectedBlock.suggestionReason} testId={`why-block-${selectedBlock.id}`} />
+        {/* to-schedule + all tasks (right) — every row drags onto the week */}
+        <div className="px-agenda-todo">
+          <h2>To schedule <span className="px-muted">{agenda.todo.length}</span></h2>
+          <div data-testid="todo-list" className="px-todo-list">
+            {agenda.todo.length === 0 &&
+              (hydrated ? <div className="px-list-empty">Nothing to place.</div> : <Skeleton testId="todo-skeleton" rows={4} />)}
+            {agenda.todo.map((t: AgendaTask) => (
+              <div
+                key={t.task.id}
+                className={`px-todo-item${t.kind === 'activity' ? ' px-todo-item--inbox' : ''}${drag?.taskId === t.task.id ? ' px-todo-item--dragging' : ''}`}
+                data-testid={`todo-${t.task.id}`}
+                data-kind={t.kind}
+                title={rowTitle(t)}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  startTaskDrag(t.schedulable, t.task.title, e);
+                }}
+              >
+                <span className="px-todo-title">{t.task.title}</span>
+                <span className="px-todo-sub">
+                  {t.kind === 'activity' && <span className="px-tag px-tag--grey px-todo-flag">inbox</span>}
+                  {t.estimated ? '' : '~'}{t.schedulable.estimateMinutes}m
+                </span>
+                <span className="px-todo-grip"><Ic name="dots" /></span>
               </div>
-              <BlockTagsPanel blockId={selectedBlock.id} title={selectedBlock.title} ctx={ctx} />
-            </>
-          ) : (
-            // key by day so the editor re-initializes per day (J4/D3); defaults to today.
-            // `lock`: just the lock/pencil toggle here — managing the note
-            // (export, delete) belongs to the Journal screen. NoteSwap holds the
-            // outgoing day on screen long enough to fade it out.
-            <NoteSwap swapKey={journalDay}>
-              <DayJournalPanel key={journalDay} date={journalDay} ctx={ctx} actions="lock" />
-            </NoteSwap>
-          )}
+            ))}
+          </div>
+
+          {/* Everything still open, scheduled ones included — bounded scroller so
+              the panel never outgrows the week grid. */}
+          <div className="px-ag-all">
+            <h2>All tasks <span className="px-muted">{agenda.allTasks.length}</span></h2>
+            <div className="px-ag-scroll px-todo-list" data-testid="all-tasks-list">
+              {agenda.allTasks.length === 0 &&
+                (hydrated ? <div className="px-list-empty">No open tasks.</div> : <Skeleton testId="all-tasks-skeleton" rows={4} />)}
+              {agenda.allTasks.map((t: AgendaTask) => (
+                <div
+                  key={t.task.id}
+                  className={`px-todo-item${t.scheduled ? ' px-todo-item--placed' : ''}${t.kind === 'activity' ? ' px-todo-item--inbox' : ''}${drag?.taskId === t.task.id ? ' px-todo-item--dragging' : ''}`}
+                  data-testid={`alltask-${t.task.id}`}
+                  data-kind={t.kind}
+                  title={rowTitle(t)}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    startTaskDrag(t.schedulable, t.task.title, e);
+                  }}
+                >
+                  <span className="px-todo-title">{t.task.title}</span>
+                  <span className="px-todo-sub">
+                    {t.kind === 'activity' && <span className="px-tag px-tag--grey px-todo-flag">inbox</span>}
+                    {t.scheduled ? 'scheduled · ' : ''}
+                    {t.estimated ? '' : '~'}
+                    {t.schedulable.estimateMinutes}m
+                  </span>
+                  <span className="px-todo-grip"><Ic name="dots" /></span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <p className="px-muted px-drag-hint" data-testid="drag-hint">
+            Drops snap to {snap === 60 ? '1 hour' : `${snap} minutes`} — change that in Settings. Anchored blocks refuse
+            the drag (🔒); everywhere else takes a drop, and one that overlaps or falls outside your hours keeps a
+            caution ⚠ until you move it.
+          </p>
         </div>
       </div>
 

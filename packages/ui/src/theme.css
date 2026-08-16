@@ -327,15 +327,21 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
 .px-ag-sw--history { background: var(--px-surface-2); border: 1px dashed var(--px-border-2); }
 .px-ag-sw-ic { width: 12px; height: 12px; flex: none; color: var(--px-amber); stroke-width: 2.4; }
 
-/* Column order: to-schedule (left) · week grid · note (right). Below ~1040px of
-   MEASURED screen width the two panels move under the calendar, and below ~720px
-   they stop sharing a row — the JS that measures also sheds day columns, so the
-   page never scrolls sideways. */
-.px-agenda { display: grid; grid-template-columns: 248px minmax(0, 1fr) 286px; gap: 18px; align-items: start; }
+/* Column order: note (left) · week grid · to-schedule (right). The widths belong
+   to the panels, not to the sides, so the note keeps the wider 286px it needs to
+   be written in. Source order matches this left-to-right, which is what keeps the
+   tab order walking the screen the way it looks — `order`/`grid-column` would
+   have swapped the picture and left the keyboard going right-to-left.
+   Below ~1040px of MEASURED screen width the two panels move under the calendar,
+   and below ~720px they stop sharing a row — the JS that measures also sheds day
+   columns, so the page never scrolls sideways. */
+.px-agenda { display: grid; grid-template-columns: 286px minmax(0, 1fr) 248px; gap: 18px; align-items: start; }
 .px-agenda--stack { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .px-agenda--stack .px-agenda-cal { grid-column: 1 / -1; order: 0; }
-.px-agenda--stack .px-agenda-todo { order: 1; }
-.px-agenda--stack .px-agenda-journal { order: 2; }
+/* Stacked, the pair keeps the same left-to-right it has in the wide layout;
+   both need an explicit order to fall BELOW the full-width calendar. */
+.px-agenda--stack .px-agenda-journal { order: 1; }
+.px-agenda--stack .px-agenda-todo { order: 2; }
 .px-agenda--narrow { grid-template-columns: minmax(0, 1fr); }
 .px-agenda-cal { min-width: 0; }
 /* multi-row spans (2 weeks) stack their grids */
