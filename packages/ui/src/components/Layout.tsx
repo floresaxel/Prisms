@@ -109,7 +109,7 @@ const PIN_KEY = 'prisms.sidebar.pinned';
  *  narrow window costs more than it gives. */
 const RAIL_FORCE_W = 900;
 /** How long the pointer must rest on the rail before it opens itself. */
-export const PEEK_DELAY_MS = 1500;
+export const PEEK_DELAY_MS = 1000;
 
 const readFlag = (key: string): boolean => {
   try {
