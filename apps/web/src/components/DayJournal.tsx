@@ -14,7 +14,7 @@
  * (and on unmount) via `journal.write`; an explicit Delete soft-deletes; empty
  * saves are allowed.
  */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -31,6 +31,8 @@ import {
   useUserSettings,
   type CommandContext,
 } from '@prisms/ui';
+
+import { readJournalLocked, writeJournalLocked } from '../journal-lock-cache';
 
 import { DayLogFooter } from './DayLogFooter';
 import { RichJournalEditor } from './RichJournalEditor';
@@ -52,6 +54,15 @@ const SAVE_DEBOUNCE_MS = 100;
  * stuck after it has visibly settled.
  */
 const LOCK_ANIM_MS = 194;
+
+/**
+ * How long the remembered lock state stands in for a day's row while that row is
+ * still on its way. Comfortably longer than the arrival it covers (~80ms
+ * measured, worst case a few hundred), and short enough that a day whose note
+ * has gone missing settles into the truth quickly rather than sitting on a
+ * memory. A slower arrival than this shows "Loading…" anyway.
+ */
+const LOCK_HINT_MS = 600;
 
 /** Allow only these link schemes; everything else (javascript:, data:, …) is dropped. */
 const SAFE_URL = /^(https?:|mailto:)/i;
@@ -164,7 +175,59 @@ export function DayJournalPanel({
     if (lockIntent !== null && syncedLocked === lockIntent) setLockIntent(null);
   }, [lockIntent, syncedLocked]);
 
-  const preview = hasNote && (lockIntent ?? syncedLocked);
+  /**
+   * The lock reads the ROW, not `draft`.
+   *
+   * `hasNote` is derived from the draft, which is seeded from the entry at mount
+   * and re-synced by an effect — so on the first render of a day it is false even
+   * when the row is right there, fully read. Gating the lock on it made a locked
+   * note mount as `false && true` — unlocked, toolbar out — and correct itself
+   * once the draft caught up. Measured on the Agenda: the panel mounts at +76ms
+   * with `hasNote=false`, and the draft lands at +125ms. ~50ms of editing chrome
+   * on a note that cannot be edited.
+   *
+   * The row has no such lag, and it is the field's own source anyway.
+   */
+  const entryHasNote = existingId !== undefined && !isJournalContentEmpty(entry?.content ?? '');
+  const settledLocked = entryHasNote && syncedLocked;
+  /**
+   * The day's remembered state, which is what this panel opens on while the read
+   * is unsettled. Without it, switching to a locked note drew the editor and its
+   * toolbar for ~36ms and then folded them away — measured on the Agenda, where
+   * the incoming panel mounts at +24ms and the row lands at +60ms.
+   *
+   * Read once per mounted day: the point is the FIRST frame, and re-reading a
+   * hint after the truth is available would only fight it.
+   */
+  const remembered = useMemo(() => readJournalLocked(date), [date]);
+  /**
+   * The hint covers ARRIVAL and nothing else: the gap between mounting a day and
+   * its row turning up. `isSettled` is not that signal — it belongs to the MONTH
+   * subscription, and a just-written day can still be missing from it (measured:
+   * settled at +172ms, the row itself at +250ms).
+   *
+   * It expires so it can never become the answer. Without that, a note deleted on
+   * another device would leave `entry` null here for good, and a remembered
+   * `true` would keep drawing a locked note that no longer exists.
+   */
+  const [hintLive, setHintLive] = useState(true);
+  useEffect(() => {
+    setHintLive(true);
+    const t = setTimeout(() => setHintLive(false), LOCK_HINT_MS);
+    return () => clearTimeout(t);
+  }, [date]);
+
+  const useHint = entry === null && hintLive && remembered !== undefined;
+  const preview = lockIntent ?? (useHint ? remembered : settledLocked);
+
+  // Remember it for next time — an explicit intent the moment it is expressed,
+  // and otherwise only what the ROW has actually shown. Never the hint itself,
+  // which would let one guess teach itself to the next mount, and never the
+  // absence of a row, which is routinely just "not here yet".
+  useEffect(() => {
+    if (lockIntent !== null) writeJournalLocked(date, lockIntent);
+    else if (entry !== null) writeJournalLocked(date, settledLocked);
+  }, [date, lockIntent, entry, settledLocked]);
   const [titleDraft, setTitleDraft] = useState<string | null>(null);
 
   function commitTitle() {
