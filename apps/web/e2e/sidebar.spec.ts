@@ -68,22 +68,28 @@ test('sidebar: collapses from inside itself, peeks on a resting pointer, and pin
   await expect(sidebar).toHaveAttribute('data-state', 'rail');
 
   // --- the keyboard's way in ---------------------------------------------
-  // Real Tabs, not programmatic focus: the sidebar is the first thing in the
-  // document, so the first press lands on the brand mark. That one does NOT
-  // peek — it is the explicit way open, and opening it there would unmount the
-  // button under the keyboard's own focus. The NEXT stop is a nav link, and
-  // that opens AT ONCE, without the pointer's wait, because a keyboard cannot
-  // rest on anything.
+  // A real Tab first: a focus only counts as a keyboard arrival while the
+  // keyboard is actually driving, so the press is what arms it. Which element
+  // that press lands on is not this test's business — it is tab order, and
+  // asserting it made this spec fail the moment the shell grew a control — so
+  // focus is then put where the assertion means it.
   await page.keyboard.press('Tab');
-  await expect(page.getByTestId('brand-expand')).toBeFocused();
-  await expect(sidebar).toHaveAttribute('data-state', 'rail');
-  await page.keyboard.press('Tab');
-  await expect(sidebar).toHaveAttribute('data-state', 'peek');
+  await page.getByTestId('nav-agenda').focus();
+  await expect(sidebar).toHaveAttribute('data-state', 'peek'); // at once, no pointer wait
   expect(await sidebar.evaluate((el) => el.contains(document.activeElement))).toBe(true);
   await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
   await expect(sidebar).toHaveAttribute('data-state', 'rail');
 
-  // --- and the mark itself opens it, for a pointer or a press ------------
+  // --- the brand mark is the exception: focus must NOT open it -----------
+  // It is the rail's explicit way open, so it does not also peek. If it did,
+  // landing on it would open the sidebar, which swaps the button for a link —
+  // unmounting the element holding focus and shutting the rail again under a
+  // keyboard that had just arrived.
+  await page.getByTestId('brand-expand').focus();
+  await expect(sidebar).toHaveAttribute('data-state', 'rail');
+  await expect(page.getByTestId('brand-expand')).toBeFocused(); // …still there to press
+
+  // --- …and pressing it opens it, for a pointer or a keyboard ------------
   await page.getByTestId('brand-expand').click();
   await expect(sidebar).toHaveAttribute('data-state', 'open');
   await expect(page.getByTestId('brand-home')).toBeVisible(); // now it means home
