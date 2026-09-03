@@ -277,12 +277,23 @@ test('agenda: a clashing drop is accepted, flagged, and drawn beside what it cla
 
   /** Drop `taskId` on col 5 at a wall-clock time, and say what the outline warned. */
   async function dropAt(taskId: string, hour: number, minute = 0): Promise<string | null> {
+    const placed = page.getByTestId('day-5').locator('.px-cal-block');
+    const before = await placed.count();
     await page.getByTestId(`todo-${taskId}`).hover();
     await page.mouse.down();
     await page.getByTestId('drop-col-5').hover({ position: { x: 20, y: gridY(hour, minute) } });
     const problems = await page.getByTestId('drop-preview-5').getAttribute('data-problems');
     await page.mouse.up();
     await expect(page.getByTestId(`todo-${taskId}`)).toHaveCount(0); // it landed
+    /*
+     * …and it is ON THE GRID before the caller drags anything else. Leaving the
+     * to-do list only says the task was placed; the block reaches the day a beat
+     * later, and the next drag reads that day to decide whether it clashes. Drop
+     * two overlapping blocks quickly enough and the second one computed its
+     * preview against a day that still looked empty and reported no overlap —
+     * a 2s failure of an otherwise 17s test, passing on the very next run.
+     */
+    await expect(placed).toHaveCount(before + 1);
     return problems;
   }
 

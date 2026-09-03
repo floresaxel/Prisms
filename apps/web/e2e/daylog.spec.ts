@@ -240,8 +240,9 @@ test('exports: the day .md carries the section, and the archive has a LOG-ONLY p
   await expect(page.getByTestId(`journal-${today}`).getByTestId('journal-rich')).toContainText('Shipped it today.', {
     timeout: 30_000,
   });
-  await page.getByTestId('journal-menu').click();
-  const [dl] = await Promise.all([page.waitForEvent('download'), page.getByTestId('journal-export').click()]);
+  const dayPanel = page.getByTestId(`journal-${today}`);
+  await dayPanel.getByTestId('journal-menu').click();
+  const [dl] = await Promise.all([page.waitForEvent('download'), dayPanel.getByTestId('journal-export').click()]);
   expect(dl.suggestedFilename()).toBe(`${today}.md`);
   const md = await readFile(await dl.path(), 'utf8');
   expect(md.startsWith('Shipped it today.')).toBe(true);

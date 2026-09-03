@@ -153,8 +153,11 @@ test('create → reload → edit → delete (WYSIWYG) with emoji; day Export .md
   await expect(page.getByTestId(`journal-${today}`).getByTestId('journal-rich')).toContainText('Standup notes', {
     timeout: 30_000,
   });
-  await page.getByTestId('journal-menu').click();
-  const [dl] = await Promise.all([page.waitForEvent('download'), page.getByTestId('journal-export').click()]);
+  // Scoped like the assertion above: the day click cross-fades, so for ~100ms
+  // the panel left behind still carries its own copy of this menu.
+  const dayPanel = page.getByTestId(`journal-${today}`);
+  await dayPanel.getByTestId('journal-menu').click();
+  const [dl] = await Promise.all([page.waitForEvent('download'), dayPanel.getByTestId('journal-export').click()]);
   expect(dl.suggestedFilename()).toBe(`${today}.md`);
   expect(await readFile(await dl.path(), 'utf8')).toBe(stored);
 
@@ -173,8 +176,8 @@ test('create → reload → edit → delete (WYSIWYG) with emoji; day Export .md
   await expect.poll(async () => (await serverDays(page)).length, { timeout: 30_000 }).toBe(1);
   await goto(page, 'journal');
   await page.getByTestId(`journal-day-${today}`).click(); // the written day, not the screen's default
-  await page.getByTestId('journal-menu').click();
-  await page.getByTestId('journal-delete').click();
+  await page.getByTestId(`journal-${today}`).getByTestId('journal-menu').click();
+  await page.getByTestId(`journal-${today}`).getByTestId('journal-delete').click();
   await expect.poll(async () => (await serverDays(page)).length, { timeout: 30_000 }).toBe(0);
   await goto(page, 'agenda');
   await expect(page.getByTestId(`note-dot-${today}`)).toHaveCount(0);
