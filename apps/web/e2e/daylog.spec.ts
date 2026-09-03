@@ -231,6 +231,15 @@ test('exports: the day .md carries the section, and the archive has a LOG-ONLY p
 
   // The day download: the note VERBATIM, then the section. Export lives behind
   // the note's corner "⋯" menu.
+  //
+  // Wait for the note's TEXT first, not just the panel and the footer. The
+  // footer is computed from blocks and completions, which can land before the
+  // journal row does — and `exportDay` writes from the panel's draft, so
+  // exporting in that gap produces a file with the day log but no note.
+  // journal.spec.ts carries the same wait, for the same reason.
+  await expect(page.getByTestId(`journal-${today}`).getByTestId('journal-rich')).toContainText('Shipped it today.', {
+    timeout: 30_000,
+  });
   await page.getByTestId('journal-menu').click();
   const [dl] = await Promise.all([page.waitForEvent('download'), page.getByTestId('journal-export').click()]);
   expect(dl.suggestedFilename()).toBe(`${today}.md`);
