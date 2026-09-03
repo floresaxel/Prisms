@@ -47,6 +47,25 @@ export function createCommands(store: OverlayStore, ctx: CommandContext, deps: E
     async rename(taskId: string, title: string): Promise<void> {
       await run('node.rename', { id: taskId, title });
     },
+    async setDescription(nodeId: string, description: string): Promise<void> {
+      await run('node.set_description', { id: nodeId, description });
+    },
+    /**
+     * Replace a node's type-specific extras (a vision's colour + horizon). The
+     * verb REPLACES the bag, so pass the attributes the node should end up with
+     * — read the current ones and spread your change onto them.
+     */
+    async setNodeAttributes(nodeId: string, attributes: Record<string, unknown>): Promise<void> {
+      await run('node.set_attributes', { id: nodeId, attributes });
+    },
+    /** Re-key a node among its siblings (fractional index; parent unchanged). */
+    async reorderNode(nodeId: string, sortOrder: string): Promise<void> {
+      await run('node.reorder', { id: nodeId, sort_order: sortOrder });
+    },
+    /** Re-parent a node (I1 typing still applies) at `sortOrder` under the new parent. */
+    async moveNode(nodeId: string, newParentId: string | null, sortOrder: string): Promise<void> {
+      await run('node.move', { id: nodeId, new_parent_id: newParentId, sort_order: sortOrder });
+    },
     async softDelete(taskId: string): Promise<void> {
       // execute() computes the §I10 descendant closure over the merged tree and
       // hides the whole subtree optimistically (S7-F7); the server re-cascades

@@ -142,6 +142,7 @@ export {
   useUserSettings,
   useAggregates,
   useCommands,
+  useSyncQueue,
   useReviewInbox,
   useTagCatalog,
   useBlockTags,
@@ -199,6 +200,7 @@ export {
   type ReviewItemView,
   type JournalMonthsRead,
   type JournalDayRead,
+  type SyncQueueState,
   type TodayItinerary,
 } from './hooks';
 export { groupWorklistBySchedule, type WorklistGroup } from './worklist-grouping';
@@ -221,7 +223,7 @@ export {
 } from './day-map';
 
 // design system
-export { Layout, type LayoutProps, type NavItemSpec, type NavGroupSpec, type BreadcrumbSpec } from './components/Layout';
+export { Layout, PEEK_DELAY_MS, type LayoutProps, type NavItemSpec, type NavGroupSpec, type BreadcrumbSpec } from './components/Layout';
 export { Ic, IconSprite, type IcProps, type IconName } from './components/icons';
 export { List, ListItem, Skeleton, ListSkeleton, type ListProps, type ListItemProps, type SkeletonProps } from './components/List';
 export { Modal, type ModalProps } from './components/Modal';

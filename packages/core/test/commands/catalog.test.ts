@@ -33,8 +33,9 @@ import { idOf, makeEdge, makeEntry, makeNode } from '../helpers/fixtures';
 
 describe('catalog completeness + strictness (DoD schema test)', () => {
   it('registers all 50 §8.1 verbs (incl. layout.renormalize_order) + 7 tag + 2 review + 4 journal + 5 step verbs and resolves names', () => {
-    expect(COMMAND_NAMES.length).toBe(68);
+    expect(COMMAND_NAMES.length).toBe(69);
     expect(isCommandName('node.create')).toBe(true);
+    expect(isCommandName('node.set_attributes')).toBe(true); // vision colour + horizon, after creation
     expect(isCommandName('layout.renormalize_order')).toBe(true); // §7.10a, M1
     expect(isCommandName('review.resolve')).toBe(true); // §7.13 inbox close, M10
     expect(isCommandName('review.dismiss')).toBe(true);

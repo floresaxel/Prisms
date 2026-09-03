@@ -12,7 +12,7 @@ export type IconName =
   | 'chart' | 'zap' | 'sliders' | 'search' | 'plus' | 'clock' | 'lock' | 'check'
   | 'x' | 'chevd' | 'chevl' | 'chevr' | 'play' | 'stop' | 'down' | 'up' | 'info'
   | 'alert' | 'flame' | 'trash' | 'cols' | 'gantt' | 'net' | 'scale' | 'list' | 'pen'
-  | 'dots' | 'route' | 'note';
+  | 'dots' | 'route' | 'note' | 'tasklist' | 'eye' | 'lockbody' | 'lockshackle' | 'pin';
 
 /** Mount once, high in the tree (the app shell). Renders no visible output. */
 export function IconSprite() {
@@ -32,7 +32,27 @@ export function IconSprite() {
       <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></symbol>
       <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></symbol>
       <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></symbol>
-      <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></symbol>
+      {/* What stops a padlock reading as a ring is the LEG length, not the width
+          of the arch: the original had legs (4) exactly equal to the arch radius
+          (4), so at a 14px render it was a semicircle sitting on almost nothing.
+          The legs are 5 now against that same radius 4 — the arch keeps its
+          original width, only the legs grew. */}
+      <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V6a4 4 0 0 1 8 0v5" /></symbol>
+      {/* i-lock split into its two moving parts, for a padlock that ANIMATES open
+          and shut (the journal note's lock). Same geometry as i-lock above, so the
+          assembled pair is pixel-identical to it in the closed state — only now
+          the shackle can pivot on its own. Drawn apart rather than as a second
+          whole icon because a shackle that swings is one lock moving, where
+          cross-fading two icons is two pictures trading places. */}
+      <symbol id="i-lockbody" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2" /></symbol>
+      {/* `non-scaling-stroke` is what makes the shackle a ROD rather than a strip
+          of paper: it is the one part that gets squashed as the lock turns, and
+          without this its stroke narrows with it — legs thinning to nothing at
+          edge-on, where a real rod's silhouette would not change at all. The
+          stroke is exempted from the transform, so only the geometry foreshortens.
+          Its width then reads in screen units, so the caller must state one; see
+          `--px-lock-size` in theme.css. */}
+      <symbol id="i-lockshackle" viewBox="0 0 24 24"><path d="M8 11V6a4 4 0 0 1 8 0v5" vectorEffect="non-scaling-stroke" /></symbol>
       <symbol id="i-check" viewBox="0 0 24 24"><path d="m4 12 5 5L20 7" /></symbol>
       <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18" /></symbol>
       <symbol id="i-chevd" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6" /></symbol>
@@ -54,9 +74,21 @@ export function IconSprite() {
       <symbol id="i-pen" viewBox="0 0 24 24"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" /></symbol>
       <symbol id="i-dots" viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.4" /><circle cx="12" cy="12" r="1.4" /><circle cx="12" cy="19" r="1.4" /></symbol>
       <symbol id="i-route" viewBox="0 0 24 24"><circle cx="6" cy="19" r="3" /><circle cx="18" cy="5" r="3" /><path d="M9 19h5a4 4 0 0 0 0-8h-4a4 4 0 0 1 0-8h5" /></symbol>
+      {/* a pushpin seen head-on: cap, tapering body, needle. Drawn upright so it
+          reads the same pressed or not — the sidebar's "keep this open". */}
+      <symbol id="i-pin" viewBox="0 0 24 24"><path d="M9 3h6" /><path d="M10 3v6l-3 4h10l-3-4V3" /><path d="M12 13v8" /></symbol>
       {/* a page with two lines of writing — legible down to ~11px, where a
           book/journal glyph turns to mush. */}
       <symbol id="i-note" viewBox="0 0 24 24"><path d="M6 3h8l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z" /><path d="M14 3v5h5" /><path d="M9 13h6M9 17h4" /></symbol>
+      {/* checked box — the journal toolbar's "Task list". A drawn icon, not the
+          ☑ character (U+2611): Inter has no glyph for it, so the font stack fell
+          through to Segoe UI Emoji and rendered a COLOUR emoji that ignores
+          `color` — the one non-monochrome mark in the editor chrome. */}
+      <symbol id="i-tasklist" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" /><path d="m9 12 2 2 4-4" /></symbol>
+      {/* what you are looking towards — the Vision nav item. `route` (a path
+          between two points) already carries Roadmap, so the pair reads as
+          "where you are going" / "how you get there". */}
+      <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12Z" /><circle cx="12" cy="12" r="2.8" /></symbol>
     </svg>
   );
 }

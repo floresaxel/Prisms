@@ -30,6 +30,7 @@ import {
 import { getSession, signOut, type SessionUser } from './auth';
 import { GlobalTimer } from './components/GlobalTimer';
 import { ReviewBanner } from './components/ReviewBanner';
+import { SyncChip } from './components/SyncChip';
 import { isDesktop, osNotify } from './desktop';
 import { rejectionMessage } from './format';
 import { clearLocalAccount, connectDb, createDb } from './powersync';
@@ -42,8 +43,10 @@ import { Login } from './screens/Login';
 import { MyDay } from './screens/MyDay';
 import { Projects } from './screens/Projects';
 import { Review } from './screens/Review';
+import { Roadmap } from './screens/Roadmap';
 import { Settings } from './screens/Settings';
 import { Tasks } from './screens/Tasks';
+import { Vision } from './screens/Vision';
 
 type Route =
   | '/'
@@ -51,13 +54,15 @@ type Route =
   | '/agenda'
   | '/habits'
   | '/journal'
+  | '/vision'
+  | '/roadmap'
   | '/projects'
   | '/dashboard'
   | '/automations'
   | '/review'
   | '/settings';
 
-const ROUTES = new Set<Route>(['/', '/tasks', '/agenda', '/habits', '/journal', '/projects', '/dashboard', '/automations', '/review', '/settings']);
+const ROUTES = new Set<Route>(['/', '/tasks', '/agenda', '/habits', '/journal', '/vision', '/roadmap', '/projects', '/dashboard', '/automations', '/review', '/settings']);
 
 // Old flat routes → new consolidated route (+ hub tab hash), applied once on boot
 // (D3) so bookmarks and mid-migration deep links never 404. The hub reads the
@@ -73,12 +78,23 @@ const REDIRECTS: Record<string, string> = {
   '/blockers': '/automations#blockers',
 };
 
+/**
+ * The Roadmap tab left the Projects hub for its own Plan route, so the hash a
+ * `/kanban`-era bookmark (or the redirect above) lands on has to follow it —
+ * a pathname-keyed REDIRECT cannot see the hash.
+ */
+const HASH_REDIRECTS: Record<string, Record<string, string>> = {
+  '/projects': { '#roadmap': '/roadmap' },
+};
+
 const CRUMBS: Record<Route, BreadcrumbSpec> = {
   '/': { section: 'My work', page: 'My Day' },
   '/tasks': { section: 'My work', page: 'Tasks' },
   '/agenda': { section: 'My work', page: 'Agenda' },
   '/habits': { section: 'My work', page: 'Habits & Skills' },
   '/journal': { section: 'My work', page: 'Journal' },
+  '/vision': { section: 'Plan', page: 'Vision' },
+  '/roadmap': { section: 'Plan', page: 'Roadmap' },
   '/projects': { section: 'Plan', page: 'Projects' },
   '/dashboard': { section: 'Plan', page: 'Dashboard' },
   '/automations': { section: 'Automate', page: 'Automations' },
@@ -92,9 +108,20 @@ function resolveBootRoute(): Route {
   const redirect = REDIRECTS[path];
   if (redirect) {
     window.history.replaceState({}, '', redirect);
-    return redirect.split('#')[0] as Route;
+    return resolveHash(redirect);
   }
-  return ROUTES.has(path as Route) ? (path as Route) : '/';
+  return ROUTES.has(path as Route) ? resolveHash(path + window.location.hash) : '/';
+}
+
+/** Second hop: a route whose HASH moved to a route of its own (`/projects#roadmap`). */
+function resolveHash(href: string): Route {
+  const [path = '/', hash] = href.split('#');
+  const moved = hash ? HASH_REDIRECTS[path]?.[`#${hash}`] : undefined;
+  if (moved) {
+    window.history.replaceState({}, '', moved);
+    return moved as Route;
+  }
+  return path as Route;
 }
 
 /** Shell composition — mounted inside PrismsDataProvider so it can read the
@@ -139,7 +166,11 @@ function Shell({
     },
     {
       label: 'Plan',
+      // top-down, the way the tree is: a vision owns roadmaps, a roadmap owns
+      // projects. Each level is managed on its own screen (I1).
       items: [
+        { key: 'vision', label: 'Vision', href: '/vision', icon: 'eye' },
+        { key: 'roadmap', label: 'Roadmap', href: '/roadmap', icon: 'route' },
         { key: 'projects', label: 'Projects', href: '/projects', icon: 'layers' },
         { key: 'dashboard', label: 'Dashboard', href: '/dashboard', icon: 'chart' },
       ],
@@ -159,6 +190,8 @@ function Shell({
         '/agenda': <Agenda ctx={ctx} />,
         '/habits': <Habits ctx={ctx} />,
         '/journal': <Journal ctx={ctx} />,
+        '/vision': <Vision ctx={ctx} onNavigate={navigate} />,
+        '/roadmap': <Roadmap ctx={ctx} onNavigate={navigate} />,
         '/projects': <Projects ctx={ctx} />,
         '/dashboard': <Dashboard ctx={ctx} />,
         '/automations': <Automations ctx={ctx} />,
@@ -171,17 +204,14 @@ function Shell({
     <Layout
       groups={groups}
       foot={foot}
+      // the brand mark opens a collapsed sidebar; once open it goes to My Day
+      brandHref="/"
       active={route}
       onNavigate={navigate}
       breadcrumb={CRUMBS[route]}
       timer={<GlobalTimer ctx={ctx} />}
       user={{ name: user.name, email: user.email }}
-      sync={
-        <div className={`px-sync-chip${connected ? '' : ' px-sync-chip--connecting'}`} data-testid="sync-state">
-          <span className="px-dot" />
-          {connected ? 'synced' : 'connecting…'}
-        </div>
-      }
+      sync={<SyncChip connected={connected} />}
       footer={
         <>
           {isDesktop() && (

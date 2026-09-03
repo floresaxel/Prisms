@@ -98,6 +98,10 @@ export function buildOptimisticEffects(name: CommandName, payload: unknown, ctx:
       return [upd('nodes', id, { title: p['title'] })];
     case 'node.set_description':
       return [upd('nodes', id, { description: p['description'] })];
+    case 'node.set_attributes':
+      // whole-bag replace (the verb's contract), and JSON *text* like every other
+      // JSON column here so the row mapper's parse sees what the replica stores.
+      return [upd('nodes', id, { attributes: j(p['attributes'] ?? {}) })];
     case 'node.set_dates': {
       const f: Record<string, unknown> = {};
       if ('start_date' in p) f['start_date'] = p['start_date'] ?? null;

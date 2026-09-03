@@ -1,11 +1,13 @@
 /**
- * Projects hub (web redesign W1/W5) — one screen hosting Roadmap / Board /
- * Timeline / Graph / Decisions under hash tabs
- * (`#roadmap|#board|#timeline|#graph|#decisions`). W5 adds a SHARED scope picker
- * (a project, or "All projects"): it filters the Board (Kanban), and scopes the
- * Timeline (Gantt) + Graph (Flowchart) to that project; Roadmap and Decisions are
- * scope-independent (Roadmap has its own roadmap picker), so the picker hides on
- * both. Old flat routes redirect into these hashes on boot (App.tsx).
+ * Projects hub (web redesign W1/W5) — one screen hosting Board / Timeline /
+ * Graph / Decisions under hash tabs (`#board|#timeline|#graph|#decisions`). W5
+ * adds a SHARED scope picker (a project, or "All projects"): it filters the
+ * Board (Kanban), and scopes the Timeline (Gantt) + Graph (Flowchart) to that
+ * project; Decisions is scope-independent, so the picker hides there. Old flat
+ * routes redirect into these hashes on boot (App.tsx).
+ *
+ * The Roadmap tab left for its own Plan route (Plan › Roadmap), where a roadmap
+ * is managed rather than just drawn; `/projects#roadmap` redirects there.
  */
 import { useMemo, useState } from 'react';
 
@@ -16,10 +18,8 @@ import { DecisionBoard } from './DecisionBoard';
 import { Flowchart } from './Flowchart';
 import { Gantt } from './Gantt';
 import { Kanban } from './Kanban';
-import { Roadmap } from './Roadmap';
 
 const TABS: readonly TabSpec[] = [
-  { key: 'roadmap', label: 'Roadmap', icon: 'route' },
   { key: 'board', label: 'Board', icon: 'cols' },
   { key: 'timeline', label: 'Timeline', icon: 'gantt' },
   { key: 'graph', label: 'Graph', icon: 'net' },
@@ -27,7 +27,7 @@ const TABS: readonly TabSpec[] = [
 ];
 
 /** Tabs that bring their own scoping and so hide the shared project picker. */
-const UNSCOPED = new Set(['roadmap', 'decisions']);
+const UNSCOPED = new Set(['decisions']);
 
 export function Projects({ ctx }: { ctx: CommandContext }) {
   const [tab, select] = useHashTab(TABS, 'board');
@@ -57,7 +57,6 @@ export function Projects({ ctx }: { ctx: CommandContext }) {
 
       <TabBar tabs={TABS} active={tab} onSelect={select} />
 
-      {tab === 'roadmap' && <Roadmap ctx={ctx} />}
       {tab === 'board' && <Kanban ctx={ctx} projectId={scope || null} />}
       {tab === 'timeline' && <Gantt projectId={scope || null} />}
       {tab === 'graph' && <Flowchart ctx={ctx} rootId={scope || null} />}

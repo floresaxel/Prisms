@@ -37,6 +37,15 @@ const dayISO = (offset: number, hourUtc: number): string => {
   return d.toISOString();
 };
 
+/**
+ * Pixels down a column body for a wall-clock time, on the calendar's 6am–10pm
+ * grid at 44px an hour. The drop overlay covers exactly that body, so a
+ * `hover({ position })` on it lands the pointer at a known minute — and unlike
+ * a raw `mouse.move` to a `boundingBox`, hover scrolls the point into view
+ * first (the grid is routinely scrolled off-screen by the preceding steps).
+ */
+const gridY = (hour: number, minute = 0) => (hour - 6) * 44 + minute * (44 / 60);
+
 test('agenda: drag→valid windows→drop commits; anchored refuses; suggestion accepts; grey rule', async ({ page }) => {
   const sql = postgres(DB_URL);
   try {
@@ -119,16 +128,55 @@ test('agenda: drag→valid windows→drop commits; anchored refuses; suggestion 
     // valid windows light up the moment the drag starts
     await expect(page.locator('.px-cal-drop').first()).toBeVisible({ timeout: 5000 });
     // col 5 (5 days out) is always free & in-window regardless of the UTC↔local
-    // date offset (seeds only touch offsets 1–2 → cols ≤ 3).
-    const cell = page.getByTestId('cell-5-9');
-    await expect(cell).toHaveAttribute('data-valid', 'true');
-    await expect(page.locator('.px-cal-cell--valid').first()).toBeVisible();
-    await cell.hover();
+    // date offset (seeds only touch offsets 1–2 → cols ≤ 3), so its whole
+    // working day is ONE glowing stretch — not the stack of hour rectangles
+    // this replaced.
+    const grid = page.getByTestId('drop-col-5');
+    await expect(grid.locator('.px-cal-free')).toHaveCount(1);
+    await expect(page.locator('.px-cal-cell')).toHaveCount(0);
+
+    // …and it is an OUTLINE: no fill over the calendar, and it holds still
+    const free = await grid.locator('.px-cal-free').first().evaluate((el) => {
+      const cs = getComputedStyle(el);
+      return { animation: cs.animationName, fill: cs.backgroundColor, halo: cs.boxShadow };
+    });
+    expect(free.animation).toBe('none');
+    expect(free.fill).toBe('rgba(0, 0, 0, 0)');
+    expect(free.halo).not.toBe('none'); // it keeps a faint one
+
+    // the grabbed item rides the cursor for as long as the drag is live
+    await expect(page.getByTestId('drag-ghost')).toContainText('Drag Me');
+
+    // …and the calendar shows where it would land. 7px into the 9am hour (44px
+    // tall) is 9:09, which the default 15-minute grid rounds to 9:15 — the
+    // outline says so, and the hour it falls in lights up, before the drop.
+    await grid.hover({ position: { x: 20, y: gridY(9) + 7 } });
+    const outline = page.getByTestId('drop-preview-5');
+    await expect(outline).toHaveAttribute('data-start-min', '195');
+    await expect(outline).toHaveAttribute('data-conflict', 'false');
+    await expect(outline).toContainText('9:15am – 10:15am');
+    await expect(page.getByTestId('hot-hour-5')).toHaveAttribute('data-hour', '9');
+
     await page.mouse.up();
+    await expect(outline).toHaveCount(0); // the drag furniture goes away with it
+    await expect(page.getByTestId('drag-ghost')).toHaveCount(0);
 
     // the task leaves the to-do panel and now has a committed block
     await expect(page.getByTestId(`todo-${ids.t1}`)).toHaveCount(0);
     await expect(page.locator('.px-cal-block', { hasText: 'Drag Me' })).toBeVisible();
+
+    // …and the outline was a promise about the drop: what reached Postgres
+    // starts at :15, not on the hour the pointer happened to be inside.
+    await expect
+      .poll(
+        async () => {
+          const rows = await sql<{ starts_at: Date }[]>`
+            SELECT starts_at FROM schedule_blocks WHERE task_id = ${ids.t1} AND deleted_at IS NULL`;
+          return rows[0] ? new Date(rows[0].starts_at).getUTCMinutes() : null;
+        },
+        { timeout: 30_000 },
+      )
+      .toBe(15);
 
     // --- DoD: accept a suggestion → it promotes to committed ------------
     const suggested = page.getByTestId(`block-${ids.suggested}`);
@@ -172,12 +220,11 @@ test('agenda: a committed block moves to another day and resizes (block.move)', 
   await expect(block).toBeVisible({ timeout: 30_000 });
   await expect(block).toHaveAttribute('data-duration-min', '60');
 
-  // --- move: drag the block to col 5 at 09:00 (always free & in-window) ---
+  // --- move: drag the block to col 5, mid-morning (always free & in-window) ---
   await block.hover();
   await page.mouse.down();
-  const cell = page.getByTestId('cell-5-9');
-  await expect(cell).toHaveAttribute('data-valid', 'true');
-  await cell.hover();
+  await page.getByTestId('drop-col-5').hover({ position: { x: 20, y: gridY(9) } });
+  await expect(page.getByTestId('drop-preview-5')).toHaveAttribute('data-conflict', 'false');
   await page.mouse.up();
   await expect(page.getByTestId('day-5').getByTestId(`block-${ids.block}`)).toBeVisible();
 
@@ -190,4 +237,148 @@ test('agenda: a committed block moves to another day and resizes (block.move)', 
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2 + 44, { steps: 6 });
   await page.mouse.up();
   await expect(page.getByTestId(`block-${ids.block}`)).toHaveAttribute('data-duration-min', '120');
+});
+
+/**
+ * A drop is never refused any more — it is accepted and MARKED. The two ways a
+ * placement can be wrong (it lands on something, or outside the hours work may
+ * land in) both survive the round-trip to the calendar as a caution glyph, and
+ * the pair that overlaps is drawn side by side: a block hidden underneath
+ * another would take its own caution down with it.
+ */
+test('agenda: a clashing drop is accepted, flagged, and drawn beside what it clashes with', async ({ page }) => {
+  const email = `e2e-s17d-${Date.now()}@prisms.test`;
+  await page.goto('/');
+  await page.getByRole('link', { name: 'Register' }).click();
+  await page.locator('input[autocomplete="name"]').fill('S17 User');
+  await page.getByTestId('email').fill(email);
+  await page.getByTestId('password').fill('e2e-password-123');
+  await page.getByTestId('submit').click();
+  await expect(page.getByTestId('sync-state')).toBeVisible();
+
+  const ids = { v: randomUUID(), r: randomUUID(), p: randomUUID(), a: randomUUID(), b: randomUUID(), c: randomUUID() };
+  const seed = await page.request.post('/sync/upload', {
+    data: {
+      device_id: 'e2e-seed',
+      commands: [
+        cmd('node.create', { id: ids.v, node_type: 'vision', title: 'Vision', sort_order: 'a0' }),
+        cmd('node.create', { id: ids.r, node_type: 'roadmap', title: 'Roadmap', sort_order: 'a0', parent_id: ids.v }),
+        cmd('node.create', { id: ids.p, node_type: 'project', title: 'Project', sort_order: 'a0', parent_id: ids.r }),
+        cmd('node.create', { id: ids.a, node_type: 'task', title: 'Clash A', sort_order: 'a0', parent_id: ids.p, estimate_minutes: 60 }),
+        cmd('node.create', { id: ids.b, node_type: 'task', title: 'Clash B', sort_order: 'a1', parent_id: ids.p, estimate_minutes: 60 }),
+        cmd('node.create', { id: ids.c, node_type: 'task', title: 'Too early', sort_order: 'a2', parent_id: ids.p, estimate_minutes: 60 }),
+      ],
+    },
+  });
+  expect(seed.ok()).toBeTruthy();
+
+  await goto(page, 'agenda');
+  await expect(page.getByTestId(`todo-${ids.a}`)).toBeVisible({ timeout: 30_000 });
+
+  /** Drop `taskId` on col 5 at a wall-clock time, and say what the outline warned. */
+  async function dropAt(taskId: string, hour: number, minute = 0): Promise<string | null> {
+    const placed = page.getByTestId('day-5').locator('.px-cal-block');
+    const before = await placed.count();
+    await page.getByTestId(`todo-${taskId}`).hover();
+    await page.mouse.down();
+    await page.getByTestId('drop-col-5').hover({ position: { x: 20, y: gridY(hour, minute) } });
+    const problems = await page.getByTestId('drop-preview-5').getAttribute('data-problems');
+    await page.mouse.up();
+    await expect(page.getByTestId(`todo-${taskId}`)).toHaveCount(0); // it landed
+    /*
+     * …and it is ON THE GRID before the caller drags anything else. Leaving the
+     * to-do list only says the task was placed; the block reaches the day a beat
+     * later, and the next drag reads that day to decide whether it clashes. Drop
+     * two overlapping blocks quickly enough and the second one computed its
+     * preview against a day that still looked empty and reported no overlap —
+     * a 2s failure of an otherwise 17s test, passing on the very next run.
+     */
+    await expect(placed).toHaveCount(before + 1);
+    return problems;
+  }
+
+  // a clean 9am placement warns about nothing
+  expect(await dropAt(ids.a, 9)).toBe('');
+  await expect(page.locator('.px-cal-block[data-conflict="true"]')).toHaveCount(0);
+
+  // …then one straight on top of it: warned about, and accepted anyway
+  expect(await dropAt(ids.b, 9, 15)).toBe('overlap');
+  const clashing = page.locator('.px-cal-block[data-conflict="true"]');
+  await expect(clashing).toHaveCount(2); // BOTH sides of the overlap are marked
+  await expect(page.getByTestId('day-5').locator('.px-cal-warn')).toHaveCount(2);
+
+  // and they share the column rather than stacking, so both cautions are visible
+  const xs = await Promise.all((await clashing.all()).map(async (b) => (await b.boundingBox())!.x));
+  expect(new Set(xs).size).toBe(2);
+
+  // the other way to be wrong: before the day's hours open
+  expect(await dropAt(ids.c, 6, 30)).toBe('outside-hours');
+  await expect(page.locator('.px-cal-block[data-conflict="true"]')).toHaveCount(3);
+});
+
+/**
+ * The snap grid is a Settings preference and the calendar obeys it: one pixel,
+ * held still, reads as 9:15 on the default 15-minute grid and 9:00 on an hourly
+ * one. Proving it across a navigation also proves the preference outlives the
+ * screen that set it.
+ */
+test('agenda: the drop preview snaps to the interval chosen in Settings', async ({ page }) => {
+  const email = `e2e-s17c-${Date.now()}@prisms.test`;
+  await page.goto('/');
+  await page.getByRole('link', { name: 'Register' }).click();
+  await page.locator('input[autocomplete="name"]').fill('S17 User');
+  await page.getByTestId('email').fill(email);
+  await page.getByTestId('password').fill('e2e-password-123');
+  await page.getByTestId('submit').click();
+  await expect(page.getByTestId('sync-state')).toBeVisible();
+
+  const ids = { v: randomUUID(), r: randomUUID(), p: randomUUID(), task: randomUUID() };
+  const seed = await page.request.post('/sync/upload', {
+    data: {
+      device_id: 'e2e-seed',
+      commands: [
+        cmd('node.create', { id: ids.v, node_type: 'vision', title: 'Vision', sort_order: 'a0' }),
+        cmd('node.create', { id: ids.r, node_type: 'roadmap', title: 'Roadmap', sort_order: 'a0', parent_id: ids.v }),
+        cmd('node.create', { id: ids.p, node_type: 'project', title: 'Project', sort_order: 'a0', parent_id: ids.r }),
+        cmd('node.create', { id: ids.task, node_type: 'task', title: 'Snap Me', sort_order: 'a0', parent_id: ids.p, estimate_minutes: 60 }),
+      ],
+    },
+  });
+  expect(seed.ok()).toBeTruthy();
+
+  await goto(page, 'agenda');
+  await expect(page.getByTestId(`todo-${ids.task}`)).toBeVisible({ timeout: 30_000 });
+
+  /** Hold the task 7px into the 9am hour (= 9:09) and report what the outline says. */
+  async function previewStartMin(): Promise<string | null> {
+    await page.getByTestId(`todo-${ids.task}`).hover();
+    await page.mouse.down();
+    await page.getByTestId('drop-col-5').hover({ position: { x: 20, y: gridY(9) + 7 } });
+    const min = await page.getByTestId('drop-preview-5').getAttribute('data-start-min');
+    await page.mouse.move(4, 4); // off the calendar, so the release drops nothing
+    await page.mouse.up();
+    return min;
+  }
+
+  // default: a quarter-hour grid rounds 9:09 up to 9:15
+  await expect(page.getByTestId('drag-hint')).toContainText('snap to 15 minutes');
+  expect(await previewStartMin()).toBe('195');
+
+  await goto(page, 'settings');
+  await page.getByTestId('snap-60').click();
+  await expect(page.getByTestId('snap-60')).toHaveAttribute('aria-pressed', 'true');
+
+  // hourly: the same pixel now means 9:00
+  await goto(page, 'agenda');
+  await expect(page.getByTestId('drag-hint')).toContainText('snap to 1 hour');
+  expect(await previewStartMin()).toBe('180');
+
+  // and a 5-minute grid keeps the minute the pointer is actually on
+  await goto(page, 'settings');
+  await page.getByTestId('snap-5').click();
+  await goto(page, 'agenda');
+  expect(await previewStartMin()).toBe('190');
+
+  // nothing was committed by any of that — the drops all landed off-calendar
+  await expect(page.getByTestId(`todo-${ids.task}`)).toBeVisible();
 });

@@ -14,6 +14,7 @@ import { asEpochMillis, type Instant, type JournalEntry } from '@prisms/core';
 import { Ic, isJournalContentEmpty, journalTitleOf, truncatePlain, useFactContext, useJournalMonths, type CommandContext } from '@prisms/ui';
 
 import { DayJournalPanel } from '../components/DayJournal';
+import { NoteSwap } from '../components/NoteSwap';
 import { downloadJournalArchive } from '../portability';
 
 const MONTHS_SHOWN = 12;
@@ -152,8 +153,11 @@ export function Journal({ ctx }: { ctx: CommandContext }) {
         </div>
 
         <div className="px-jn-editor">
-          {/* key by day so the editor re-initializes per day (J4/D3). */}
-          <DayJournalPanel key={selectedDay} date={selectedDay} ctx={ctx} />
+          {/* key by day so the editor re-initializes per day (J4/D3); NoteSwap
+              holds the outgoing day on screen long enough to fade it out. */}
+          <NoteSwap swapKey={selectedDay}>
+            <DayJournalPanel key={selectedDay} date={selectedDay} ctx={ctx} />
+          </NoteSwap>
         </div>
       </div>
     </section>

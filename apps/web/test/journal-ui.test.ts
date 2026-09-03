@@ -11,7 +11,7 @@
 import { createElement } from 'react';
 
 import { addDays, asEpochMillis, bucketDate } from '@prisms/core';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { strFromU8, unzipSync } from 'fflate';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -19,6 +19,8 @@ const state = {
   entry: null as null | { id: string; content: string; deleted_at: null; locked?: boolean; title?: string },
   months: [] as { entry_date: string; content: string }[],
   loading: false,
+  /** Has the day's row actually been READ (vs. cached/in-flight rows standing in)? */
+  settled: true,
 };
 const commandFns = new Map<string, ReturnType<typeof vi.fn>>();
 const command = (name: string) => {
@@ -32,8 +34,8 @@ vi.mock('@prisms/ui', async (importOriginal) => {
   return {
     ...actual,
     useCommands: () => commands,
-    useJournalDay: () => ({ entry: state.entry, isLoading: state.loading }),
-    useJournalMonths: () => ({ entries: state.months, isLoading: false }),
+    useJournalDay: () => ({ entry: state.entry, isLoading: state.loading, isSettled: state.settled }),
+    useJournalMonths: () => ({ entries: state.months, isLoading: false, isSettled: true }),
     useAgenda: () => ({
       input: { tasks: [], committed: [], windows: [], timezone: 'UTC', horizon: { from: 0, to: 0 }, mode: 'greedy' },
       tasksById: new Map(),
@@ -56,16 +58,42 @@ vi.mock('@prisms/ui', async (importOriginal) => {
 // TipTap needs a real browser DOM; jsdom can't run ProseMirror. Mock the rich
 // editor as a controlled textarea so the SHELL (save/flush/export/delete/preview)
 // stays unit-testable here — the real WYSIWYG is covered by Playwright e2e.
+/**
+ * The last `onBlur` the editor was handed. The real one fires a blur as its
+ * ProseMirror view is torn down — after a lock has already unmounted it — and
+ * there is no element left to blur by then, so a test reaches it through here.
+ */
+const editorProps: { onBlur?: (markdown: string) => void } = {};
+
 vi.mock('../src/components/RichJournalEditor', async () => {
   const { createElement: h } = await import('react');
   return {
-    RichJournalEditor: ({ value, onChange, onBlur }: { value: string; onChange: (m: string) => void; onBlur?: (m: string) => void }) =>
-      h('textarea', {
-        'data-testid': 'journal-rich',
-        value,
-        onChange: (e: { target: { value: string } }) => onChange(e.target.value),
-        onBlur: (e: { target: { value: string } }) => onBlur?.(e.target.value),
-      }),
+    // Mirrors the real component's contract: it owns BOTH bodies now (locking no
+    // longer swaps it out from above), and renders the injected read-only one
+    // when locked.
+    RichJournalEditor: ({
+      value,
+      onChange,
+      onBlur,
+      locked,
+      renderLocked,
+    }: {
+      value: string;
+      onChange: (m: string) => void;
+      onBlur?: (m: string) => void;
+      locked?: boolean;
+      renderLocked?: (m: string) => unknown;
+    }) => {
+      editorProps.onBlur = onBlur;
+      return locked
+        ? renderLocked?.(value)
+        : h('textarea', {
+            'data-testid': 'journal-rich',
+            value,
+            onChange: (e: { target: { value: string } }) => onChange(e.target.value),
+            onBlur: (e: { target: { value: string } }) => onBlur?.(e.target.value),
+          });
+    },
   };
 });
 
@@ -88,6 +116,7 @@ afterEach(() => {
   state.entry = null;
   state.months = [];
   state.loading = false;
+  state.settled = true;
   commandFns.clear();
   store.clear(); // per-day lock state persists across mounts by design
 });
@@ -190,10 +219,15 @@ describe('DayJournalPanel — editor', () => {
     for (const id of ['journal-menu', 'journal-export', 'journal-delete']) {
       expect(screen.queryByTestId(id)).toBeNull();
     }
-    // the icon IS the affordance: a padlock while editable, a pencil while locked
+    // The icon shows the note's STATE: the shackle stands open while the note is
+    // editable and drops shut once locked. It is ONE padlock drawn as two parts —
+    // a static body and a shackle that swings — so `data-state` is what says which
+    // way it is hanging; the parts in the DOM never change.
     const toggle = screen.getByTestId('journal-preview-toggle');
+    const hrefs = (el: Element) => [...el.querySelectorAll('use')].map((u) => u.getAttribute('href'));
     expect(toggle.getAttribute('aria-pressed')).toBe('false');
-    expect(toggle.querySelector('use')?.getAttribute('href')).toBe('#i-lock');
+    expect(toggle.getAttribute('data-state')).toBe('unlocked');
+    expect(hrefs(toggle)).toEqual(['#i-lockbody', '#i-lockshackle']);
     expect(toggle.getAttribute('title')).toBe('Lock edit');
     editable.unmount();
 
@@ -202,8 +236,57 @@ describe('DayJournalPanel — editor', () => {
     expect(screen.getByTestId('journal-preview').querySelector('h1')?.textContent).toBe('Title');
     const locked = screen.getByTestId('journal-preview-toggle');
     expect(locked.getAttribute('aria-pressed')).toBe('true');
-    expect(locked.querySelector('use')?.getAttribute('href')).toBe('#i-pen');
+    expect(locked.getAttribute('data-state')).toBe('locked');
+    expect(hrefs(locked)).toEqual(['#i-lockbody', '#i-lockshackle']); // same parts, swung shut
     expect(locked.getAttribute('title')).toBe('Edit');
+  });
+
+  it('the lock is hidden — but still holds its slot — until the day has a note', () => {
+    // `data-ready` drives opacity, NOT display: the button occupies its space the
+    // whole time, so the title does not resize the instant a note becomes
+    // lockable. It is also off the a11y tree while inoperable.
+    state.entry = null;
+    const empty = render(createElement(DayJournalPanel, { date: '2026-08-09', ctx: CTX, actions: 'lock' }));
+    const hidden = screen.getByTestId('journal-preview-toggle');
+    expect(hidden.getAttribute('data-ready')).toBe('false');
+    expect(hidden.getAttribute('aria-hidden')).toBe('true');
+    expect((hidden as HTMLButtonElement).disabled).toBe(true);
+    empty.unmount();
+
+    state.entry = { id: 'j1', content: 'something', deleted_at: null, locked: false };
+    render(createElement(DayJournalPanel, { date: '2026-08-09', ctx: CTX, actions: 'lock' }));
+    const shown = screen.getByTestId('journal-preview-toggle');
+    expect(shown.getAttribute('data-ready')).toBe('true');
+    expect(shown.getAttribute('aria-hidden')).toBeNull();
+    expect((shown as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('the shackle only swings once the lock has been WORKED, never on arrival', () => {
+    // The keyframes key off `data-state`, and CSS cannot tell a state that just
+    // changed from one that was rendered that way — so opening a locked note
+    // would swing the shackle open as if someone had just unlocked it. The flag
+    // is set on the click, so the animation belongs to the act, not the arrival.
+    state.entry = { id: 'j1', content: 'x', deleted_at: null, locked: true };
+    render(createElement(DayJournalPanel, { date: '2026-08-05', ctx: CTX, actions: 'lock' }));
+    const toggle = screen.getByTestId('journal-preview-toggle');
+    expect(toggle.getAttribute('data-state')).toBe('locked');
+    expect(toggle.getAttribute('data-animate')).toBeNull(); // arrived locked — no swing
+
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute('data-animate')).toBe('true');
+  });
+
+  it('the lock sits on the title row, not above it', () => {
+    // Alignment is CSS, but the STRUCTURE it needs is pinned here: the button has
+    // to be a sibling of the title inside the title row. Top-aligning it against
+    // the title+date block is what left it floating above the title.
+    state.entry = { id: 'j1', content: 'x', deleted_at: null, locked: false };
+    render(createElement(DayJournalPanel, { date: '2026-08-05', ctx: CTX, actions: 'lock' }));
+    const row = screen.getByTestId('journal-title').closest('.px-jn-titlerow');
+    expect(row).not.toBeNull();
+    expect(row!.contains(screen.getByTestId('journal-preview-toggle'))).toBe(true);
+    // the date is a caption BELOW the row, not part of it
+    expect(row!.contains(screen.getByTestId('journal-date'))).toBe(false);
   });
 
   it('renders the lock state from the SYNCED row, not local state', () => {
@@ -233,6 +316,115 @@ describe('DayJournalPanel — editor', () => {
     render(createElement(DayJournalPanel, { date: '2026-08-07', ctx: CTX, actions: 'lock' }));
     fireEvent.click(screen.getByTestId('journal-preview-toggle'));
     expect(command('setJournalLocked')).toHaveBeenCalledWith('j1', true);
+  });
+
+  it('locking never writes — the editor tearing down must not delete the note', () => {
+    // Unmounting the editor fires a blur carrying empty content, and that handler
+    // is the save path: locking a note used to soft-delete it. Caught by the e2e
+    // (lock, unlock, editor blank), pinned here.
+    state.entry = { id: 'j1', content: 'real words', deleted_at: null, locked: false };
+    render(createElement(DayJournalPanel, { date: '2026-08-07', ctx: CTX, actions: 'lock' }));
+    fireEvent.click(screen.getByTestId('journal-preview-toggle'));
+    // …and now the editor's own teardown blur arrives, carrying nothing. There is
+    // no element left to blur by this point — which is the whole difficulty — so
+    // it comes through the handler the editor was given.
+    editorProps.onBlur?.('');
+    expect(command('deleteJournal')).not.toHaveBeenCalled();
+    expect(command('writeJournal')).not.toHaveBeenCalled();
+  });
+
+  it('flushes a pending edit BEFORE locking, so the lock cannot strand it', () => {
+    // The other side of the rule above: writes stop at the lock, so whatever is
+    // still in the debounce has to go first or it is lost.
+    state.entry = { id: 'j1', content: 'start', deleted_at: null, locked: false };
+    render(createElement(DayJournalPanel, { date: '2026-08-07', ctx: CTX, actions: 'lock' }));
+    fireEvent.change(screen.getByTestId('journal-rich'), { target: { value: 'start + more' } });
+    expect(command('writeJournal')).not.toHaveBeenCalled(); // still inside the debounce
+
+    fireEvent.click(screen.getByTestId('journal-preview-toggle'));
+    expect(command('writeJournal')).toHaveBeenCalledWith({ existingId: 'j1', entryDate: '2026-08-07', content: 'start + more' });
+  });
+
+  it('a double click locks once, not lock-then-unlock', () => {
+    // Two commands for one gesture is the visible half; the real hazard is that
+    // they race each other to the server on a field with no ordering of its own.
+    state.entry = { id: 'j1', content: 'x', deleted_at: null, locked: false };
+    render(createElement(DayJournalPanel, { date: '2026-08-07', ctx: CTX, actions: 'lock' }));
+    const toggle = screen.getByTestId('journal-preview-toggle');
+    fireEvent.click(toggle);
+    fireEvent.click(toggle);
+    fireEvent.click(toggle);
+    expect(command('setJournalLocked')).toHaveBeenCalledTimes(1);
+    expect(command('setJournalLocked')).toHaveBeenCalledWith('j1', true);
+  });
+
+  it('answers again once the fold has finished', async () => {
+    // The deafness is bounded by the animation, not by the command completing —
+    // a control that stayed dead until the server replied would feel broken
+    // offline, where the write is queued and there is nothing to wait for.
+    vi.useFakeTimers();
+    try {
+      state.entry = { id: 'j1', content: 'x', deleted_at: null, locked: false };
+      render(createElement(DayJournalPanel, { date: '2026-08-07', ctx: CTX, actions: 'lock' }));
+      const toggle = screen.getByTestId('journal-preview-toggle');
+      fireEvent.click(toggle);
+      fireEvent.click(toggle);
+      expect(command('setJournalLocked')).toHaveBeenCalledTimes(1);
+
+      await act(async () => { vi.advanceTimersByTime(400); });
+      fireEvent.click(toggle);
+      expect(command('setJournalLocked')).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('paints the lock on the CLICK, without waiting for the row to come back', () => {
+    // The command is queued, not awaited. `state.entry` is deliberately left
+    // unlocked here — this is exactly the window the panel used to sit dead in,
+    // waiting on a write transaction and a query invalidation across a worker.
+    state.entry = { id: 'j1', content: 'x', deleted_at: null, locked: false };
+    render(createElement(DayJournalPanel, { date: '2026-08-07', ctx: CTX, actions: 'lock' }));
+    const toggle = screen.getByTestId('journal-preview-toggle');
+    expect(toggle.getAttribute('data-state')).toBe('unlocked');
+
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute('data-state')).toBe('locked'); // same tick, row unchanged
+    expect(screen.getByTestId('journal-preview')).toBeTruthy(); // and the body has folded
+  });
+
+  it('puts the lock back if the command is rejected', async () => {
+    // An optimistic paint that survives a rejection is a lie on screen. The queue
+    // itself is durable, so nothing is lost by reverting the picture.
+    state.entry = { id: 'j1', content: 'x', deleted_at: null, locked: false };
+    command('setJournalLocked').mockImplementationOnce(async () => {
+      throw new Error('rejected');
+    });
+    render(createElement(DayJournalPanel, { date: '2026-08-07', ctx: CTX, actions: 'lock' }));
+    const toggle = screen.getByTestId('journal-preview-toggle');
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute('data-state')).toBe('locked'); // optimistic
+
+    await act(async () => undefined); // let the rejection settle and React re-render
+    expect(toggle.getAttribute('data-state')).toBe('unlocked'); // reverted to the row
+  });
+
+  it('marks the panel ready only once the day has been read', () => {
+    // The Agenda hangs its fade-in on this. While the day is still loading the
+    // panel must NOT be ready, or the fade plays over "Loading…" and the note
+    // itself then appears with no transition at all.
+    state.entry = null;
+    state.loading = true;
+    state.settled = false;
+    const loading = render(createElement(DayJournalPanel, { date: '2026-08-07', ctx: CTX, actions: 'lock' }));
+    expect(screen.getByTestId('journal-2026-08-07').className).not.toContain('px-journal--ready');
+    loading.unmount();
+
+    state.loading = false;
+    state.settled = true;
+    state.entry = { id: 'j1', content: 'x', deleted_at: null, locked: false };
+    render(createElement(DayJournalPanel, { date: '2026-08-07', ctx: CTX, actions: 'lock' }));
+    expect(screen.getByTestId('journal-2026-08-07').className).toContain('px-journal--ready');
   });
 
   it('a day with no note cannot be locked — there is nothing to lock', () => {
@@ -301,11 +493,34 @@ describe('DayJournalPanel — editor', () => {
   it('is BLANK while the day is still loading — the default must not flash first', () => {
     state.entry = null;
     state.loading = true;
+    state.settled = false; // loading is, by definition, not yet settled
     render(createElement(DayJournalPanel, { date: '2026-08-05', ctx: CTX, actions: 'lock' }));
     const input = screen.getByTestId('journal-title') as HTMLInputElement;
     expect(input.value).toBe('');
     expect(input.placeholder).toBe(''); // nothing claimed about a note we do not have
     expect(screen.getByTestId('journal-date').textContent).toBe('2026-08-05'); // the day IS known
+  });
+
+  it('is BLANK for an unsettled read — the default must not be assumed from stale rows', () => {
+    // The gap `isLoading` cannot express: rows ARE on screen (ROWS_CACHE standing
+    // in for a mount that has not re-produced), so nothing reads as "loading", yet
+    // their `title` has not been confirmed. Painting "Note · <date>" here is the
+    // flash — it is overwritten the moment the live row lands.
+    state.entry = { id: 'j1', content: 'x', deleted_at: null, locked: false };
+    state.loading = false;
+    state.settled = false;
+    render(createElement(DayJournalPanel, { date: '2026-08-05', ctx: CTX, actions: 'lock' }));
+    expect((screen.getByTestId('journal-title') as HTMLInputElement).value).toBe('');
+  });
+
+  it('shows a stored title even before the read settles — a real title is never wrong', () => {
+    // The other side of the gate: only the DEFAULT is a claim about absence. A
+    // title the row already carries cannot be contradicted by a later read, so
+    // waiting on it would be a needless blank.
+    state.entry = { id: 'j1', content: 'x', deleted_at: null, locked: false, title: 'Trip planning' };
+    state.settled = false;
+    render(createElement(DayJournalPanel, { date: '2026-08-05', ctx: CTX, actions: 'lock' }));
+    expect((screen.getByTestId('journal-title') as HTMLInputElement).value).toBe('Trip planning');
   });
 
   it('an EMPTY row that is locked is still editable — not a dead end', () => {
@@ -318,11 +533,15 @@ describe('DayJournalPanel — editor', () => {
     expect(screen.queryByTestId('journal-preview')).toBeNull();
   });
 
-  it('is blank for a day that has no note at all', () => {
+  it('names a day that has no note yet, but leaves it uneditable', () => {
+    // Both screens open on TODAY, which usually holds nothing — blanking here
+    // left the Agenda's note panel headerless in its most common state. The
+    // default names the day the note WILL be filed under; `disabled` keeps it a
+    // heading rather than a value that has been filled in for you.
     state.entry = null;
     render(createElement(DayJournalPanel, { date: '2026-08-05', ctx: CTX, actions: 'lock' }));
     const input = screen.getByTestId('journal-title') as HTMLInputElement;
-    expect(input.value).toBe('');
+    expect(input.value).toBe('Note · 2026-08-05');
     expect(input.disabled).toBe(true);
   });
 

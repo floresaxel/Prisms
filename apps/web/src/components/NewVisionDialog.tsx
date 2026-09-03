@@ -12,28 +12,26 @@
  * The colour is picked from a 20-swatch palette and must be UNIQUE: swatches
  * other visions already wear are struck through and disabled, and the form opens
  * on the first free one.
+ *
+ * The colour and timeline controls themselves live in VisionFields, shared with
+ * the Vision screen's editor — creating and later correcting a vision ask for
+ * the same things in the same shape.
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import {
   firstFreeVisionColor,
-  formatHorizon,
-  isHorizonAmount,
   Modal,
   visionColorOf,
-  visionHex,
   HORIZON_MAX,
   HORIZON_MIN,
   HORIZON_PRESETS,
-  HORIZON_UNITS,
-  VISION_PALETTE,
   type HorizonUnit,
   type VisionColor,
   type VisionHorizon,
 } from '@prisms/ui';
 
-const AMOUNT_OPTIONS = Array.from({ length: HORIZON_MAX - HORIZON_MIN + 1 }, (_, i) => HORIZON_MIN + i);
-const AMOUNT_LIST_ID = 'px-horizon-amounts';
+import { ColorField, colorLabel, HorizonField, parseHorizon } from './VisionFields';
 
 export interface NewVisionValues {
   title: string;
@@ -68,19 +66,24 @@ export function NewVisionDialog({
   const [touched, setTouched] = useState(false);
 
   // Re-arm on each open: fresh form, and default to a colour that is still free.
+  // ONLY on open — `taken` is derived from the live node tree, so it takes a new
+  // identity on every sync tick, and depending on it here wiped a half-filled
+  // form under the user's hands. The ref keeps the colour default current
+  // without making the effect reactive to it.
+  const takenRef = useRef(taken);
+  takenRef.current = taken;
   useEffect(() => {
     if (!open) return;
     setTitle('');
     setDescription('');
-    setColor(firstFreeVisionColor(taken));
+    setColor(firstFreeVisionColor(takenRef.current));
     setUnit('years');
     setAmount('1');
     setTouched(false);
-  }, [open, taken]);
+  }, [open]);
 
-  const parsed = Number(amount.trim());
-  const amountOk = amount.trim() !== '' && isHorizonAmount(parsed);
-  const horizon: VisionHorizon | null = amountOk ? { unit, amount: parsed } : null;
+  const horizon: VisionHorizon | null = parseHorizon(unit, amount);
+  const amountOk = horizon !== null;
   const titleOk = title.trim() !== '';
   const descriptionOk = description.trim() !== '';
   const valid = titleOk && descriptionOk && horizon !== null;
@@ -148,63 +151,15 @@ export function NewVisionDialog({
 
       <div className="px-vd-field">
         <span className="px-vd-lbl">Expected timeline</span>
-        <div className="px-vd-row">
-          <div className="px-vd-units" role="tablist" aria-label="timeline unit">
-            {HORIZON_UNITS.map((u) => (
-              <button
-                key={u}
-                role="tab"
-                aria-selected={u === unit}
-                data-testid={`vision-dialog-unit-${u}`}
-                className={`px-vd-unit${u === unit ? ' px-vd-unit--on' : ''}`}
-                onClick={() => {
-                  setUnit(u);
-                  setAmount(String(HORIZON_PRESETS[u][0]));
-                }}
-              >
-                {u}
-              </button>
-            ))}
-          </div>
-
-          <div className="px-vd-presets">
-            {HORIZON_PRESETS[unit].map((n) => (
-              <button
-                key={n}
-                className={`px-vd-preset${amountOk && parsed === n ? ' px-vd-preset--on' : ''}`}
-                data-testid={`vision-dialog-preset-${n}`}
-                aria-pressed={amountOk && parsed === n}
-                onClick={() => setAmount(String(n))}
-              >
-                {n}
-              </button>
-            ))}
-          </div>
-
-          <span className="px-vd-sep">or</span>
-          {/* free text + a 1–10 dropdown: `list` keeps the box fully typeable */}
-          <input
-            className="px-vd-amount"
-            data-testid="vision-dialog-amount"
-            type="number"
-            inputMode="numeric"
-            min={HORIZON_MIN}
-            max={HORIZON_MAX}
-            list={AMOUNT_LIST_ID}
-            aria-label={`number of ${unit}`}
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-          />
-          <datalist id={AMOUNT_LIST_ID}>
-            {AMOUNT_OPTIONS.map((n) => (
-              <option key={n} value={n} />
-            ))}
-          </datalist>
-
-          <span className="px-vd-preview" data-testid="vision-dialog-horizon">
-            {horizon ? formatHorizon(horizon) : '—'}
-          </span>
-        </div>
+        <HorizonField
+          unit={unit}
+          amount={amount}
+          testPrefix="vision-dialog"
+          onChange={(u, a) => {
+            setUnit(u);
+            setAmount(a);
+          }}
+        />
         <p className="px-vd-hint">
           No dates — a vision runs on the order of {HORIZON_PRESETS.months.join('/')} months,{' '}
           {HORIZON_PRESETS.years.join('/')} years or {HORIZON_PRESETS.decades.join('/')} decades. Pick one, or type any
@@ -214,28 +169,9 @@ export function NewVisionDialog({
 
       <div className="px-vd-field">
         <span className="px-vd-lbl">
-          Colour · <span className="px-swatch-name" data-testid="vision-dialog-color">{VISION_PALETTE.find((c) => c.id === color)?.label}</span>
+          Colour · <span className="px-swatch-name" data-testid="vision-dialog-color">{colorLabel(color)}</span>
         </span>
-        <div className="px-swatches" role="radiogroup" aria-label="vision colour">
-          {VISION_PALETTE.map((c) => {
-            const used = taken.has(c.id);
-            return (
-              <button
-                key={c.id}
-                type="button"
-                role="radio"
-                aria-checked={c.id === color}
-                aria-label={used ? `${c.label} (already used)` : c.label}
-                title={used ? `${c.label} — already used by another vision` : c.label}
-                disabled={used}
-                data-testid={`vision-dialog-swatch-${c.id}`}
-                className={`px-swatch${c.id === color ? ' px-swatch--on' : ''}`}
-                style={{ background: visionHex(c.id) }}
-                onClick={() => setColor(c.id)}
-              />
-            );
-          })}
-        </div>
+        <ColorField value={color} taken={taken} onChange={setColor} testPrefix="vision-dialog" />
         <p className="px-vd-hint">
           Every vision gets its own colour, and all of its roadmaps carry it. Struck-through swatches are taken.
         </p>

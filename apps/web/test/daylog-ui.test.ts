@@ -38,7 +38,7 @@ vi.mock('@prisms/ui', async (importOriginal) => {
   return {
     ...actual,
     useCommands: () => commands,
-    useJournalDay: () => ({ entry: state.entry, isLoading: false }),
+    useJournalDay: () => ({ entry: state.entry, isLoading: false, isSettled: true }),
     useDayLog: () => (state.journalDayLog ? state.dayLog : null),
     useUserSettings: () => ({ hasRow: true, dayResetHour: 4, timezone: NY, weatherLocation: null, journalDayLog: state.journalDayLog }),
   };
@@ -47,8 +47,22 @@ vi.mock('@prisms/ui', async (importOriginal) => {
 vi.mock('../src/components/RichJournalEditor', async () => {
   const { createElement: h } = await import('react');
   return {
-    RichJournalEditor: ({ value, onChange }: { value: string; onChange: (m: string) => void }) =>
-      h('textarea', { 'data-testid': 'journal-rich', value, onChange: (e: { target: { value: string } }) => onChange(e.target.value) }),
+    // Owns both bodies: locking no longer swaps this component out, it renders
+    // the injected read-only one instead (so the toolbar can animate away).
+    RichJournalEditor: ({
+      value,
+      onChange,
+      locked,
+      renderLocked,
+    }: {
+      value: string;
+      onChange: (m: string) => void;
+      locked?: boolean;
+      renderLocked?: (m: string) => unknown;
+    }) =>
+      locked
+        ? renderLocked?.(value)
+        : h('textarea', { 'data-testid': 'journal-rich', value, onChange: (e: { target: { value: string } }) => onChange(e.target.value) }),
   };
 });
 

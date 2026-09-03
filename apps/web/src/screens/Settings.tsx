@@ -3,13 +3,21 @@
  * that drive every "today/daily" computation (§7.2). Writes settings.update;
  * a fresh account has no row yet, so the first save inserts one (id = user_id,
  * which the server upserts on).
+ *
+ * Not everything here is account data: the agenda snap grid is a property of
+ * the pointer in front of you, and the agenda's date-range label is a property
+ * of the screen you are reading it on, so both are stored per device and apply
+ * the moment they are picked — no Save, nothing to sync. Their rows say so.
  */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { usePowerSync } from '@powersync/react';
-import type { ImportReport } from '@prisms/core';
+import { addDays, asEpochMillis, bucketDate, type ImportReport } from '@prisms/core';
 import { Ic, subscribeHistory, useCommands, useUserSettings, type CommandContext, type StreamSubscriber } from '@prisms/ui';
 
+import { DEFAULT_SPAN } from '../agenda-layout';
+import { formatAgendaRange, RANGE_FORMATS, setRangeFormatPref, useRangeFormatPref } from '../agenda-range';
+import { setSnapPref, SNAP_OPTIONS, useSnapPref } from '../agenda-snap';
 import { isDesktop } from '../desktop';
 import { downloadExport, downloadJournalArchive, dryRunImport, fetchExport, readImportFile, restoreImport } from '../portability';
 
@@ -20,6 +28,19 @@ export function Settings({ ctx }: { ctx: CommandContext }) {
   const commands = useCommands(ctx);
   const hasRow = settings.hasRow;
 
+  const snap = useSnapPref();
+  const rangeFormat = useRangeFormatPref();
+  /**
+   * The options are labelled with what they would ACTUALLY say, over the days
+   * the Agenda would open on — today, forward by the default span. A live
+   * example cannot drift away from the formats the way a written-down one can,
+   * and it settles the questions the names raise on their own: whether a range
+   * inside one month repeats it, and what happens when it straddles two weeks.
+   */
+  const sample = useMemo(() => {
+    const from = bucketDate(asEpochMillis(Date.now()), 0, settings.timezone);
+    return { from, to: addDays(from, DEFAULT_SPAN - 1) };
+  }, [settings.timezone]);
   const [hour, setHour] = useState(String(settings.dayResetHour));
   const [tz, setTz] = useState(settings.timezone);
   const [saved, setSaved] = useState(false);
@@ -76,6 +97,52 @@ export function Settings({ ctx }: { ctx: CommandContext }) {
             <div className="px-set-ctl">
               <button className="px-btn px-btn--primary" data-testid="settings-save" onClick={() => void save()}>Save</button>
               {saved && <span className="px-muted" data-testid="settings-saved" style={{ marginLeft: 10 }}>Saved ✓</span>}
+            </div>
+          </div>
+          <div className="px-set-row">
+            <div className="px-set-lbl">
+              <b>Agenda snap</b>
+              <span>The grid a dragged task snaps to on the Agenda. This device only — it applies straight away.</span>
+            </div>
+            <div className="px-set-ctl">
+              <div className="px-seg" role="group" aria-label="agenda snap interval" data-testid="settings-snap">
+                {SNAP_OPTIONS.map((o) => (
+                  <button
+                    key={o.value}
+                    className={`px-seg-btn${snap === o.value ? ' px-seg-btn--on' : ''}`}
+                    data-testid={`snap-${o.value}`}
+                    aria-pressed={snap === o.value}
+                    title={o.label}
+                    onClick={() => setSnapPref(o.value)}
+                  >
+                    {o.short}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className="px-set-row">
+            <div className="px-set-lbl">
+              <b>Agenda date range</b>
+              <span>
+                How the Agenda names the days it is showing. This device only — it applies straight away.
+                Each option is shown as it would read for the days ahead of you.
+              </span>
+            </div>
+            <div className="px-set-ctl">
+              <select
+                className="px-select"
+                data-testid="settings-range"
+                aria-label="agenda date range format"
+                value={rangeFormat}
+                onChange={(e) => setRangeFormatPref(e.target.value)}
+              >
+                {RANGE_FORMATS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label} — {formatAgendaRange(sample.from, sample.to, o.value)}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
         </div>

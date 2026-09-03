@@ -17,12 +17,15 @@
  * Rendered in a browser only; the jsdom component tests mock this module (TipTap
  * needs a real DOM), and Playwright e2e exercises the live editor.
  */
-import { useEffect } from 'react';
+import { useEffect, type ReactNode } from 'react';
+
 
 import { TaskItem, TaskList } from '@tiptap/extension-list';
 import { EditorContent, useEditor, type Editor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Markdown, type MarkdownStorage } from 'tiptap-markdown';
+
+import { Ic } from '@prisms/ui';
 
 /** Link schemes allowed in a note; everything else is refused (matches MarkdownView, D2). */
 const SAFE_PROTOCOLS = ['http', 'https', 'mailto'];
@@ -33,7 +36,14 @@ const getMd = (editor: Editor): string =>
 
 interface ToolItem {
   key: string;
-  label: string;
+  /**
+   * What the button shows. Plain text where a normal character carries the
+   * meaning (B, H2, •, 1.) — those render in the button's own `color`. Anything
+   * needing a pictogram uses the shared SVG sprite rather than a symbol
+   * character: a glyph Inter lacks falls through the font stack to Segoe UI
+   * Emoji, which paints a COLOUR emoji that `color` cannot touch.
+   */
+  label: ReactNode;
   title: string;
   run: (editor: Editor) => void;
 }
@@ -46,7 +56,7 @@ const TOOLBAR: ToolItem[] = [
   { key: 'h2', label: 'H2', title: 'Heading', run: (e) => e.chain().focus().toggleHeading({ level: 2 }).run() },
   { key: 'bullet', label: '•', title: 'Bullet list', run: (e) => e.chain().focus().toggleBulletList().run() },
   { key: 'ordered', label: '1.', title: 'Numbered list', run: (e) => e.chain().focus().toggleOrderedList().run() },
-  { key: 'task', label: '☑', title: 'Task list', run: (e) => e.chain().focus().toggleTaskList().run() },
+  { key: 'task', label: <Ic name="tasklist" />, title: 'Task list', run: (e) => e.chain().focus().toggleTaskList().run() },
   { key: 'quote', label: '❝', title: 'Quote', run: (e) => e.chain().focus().toggleBlockquote().run() },
   // StarterKit's horizontalRule; tiptap-markdown serializes it to `---`, so the
   // divider survives the round trip to storage, the .md export and every client.
@@ -65,10 +75,31 @@ export function RichJournalEditor({
   value,
   onChange,
   onBlur,
+  locked = false,
+  animate = false,
+  renderLocked,
 }: {
   value: string;
   onChange: (markdown: string) => void;
   onBlur?: (markdown: string) => void;
+  /**
+   * Read-only. The toolbar STAYS MOUNTED and merely goes inert — it used to
+   * unmount with the editor, which made it vanish the instant a note locked.
+   * Keeping it lets it animate out, and lets it animate back.
+   */
+  locked?: boolean;
+  /**
+   * Whether a change of `locked` should animate. False on arrival, so a note that
+   * loads already locked is simply drawn locked rather than folding itself shut
+   * in front of the reader — the same reasoning as the padlock's own gate.
+   */
+  animate?: boolean;
+  /**
+   * The read-only body. Injected rather than imported so the SANITIZED renderer
+   * (D2 — no raw HTML, href allowlist) stays in DayJournal and this module keeps
+   * no opinion about how locked markdown is drawn.
+   */
+  renderLocked?: (markdown: string) => ReactNode;
 }) {
   const editor = useEditor({
     immediatelyRender: false, // client-only SPA; avoids any SSR-detection warning
@@ -104,26 +135,64 @@ export function RichJournalEditor({
     if (getMd(editor) !== value) editor.commands.setContent(value, { emitUpdate: false });
   }, [editor, value]);
 
+  /**
+   * Locking is a SYNCED fact, so the editor has to honour it even while mounted:
+   * the toolbar going inert is not enough to stop typing into the note.
+   *
+   * The `false` is load-bearing. `setEditable(editable, emitUpdate = true)` emits
+   * an `update` by DEFAULT, and this editor's update handler is the note's save
+   * path — so the plain one-argument call cost every note its contents:
+   *   - it fired on mount, while the editor still held the empty string it was
+   *     created with (the synced text arrives a beat later),
+   *   - which ran `onChange('')` → the panel marked the note dirty and scheduled
+   *     a save of nothing,
+   *   - the empty save soft-DELETED the row, and the dirty flag then blocked the
+   *     panel from ever adopting the synced text, so the note did not come back.
+   * Editability is not a content change and must never be announced as one.
+   */
+  useEffect(() => {
+    if (!editor || editor.isEditable === !locked) return;
+    editor.setEditable(!locked, false);
+  }, [editor, locked]);
+
+  const wrap =
+    'px-journal-rich-wrap' +
+    (locked ? ' px-journal-rich-wrap--locked' : '') +
+    (animate ? ' px-journal-rich-wrap--anim' : '');
+
   return (
-    <div className="px-journal-rich-wrap">
-      <div className="px-md-toolbar" role="toolbar" aria-label="formatting">
-        {TOOLBAR.map((t) => (
-          <button
-            key={t.key}
-            type="button"
-            className="px-btn"
-            data-testid={`rt-${t.key}`}
-            title={t.title}
-            aria-label={t.title}
-            disabled={!editor}
-            onMouseDown={(e) => e.preventDefault()} // keep the editor selection on click
-            onClick={() => editor && t.run(editor)}
-          >
-            {t.label}
-          </button>
-        ))}
+    <div className={wrap}>
+      {/* The toolbar rides up under the title block and is clipped off there
+          rather than unmounting. The clip is the grid; the row collapses to 0fr,
+          which is the one way to animate to a CONTENT height — the toolbar wraps
+          to two rows at narrow widths, so its height is not a number we know. */}
+      <div className="px-md-toolbar-clip" aria-hidden={locked || undefined}>
+        <div className="px-md-toolbar" role="toolbar" aria-label="formatting">
+          {TOOLBAR.map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              className="px-btn"
+              data-testid={`rt-${t.key}`}
+              title={t.title}
+              aria-label={t.title}
+              // Inert while locked, in every sense: not clickable, not hoverable
+              // (the clip drops pointer-events), and out of the tab order.
+              disabled={!editor || locked}
+              onMouseDown={(e) => e.preventDefault()} // keep the editor selection on click
+              onClick={() => editor && t.run(editor)}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
       </div>
-      <EditorContent editor={editor} />
+      {/* The field's own min-height lives HERE, on the one element that survives
+          the editor⇄read-only swap, so its bottom edge can animate up to the last
+          line of text instead of jumping there. */}
+      <div className="px-jn-field" data-testid="journal-field">
+        {locked ? renderLocked?.(value) : <EditorContent editor={editor} className="px-jn-field-fill" />}
+      </div>
     </div>
   );
 }

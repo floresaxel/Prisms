@@ -1,8 +1,10 @@
 /**
- * Agenda (§12.2, §10 client mode): a to-do panel on the LEFT, the week calendar
- * in the middle, the day's note on the RIGHT. The left panel holds "To schedule"
+ * Agenda (§12.2, §10 client mode): the day's note on the LEFT, the week calendar
+ * in the middle, a to-do panel on the RIGHT. The right panel holds "To schedule"
  * (unplaced tasks) above a scrollable "All tasks" list — every live task, the
- * already-scheduled ones included. Both lists drag onto the week: while dragging,
+ * already-scheduled ones included. Both are dense flush lists rather than stacks
+ * of cards: hairline-separated rows, each with a three-dot grip at its trailing
+ * edge to say it picks up. Both lists drag onto the week: while dragging,
  * the valid time windows (core `validWindowsFor`, greedy mode) light up and
  * everything else dims; dropping in a valid slot creates a committed block.
  * Committed blocks drag to move; anchored blocks show a lock and refuse the drag
@@ -12,6 +14,12 @@
  *
  * Drag is pointer-based (mousedown→mouseup) rather than HTML5 DnD so the live
  * window-hint state is observable mid-drag and it drives reliably in tests.
+ *
+ * While a drag is live the calendar shows exactly where the drop would land: a
+ * dashed outline at the pointer's snapped position (its real duration, its real
+ * start/end times) and the containing hour cell lit. The snap grid is the
+ * Settings preference — 15 minutes unless changed — so the pointer places
+ * things at a minute, not at an o'clock.
  */
 import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type RefObject } from 'react';
 
@@ -20,6 +28,7 @@ import {
   asEpochMillis,
   bucketDate,
   epochMillisToIso,
+  expandWindows,
   localInstant,
   validWindowsFor,
   type Instant,
@@ -43,8 +52,12 @@ import {
   type CommandContext,
 } from '@prisms/ui';
 
+import { conflictMessage, fitProblems, laneLayout, regionsInDay, type FitProblem } from '../agenda-fit';
 import { agendaLayout, DAY_SPANS, DEFAULT_SPAN, GUTTER_W, isDaySpan } from '../agenda-layout';
+import { formatAgendaRange, useRangeFormatPref } from '../agenda-range';
+import { fmtGridClock, pointerMinutes, snapMinutes, useSnapPref } from '../agenda-snap';
 import { DayJournalPanel } from '../components/DayJournal';
+import { NoteSwap } from '../components/NoteSwap';
 import { WhyButton } from '../components/Why';
 
 const GRID_START_HOUR = 6;
@@ -52,6 +65,7 @@ const GRID_END_HOUR = 22;
 const HOUR_PX = 44;
 const MS_PER_MIN = 60_000;
 const BODY_HEIGHT = (GRID_END_HOUR - GRID_START_HOUR) * HOUR_PX;
+const BODY_MINUTES = (GRID_END_HOUR - GRID_START_HOUR) * 60;
 const DAY_LABEL = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 const SPAN_KEY = 'prisms.agenda.span';
@@ -100,6 +114,13 @@ interface DragState {
   /** Where the grab started, so the card appears under the cursor immediately. */
   originX: number;
   originY: number;
+  /**
+   * How far into the item the pointer grabbed it, in minutes. A block held by
+   * its middle keeps that hold: the outline stays under the hand rather than
+   * snapping its top up to the cursor. Always 0 for a fresh task, which has no
+   * shape on the grid yet to hold.
+   */
+  grabOffsetMin: number;
 }
 
 /** Offset from the cursor so the card never sits under the pointer itself. */
@@ -250,9 +271,29 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
   const dragRef = useRef<DragState | null>(null);
   dragRef.current = drag;
 
+  /**
+   * Where the drop would land right now: the day column under the pointer and
+   * the snapped start, as minutes from the top of the grid. Two primitives
+   * rather than one object on purpose — React bails out of the re-render when a
+   * `useState` setter is handed the value it already holds, so the (heavy)
+   * Agenda re-renders once per crossed snap line rather than once per pointer
+   * sample. The same trick keeps the resize drag below cheap.
+   */
+  const snap = useSnapPref();
+  const rangeFormat = useRangeFormatPref();
+  const [previewCol, setPreviewCol] = useState<number | null>(null);
+  const [previewMin, setPreviewMin] = useState<number | null>(null);
+  const clearPreview = () => {
+    setPreviewCol(null);
+    setPreviewMin(null);
+  };
+
   // cancel a drag that ends anywhere other than a valid cell
   useEffect(() => {
-    const onUp = () => setDrag(null);
+    const onUp = () => {
+      setDrag(null);
+      clearPreview();
+    };
     window.addEventListener('mouseup', onUp);
     return () => window.removeEventListener('mouseup', onUp);
   }, []);
@@ -336,6 +377,7 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
       title,
       originX: e.clientX,
       originY: e.clientY,
+      grabOffsetMin: 0, // a list row has no height on the grid to hold on to
     });
   }
 
@@ -351,6 +393,7 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
     if (block.anchored) return; // I7: anchored blocks refuse the drag
     const task = schedulableById.get(block.taskId);
     if (!task) return;
+    const top = e.currentTarget.getBoundingClientRect().top;
     setDrag({
       taskId: block.taskId,
       blockId: block.id,
@@ -359,6 +402,7 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
       title: block.title,
       originX: e.clientX,
       originY: e.clientY,
+      grabOffsetMin: ((e.clientY - top) / HOUR_PX) * 60,
     });
   }
 
@@ -379,24 +423,105 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
     return () => window.removeEventListener('mousemove', onMove);
   }, [drag]);
 
-  const cellValid = (cellStart: Instant, durationMs: number, valid: Interval[]): boolean =>
-    valid.some((w) => w.start <= cellStart && cellStart + durationMs <= w.end);
+  /**
+   * The hours work may land in, over the DISPLAYED days rather than the
+   * scheduler's horizon — otherwise paging back a week would leave every block
+   * on it with no window to be inside of, and the whole page would wear a
+   * caution.
+   */
+  const dayHours = useMemo(
+    () =>
+      expandWindows(agenda.input.windows, tz, {
+        from: localInstant(days[0]!, 0, tz),
+        to: localInstant(days.at(-1)!, 24, tz),
+      }),
+    [agenda.input.windows, tz, days],
+  );
 
+  /** Committed blocks are what a placement can collide with. */
+  const committedSpans = useMemo(
+    () =>
+      agenda.blocks
+        .filter((b) => b.status === 'committed')
+        .map((b) => ({ id: b.id, start: b.startsAt, end: b.endsAt })),
+    [agenda.blocks],
+  );
+
+  /**
+   * §I7-adjacent: a drop is no longer refused, so what used to be an invalid
+   * region is now merely a clash — computed once per block and worn as a
+   * caution glyph. Excludes the block itself; a block cannot clash with itself.
+   */
+  const problemsByBlock = useMemo(() => {
+    const map = new Map<string, FitProblem[]>();
+    for (const b of agenda.blocks) {
+      const others = committedSpans.filter((s) => s.id !== b.id);
+      map.set(b.id, fitProblems({ start: b.startsAt, end: b.endsAt }, others, dayHours));
+    }
+    return map;
+  }, [agenda.blocks, committedSpans, dayHours]);
+
+  /** Overlapping blocks share the column instead of hiding one another. */
+  const lanes = useMemo(
+    () => laneLayout(agenda.blocks.map((b) => ({ id: b.id, start: b.startsAt, end: b.endsAt }))),
+    [agenda.blocks],
+  );
+
+  /**
+   * Where the dragged item actually fits, per day column, as one merged shape
+   * per continuous stretch. Recomputed once per drag (the drag object's
+   * identity is stable through the pointer's travel), not per pointer sample.
+   */
+  const fitRegions = useMemo(
+    () => (drag ? days.map((d) => regionsInDay(drag.valid, localInstant(d, GRID_START_HOUR, tz), BODY_MINUTES)) : null),
+    [drag, days, tz],
+  );
+
+  /**
+   * Pointer → the snapped start it means, as minutes from the top of the grid.
+   * The last snap line is left clear of the grid's end so the last slot of the
+   * day is always reachable; an item longer than the room left simply overhangs
+   * the bottom, exactly as an equivalent block would.
+   */
+  const minutesAt = (clientY: number, rectTop: number, d: DragState): number =>
+    snapMinutes(pointerMinutes(clientY, rectTop, HOUR_PX, d.grabOffsetMin), snap, BODY_MINUTES - snap);
+
+  /** Minutes from the top of the grid → the instant that reads as on `date`. */
+  const instantAt = (date: string, minutes: number): Instant => localInstant(date, GRID_START_HOUR, tz, minutes);
+
+  /**
+   * What would be wrong with dropping the held item at `start` — the same
+   * question `problemsByBlock` asks of a block that has already landed, so the
+   * outline's warning and the block's caution always agree. A block being MOVED
+   * does not collide with the copy of itself it is about to leave behind.
+   */
+  const problemsAt = (start: Instant, d: DragState): FitProblem[] =>
+    fitProblems(
+      { start, end: start + d.durationMs },
+      committedSpans.filter((s) => s.id !== d.blockId),
+      dayHours,
+    );
+
+  /** A drop is never refused (§12.2): anywhere is allowed, a clash is flagged. */
   async function dropAt(cellStart: Instant) {
     const d = dragRef.current;
-    if (!d || !cellValid(cellStart, d.durationMs, d.valid)) return;
+    if (!d) return;
     const startsAt = epochMillisToIso(cellStart);
     const endsAt = epochMillisToIso(asEpochMillis(cellStart + d.durationMs));
     if (d.blockId) await commands.moveBlock(d.blockId, startsAt, endsAt);
     else await commands.createBlock({ taskId: d.taskId, startsAt, endsAt });
     setDrag(null);
+    clearPreview();
   }
 
   return (
     <section className="px-agenda-view" ref={viewRef as RefObject<HTMLElement>}>
       <div className="px-page-head">
         <h1>Agenda</h1>
-        <span className="px-page-sub" data-testid="week-range">{days[0]} – {days.at(-1)}</span>
+        {/* The label's shape is a Settings preference; the days it names are not. */}
+        <span className="px-page-sub" data-testid="week-range">
+          {formatAgendaRange(days[0] ?? '', days.at(-1) ?? '', rangeFormat)}
+        </span>
         {shownDays < span && (
           <span className="px-page-sub" data-testid="span-capped">showing {shownDays} of {span} — widen the window for more</span>
         )}
@@ -422,13 +547,14 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
       </div>
 
       <div className="px-ag-bar">
-        <span className="px-page-sub">Drag any task onto the week — valid windows light up, everything else dims.</span>
+        <span className="px-page-sub">Drag any task onto the week — the free stretches glow. Drop anywhere; a clash is flagged, not refused.</span>
         <div className="px-ag-legend">
           <span className="px-lg"><span className="px-ag-sw px-ag-sw--committed" />Committed</span>
           <span className="px-lg"><span className="px-ag-sw px-ag-sw--anchored" />Anchored 🔒</span>
           <span className="px-lg"><span className="px-ag-sw px-ag-sw--suggested" />Suggested</span>
           <span className="px-lg"><span className="px-ag-sw px-ag-sw--novision" />No vision</span>
           <span className="px-lg"><span className="px-ag-sw px-ag-sw--history" />History</span>
+          <span className="px-lg"><Ic name="alert" className="px-ag-sw-ic" />Clash</span>
         </div>
       </div>
 
@@ -438,64 +564,25 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
         data-layout={stacked ? (narrow ? 'narrow' : 'stack') : 'cols'}
         style={drag || resize ? { userSelect: 'none' } : undefined}
       >
-        {/* to-schedule + all tasks (left) — every row drags onto the week */}
-        <div className="px-agenda-todo">
-          <h2>To schedule <span className="px-muted">{agenda.todo.length}</span></h2>
-          <div data-testid="todo-list" className="px-list">
-            {agenda.todo.length === 0 &&
-              (hydrated ? <div className="px-list-empty">Nothing to place.</div> : <Skeleton testId="todo-skeleton" rows={4} />)}
-            {agenda.todo.map((t: AgendaTask) => (
-              <div
-                key={t.task.id}
-                className={`px-todo-item${t.kind === 'activity' ? ' px-todo-item--inbox' : ''}${drag?.taskId === t.task.id ? ' px-todo-item--dragging' : ''}`}
-                data-testid={`todo-${t.task.id}`}
-                data-kind={t.kind}
-                title={rowTitle(t)}
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  startTaskDrag(t.schedulable, t.task.title, e);
-                }}
-              >
-                <span className="px-todo-title">{t.task.title}</span>
-                <span className="px-todo-sub">
-                  {t.kind === 'activity' && <span className="px-tag px-tag--grey px-todo-flag">inbox</span>}
-                  {t.estimated ? '' : '~'}{t.schedulable.estimateMinutes}m
-                </span>
+        {/* journal / event-tags panel (left) */}
+        <div className="px-agenda-journal">
+          {selectedBlock ? (
+            <>
+              <div className="px-why-inline" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span className="px-muted">{selectedBlock.status === 'suggested' ? 'Suggested event' : 'Event'}</span>
+                <WhyButton row={selectedBlock.provenance} suggestionReason={selectedBlock.suggestionReason} testId={`why-block-${selectedBlock.id}`} />
               </div>
-            ))}
-          </div>
-
-          {/* Everything still open, scheduled ones included — bounded scroller so
-              the panel never outgrows the week grid. */}
-          <div className="px-ag-all">
-            <h2>All tasks <span className="px-muted">{agenda.allTasks.length}</span></h2>
-            <div className="px-ag-scroll" data-testid="all-tasks-list">
-              {agenda.allTasks.length === 0 &&
-                (hydrated ? <div className="px-list-empty">No open tasks.</div> : <Skeleton testId="all-tasks-skeleton" rows={4} />)}
-              {agenda.allTasks.map((t: AgendaTask) => (
-                <div
-                  key={t.task.id}
-                  className={`px-todo-item${t.scheduled ? ' px-todo-item--placed' : ''}${t.kind === 'activity' ? ' px-todo-item--inbox' : ''}${drag?.taskId === t.task.id ? ' px-todo-item--dragging' : ''}`}
-                  data-testid={`alltask-${t.task.id}`}
-                  data-kind={t.kind}
-                  title={rowTitle(t)}
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    startTaskDrag(t.schedulable, t.task.title, e);
-                  }}
-                >
-                  <span className="px-todo-title">{t.task.title}</span>
-                  <span className="px-todo-sub">
-                    {t.kind === 'activity' && <span className="px-tag px-tag--grey px-todo-flag">inbox</span>}
-                    {t.scheduled ? 'scheduled · ' : ''}
-                    {t.estimated ? '' : '~'}
-                    {t.schedulable.estimateMinutes}m
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-          <p className="px-muted px-drag-hint">Anchored blocks refuse the drag (🔒). A drop outside a valid window snaps back.</p>
+              <BlockTagsPanel blockId={selectedBlock.id} title={selectedBlock.title} ctx={ctx} />
+            </>
+          ) : (
+            // key by day so the editor re-initializes per day (J4/D3); defaults to today.
+            // `lock`: just the lock/pencil toggle here — managing the note
+            // (export, delete) belongs to the Journal screen. NoteSwap holds the
+            // outgoing day on screen long enough to fade it out.
+            <NoteSwap swapKey={journalDay}>
+              <DayJournalPanel key={journalDay} date={journalDay} ctx={ctx} actions="lock" />
+            </NoteSwap>
+          )}
         </div>
 
         <div className="px-agenda-cal">
@@ -517,6 +604,10 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
 
           {rowDays.map((date, i) => {
             const col = r * perRow + i;
+            // The drop preview belongs to whichever column the pointer is over:
+            // minutes from the top of the grid, and the hour that contains them.
+            const preview = drag && previewCol === col && previewMin !== null ? previewMin : null;
+            const previewHour = preview === null ? -1 : GRID_START_HOUR + Math.floor(preview / 60);
             return (
             <div
               key={date}
@@ -566,12 +657,16 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
                   const endForDisplay = resizing ? (resizeEnd as Instant) : b.endsAt;
                   const p = place(b.startsAt, endForDisplay);
                   if (p === null || p.col !== col) return null;
+                  const problems = problemsByBlock.get(b.id) ?? [];
+                  const clash = conflictMessage(problems);
+                  const { lane, lanes: laneCount } = lanes.get(b.id) ?? { lane: 0, lanes: 1 };
                   const cls = [
                     'px-cal-block',
                     b.status === 'suggested' ? 'px-cal-block--suggested' : '',
                     b.superseded ? 'px-cal-block--superseded' : '',
                     !b.justified ? 'px-cal-block--unjustified' : '',
                     b.anchored ? 'px-cal-block--anchored' : '',
+                    clash ? 'px-cal-block--clash' : '',
                   ].filter(Boolean).join(' ');
                   return (
                     <div
@@ -579,7 +674,17 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
                       className={cls}
                       data-testid={`block-${b.id}`}
                       data-duration-min={Math.round((endForDisplay - b.startsAt) / MS_PER_MIN)}
-                      style={{ top: p.top, height: p.height, cursor: b.anchored ? 'not-allowed' : 'grab', outline: b.id === selectedBlockId ? '2px solid var(--px-accent, #4c8bf5)' : undefined }}
+                      data-conflict={clash ? 'true' : 'false'}
+                      style={{
+                        top: p.top,
+                        height: p.height,
+                        // lanes, so a clashing block sits BESIDE what it clashes
+                        // with rather than under it — hiding its own caution.
+                        left: `${(lane / laneCount) * 100}%`,
+                        right: `${((laneCount - lane - 1) / laneCount) * 100}%`,
+                        cursor: b.anchored ? 'not-allowed' : 'grab',
+                        outline: b.id === selectedBlockId ? '2px solid var(--px-accent, #4c8bf5)' : undefined,
+                      }}
                       onMouseDown={(e) => {
                         if (b.status !== 'committed') return;
                         e.preventDefault();
@@ -590,6 +695,12 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
                         setSelectedDay(null);
                       }}
                     >
+                      {clash && (
+                        <span className="px-cal-warn" data-testid={`conflict-${b.id}`} data-problems={problems.join(' ')}>
+                          {/* `title` is both the hover text and the icon's accessible name */}
+                          <Ic name="alert" title={clash} />
+                        </span>
+                      )}
                       <span className="px-cal-block-title">{b.anchored && <span aria-label="anchored">🔒 </span>}{b.title}</span>
                       {b.superseded && (
                         <span className="px-cal-block-stale" data-testid={`superseded-${b.id}`}>superseded</span>
@@ -616,24 +727,74 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
                   );
                 })}
 
-                {/* drop overlay — only live during a drag */}
+                {/* drop overlay — only live during a drag. The pointer is read
+                    on the overlay rather than per cell, because a snapped drop
+                    can start anywhere inside an hour (or, once grabbed
+                    mid-block, inside the one above it). */}
                 {drag && (
-                  <div className="px-cal-drop" data-testid={`drop-col-${col}`}>
-                    {Array.from({ length: GRID_END_HOUR - GRID_START_HOUR }, (_, i) => {
-                      const hour = GRID_START_HOUR + i;
-                      const cellStart = localInstant(date, hour, tz);
-                      const ok = cellValid(cellStart, drag.durationMs, drag.valid);
+                  <div
+                    className="px-cal-drop"
+                    data-testid={`drop-col-${col}`}
+                    onMouseMove={(e) => {
+                      const min = minutesAt(e.clientY, e.currentTarget.getBoundingClientRect().top, drag);
+                      setPreviewCol(col);
+                      setPreviewMin(min);
+                    }}
+                    // guarded: the pointer enters the next column before this
+                    // fires, so an unguarded clear would blank that fresh preview
+                    onMouseLeave={() => setPreviewCol((c) => (c === col ? null : c))}
+                    onMouseUp={(e) => {
+                      const min = minutesAt(e.clientY, e.currentTarget.getBoundingClientRect().top, drag);
+                      void dropAt(instantAt(date, min));
+                    }}
+                  >
+                    {/* where it fits: ONE glowing outline per continuous free
+                        stretch, not a stack of hour-sized rectangles. */}
+                    {(fitRegions?.[col] ?? []).map((r) => (
+                      <div
+                        key={r.startMin}
+                        className="px-cal-free"
+                        data-testid={`free-${col}-${r.startMin}`}
+                        data-span-min={r.endMin - r.startMin}
+                        aria-hidden="true"
+                        style={{ top: (r.startMin / 60) * HOUR_PX, height: ((r.endMin - r.startMin) / 60) * HOUR_PX }}
+                      />
+                    ))}
+
+                    {/* the hour the drop would fall in */}
+                    {previewHour >= 0 && (
+                      <div
+                        className="px-cal-hot"
+                        data-testid={`hot-hour-${col}`}
+                        data-hour={previewHour}
+                        aria-hidden="true"
+                        style={{ top: (previewHour - GRID_START_HOUR) * HOUR_PX, height: HOUR_PX }}
+                      />
+                    )}
+
+                    {/* what the drop would make, drawn where it would go */}
+                    {preview !== null && (() => {
+                      const durMin = drag.durationMs / MS_PER_MIN;
+                      const problems = problemsAt(instantAt(date, preview), drag);
+                      const clash = conflictMessage(problems);
                       return (
                         <div
-                          key={i}
-                          className={`px-cal-cell ${ok ? 'px-cal-cell--valid' : 'px-cal-cell--invalid'}`}
-                          data-testid={`cell-${col}-${hour}`}
-                          data-valid={ok ? 'true' : 'false'}
-                          style={{ top: i * HOUR_PX, height: HOUR_PX }}
-                          onMouseUp={() => void dropAt(cellStart)}
-                        />
+                          className={`px-cal-preview${clash ? ' px-cal-preview--clash' : ''}`}
+                          data-testid={`drop-preview-${col}`}
+                          data-start-min={preview}
+                          data-conflict={clash ? 'true' : 'false'}
+                          data-problems={problems.join(' ')}
+                          aria-hidden="true"
+                          style={{ top: (preview / 60) * HOUR_PX, height: Math.max(16, (durMin / 60) * HOUR_PX) }}
+                        >
+                          <span className="px-cal-preview-time">
+                            {clash && <Ic name="alert" className="px-cal-preview-warn" />}
+                            {fmtGridClock(GRID_START_HOUR, preview)} – {fmtGridClock(GRID_START_HOUR, preview + durMin)}
+                          </span>
+                          <span className="px-cal-preview-title">{drag.title}</span>
+                        </div>
                       );
-                    })}
+                    })()}
                   </div>
                 )}
               </div>
@@ -645,22 +806,70 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
         </div>
       </div>
 
-        {/* journal / event-tags panel (right) */}
-        <div className="px-agenda-journal">
-          {selectedBlock ? (
-            <>
-              <div className="px-why-inline" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span className="px-muted">{selectedBlock.status === 'suggested' ? 'Suggested event' : 'Event'}</span>
-                <WhyButton row={selectedBlock.provenance} suggestionReason={selectedBlock.suggestionReason} testId={`why-block-${selectedBlock.id}`} />
+        {/* to-schedule + all tasks (right) — every row drags onto the week */}
+        <div className="px-agenda-todo">
+          <h2>To schedule <span className="px-muted">{agenda.todo.length}</span></h2>
+          <div data-testid="todo-list" className="px-todo-list">
+            {agenda.todo.length === 0 &&
+              (hydrated ? <div className="px-list-empty">Nothing to place.</div> : <Skeleton testId="todo-skeleton" rows={4} />)}
+            {agenda.todo.map((t: AgendaTask) => (
+              <div
+                key={t.task.id}
+                className={`px-todo-item${t.kind === 'activity' ? ' px-todo-item--inbox' : ''}${drag?.taskId === t.task.id ? ' px-todo-item--dragging' : ''}`}
+                data-testid={`todo-${t.task.id}`}
+                data-kind={t.kind}
+                title={rowTitle(t)}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  startTaskDrag(t.schedulable, t.task.title, e);
+                }}
+              >
+                <span className="px-todo-title">{t.task.title}</span>
+                <span className="px-todo-sub">
+                  {t.kind === 'activity' && <span className="px-tag px-tag--grey px-todo-flag">inbox</span>}
+                  {t.estimated ? '' : '~'}{t.schedulable.estimateMinutes}m
+                </span>
+                <span className="px-todo-grip"><Ic name="dots" /></span>
               </div>
-              <BlockTagsPanel blockId={selectedBlock.id} title={selectedBlock.title} ctx={ctx} />
-            </>
-          ) : (
-            // key by day so the editor re-initializes per day (J4/D3); defaults to today.
-            // `lock`: just the lock/pencil toggle here — managing the note
-            // (export, delete) belongs to the Journal screen.
-            <DayJournalPanel key={journalDay} date={journalDay} ctx={ctx} actions="lock" />
-          )}
+            ))}
+          </div>
+
+          {/* Everything still open, scheduled ones included — bounded scroller so
+              the panel never outgrows the week grid. */}
+          <div className="px-ag-all">
+            <h2>All tasks <span className="px-muted">{agenda.allTasks.length}</span></h2>
+            <div className="px-ag-scroll px-todo-list" data-testid="all-tasks-list">
+              {agenda.allTasks.length === 0 &&
+                (hydrated ? <div className="px-list-empty">No open tasks.</div> : <Skeleton testId="all-tasks-skeleton" rows={4} />)}
+              {agenda.allTasks.map((t: AgendaTask) => (
+                <div
+                  key={t.task.id}
+                  className={`px-todo-item${t.scheduled ? ' px-todo-item--placed' : ''}${t.kind === 'activity' ? ' px-todo-item--inbox' : ''}${drag?.taskId === t.task.id ? ' px-todo-item--dragging' : ''}`}
+                  data-testid={`alltask-${t.task.id}`}
+                  data-kind={t.kind}
+                  title={rowTitle(t)}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    startTaskDrag(t.schedulable, t.task.title, e);
+                  }}
+                >
+                  <span className="px-todo-title">{t.task.title}</span>
+                  <span className="px-todo-sub">
+                    {t.kind === 'activity' && <span className="px-tag px-tag--grey px-todo-flag">inbox</span>}
+                    {t.scheduled ? 'scheduled · ' : ''}
+                    {t.estimated ? '' : '~'}
+                    {t.schedulable.estimateMinutes}m
+                  </span>
+                  <span className="px-todo-grip"><Ic name="dots" /></span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <p className="px-muted px-drag-hint" data-testid="drag-hint">
+            Drops snap to {snap === 60 ? '1 hour' : `${snap} minutes`} — change that in Settings. Anchored blocks refuse
+            the drag (🔒); everywhere else takes a drop, and one that overlaps or falls outside your hours keeps a
+            caution ⚠ until you move it.
+          </p>
         </div>
       </div>
 

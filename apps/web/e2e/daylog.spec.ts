@@ -26,7 +26,17 @@ import { strFromU8, unzipSync } from 'fflate';
 import { goto } from './util/nav';
 
 const TZ = 'America/New_York'; // a fresh account's default timezone
-const today = bucketDate(asEpochMillis(Date.now()), 0, TZ);
+/**
+ * A fresh account's default `day_reset_hour` (hooks.ts): the day rolls at 4am,
+ * not at midnight. Bucketing with 0 here made the spec disagree with the app for
+ * the four hours after local midnight — it asked for the calendar date while the
+ * app was still showing the previous logical day, so `journal-<today>` simply did
+ * not exist and every test that opens today timed out. It passed for months
+ * because CI happened not to run in that window; run 33722021970 did (02:10 EDT)
+ * and took four tests with it.
+ */
+const DAY_RESET = 4;
+const today = bucketDate(asEpochMillis(Date.now()), DAY_RESET, TZ);
 const yearOf = (d: string): string => d.slice(0, 4);
 
 let seq = 0;
@@ -221,8 +231,18 @@ test('exports: the day .md carries the section, and the archive has a LOG-ONLY p
 
   // The day download: the note VERBATIM, then the section. Export lives behind
   // the note's corner "⋯" menu.
-  await page.getByTestId('journal-menu').click();
-  const [dl] = await Promise.all([page.waitForEvent('download'), page.getByTestId('journal-export').click()]);
+  //
+  // Wait for the note's TEXT first, not just the panel and the footer. The
+  // footer is computed from blocks and completions, which can land before the
+  // journal row does — and `exportDay` writes from the panel's draft, so
+  // exporting in that gap produces a file with the day log but no note.
+  // journal.spec.ts carries the same wait, for the same reason.
+  await expect(page.getByTestId(`journal-${today}`).getByTestId('journal-rich')).toContainText('Shipped it today.', {
+    timeout: 30_000,
+  });
+  const dayPanel = page.getByTestId(`journal-${today}`);
+  await dayPanel.getByTestId('journal-menu').click();
+  const [dl] = await Promise.all([page.waitForEvent('download'), dayPanel.getByTestId('journal-export').click()]);
   expect(dl.suggestedFilename()).toBe(`${today}.md`);
   const md = await readFile(await dl.path(), 'utf8');
   expect(md.startsWith('Shipped it today.')).toBe(true);

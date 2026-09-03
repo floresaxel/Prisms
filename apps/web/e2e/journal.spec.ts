@@ -33,7 +33,26 @@ import { strFromU8, unzipSync } from 'fflate';
 import { goto } from './util/nav';
 
 const TZ = 'America/New_York'; // a fresh account's default day-reset timezone
+/**
+ * The two screens do NOT agree on what "today" is, so the spec cannot use one
+ * date for both.
+ *
+ * The Agenda's columns are CALENDAR days (`bucketDate(now, 0, tz)` in
+ * Agenda.tsx), and its note panel defaults to the same — so a note written
+ * there is filed under the calendar date. The Journal screen asks the fact
+ * context (`fc.today(now)`), which honours a fresh account's default
+ * `day_reset_hour` of 4 — so between local midnight and 4am it opens the
+ * PREVIOUS day.
+ *
+ * For those four hours the two are different days, and an assertion has to name
+ * the one belonging to the screen it is made on. (That divergence is the app's,
+ * not this spec's, and it is on `main` too — see the note in the PR.)
+ */
+const DAY_RESET = 4;
+/** What the Agenda calls today, and therefore what a note written there is filed under. */
 const today = bucketDate(asEpochMillis(Date.now()), 0, TZ);
+/** What the Journal screen opens on. Equal to `today` for twenty hours of every day. */
+const journalToday = bucketDate(asEpochMillis(Date.now()), DAY_RESET, TZ);
 const daysAgo = (n: number): string => addDays(today, -n);
 const yearOf = (d: string): string => d.slice(0, 4);
 
@@ -111,16 +130,34 @@ test('create → reload → edit → delete (WYSIWYG) with emoji; day Export .md
   await expect(page.getByTestId('journal-preview')).toBeVisible();
   await expect(page.getByTestId('journal-rich')).toHaveCount(0);
   await expect(page.getByTestId('journal-menu')).toHaveCount(0); // no menu on the Agenda
+
+  // The lock stops answering for the length of the fold it starts, so that a
+  // double click cannot lock and immediately unlock again. The three assertions
+  // above run well inside that window, so clicking straight through them lands
+  // in it and is dropped — wait it out, then prove the unlock actually took
+  // rather than discovering it much later as an empty editor.
+  await page.waitForTimeout(300);
   await page.getByTestId('journal-preview-toggle').click(); // back to editing
+  await expect(page.getByTestId('journal-rich')).toBeVisible();
 
   // Export .md downloads exactly the stored markdown, named <today>.md. Wait for
   // the note's TEXT, not just the panel: the panel mounts before its row loads,
   // and exporting in that window would write the file from an empty draft.
   await goto(page, 'journal');
+  // Pick the day the note was actually written on rather than trusting the
+  // screen's default: the Journal screen opens on the day-reset day, which is
+  // the PREVIOUS one between midnight and 4am, while the note above was filed
+  // under the Agenda's calendar day. Selecting it is a no-op the rest of the day.
+  await page.getByTestId(`journal-day-${today}`).click();
   await expect(page.getByTestId(`journal-${today}`)).toBeVisible({ timeout: 30_000 });
-  await expect(page.getByTestId('journal-rich')).toContainText('Standup notes', { timeout: 30_000 });
-  await page.getByTestId('journal-menu').click();
-  const [dl] = await Promise.all([page.waitForEvent('download'), page.getByTestId('journal-export').click()]);
+  await expect(page.getByTestId(`journal-${today}`).getByTestId('journal-rich')).toContainText('Standup notes', {
+    timeout: 30_000,
+  });
+  // Scoped like the assertion above: the day click cross-fades, so for ~100ms
+  // the panel left behind still carries its own copy of this menu.
+  const dayPanel = page.getByTestId(`journal-${today}`);
+  await dayPanel.getByTestId('journal-menu').click();
+  const [dl] = await Promise.all([page.waitForEvent('download'), dayPanel.getByTestId('journal-export').click()]);
   expect(dl.suggestedFilename()).toBe(`${today}.md`);
   expect(await readFile(await dl.path(), 'utf8')).toBe(stored);
 
@@ -138,8 +175,9 @@ test('create → reload → edit → delete (WYSIWYG) with emoji; day Export .md
   await page.getByTestId('journal-rich').blur();
   await expect.poll(async () => (await serverDays(page)).length, { timeout: 30_000 }).toBe(1);
   await goto(page, 'journal');
-  await page.getByTestId('journal-menu').click();
-  await page.getByTestId('journal-delete').click();
+  await page.getByTestId(`journal-day-${today}`).click(); // the written day, not the screen's default
+  await page.getByTestId(`journal-${today}`).getByTestId('journal-menu').click();
+  await page.getByTestId(`journal-${today}`).getByTestId('journal-delete').click();
   await expect.poll(async () => (await serverDays(page)).length, { timeout: 30_000 }).toBe(0);
   await goto(page, 'agenda');
   await expect(page.getByTestId(`note-dot-${today}`)).toHaveCount(0);
@@ -220,41 +258,51 @@ test('standalone Journal screen: lists the current month, opens a note, lazily l
     data: {
       device_id: 'e2e-seed',
       commands: [
-        cmd('journal.write', { id: randomUUID(), entry_date: today, content: '# Today\nstandup notes' }),
+        cmd('journal.write', { id: randomUUID(), entry_date: journalToday, content: '# Today\nstandup notes' }),
         cmd('journal.write', { id: randomUUID(), entry_date: pastA, content: pastContent }),
       ],
     },
   });
   expect(seed.ok()).toBeTruthy();
-  expect(monthA).not.toBe(today.slice(0, 7)); // sanity: the seed really is a different month
+  expect(monthA).not.toBe(journalToday.slice(0, 7)); // sanity: the seed really is a different month
 
   await goto(page, 'journal');
 
   // the current month opens expanded → today's note syncs down and lists (markdown
   // heading stripped to a plain title).
-  await expect(page.getByTestId(`journal-day-${today}`)).toBeVisible({ timeout: 30_000 });
-  await expect(page.getByTestId(`journal-day-${today}`)).toContainText('Today');
+  await expect(page.getByTestId(`journal-day-${journalToday}`)).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId(`journal-day-${journalToday}`)).toContainText('Today');
 
   // the past month renders as a header but COLLAPSED — its day is not listed yet.
   await expect(page.getByTestId(`journal-month-${monthA}`)).toBeVisible();
   await expect(page.getByTestId(`journal-day-${pastA}`)).toHaveCount(0);
 
-  // clicking today loads it in the shared day editor.
-  await page.getByTestId(`journal-day-${today}`).click();
-  await expect(page.getByTestId('journal-rich')).toContainText('standup notes', { timeout: 15_000 });
+  // clicking today loads it in the shared day editor. Scoped to the day for the
+  // same reason as the past-month assertion below: the switch cross-fades, so a
+  // bare `journal-rich` can match the panel being left as well as the one arrived
+  // at, and a strict-mode violation is not something the retry can wait out.
+  await page.getByTestId(`journal-day-${journalToday}`).click();
+  await expect(page.getByTestId(`journal-${journalToday}`).getByTestId('journal-rich')).toContainText('standup notes', {
+    timeout: 15_000,
+  });
 
   // expand the past month → its rows sync LAZILY (the day appears only now).
   await page.getByTestId(`journal-month-${monthA}`).click();
   await expect(page.getByTestId(`journal-day-${pastA}`)).toBeVisible({ timeout: 30_000 });
   await page.getByTestId(`journal-day-${pastA}`).click();
-  await expect(page.getByTestId('journal-rich')).toContainText('past month note', { timeout: 15_000 });
+  // Scoped to the day: switching days cross-fades, so for ~100ms the panel you
+  // came FROM is still on screen behind the one you moved to and a bare
+  // `journal-rich` matches both. The day you asked for is the one to assert on.
+  await expect(page.getByTestId(`journal-${pastA}`).getByTestId('journal-rich')).toContainText('past month note', {
+    timeout: 15_000,
+  });
 
   // the archive is server-sourced, so it includes BOTH months (even the lazy one).
   const [dl] = await Promise.all([page.waitForEvent('download'), page.getByTestId('journal-archive').click()]);
   expect(dl.suggestedFilename()).toMatch(/^prisms-journal_.*\.zip$/);
   const files = unzipSync(new Uint8Array(await readFile(await dl.path())));
   expect(strFromU8(files[`journal/${yearOf(pastA)}/${pastA}.md`]!)).toBe(pastContent);
-  expect(Object.keys(files)).toContain(`journal/${yearOf(today)}/${today}.md`);
+  expect(Object.keys(files)).toContain(`journal/${yearOf(journalToday)}/${journalToday}.md`);
 });
 
 test('J7 WYSIWYG: toolbar task list + an interactive checkbox round-trip to markdown', async ({ page }) => {

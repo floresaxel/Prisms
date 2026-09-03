@@ -14,7 +14,7 @@
  * (and on unmount) via `journal.write`; an explicit Delete soft-deletes; empty
  * saves are allowed.
  */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -32,6 +32,8 @@ import {
   type CommandContext,
 } from '@prisms/ui';
 
+import { readJournalLocked, writeJournalLocked } from '../journal-lock-cache';
+
 import { DayLogFooter } from './DayLogFooter';
 import { RichJournalEditor } from './RichJournalEditor';
 
@@ -42,6 +44,25 @@ import { RichJournalEditor } from './RichJournalEditor';
  * user's other devices) sooner. A blur still flushes immediately regardless.
  */
 const SAVE_DEBOUNCE_MS = 100;
+
+/**
+ * How long the lock's fold runs, and therefore how long the lock ignores further
+ * clicks. It is the LONGEST duration in theme.css's lock set — the toolbar
+ * collapse and the field's min-height, both 194ms; the padlock's own turn (154ms
+ * shutting, 184ms opening) finishes inside it. Keep this in step with those: too
+ * short and a double click still gets through, too long and the control feels
+ * stuck after it has visibly settled.
+ */
+const LOCK_ANIM_MS = 194;
+
+/**
+ * How long the remembered lock state stands in for a day's row while that row is
+ * still on its way. Comfortably longer than the arrival it covers (~80ms
+ * measured, worst case a few hundred), and short enough that a day whose note
+ * has gone missing settles into the truth quickly rather than sitting on a
+ * memory. A slower arrival than this shows "Loading…" anyway.
+ */
+const LOCK_HINT_MS = 600;
 
 /** Allow only these link schemes; everything else (javascript:, data:, …) is dropped. */
 const SAFE_URL = /^(https?:|mailto:)/i;
@@ -84,7 +105,7 @@ export function DayJournalPanel({
    */
   actions?: 'menu' | 'lock';
 }) {
-  const { entry, isLoading } = useJournalDay(date);
+  const { entry, isLoading, isSettled } = useJournalDay(date);
   const commands = useCommands(ctx);
   // Annex L: derived at render from the warm provider — null when the built-in
   // automation is off or the day holds nothing.
@@ -97,10 +118,31 @@ export function DayJournalPanel({
   const existingId = entry?.id;
   const menuRef = useRef<HTMLDivElement | null>(null);
 
-  /** The heading: the stored title, else "Note · <date>". */
-  const heading = journalTitleOf(entry?.title, date);
   /** Title and lock belong to a note that EXISTS; a blank day has neither. */
   const hasNote = existingId !== undefined && !isJournalContentEmpty(draft);
+  const storedTitle = (entry?.title ?? '').trim();
+  /**
+   * The heading: the stored title, else "Note · <date>" — but the two are NOT
+   * equally safe to render early, so they are gated differently.
+   *
+   * A stored title is shown the instant it arrives: it is the note's own value,
+   * so it can never be contradicted by a later read.
+   *
+   * The default is the opposite — it asserts that this note has NO title, which
+   * is only true once the row has actually been read. Deriving it from
+   * `entry?.title` alone assumes the absence: `entry` also carries an empty
+   * `title` while the read is unsettled (a cold load, or `ROWS_CACHE` standing in
+   * with rows this mount has not re-produced), so the default would paint for a
+   * frame and then be overwritten by the real title. It waits for `isSettled`.
+   *
+   * A day with NO note yet gets the default too — it names the day the note WILL
+   * be filed under. The panel used to blank there on the reasoning that a title
+   * belongs to a note that exists, but both screens open on TODAY, which usually
+   * has nothing written yet: the common view of the Agenda's note panel was a
+   * headerless box. The input stays disabled, so this reads as a heading rather
+   * than an editable value that has been filled in for you.
+   */
+  const heading = storedTitle || (isSettled ? journalTitleOf('', date) : '');
   /**
    * The LOCKED (read-only) state of THIS day, surfaced as "Lock edit" ⇄ "Edit".
    * It is a SYNCED field on the day's row (`journal_entries.locked`), not local
@@ -112,7 +154,80 @@ export function DayJournalPanel({
    * Such rows cannot be created any more, but they exist in databases that
    * predate that rule, so an empty one is simply editable.
    */
-  const preview = hasNote && (entry?.locked ?? false);
+  /**
+   * The lock the user has ASKED for but the row has not caught up to yet, or null
+   * when there is nothing outstanding.
+   *
+   * The panel used to render straight off the synced field, which meant a click
+   * moved nothing until the command had been through zod, the overlay store's
+   * write transaction, the query invalidation and a re-render — all of it across
+   * a web worker. That whole round trip was dead air before the fold so much as
+   * began, and it does not shrink when the animation is shortened, so it grew
+   * more obvious with every speed-up.
+   *
+   * The intent paints immediately and is dropped the moment the synced value
+   * agrees with it — or the moment the command fails, which puts the note back
+   * where the server thinks it is rather than leaving a lie on screen.
+   */
+  const [lockIntent, setLockIntent] = useState<boolean | null>(null);
+  const syncedLocked = entry?.locked ?? false;
+  useEffect(() => {
+    if (lockIntent !== null && syncedLocked === lockIntent) setLockIntent(null);
+  }, [lockIntent, syncedLocked]);
+
+  /**
+   * The lock reads the ROW, not `draft`.
+   *
+   * `hasNote` is derived from the draft, which is seeded from the entry at mount
+   * and re-synced by an effect — so on the first render of a day it is false even
+   * when the row is right there, fully read. Gating the lock on it made a locked
+   * note mount as `false && true` — unlocked, toolbar out — and correct itself
+   * once the draft caught up. Measured on the Agenda: the panel mounts at +76ms
+   * with `hasNote=false`, and the draft lands at +125ms. ~50ms of editing chrome
+   * on a note that cannot be edited.
+   *
+   * The row has no such lag, and it is the field's own source anyway.
+   */
+  const entryHasNote = existingId !== undefined && !isJournalContentEmpty(entry?.content ?? '');
+  const settledLocked = entryHasNote && syncedLocked;
+  /**
+   * The day's remembered state, which is what this panel opens on while the read
+   * is unsettled. Without it, switching to a locked note drew the editor and its
+   * toolbar for ~36ms and then folded them away — measured on the Agenda, where
+   * the incoming panel mounts at +24ms and the row lands at +60ms.
+   *
+   * Read once per mounted day: the point is the FIRST frame, and re-reading a
+   * hint after the truth is available would only fight it.
+   */
+  const remembered = useMemo(() => readJournalLocked(date), [date]);
+  /**
+   * The hint covers ARRIVAL and nothing else: the gap between mounting a day and
+   * its row turning up. `isSettled` is not that signal — it belongs to the MONTH
+   * subscription, and a just-written day can still be missing from it (measured:
+   * settled at +172ms, the row itself at +250ms).
+   *
+   * It expires so it can never become the answer. Without that, a note deleted on
+   * another device would leave `entry` null here for good, and a remembered
+   * `true` would keep drawing a locked note that no longer exists.
+   */
+  const [hintLive, setHintLive] = useState(true);
+  useEffect(() => {
+    setHintLive(true);
+    const t = setTimeout(() => setHintLive(false), LOCK_HINT_MS);
+    return () => clearTimeout(t);
+  }, [date]);
+
+  const useHint = entry === null && hintLive && remembered !== undefined;
+  const preview = lockIntent ?? (useHint ? remembered : settledLocked);
+
+  // Remember it for next time — an explicit intent the moment it is expressed,
+  // and otherwise only what the ROW has actually shown. Never the hint itself,
+  // which would let one guess teach itself to the next mount, and never the
+  // absence of a row, which is routinely just "not here yet".
+  useEffect(() => {
+    if (lockIntent !== null) writeJournalLocked(date, lockIntent);
+    else if (entry !== null) writeJournalLocked(date, settledLocked);
+  }, [date, lockIntent, entry, settledLocked]);
   const [titleDraft, setTitleDraft] = useState<string | null>(null);
 
   function commitTitle() {
@@ -126,9 +241,51 @@ export function DayJournalPanel({
     void commands.setJournalTitle(existingId, next);
   }
 
+  /**
+   * Has the lock been WORKED yet, this mounting of this day?
+   *
+   * Gates the swing animation. The keyframes are keyed off `data-state`, and CSS
+   * cannot tell "this attribute just changed" from "this attribute was rendered
+   * with that value" — so without a gate the shackle would swing itself open
+   * every time a locked day is opened, as if someone had just unlocked it. Set on
+   * the click, so the animation belongs to the act of locking rather than to
+   * arriving at a note that happens to be locked. Resets per day: the panel is
+   * mounted with `key={date}`.
+   */
+  const [lockWorked, setLockWorked] = useState(false);
+  /** Mid-transition: the lock is deaf until the fold it started has finished. */
+  const [lockBusy, setLockBusy] = useState(false);
+  const lockTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (lockTimer.current) clearTimeout(lockTimer.current); }, []);
+
+  /**
+   * Toggling is IGNORED while the fold it starts is still running. A double click
+   * would otherwise lock and immediately unlock — two commands and two half-played
+   * animations for what reads as one gesture — and, worse, the second command
+   * races the first to the server on a field that has no ordering of its own.
+   *
+   * Deliberately not `disabled`: the button greying out for a fifth of a second
+   * mid-animation looks like a fault. It simply stops answering.
+   */
   function toggleLock() {
-    if (!existingId) return;
-    void commands.setJournalLocked(existingId, !preview);
+    if (!existingId || lockBusy) return;
+    const next = !preview;
+    // A locked note refuses to write, so anything still sitting in the debounce
+    // has to go NOW or it goes nowhere. Runs before the lock is set, while writes
+    // are still allowed.
+    if (next) flushPending.current();
+    setLockWorked(true);
+    setLockBusy(true);
+    setLockIntent(next); // paints THIS frame; the command catches up behind it
+    if (lockTimer.current) clearTimeout(lockTimer.current);
+    lockTimer.current = setTimeout(() => {
+      lockTimer.current = null;
+      setLockBusy(false);
+    }, LOCK_ANIM_MS);
+    // The write is queued, not awaited — the sync indicator is what reports it as
+    // outstanding. A rejection puts the note back rather than stranding the
+    // optimistic state; the queue survives a reload either way.
+    void commands.setJournalLocked(existingId, next).catch(() => setLockIntent(null));
   }
 
   // Dismiss the overflow menu on an outside click or Escape.
@@ -162,7 +319,23 @@ export function DayJournalPanel({
    *                       it. Typing again re-creates it (the §7.7 partial unique
    *                       permits re-creating a soft-deleted day).
    */
+  /**
+   * A LOCKED note never writes, and the ref is what makes that true at the only
+   * moment it matters.
+   *
+   * Locking unmounts the editor, and tearing a ProseMirror view down fires a
+   * BLUR — whose handler is this save path. The content it reports as it goes is
+   * empty, which lands on the branch below and soft-deletes the row: lock a note,
+   * and it was gone. (Found by the e2e, which locked, unlocked, and then found
+   * the editor blank.) The teardown happens during React's commit, so a ref
+   * assigned in render is already true by then where a state value or an effect
+   * would not be.
+   */
+  const lockedRef = useRef(preview);
+  lockedRef.current = preview;
+
   const write = (content: string) => {
+    if (lockedRef.current) return;
     if (isJournalContentEmpty(content)) {
       if (existingId) void commands.deleteJournal(existingId);
       return;
@@ -220,23 +393,37 @@ export function DayJournalPanel({
   }
 
   return (
-    <div className="px-journal" data-testid={`journal-${date}`} style={{ marginTop: 16 }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-        {/* The title is editable; the DATE moves below it, so renaming a note
-            never costs you the day it belongs to. */}
-        <div className="px-jn-head">
-          {/* The heading is the note's title, or "Note · <date>" when it has
-              none — but ONLY once the note has loaded and that absence is a
-              fact. While the row is still arriving we know neither, so the field
-              stays blank rather than showing the default for a moment and then
-              correcting itself. */}
+    /* `--ready` marks the day as READ, not merely mounted — the Agenda fades the
+       panel in on it. Keyed off loading rather than mount so the fade belongs to
+       the note arriving; fading a panel in while it still says "Loading…" would
+       animate the wrong moment, and the day's real content would then pop in
+       afterwards with no transition at all. */
+    /* No margin of its own: the gap above the note belongs to `.px-note-swap`
+       (theme.css). A margin here COLLAPSES out of an in-flow layer but not out of
+       the absolutely-positioned outgoing one, so the two cross-fade layers landed
+       16px apart — the note visibly jumped as you moved between days. */
+    <div
+      className={`px-journal${isLoading ? '' : ' px-journal--ready'}`}
+      data-testid={`journal-${date}`}
+    >
+      {/* The title is editable; the DATE moves below it, so renaming a note
+          never costs you the day it belongs to. The action sits ON the title's
+          line (not the block's top edge) — the date underneath is a caption, and
+          top-aligning against it left the button floating above the title. */}
+      <div className="px-jn-head">
+        <div className="px-jn-titlerow">
+          {/* Blank until we KNOW what to put here (see `heading`): an untitled
+              note — or a day with nothing written yet — reads "Note · <date>",
+              but only once the row has been read. An unsettled read carries an
+              empty title too, and painting the default from that would flash it
+              for a frame before the real title lands. */}
           <input
             className="px-jn-title"
             data-testid="journal-title"
             aria-label="note title"
-            value={titleDraft ?? (hasNote ? heading : '')}
+            value={titleDraft ?? heading}
             disabled={!hasNote || preview}
-            title={hasNote ? heading : 'Write something first — an empty day is not saved'}
+            title={hasNote ? heading || undefined : 'Write something first — an empty day is not saved'}
             onChange={(e) => setTitleDraft(e.target.value)}
             onBlur={commitTitle}
             onKeyDown={(e) => {
@@ -244,23 +431,37 @@ export function DayJournalPanel({
               if (e.key === 'Escape') setTitleDraft(null);
             }}
           />
-          <span className="px-jn-date" data-testid="journal-date">{date}</span>
-        </div>
-        {/* `lock`: one button, nothing else — the icon is the affordance for what
-            the click DOES (a padlock while editing, a pencil while locked). */}
-        {actions === 'lock' ? (
-          <button
-            className="px-btn px-btn--icon"
-            data-testid="journal-preview-toggle"
-            aria-pressed={preview}
-            disabled={!hasNote}
-            aria-label={preview ? 'Edit this note' : 'Lock this note from editing'}
-            title={hasNote ? (preview ? 'Edit' : 'Lock edit') : 'Nothing to lock — this day has no note'}
-            onClick={toggleLock}
-          >
-            <Ic name={preview ? 'pen' : 'lock'} />
-          </button>
-        ) : (
+          {/* `lock`: one button, nothing else. The icon shows the note's STATE —
+              the shackle stands open while the note can be edited and drops shut
+              once it is locked. Body and shackle are drawn as separate parts so
+              the shackle can actually swing on its hinge; the body never moves,
+              which is what keeps the icon centred in the button while it animates.
+
+              It is INVISIBLE until there is something to lock, but keeps its slot
+              (opacity, not display), so becoming lockable never nudges the title
+              sideways — the button fades in exactly where it already was. */}
+          {actions === 'lock' ? (
+            <button
+              className="px-btn px-btn--icon px-jn-lock"
+              data-testid="journal-preview-toggle"
+              data-state={preview ? 'locked' : 'unlocked'}
+              data-ready={hasNote ? 'true' : 'false'}
+              data-animate={lockWorked ? 'true' : undefined}
+              aria-pressed={preview}
+              disabled={!hasNote}
+              // Hidden from assistive tech too while it does nothing — a control
+              // announced but inoperable is worse than one that is not there.
+              aria-hidden={hasNote ? undefined : true}
+              aria-label={preview ? 'Edit this note' : 'Lock this note from editing'}
+              title={hasNote ? (preview ? 'Edit' : 'Lock edit') : 'Nothing to lock — this day has no note'}
+              onClick={toggleLock}
+            >
+              <span className="px-jn-lock-ic" aria-hidden="true">
+                <Ic name="lockbody" className="px-ic px-jn-lk" />
+                <Ic name="lockshackle" className="px-ic px-jn-lk px-jn-shackle" />
+              </span>
+            </button>
+          ) : (
         /* Lock/edit, export and delete all live in this corner menu so the note
            itself is the only thing competing for the panel. */
         <div className="px-menu" ref={menuRef}>
@@ -327,15 +528,28 @@ export function DayJournalPanel({
             </div>
           )}
         </div>
-        )}
+          )}
+        </div>
+        <span className="px-jn-date" data-testid="journal-date">{date}</span>
       </div>
 
+      {/* One body in both states, rather than swapping the editor out for the
+          read-only render: locking now FOLDS the editing chrome away — the
+          toolbar rides up under the title block and the field's bottom edge draws
+          up to the last line of text — and none of that can be animated by an
+          element that unmounts. The sanitized renderer is handed down rather than
+          imported there, so D2 stays this file's business. */}
       {isLoading ? (
         <p className="px-muted" data-testid="journal-loading">Loading…</p>
-      ) : preview ? (
-        <MarkdownView markdown={draft} />
       ) : (
-        <RichJournalEditor value={draft} onChange={change} onBlur={flush} />
+        <RichJournalEditor
+          value={draft}
+          onChange={change}
+          onBlur={flush}
+          locked={preview}
+          animate={lockWorked}
+          renderLocked={(markdown) => <MarkdownView markdown={markdown} />}
+        />
       )}
 
       {/* OUTSIDE the editor and the preview, in both modes — never part of the

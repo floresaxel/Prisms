@@ -382,6 +382,25 @@ describe.skipIf(!adminUrl)('S12 convergence harness (two devices, offline edits)
     b.close();
   });
 
+  it("scenario 2b — a vision's attributes are ONE LWW field: the later bag wins whole", async () => {
+    // `node.set_attributes` REPLACES the bag rather than merging keys, so two
+    // devices editing a vision's look land on one device's whole bag — never a
+    // half-and-half vision (A's colour with B's horizon) neither device wrote.
+    const p = await project();
+    const a = new Device('device-a');
+    const b = new Device('device-b');
+    a.edit('node.set_attributes', { id: p.vision, attributes: { color: 'teal', horizon: { unit: 'years', amount: 3 } } }, 1000);
+    b.edit('node.set_attributes', { id: p.vision, attributes: { color: 'amber', horizon: { unit: 'decades', amount: 1 } } }, 2000);
+    // the EARLIER edit arrives last and still must not win
+    await b.sync(dispatcher, p.user);
+    await a.sync(dispatcher, p.user);
+
+    const [row] = await sql`SELECT attributes FROM nodes WHERE id = ${p.vision}`;
+    expect(row!['attributes']).toEqual({ color: 'amber', horizon: { unit: 'decades', amount: 1 } });
+    a.close();
+    b.close();
+  });
+
   it('scenario 3 — same row, same field: the later HLC wins, regardless of arrival order', async () => {
     // run the SAME conflict twice with opposite upload orders; both converge
     // to the later-HLC value ("Beta", physical time 2000), proving HLC LWW
