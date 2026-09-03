@@ -26,7 +26,17 @@ import { strFromU8, unzipSync } from 'fflate';
 import { goto } from './util/nav';
 
 const TZ = 'America/New_York'; // a fresh account's default timezone
-const today = bucketDate(asEpochMillis(Date.now()), 0, TZ);
+/**
+ * A fresh account's default `day_reset_hour` (hooks.ts): the day rolls at 4am,
+ * not at midnight. Bucketing with 0 here made the spec disagree with the app for
+ * the four hours after local midnight — it asked for the calendar date while the
+ * app was still showing the previous logical day, so `journal-<today>` simply did
+ * not exist and every test that opens today timed out. It passed for months
+ * because CI happened not to run in that window; run 33722021970 did (02:10 EDT)
+ * and took four tests with it.
+ */
+const DAY_RESET = 4;
+const today = bucketDate(asEpochMillis(Date.now()), DAY_RESET, TZ);
 const yearOf = (d: string): string => d.slice(0, 4);
 
 let seq = 0;

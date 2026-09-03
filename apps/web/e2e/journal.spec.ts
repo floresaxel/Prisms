@@ -33,7 +33,14 @@ import { strFromU8, unzipSync } from 'fflate';
 import { goto } from './util/nav';
 
 const TZ = 'America/New_York'; // a fresh account's default day-reset timezone
-const today = bucketDate(asEpochMillis(Date.now()), 0, TZ);
+/**
+ * A fresh account's default `day_reset_hour` (hooks.ts) — the day rolls at 4am.
+ * Bucketing with 0 made this spec ask for the calendar date while the app was
+ * still on the previous logical day, for the four hours after local midnight.
+ * See the same constant in daylog.spec.ts.
+ */
+const DAY_RESET = 4;
+const today = bucketDate(asEpochMillis(Date.now()), DAY_RESET, TZ);
 const daysAgo = (n: number): string => addDays(today, -n);
 const yearOf = (d: string): string => d.slice(0, 4);
 
@@ -247,9 +254,14 @@ test('standalone Journal screen: lists the current month, opens a note, lazily l
   await expect(page.getByTestId(`journal-month-${monthA}`)).toBeVisible();
   await expect(page.getByTestId(`journal-day-${pastA}`)).toHaveCount(0);
 
-  // clicking today loads it in the shared day editor.
+  // clicking today loads it in the shared day editor. Scoped to the day for the
+  // same reason as the past-month assertion below: the switch cross-fades, so a
+  // bare `journal-rich` can match the panel being left as well as the one arrived
+  // at, and a strict-mode violation is not something the retry can wait out.
   await page.getByTestId(`journal-day-${today}`).click();
-  await expect(page.getByTestId('journal-rich')).toContainText('standup notes', { timeout: 15_000 });
+  await expect(page.getByTestId(`journal-${today}`).getByTestId('journal-rich')).toContainText('standup notes', {
+    timeout: 15_000,
+  });
 
   // expand the past month → its rows sync LAZILY (the day appears only now).
   await page.getByTestId(`journal-month-${monthA}`).click();
