@@ -19,7 +19,7 @@ const AWAY = { x: 900, y: 400 };
  * A stay too short to count as resting — long enough to be a real pause, short
  * enough that the rail must still be shut when it ends.
  *
- * It has to stay well under `PEEK_DELAY_MS` (500ms, `Layout.tsx`), and the two
+ * It has to stay well under `PEEK_DELAY_MS` (400ms, `Layout.tsx`), and the two
  * are not linked in code: importing the constant here would drag the browser
  * bundle into a Node-side spec, so this is kept a fraction of it by hand.
  * **Shorten the peek delay again and this has to come down with it** — it was

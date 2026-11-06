@@ -145,8 +145,8 @@ describe('resting the pointer on the rail', () => {
     expect(state()).toBe('peek');
   });
 
-  it('waits half a second', () => {
-    expect(PEEK_DELAY_MS).toBe(500);
+  it('waits four tenths of a second', () => {
+    expect(PEEK_DELAY_MS).toBe(400);
   });
 
   it('opens a rail that has no chevron of its own', () => {

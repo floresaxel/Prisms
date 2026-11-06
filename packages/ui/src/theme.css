@@ -65,7 +65,12 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
 /* `--px-rail-ms` is the beat the whole collapse moves on — width, labels, the
    spacing of every row. Declared here so a change reaches all of them at once. */
 .px-sidebar { --px-rail-ms: 140ms; width: 234px; flex: none; display: flex; flex-direction: column; padding: 12px 10px 10px; background: var(--px-sb-bg); border-right: 1px solid var(--px-border); transition: width var(--px-rail-ms) ease; }
-.px-brand { display: flex; align-items: center; gap: 8px; padding: 2px 8px 10px; font-weight: 650; font-size: 14px; letter-spacing: 0.1px; }
+/* `min-height` holds the row open across the one change here that is structural
+   rather than styled: the rail renders no pin and no chevron at all, and those
+   buttons (16px glyph + 5px padding = 26px) are what the open row is as tall as.
+   Without it the brand shrinks by 4px the moment it collapses and takes every
+   icon under it along. 26 + the row's own 2/10 padding. */
+.px-brand { display: flex; align-items: center; gap: 8px; padding: 2px 8px 10px; min-height: 38px; font-weight: 650; font-size: 14px; letter-spacing: 0.1px; }
 
 /* Collapsed rail: icons + badges only, labels become tooltips. The width is
    DERIVED from the icon rather than a round number — a 16px glyph inside a
@@ -121,24 +126,26 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
   transition-delay: 0s, 0s, var(--px-rail-ms);
 }
 
-/* Blocks that occupy a ROW OF THEIR OWN collapse downwards instead. The
-   max-heights only have to EXCEED the real ones — a heading, a button or two —
-   and it is `overflow: hidden` that makes them collapse rather than clip. */
+/* Blocks that occupy a ROW OF THEIR OWN keep that row. They used to collapse
+   downwards (max-height → 0), which is why every icon beneath them slid as the
+   sidebar moved: a group heading taking 32px open and 0px shut drags the whole
+   column up past it, and the foot's actions doing the same pushes the foot down
+   to fill what the nav then grows into. Measured before this rule, the icons
+   moved between -13.8px and +39.2px between the two states.
+   So they fade and go inert, and keep their box. `nowrap` is what makes that
+   box width-INDEPENDENT: left to wrap, a two-word heading becomes two lines at
+   rail width and the shift comes back wearing a different hat. */
 .px-nav-group,
 .px-sidebar-actions {
   overflow: hidden;
-  transition: opacity var(--px-rail-ms) ease, max-height var(--px-rail-ms) ease, margin var(--px-rail-ms) ease, visibility 0s;
+  white-space: nowrap;
+  transition: opacity var(--px-rail-ms) ease, visibility 0s;
 }
-.px-nav-group { max-height: 44px; }
-.px-sidebar-actions { max-height: 160px; }
 .px-sidebar--rail .px-nav-group,
 .px-sidebar--rail .px-sidebar-actions {
   opacity: 0;
-  max-height: 0;
-  margin-top: 0;
-  margin-bottom: 0;
   visibility: hidden;
-  transition-delay: 0s, 0s, 0s, var(--px-rail-ms);
+  transition-delay: 0s, var(--px-rail-ms);
 }
 
 /* A note on the last half pixel: the rail's width formula counts the ring and the
@@ -149,11 +156,19 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
    every icon ~70px sideways before the sidebar had begun to move. Half a pixel
    is the better trade, and it is invisible. */
 
-/* the rows the labels sat in re-space themselves over the same beat */
+/* The rows the labels sat in re-space themselves over the same beat — but only
+   SIDEWAYS. Every vertical value here is the same in both states, so a row is
+   exactly as tall collapsed as it is open and nothing below it moves. The rail
+   override therefore changes the gap and nothing else: the base row's 9px of
+   horizontal padding is already the ring that centres a 16px glyph in the rail
+   (40px wide − 6px gutter − 18px padding = the glyph exactly), so there was
+   never anything to re-pad. It used to set `padding: 9px` and `margin: 2px 0`
+   against the base's `6px 9px` / `1px 0`, which made every rail row 8px taller
+   than its open self and walked the icons down the column. */
 .px-brand,
 .px-navlink,
 .px-sidebar-user { transition: gap var(--px-rail-ms) ease, padding var(--px-rail-ms) ease, margin var(--px-rail-ms) ease; }
-.px-sidebar--rail .px-navlink { gap: 0; padding: var(--px-rail-ring); margin: 2px 0; position: relative; }
+.px-sidebar--rail .px-navlink { gap: 0; position: relative; }
 /* the count rides the icon's top-right corner; it is the one thing that would
    otherwise dictate a wider rail. */
 .px-sidebar--rail .px-nav-badge { position: absolute; top: 0; right: 0; margin: 0; font-size: 9px; font-weight: 640; padding: 0 3px; min-width: 13px; text-align: center; line-height: 13px; border-radius: 7px; }
