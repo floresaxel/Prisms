@@ -63,8 +63,22 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
    mobile browser's collapsing chrome does not clip it. */
 .px-app { display: flex; height: 100vh; height: 100dvh; overflow: hidden; }
 /* `--px-rail-ms` is the beat the whole collapse moves on — width, labels, the
-   spacing of every row. Declared here so a change reaches all of them at once. */
-.px-sidebar { --px-rail-ms: 140ms; width: 234px; flex: none; display: flex; flex-direction: column; padding: 12px 10px 10px; background: var(--px-sb-bg); border-right: 1px solid var(--px-border); transition: width var(--px-rail-ms) ease; }
+   spacing of every row — and `--px-rail-ease` is its curve. Declared here so a
+   change reaches all of them at once; a rail that moved on two different curves
+   would stop reading as one object.
+   The curve is the house standard (same as the journal's lock fold): off the
+   mark quickly, then a long settle. `ease` spends its first frames almost
+   stationary, which at 140ms is most of the movement — the sidebar appeared to
+   hesitate and then arrive all at once. Same duration, the weight just moved to
+   the front. */
+.px-sidebar {
+  --px-rail-ms: 140ms;
+  --px-rail-ease: cubic-bezier(0.4, 0, 0.2, 1);
+  width: 234px; flex: none; display: flex; flex-direction: column;
+  padding: 12px 10px 10px; background: var(--px-sb-bg);
+  border-right: 1px solid var(--px-border);
+  transition: width var(--px-rail-ms) var(--px-rail-ease);
+}
 /* `min-height` holds the row open across the one change here that is structural
    rather than styled: the rail renders no pin and no chevron at all, and those
    buttons (16px glyph + 5px padding = 26px) are what the open row is as tall as.
@@ -113,7 +127,7 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
   white-space: nowrap;
   overflow: hidden;
   max-width: 200px;
-  transition: opacity var(--px-rail-ms) ease, max-width var(--px-rail-ms) ease, visibility 0s;
+  transition: opacity var(--px-rail-ms) var(--px-rail-ease), max-width var(--px-rail-ms) var(--px-rail-ease), visibility 0s;
 }
 .px-sidebar--rail .px-brand-lbl,
 .px-sidebar--rail .px-navlink-lbl,
@@ -139,14 +153,51 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
 .px-sidebar-actions {
   overflow: hidden;
   white-space: nowrap;
-  transition: opacity var(--px-rail-ms) ease, visibility 0s;
 }
 .px-sidebar--rail .px-nav-group,
 .px-sidebar--rail .px-sidebar-actions {
-  opacity: 0;
   visibility: hidden;
-  transition-delay: 0s, var(--px-rail-ms);
 }
+/* The actions fade as a block — nothing is drawn in their place. */
+.px-sidebar-actions { transition: opacity var(--px-rail-ms) var(--px-rail-ease), visibility 0s; }
+.px-sidebar--rail .px-sidebar-actions { opacity: 0; transition-delay: 0s, var(--px-rail-ms); }
+/* The heading fades by COLOUR, not opacity, because a rule is drawn in its
+   place and `opacity` would take that with it: opacity establishes a group, and
+   nothing inside one — pseudo-element included — can be more opaque than the
+   group is. `visibility` has no such rule, which is why the mark below can
+   simply assert itself back. Costs nothing: the heading is bare text. */
+.px-nav-group { transition: color var(--px-rail-ms) var(--px-rail-ease), visibility 0s; }
+.px-sidebar--rail .px-nav-group { color: transparent; transition-delay: 0s, var(--px-rail-ms); }
+
+/* …and in the space the heading leaves behind, a rule takes its place. The gap
+   has to stay (it is what holds the icons still), so this is what stops it
+   reading as a dead band: the groups are still separated, just by a mark
+   instead of a word. Drawn as the heading's own pseudo-element so it inherits
+   the heading's box — no extra node, and nothing new in the DOM for the rail to
+   keep aligned.
+   It fades in as the word fades out, on the same beat and the same curve, and
+   it is short on purpose: inset by the heading's 8px margins it comes to ~18px
+   in a 40px rail, which reads as a segment between groups rather than a line
+   ruled across the whole thing. `visibility` has to be re-asserted because the
+   parent turns itself inert once the fade is done, and that inherits. */
+.px-nav-group { position: relative; }
+.px-nav-group::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  /* Centred in the GAP, which is not the same as centred in the heading: the
+     heading wears 14px of margin above and 4px below, so its own middle sits
+     5px — half that difference — below the middle of the space between the two
+     icons either side. Measured at +5 before this correction. */
+  top: calc(50% - 5px);
+  height: 1px;
+  background: var(--px-border-2);
+  opacity: 0;
+  transition: opacity var(--px-rail-ms) var(--px-rail-ease);
+}
+.px-sidebar--rail .px-nav-group::after { opacity: 1; visibility: visible; }
+@media (prefers-reduced-motion: reduce) { .px-nav-group::after { transition: none; } }
 
 /* A note on the last half pixel: the rail's width formula counts the ring and the
    gutter but not the 1px border, so the content box is 33 where the ring assumes
@@ -167,7 +218,7 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
    than its open self and walked the icons down the column. */
 .px-brand,
 .px-navlink,
-.px-sidebar-user { transition: gap var(--px-rail-ms) ease, padding var(--px-rail-ms) ease, margin var(--px-rail-ms) ease; }
+.px-sidebar-user { transition: gap var(--px-rail-ms) var(--px-rail-ease), padding var(--px-rail-ms) var(--px-rail-ease), margin var(--px-rail-ms) var(--px-rail-ease); }
 .px-sidebar--rail .px-navlink { gap: 0; position: relative; }
 /* the count rides the icon's top-right corner; it is the one thing that would
    otherwise dictate a wider rail. */
