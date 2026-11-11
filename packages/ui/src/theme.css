@@ -1146,6 +1146,67 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
   .px-mgr { grid-template-columns: minmax(0, 1fr); }
 }
 
+/* ── Vision "Shape": an icicle chart of everything under one vision
+   (components/VisionShape.tsx). One row per level; a block's width is its share
+   of the chosen measure, and the bar on its bottom edge is how much is done.
+   `--px-shape-c` carries the vision's own hex, and every tint is mixed from it,
+   so the chart re-colours with the vision. Rows are 44px blocks on a 48px pitch
+   (ROW in the component). ── */
+.px-shape-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
+.px-shape-head b { font-size: 13px; }
+.px-shape-head .px-vd-unit { font-size: 12px; padding: 4px 11px; }
+.px-shape-by { font-size: 11.5px; color: var(--px-faint); }
+.px-shape-insight { font-size: 12.5px; color: var(--px-text-dim); margin: 0 0 10px; line-height: 1.5; }
+.px-shape-insight b { color: var(--px-text); font-weight: 600; }
+.px-shape-trail { display: flex; align-items: center; gap: 2px; flex-wrap: wrap; font-size: 12px; margin: -2px 0 8px; min-height: 26px; }
+.px-shape-step { display: inline-flex; align-items: center; gap: 2px; min-width: 0; }
+.px-shape-step button { font: inherit; border: none; background: none; color: var(--px-text-dim); padding: 3px 6px; border-radius: 6px; cursor: pointer; max-width: 34ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.px-shape-step button:hover:not(:disabled) { background: var(--px-surface-2); color: var(--px-text); }
+.px-shape-step button:disabled { color: var(--px-text); font-weight: 600; cursor: default; }
+.px-shape-sep { color: var(--px-border-2); }
+.px-shape-up { margin-left: auto; }
+.px-shape-body { display: grid; grid-template-columns: 74px minmax(0, 1fr); gap: 8px; }
+.px-shape-gutter { position: relative; }
+.px-shape-gutter span { position: absolute; left: 0; right: 0; height: 44px; display: flex; align-items: center; font-size: 10px; font-weight: 640; letter-spacing: 0.5px; line-height: 1.25; text-transform: uppercase; color: var(--px-faint); }
+.px-shape-chart { position: relative; }
+.px-shape-cell {
+  --px-shape-mix: 11%;
+  position: absolute; height: 44px; margin: 0; padding: 6px 8px 0; border: none; border-radius: 6px;
+  font: inherit; text-align: left; color: var(--px-text); cursor: pointer; overflow: hidden;
+  background: color-mix(in srgb, var(--px-shape-c) var(--px-shape-mix), var(--px-surface));
+  animation: px-shape-in 200ms ease-out;
+  transition: left 320ms cubic-bezier(0.4, 0, 0.2, 1), width 320ms cubic-bezier(0.4, 0, 0.2, 1), top 320ms cubic-bezier(0.4, 0, 0.2, 1), opacity 200ms ease-out;
+}
+.px-shape-cell:hover, .px-shape-cell:focus-visible, .px-shape-cell--pinned { outline: none; box-shadow: inset 0 0 0 1.5px var(--px-shape-c); }
+.px-shape-cell--vision { --px-shape-mix: 26%; }
+.px-shape-cell--roadmap { --px-shape-mix: 17%; }
+.px-shape-cell--project { --px-shape-mix: 11%; }
+.px-shape-cell--milestone { --px-shape-mix: 8%; }
+.px-shape-cell--task { --px-shape-mix: 6%; }
+.px-shape-cell--done { --px-shape-mix: 22%; }
+.px-shape-cell--off { opacity: 0; pointer-events: none; }
+.px-shape-t { display: block; font-size: 12px; font-weight: 560; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.px-shape-cell--vision .px-shape-t { font-weight: 640; }
+.px-shape-cell--done .px-shape-t::before { content: '✓ '; color: var(--px-shape-c); }
+.px-shape-s { display: block; font-size: 10.5px; color: var(--px-text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+.px-shape-bar { position: absolute; left: 0; bottom: 0; height: 3px; background: var(--px-shape-c); transition: width 320ms cubic-bezier(0.4, 0, 0.2, 1); }
+.px-shape-cell--tight { padding: 0; }
+.px-shape-cell--tight .px-shape-t, .px-shape-cell--tight .px-shape-s { display: none; }
+@keyframes px-shape-in { from { opacity: 0; } }
+.px-shape-legend { display: flex; gap: 6px 18px; flex-wrap: wrap; margin-top: 12px; font-size: 11.5px; color: var(--px-faint); }
+.px-shape-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.px-shape-key { display: inline-block; width: 18px; height: 10px; border-radius: 3px; background: color-mix(in srgb, var(--px-shape-c) 17%, var(--px-surface)); }
+.px-shape-key--bar { height: 3px; border-radius: 2px; background: var(--px-shape-c); }
+.px-shape-key--done { background: color-mix(in srgb, var(--px-shape-c) 22%, var(--px-surface)); }
+.px-shape-detail { display: flex; align-items: center; gap: 6px 12px; flex-wrap: wrap; margin-top: 14px; padding: 10px 12px; border-radius: 9px; background: var(--px-surface-2); font-size: 12.5px; min-height: 46px; }
+.px-shape-kind { font-size: 10.5px; font-weight: 640; letter-spacing: 0.5px; text-transform: uppercase; color: var(--px-shape-c); }
+.px-shape-name { font-weight: 600; }
+.px-shape-nums { color: var(--px-text-dim); font-variant-numeric: tabular-nums; }
+.px-shape-open { margin-left: auto; }
+@media (prefers-reduced-motion: reduce) {
+  .px-shape-cell, .px-shape-bar { transition: none; animation: none; }
+}
+
 /* ── Roadmap graph — a top-to-bottom graph of a roadmap's projects, grouped and
    tinted by the owning VISION's colour (stored in the vision's attributes) ── */
 .px-rm-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
