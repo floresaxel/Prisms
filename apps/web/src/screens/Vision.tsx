@@ -14,6 +14,9 @@
  *
  * Deleting a vision cascades (I10) to its roadmaps, projects and tasks, so the
  * confirm names what goes with it. I2 caps the workspace at MAX_VISIONS.
+ *
+ * Under its name and counts sits the Shape card (components/VisionShape): an
+ * icicle chart of where the work under the vision is, and how much is done.
  */
 import { useMemo, useState } from 'react';
 
@@ -43,6 +46,7 @@ import {
 
 import { NewVisionDialog, type NewVisionValues } from '../components/NewVisionDialog';
 import { ColorField, colorLabel, HorizonField, parseHorizon } from '../components/VisionFields';
+import { VisionShape } from '../components/VisionShape';
 
 const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 
@@ -228,6 +232,7 @@ export function Vision({ ctx, onNavigate }: { ctx: CommandContext; onNavigate: (
         {active && (
           <VisionDetail
             key={active.id}
+            tree={tree}
             vision={active}
             counts={countsFor(tree, active.id)}
             takenColors={taken}
@@ -244,12 +249,14 @@ export function Vision({ ctx, onNavigate }: { ctx: CommandContext; onNavigate: (
 
 /** The selected vision, editable field by field. Each edit is its own command. */
 function VisionDetail({
+  tree,
   vision,
   counts,
   takenColors,
   commands,
   onNavigate,
 }: {
+  tree: TreeIndex;
   vision: Node;
   counts: VisionCounts;
   takenColors: ReadonlySet<VisionColor>;
@@ -337,6 +344,10 @@ function VisionDetail({
           </span>
         </div>
       </div>
+
+      {/* Where the work under this vision sits. Read-only: edits stay on the
+          screen that owns each level, which the detail line links to. */}
+      <VisionShape tree={tree} visionId={vision.id} color={solid(color)} onNavigate={onNavigate} />
 
       <div className="px-mgr-card">
         <div className="px-vd-field">

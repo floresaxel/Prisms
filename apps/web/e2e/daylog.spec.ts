@@ -19,7 +19,7 @@
 import { readFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 
-import { addDays, asEpochMillis, bucketDate } from '@prisms/core';
+import { addDays, asEpochMillis, bucketDate, localInstant } from '@prisms/core';
 import { expect, test, type Page } from '@playwright/test';
 import { strFromU8, unzipSync } from 'fflate';
 
@@ -75,9 +75,15 @@ function tree(): { vision: string; roadmap: string; project: string; commands: R
   };
 }
 
-/** An instant on `date` at `hh:mm` UTC. Both the block and the completion use these. */
-const atUtc = (date: string, hh: number, mm = 0): string =>
-  `${date}T${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}:00.000Z`;
+/**
+ * An instant on `date` at `hh:mm` on the ACCOUNT's wall clock (TZ). Both the
+ * block and the completion use these, so the times the footer prints are the
+ * ones written here, all year round. These used to be fixed UTC hours with the
+ * New York summer offset baked into the assertions (15:00Z "is" 11:00), so the
+ * suite went red every November when EDT ended and 15:00Z became 10:00.
+ */
+const atLocal = (date: string, hh: number, mm = 0): string =>
+  new Date(localInstant(date, hh, TZ, mm)).toISOString();
 
 const upload = async (page: Page, commands: unknown[]): Promise<void> => {
   const res = await page.request.post('/sync/upload', { data: { device_id: 'e2e-seed', commands } });
@@ -103,8 +109,8 @@ test('a scheduled + completed task shows in both sections; unchecking removes it
   await upload(page, [
     ...t.commands,
     cmd('node.create', { id: task, node_type: 'task', title: 'Write the release notes 🚀', sort_order: 'a0', parent_id: t.project }),
-    cmd('block.create', { id: block, task_id: task, starts_at: atUtc(today, 15), ends_at: atUtc(today, 16, 30) }),
-    cmd('node.check_off', { id: task, completed_at: atUtc(today, 16, 20) }),
+    cmd('block.create', { id: block, task_id: task, starts_at: atLocal(today, 11), ends_at: atLocal(today, 12, 30) }),
+    cmd('node.check_off', { id: task, completed_at: atLocal(today, 12, 20) }),
   ]);
 
   await openToday(page);
@@ -112,7 +118,7 @@ test('a scheduled + completed task shows in both sections; unchecking removes it
   // Scheduled: the box is filled (done) and the block's local time range renders.
   const scheduled = page.getByTestId('daylog-scheduled');
   await expect(scheduled).toContainText('Write the release notes 🚀');
-  await expect(scheduled).toContainText('11:00–12:30'); // 15:00Z–16:30Z in America/New_York
+  await expect(scheduled).toContainText('11:00–12:30'); // the block's local range, as seeded
   await expect(scheduled.locator('.px-daylog-box--on')).toHaveCount(1);
   // Completed: the same task, marked planned (no "unplanned" chip).
   const completed = page.getByTestId('daylog-completed');
@@ -177,7 +183,7 @@ test('the Built-in toggle hides the footer immediately and restores it on the wa
   await upload(page, [
     ...t.commands,
     cmd('node.create', { id: first, node_type: 'task', title: 'First thing', sort_order: 'a0', parent_id: t.project }),
-    cmd('node.check_off', { id: first, completed_at: atUtc(today, 15) }),
+    cmd('node.check_off', { id: first, completed_at: atLocal(today, 11) }),
   ]);
 
   await openToday(page);
@@ -196,7 +202,7 @@ test('the Built-in toggle hides the footer immediately and restores it on the wa
   const second = randomUUID();
   await upload(page, [
     cmd('node.create', { id: second, node_type: 'task', title: 'Second thing', sort_order: 'a1', parent_id: t.project }),
-    cmd('node.check_off', { id: second, completed_at: atUtc(today, 17) }),
+    cmd('node.check_off', { id: second, completed_at: atLocal(today, 13) }),
   ]);
   await expect(footer(page)).toHaveCount(0);
 
@@ -218,11 +224,11 @@ test('exports: the day .md carries the section, and the archive has a LOG-ONLY p
   await upload(page, [
     ...t.commands,
     cmd('node.create', { id: todayTask, node_type: 'task', title: 'Ship it 🚀', sort_order: 'a0', parent_id: t.project }),
-    cmd('block.create', { id: randomUUID(), task_id: todayTask, starts_at: atUtc(today, 15), ends_at: atUtc(today, 16, 30) }),
-    cmd('node.check_off', { id: todayTask, completed_at: atUtc(today, 16, 20) }),
+    cmd('block.create', { id: randomUUID(), task_id: todayTask, starts_at: atLocal(today, 11), ends_at: atLocal(today, 12, 30) }),
+    cmd('node.check_off', { id: todayTask, completed_at: atLocal(today, 12, 20) }),
     // the LOG-ONLY day: facts in a past month, and NO journal note for it
     cmd('node.create', { id: pastTask, node_type: 'task', title: 'Old work 🗓️', sort_order: 'a1', parent_id: t.project }),
-    cmd('node.check_off', { id: pastTask, completed_at: atUtc(past, 15) }),
+    cmd('node.check_off', { id: pastTask, completed_at: atLocal(past, 11) }),
     cmd('journal.write', { id: randomUUID(), entry_date: today, content: 'Shipped it today.' }),
   ]);
 

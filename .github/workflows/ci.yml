@@ -77,7 +77,11 @@ jobs:
     # (review inbox + freshness), m13 (import/export round-trip), and v14 (§7.15
     # read-path: no empty-then-fill flash + warm synchronous tab revisit).
     name: Web Playwright e2e (offline + convergence + graph/rules + read-path + portability) vs live stack
-    runs-on: ubuntu-latest
+    # Pinned, not ubuntu-latest: that label moved to 26.04, where this Playwright
+    # (1.60) refuses to install Chromium ("does not support chromium on
+    # ubuntu26.04-x64") and the job dies before a single test runs. Move back to
+    # ubuntu-latest once a Playwright upgrade supports 26.04.
+    runs-on: ubuntu-24.04
     # The web client's default powersyncUrl (:8080) matches compose's default
     # container mapping — no port remap needed (audit S1-F7/S9-F4).
     steps:
