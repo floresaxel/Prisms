@@ -1,0 +1,355 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ways to Show a Tree</title>
+<style>
+  :root {
+    --bg: #fafaf7; --card: #ffffff; --text: #1d2327; --muted: #5d676e;
+    --line: #b9c0c5; --soft: #e9eef0; --accent: #2f6f6a; --accent-soft: #cfe3e0;
+    --warn: #a4572a; --rule: #e1e5e7;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14181a; --card: #1c2225; --text: #e6eaec; --muted: #9aa5ab;
+      --line: #4a565c; --soft: #29323630; --accent: #6fb8b0; --accent-soft: #2c4b48;
+      --warn: #e0966a; --rule: #2b3438;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 1040px; margin: 0 auto; padding: 48px 16px 96px; }
+  h1 { font-size: clamp(2rem, 5vw, 3rem); line-height: 1.1; margin: 0 0 12px; letter-spacing: -0.02em; }
+  h2 { font-size: 1.5rem; margin: 64px 0 8px; letter-spacing: -0.01em; }
+  h3 { font-size: 1.05rem; margin: 0 0 4px; }
+  p { margin: 0 0 12px; }
+  .lede { font-size: 1.15rem; color: var(--muted); max-width: 62ch; }
+  .sub { color: var(--muted); max-width: 66ch; margin-bottom: 24px; }
+  .takeaways { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); margin-top: 32px; }
+  .takeaways div { border-left: 3px solid var(--accent); padding: 4px 0 4px 14px; }
+  .takeaways b { display: block; }
+  .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+  .card { background: var(--card); border: 1px solid var(--rule); border-radius: 10px; padding: 16px; display: flex; flex-direction: column; }
+  .card svg { width: 100%; height: auto; max-height: 120px; margin-bottom: 12px; }
+  .card p { font-size: .93rem; margin-bottom: 8px; }
+  .tag { font-size: .75rem; text-transform: uppercase; letter-spacing: .06em; color: var(--accent); font-weight: 600; }
+  .pro::before { content: "+ "; color: var(--accent); font-weight: 700; }
+  .con::before { content: "− "; color: var(--warn); font-weight: 700; }
+  .best { margin-top: auto; padding-top: 8px; border-top: 1px solid var(--rule); font-size: .85rem; color: var(--muted); }
+  table { width: 100%; border-collapse: collapse; font-size: .93rem; background: var(--card); border: 1px solid var(--rule); border-radius: 10px; overflow: hidden; }
+  th, td { text-align: left; padding: 10px 12px; vertical-align: top; border-bottom: 1px solid var(--rule); }
+  th { font-size: .78rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); background: var(--soft); }
+  tr:last-child td { border-bottom: 0; }
+  .scroll { overflow-x: auto; }
+  .scroll table { min-width: 560px; }
+  .reco { background: var(--accent-soft); border-radius: 10px; padding: 20px 22px; }
+  .reco p:last-child { margin: 0; }
+  /* diagram styles */
+  svg .n { fill: var(--soft); stroke: var(--line); stroke-width: 1; }
+  svg .h { fill: var(--accent); stroke: none; }
+  svg .m { fill: var(--accent-soft); stroke: var(--line); stroke-width: 1; }
+  svg .l { stroke: var(--line); fill: none; stroke-width: 1.2; }
+  svg .t { stroke: var(--muted); stroke-width: 3.5; stroke-linecap: round; fill: none; opacity: .55; }
+  svg .r { fill: none; stroke-width: 13; }
+  footer { margin-top: 72px; color: var(--muted); font-size: .85rem; }
+</style>
+</head>
+<body>
+<main>
+
+<p class="tag">Findings</p>
+<h1>Ways to show a tree</h1>
+<p class="lede">Most people reach for an org chart or an indented list. There are a dozen better-fitting ways to draw hierarchical data for human readers, and the right one depends on what the reader needs to do.</p>
+
+<div class="takeaways">
+  <div><b>Match the form to the question</b>Finding, weighing, explaining, planning and diagnosing each have a different best shape.</div>
+  <div><b>Size is the big missing piece</b>Org charts and outlines show structure but not weight. Icicle charts, sunbursts and treemaps add it.</div>
+  <div><b>Many strong forms are not "trees"</b>Fishbones, brackets, hourglasses and skill trees are trees in disguise, tuned for one job.</div>
+</div>
+
+<h2>1. The familiar baselines</h2>
+<p class="sub">These are what most readers already know. They set the bar the other forms have to beat.</p>
+<div class="grid">
+
+  <div class="card">
+    <svg viewBox="0 0 160 100" aria-label="Org chart">
+      <path class="l" d="M80 20V30M30 30H130M30 30V40M80 30V40M130 30V40M30 60V68M130 60V68"/>
+      <rect class="m" x="58" y="6" width="44" height="14" rx="3"/>
+      <rect class="n" x="10" y="40" width="40" height="20" rx="3"/><rect class="n" x="60" y="40" width="40" height="20" rx="3"/><rect class="n" x="110" y="40" width="40" height="20" rx="3"/>
+      <rect class="n" x="14" y="68" width="32" height="14" rx="3"/><rect class="n" x="114" y="68" width="32" height="14" rx="3"/>
+    </svg>
+    <span class="tag">Baseline</span><h3>Org chart</h3>
+    <p class="pro">Shows who reports to whom at a glance.</p>
+    <p class="con">Wide trees sprawl sideways, and nothing shows size or value.</p>
+  </div>
+
+  <div class="card">
+    <svg viewBox="0 0 160 100" aria-label="Indented outline">
+      <path class="t" d="M12 12H60M26 26H80M26 40H70M40 54H96M40 68H84M12 82H66"/>
+    </svg>
+    <span class="tag">Baseline</span><h3>Indented outline</h3>
+    <p class="pro">Dense, scannable, easy to edit, handles deep nesting.</p>
+    <p class="con">No overview. You cannot see the shape or compare branches.</p>
+  </div>
+
+  <div class="card">
+    <svg viewBox="0 0 160 100" aria-label="Mind map">
+      <path class="l" d="M80 50 40 24M80 50 40 76M80 50 122 26M80 50 122 74M40 24 14 14M40 24 14 34M122 26 148 14M122 74 148 86"/>
+      <circle class="h" cx="80" cy="50" r="9"/>
+      <circle class="n" cx="40" cy="24" r="6"/><circle class="n" cx="40" cy="76" r="6"/><circle class="n" cx="122" cy="26" r="6"/><circle class="n" cx="122" cy="74" r="6"/>
+      <circle class="n" cx="14" cy="14" r="4"/><circle class="n" cx="14" cy="34" r="4"/><circle class="n" cx="148" cy="14" r="4"/><circle class="n" cx="148" cy="86" r="4"/>
+    </svg>
+    <span class="tag">Baseline</span><h3>Mind map</h3>
+    <p class="pro">Memorable, good for brainstorming around one idea.</p>
+    <p class="con">Turns messy past roughly 50 nodes, and the layout is subjective.</p>
+  </div>
+
+  <div class="card">
+    <svg viewBox="0 0 160 100" aria-label="File explorer tree">
+      <path class="l" d="M14 16V80M14 30H26M14 54H26M14 80H26M38 30V42M38 42H48"/>
+      <rect class="m" x="6" y="8" width="16" height="8" rx="2"/>
+      <rect class="n" x="26" y="25" width="30" height="10" rx="2"/><rect class="n" x="26" y="49" width="30" height="10" rx="2"/><rect class="n" x="26" y="75" width="30" height="10" rx="2"/>
+      <rect class="n" x="48" y="37" width="30" height="10" rx="2"/>
+    </svg>
+    <span class="tag">Baseline</span><h3>File-explorer tree</h3>
+    <p class="pro">Familiar and collapsible.</p>
+    <p class="con">You only see the part you have expanded.</p>
+  </div>
+
+</div>
+
+<h2>2. Less common hierarchical forms</h2>
+<p class="sub">These add something the baselines lack: weight, containment, or a drill-down path that stays visible.</p>
+<div class="grid">
+
+  <div class="card">
+    <svg viewBox="0 0 160 100" aria-label="Icicle chart">
+      <rect class="m" x="4" y="6" width="152" height="20"/>
+      <rect class="h" x="4" y="28" width="78" height="20"/><rect class="n" x="84" y="28" width="46" height="20"/><rect class="n" x="132" y="28" width="24" height="20"/>
+      <rect class="m" x="4" y="50" width="40" height="20"/><rect class="n" x="46" y="50" width="36" height="20"/><rect class="n" x="84" y="50" width="30" height="20"/><rect class="n" x="116" y="50" width="14" height="20"/>
+      <rect class="n" x="4" y="72" width="20" height="20"/><rect class="n" x="26" y="72" width="18" height="20"/><rect class="n" x="46" y="72" width="36" height="20"/>
+    </svg>
+    <span class="tag">Space-filling</span><h3>Icicle chart</h3>
+    <p>Rectangles stacked by depth, with width proportional to value.</p>
+    <p class="pro">You see where the weight sits and how deep each branch goes.</p>
+    <p class="con">Narrow slices are unreadable, so labels need hover.</p>
+    <div class="best">Best for: budgets, time spent, "what is eating my effort?"</div>
+  </div>
+
+  <div class="card">
+    <svg viewBox="0 0 160 100" aria-label="Sunburst">
+      <g transform="translate(80 50) rotate(-90)">
+        <circle class="r" r="14" stroke="var(--accent)" pathLength="100" stroke-dasharray="49 1 29 1 19 1" transform="scale(1)"/>
+        <circle class="r" r="28" stroke="var(--line)" pathLength="100" stroke-dasharray="24 1 23 2 29 1 19 1"/>
+      </g>
+    </svg>
+    <span class="tag">Space-filling</span><h3>Sunburst</h3>
+    <p>An icicle chart wrapped into rings: the whole at the centre, the detail at the rim.</p>
+    <p class="pro">Shows part-to-whole across two to four levels.</p>
+    <p class="con">Outer rings are hard to compare by angle.</p>
+    <div class="best">Best for: composition breakdowns</div>
+  </div>
+
+  <div class="card">
+    <svg viewBox="0 0 160 100" aria-label="Treemap">
+      <rect class="m" x="4" y="4" width="78" height="56"/><rect class="n" x="4" y="62" width="40" height="34"/><rect class="n" x="46" y="62" width="36" height="34"/>
+      <rect class="h" x="84" y="4" width="72" height="44"/><rect class="n" x="84" y="50" width="34" height="46"/><rect class="m" x="120" y="50" width="36" height="22"/><rect class="n" x="120" y="74" width="36" height="22"/>
+    </svg>
+    <span class="tag">Space-filling</span><h3>Treemap</h3>
+    <p>Nested rectangles sized by value.</p>
+    <p class="pro">The most efficient use of space for thousands of weighted leaves.</p>
+    <p class="con">The hierarchy is hard to see, and beyond three levels it turns to mush.</p>
+    <div class="best">Best for: disk usage, portfolios, market maps</div>
+  </div>
+
+  <div class="card">
+    <svg viewBox="0 0 160 100" aria-label="Circle packing">
+      <circle class="n" cx="80" cy="50" r="46"/>
+      <circle class="m" cx="58" cy="50" r="26"/><circle class="m" cx="108" cy="38" r="18"/><circle class="m" cx="104" cy="72" r="14"/>
+      <circle class="h" cx="52" cy="46" r="10"/><circle class="h" cx="66" cy="62" r="7"/>
+    </svg>
+    <span class="tag">Containment</span><h3>Circle packing</h3>
+    <p>Child circles nested inside their parent.</p>
+    <p class="pro">"Belongs to" reads instantly, even to non-technical viewers.</p>
+    <p class="con">Wastes about a fifth of the space, and area is hard to judge.</p>
+    <div class="best">Best for: small, friendly overviews</div>
+  </div>
+
+  <div class="card">
+    <svg viewBox="0 0 160 100" aria-label="Miller columns">
+      <rect class="n" x="4" y="6" width="46" height="88"/><rect class="n" x="56" y="6" width="46" height="88"/><rect class="n" x="108" y="6" width="48" height="88"/>
+      <rect class="m" x="4" y="22" width="46" height="12"/><rect class="m" x="56" y="46" width="46" height="12"/><rect class="h" x="108" y="30" width="48" height="12"/>
+      <path class="t" d="M10 14H36M10 28H32M10 42H40M10 56H30M62 14H88M62 28H84M62 40H80M62 52H90M62 66H82M114 14H140M114 26H134M114 50H138M114 62H130"/>
+    </svg>
+    <span class="tag">Drill-down</span><h3>Miller columns</h3>
+    <p>Each selection opens its children in a new column to the right, as in Finder's column view.</p>
+    <p class="pro">Drilling down while the whole path stays visible.</p>
+    <p class="con">One path at a time and no global view.</p>
+    <div class="best">Best for: browsing deep taxonomies</div>
+  </div>
+
+  <div class="card">
+    <svg viewBox="0 0 160 100" aria-label="Dendrogram">
+      <path class="l" d="M10 14H46V32H10M10 50H40V68H10M46 23H78V59H40M78 41H140M10 86H98M98 86V41"/>
+      <circle class="h" cx="140" cy="41" r="3"/>
+    </svg>
+    <span class="tag">Distance</span><h3>Dendrogram</h3>
+    <p>Branch length means "how different".</p>
+    <p class="pro">Shows similarity and clusters directly.</p>
+    <p class="con">The length is only meaningful for similarity data.</p>
+    <div class="best">Best for: clustering, evolution, taxonomy</div>
+  </div>
+
+</div>
+
+<h2>3. Useful forms you may not think of as trees</h2>
+<p class="sub">Each of these is a hierarchy shaped for one specific job.</p>
+<div class="grid">
+
+  <div class="card">
+    <svg viewBox="0 0 160 100" aria-label="Issue tree">
+      <path class="l" d="M38 50H50M50 17V83M50 17H62M50 50H62M50 83H62M102 17H114M114 8V26M114 8H124M114 26H124"/>
+      <rect class="h" x="4" y="40" width="34" height="20" rx="3"/>
+      <rect class="m" x="62" y="8" width="40" height="18" rx="3"/><rect class="m" x="62" y="41" width="40" height="18" rx="3"/><rect class="m" x="62" y="74" width="40" height="18" rx="3"/>
+      <rect class="n" x="124" y="2" width="32" height="12" rx="3"/><rect class="n" x="124" y="20" width="32" height="12" rx="3"/>
+    </svg>
+    <span class="tag">Decide</span><h3>Issue / logic tree</h3>
+    <p>A question splits into branches that do not overlap and together cover everything (MECE).</p>
+    <p class="pro">Disciplined, so gaps and overlaps show up.</p>
+    <div class="best">Best for: decisions, root-cause and strategy work</div>
+  </div>
+
+  <div class="card">
+    <svg viewBox="0 0 160 100" aria-label="Fishbone">
+      <path class="l" d="M8 50H122M30 10 46 50M30 90 46 50M72 10 88 50M72 90 88 50M38 30H56M80 70H100"/>
+      <rect class="h" x="122" y="38" width="34" height="24" rx="3"/>
+    </svg>
+    <span class="tag">Diagnose</span><h3>Fishbone (Ishikawa)</h3>
+    <p>Causes drawn as ribs feeding one effect on the right.</p>
+    <p class="pro">Puts the problem at the root and the causes in categories.</p>
+    <div class="best">Best for: "why did this fail?"</div>
+  </div>
+
+  <div class="card">
+    <svg viewBox="0 0 160 100" aria-label="Work breakdown structure with Gantt">
+      <path class="t" d="M8 14H52M18 30H56M18 46H50M28 62H60M28 78H54"/>
+      <path class="l" d="M72 6V94"/>
+      <rect class="h" x="76" y="10" width="76" height="8" rx="2"/><rect class="m" x="76" y="26" width="30" height="8" rx="2"/><rect class="m" x="100" y="42" width="30" height="8" rx="2"/><rect class="n" x="112" y="58" width="22" height="8" rx="2"/><rect class="n" x="130" y="74" width="22" height="8" rx="2"/>
+    </svg>
+    <span class="tag">Plan</span><h3>Work breakdown + Gantt</h3>
+    <p>Hierarchy on the left, timeline on the same rows.</p>
+    <p class="pro">Structure and schedule in one view.</p>
+    <div class="best">Best for: project and task hierarchies</div>
+  </div>
+
+  <div class="card">
+    <svg viewBox="0 0 160 100" aria-label="Hourglass chart">
+      <path class="l" d="M52 14V22M108 14V22M52 22H108M80 22V40M80 56V66M80 66H40M80 66H120M40 66V74M80 66V74M120 66V74"/>
+      <circle class="n" cx="52" cy="10" r="6"/><circle class="n" cx="108" cy="10" r="6"/>
+      <circle class="h" cx="80" cy="48" r="8"/>
+      <circle class="n" cx="40" cy="80" r="6"/><circle class="n" cx="80" cy="80" r="6"/><circle class="n" cx="120" cy="80" r="6"/>
+    </svg>
+    <span class="tag">Context</span><h3>Hourglass chart</h3>
+    <p>One person at the centre, ancestors above and descendants below.</p>
+    <p class="pro">Far better than a plain family tree for "show me this person in context".</p>
+    <div class="best">Best for: genealogy and focus-plus-neighbours views</div>
+  </div>
+
+  <div class="card">
+    <svg viewBox="0 0 160 100" aria-label="Tournament bracket">
+      <path class="l" d="M6 14H40V34H6M40 24H78M6 66H40V86H6M40 76H78M78 24V76M78 50H150"/>
+      <circle class="h" cx="150" cy="50" r="4"/>
+    </svg>
+    <span class="tag">Outcome</span><h3>Tournament bracket</h3>
+    <p>A tree read from the leaves to the root.</p>
+    <p class="pro">The only common form where the leaves are the starting point and the root is the result.</p>
+    <div class="best">Best for: eliminations, rankings, roll-ups</div>
+  </div>
+
+  <div class="card">
+    <svg viewBox="0 0 160 100" aria-label="Skill tree">
+      <path class="l" d="M80 86V66M80 66 40 46M80 66 120 46M40 46V26M120 46V26M40 26 80 10M120 26 80 10"/>
+      <circle class="h" cx="80" cy="86" r="7"/><circle class="h" cx="80" cy="66" r="7"/>
+      <circle class="m" cx="40" cy="46" r="7"/><circle class="n" cx="120" cy="46" r="7"/>
+      <circle class="n" cx="40" cy="26" r="7"/><circle class="n" cx="120" cy="26" r="7"/><circle class="n" cx="80" cy="10" r="7"/>
+    </svg>
+    <span class="tag">Prerequisites</span><h3>Skill / tech tree</h3>
+    <p>Branches are prerequisites, with unlocked and locked nodes visible.</p>
+    <p class="pro">Handles "A needs B and C" better than a strict tree.</p>
+    <div class="best">Best for: learning paths, dependencies, progression</div>
+  </div>
+
+  <div class="card">
+    <svg viewBox="0 0 160 100" aria-label="Nested boxes">
+      <rect class="n" x="4" y="4" width="152" height="92" rx="6"/>
+      <rect class="m" x="12" y="14" width="86" height="76" rx="5"/>
+      <rect class="h" x="20" y="26" width="32" height="26" rx="4"/><rect class="n" x="58" y="26" width="32" height="26" rx="4"/>
+      <rect class="m" x="106" y="14" width="42" height="34" rx="5"/><rect class="n" x="106" y="56" width="42" height="34" rx="5"/>
+    </svg>
+    <span class="tag">Containment</span><h3>Nested boxes (Euler)</h3>
+    <p>Pure containment, with no connecting lines.</p>
+    <p class="pro">The most intuitive form for non-technical audiences.</p>
+    <p class="con">Only works to about three levels.</p>
+  </div>
+
+  <div class="card">
+    <svg viewBox="0 0 160 100" aria-label="Metro map">
+      <path class="l" d="M10 80H70L110 40H150M70 80 110 80H150M40 80 40 30H80" style="stroke-width:4"/>
+      <circle class="h" cx="70" cy="80" r="6"/><circle class="n" cx="40" cy="80" r="4"/><circle class="n" cx="110" cy="40" r="4"/><circle class="n" cx="110" cy="80" r="4"/>
+    </svg>
+    <span class="tag">Cross-links</span><h3>Metro / transit map</h3>
+    <p>Branches become lines and shared dependencies become interchanges.</p>
+    <p class="pro">Works when the structure is a tree with a few cross-links.</p>
+  </div>
+
+</div>
+
+<h2>4. Comparing them side by side</h2>
+<p class="sub">Ticks mean the form does this well. A dash means it does not help, or does it poorly.</p>
+<div class="scroll">
+<table>
+  <thead><tr><th>Form</th><th>Shows structure</th><th>Shows size</th><th>Scales to large</th><th>Easy to find a node</th><th>Reader effort</th></tr></thead>
+  <tbody>
+    <tr><td>Org chart</td><td>✓✓</td><td>—</td><td>—</td><td>✓</td><td>Low</td></tr>
+    <tr><td>Indented outline</td><td>✓</td><td>—</td><td>✓✓</td><td>✓✓</td><td>Low</td></tr>
+    <tr><td>Mind map</td><td>✓</td><td>—</td><td>—</td><td>✓</td><td>Low</td></tr>
+    <tr><td>Icicle chart</td><td>✓✓</td><td>✓✓</td><td>✓</td><td>✓</td><td>Medium</td></tr>
+    <tr><td>Sunburst</td><td>✓</td><td>✓</td><td>✓</td><td>—</td><td>Medium</td></tr>
+    <tr><td>Treemap</td><td>—</td><td>✓✓</td><td>✓✓</td><td>—</td><td>Medium</td></tr>
+    <tr><td>Circle packing</td><td>✓✓</td><td>✓</td><td>—</td><td>—</td><td>Low</td></tr>
+    <tr><td>Miller columns</td><td>✓</td><td>—</td><td>✓✓</td><td>✓✓</td><td>Low</td></tr>
+    <tr><td>Issue tree</td><td>✓✓</td><td>—</td><td>—</td><td>✓</td><td>Low</td></tr>
+    <tr><td>Work breakdown + Gantt</td><td>✓✓</td><td>✓ (time)</td><td>✓</td><td>✓</td><td>Medium</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>5. Choosing</h2>
+<div class="scroll">
+<table>
+  <thead><tr><th>The reader needs to…</th><th>Use</th></tr></thead>
+  <tbody>
+    <tr><td>Find a thing</td><td>Indented outline, Miller columns</td></tr>
+    <tr><td>See where the weight is</td><td>Icicle chart, treemap, sunburst</td></tr>
+    <tr><td>Explain or persuade</td><td>Issue tree, pyramid-principle outline, nested boxes</td></tr>
+    <tr><td>Plan work</td><td>Work breakdown with a Gantt, or a skill tree when there are dependencies</td></tr>
+    <tr><td>Diagnose a failure</td><td>Fishbone</td></tr>
+    <tr><td>Explore a huge, unfamiliar tree</td><td>Hyperbolic tree, or a zoomable treemap or sunburst</td></tr>
+    <tr><td>See one item in context</td><td>Hourglass chart</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>6. What this means for Prisms</h2>
+<div class="reco">
+  <p><b>Recommendation: add an icicle chart next to the existing outline.</b></p>
+  <p>Prisms' vision → roadmap → project → task hierarchy is strictly parent-child, which is exactly what an icicle chart draws cleanly. Width can encode effort or remaining work, and colour can encode progress, so it answers "where is my effort going?" without losing the order of the levels. The outline stays the place to edit and find things.</p>
+</div>
+
+<footer>Summary of a conversation about non-programming ways to present hierarchical data. Diagrams are simplified thumbnails, not data-accurate charts.</footer>
+
+</main>
+</body>
+</html>
