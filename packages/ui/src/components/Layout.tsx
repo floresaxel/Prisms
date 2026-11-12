@@ -108,6 +108,8 @@ function NavLink({ item, active, onNavigate, rail }: { item: NavItemSpec; active
   );
 }
 
+/** Retired: the collapse preference from when a chevron set it. Read once, as
+ *  the starting pin for anyone who has no pin stored yet — never written. */
 const RAIL_KEY = 'prisms.sidebar.collapsed';
 const PIN_KEY = 'prisms.sidebar.pinned';
 /** Below this the sidebar is a rail regardless of preference — a 234px nav on a
@@ -123,6 +125,20 @@ const readFlag = (key: string): boolean => {
     return false; // storage denied (private mode / desktop shell)
   }
 };
+/**
+ * The pin as stored — or, for someone who has never touched it, whatever the
+ * old chevron left behind: open unless they had collapsed it. A brand-new
+ * user has neither, and gets the sidebar open.
+ */
+const readPinned = (): boolean => {
+  try {
+    const stored = localStorage.getItem(PIN_KEY);
+    if (stored !== null) return stored === '1';
+  } catch {
+    return true;
+  }
+  return !readFlag(RAIL_KEY);
+};
 const writeFlag = (key: string, on: boolean): void => {
   try {
     localStorage.setItem(key, on ? '1' : '0');
@@ -136,38 +152,34 @@ interface SidebarState {
   rail: boolean;
   /** The window is too narrow for the full nav — no preference can win. */
   forced: boolean;
-  /** Held open: the rail cannot take it back, and neither can the button. */
+  /** Held open. Unpinned, the sidebar is a rail that peeks. */
   pinned: boolean;
   /** Open only because the pointer (or the keyboard) is on the rail. */
   peeking: boolean;
-  toggleRail: () => void;
   togglePin: () => void;
   setHovering: (on: boolean) => void;
   setFocused: (on: boolean) => void;
 }
 
 /**
- * What the sidebar is doing, from three inputs that can disagree.
+ * What the sidebar is doing, from two inputs that can disagree.
  *
- *  - `collapsed` — the user's own preference, persisted.
- *  - `pinned` — held open ON TOP of that preference, also persisted. Unpinning
- *    restores whatever `collapsed` said, rather than guessing.
- *  - `forced` — the window is too narrow, which overrules both.
+ *  - `pinned` — the user's one switch, persisted. Pinned is expanded and stays
+ *    that way; unpinned is the rail. There is no separate collapse button: the
+ *    pin IS the collapse, so the two can never contradict each other.
+ *  - `forced` — the window is too narrow, which overrules the pin.
  *
  * On top of those sits the PEEK, which is the ONLY way back from a rail: it
  * carries no expand button, so resting the pointer there for `PEEK_DELAY_MS`
  * is what opens it, and leaving closes it again. One derived condition driving
- * one timer, which is what makes the awkward cases fall out for free — unpin
- * while the pointer is still on the sidebar and the peek simply re-arms rather
- * than stranding it shut under a cursor that never left.
+ * one timer.
  *
  * Focus peeks too, and WITHOUT the delay: a keyboard has no way to rest on
  * anything, and with no button to tab to, a delayed focus-peek would leave the
  * rail permanently shut for anyone not using a mouse.
  */
 function useSidebar(): SidebarState {
-  const [collapsed, setCollapsed] = useState(() => readFlag(RAIL_KEY));
-  const [pinned, setPinned] = useState(() => readFlag(PIN_KEY));
+  const [pinned, setPinned] = useState(readPinned);
   const [forced, setForced] = useState(() => window.innerWidth < RAIL_FORCE_W);
   const [hovering, setHovering] = useState(false);
   const [focused, setFocused] = useState(false);
@@ -202,7 +214,7 @@ function useSidebar(): SidebarState {
   }, []);
 
   // Only a sidebar that is actually shut has anything to open.
-  const openable = collapsed && !pinned && !forced;
+  const openable = !pinned && !forced;
   const waiting = hovering && openable;
   useEffect(() => {
     if (!waiting) {
@@ -217,24 +229,22 @@ function useSidebar(): SidebarState {
   const peek = peeking || (focused && keyNav && openable);
 
   return {
-    rail: forced || (!pinned && collapsed && !peek),
+    rail: forced || (!pinned && !peek),
     forced,
     pinned,
     peeking: peek,
-    toggleRail: () => {
-      setCollapsed(!collapsed);
-      writeFlag(RAIL_KEY, !collapsed);
-      // The button is ON the sidebar, so collapsing always happens with the
-      // pointer resting there — and the peek would open again a beat later,
-      // making the button look broken. The click counts as leaving; the next
-      // real entry re-arms it. Focus goes with it: the button is about to
-      // unmount, which fires no blur to clear it.
-      setHovering(false);
-      setFocused(false);
-    },
     togglePin: () => {
       setPinned(!pinned);
       writeFlag(PIN_KEY, !pinned);
+      // Unpinning is the collapse, and the pin is ON the sidebar, so it always
+      // happens with the pointer resting there — the peek would open it again a
+      // beat later and make the button look broken. The click counts as
+      // leaving; the next real entry re-arms it. Focus goes with it: the pin is
+      // about to unmount, which fires no blur to clear it.
+      if (pinned) {
+        setHovering(false);
+        setFocused(false);
+      }
     },
     setHovering,
     setFocused,
@@ -243,7 +253,7 @@ function useSidebar(): SidebarState {
 
 export function Layout({ brand = 'Prisms', brandHref, groups, foot, active, onNavigate, breadcrumb, sync, timer, user, footer, children }: LayoutProps) {
   const initial = (user?.name?.trim()?.[0] ?? user?.email?.[0] ?? '?').toUpperCase();
-  const { rail, forced, pinned, peeking, toggleRail, togglePin, setHovering, setFocused } = useSidebar();
+  const { rail, forced, pinned, peeking, togglePin, setHovering, setFocused } = useSidebar();
   /**
    * Can the mark still OPEN something? Only while the sidebar is shut by choice.
    * A rail the window forced cannot be opened at all, so offering to would be a
@@ -299,7 +309,8 @@ export function Layout({ brand = 'Prisms', brandHref, groups, foot, active, onNa
               aria-label="expand sidebar"
               aria-expanded={false}
               title="Expand sidebar"
-              onClick={toggleRail}
+              // expanding by hand is pinning: the rail only ever shows unpinned
+              onClick={togglePin}
             >
               <Ic name="prism" />
             </button>
@@ -325,10 +336,10 @@ export function Layout({ brand = 'Prisms', brandHref, groups, foot, active, onNa
             <span className="px-brand-logo"><Ic name="prism" /></span>
           )}
           <span className="px-brand-lbl">{brand}</span>
-          {/* Both controls belong to a sidebar that is SHOWING. A rail carries
-              none — it is opened by resting on it, not by aiming at a 34px
-              chevron, and a button to expand something you are already hovering
-              is the one it can most afford to lose. */}
+          {/* The pin is the sidebar's only control, and it belongs to a sidebar
+              that is SHOWING: pressed, it holds it expanded; released, it lets
+              it fold to the rail. A rail carries none — it is opened by resting
+              on it or by pressing the mark. */}
           {!rail && (
             <div className="px-sidebar-ctl">
               <button
@@ -336,23 +347,10 @@ export function Layout({ brand = 'Prisms', brandHref, groups, foot, active, onNa
                 data-testid="sidebar-pin"
                 aria-label={pinned ? 'unpin sidebar' : 'pin sidebar open'}
                 aria-pressed={pinned}
-                title={pinned ? 'Unpin — let the sidebar collapse again' : 'Pin — keep the sidebar expanded'}
+                title={pinned ? 'Unpin — collapse the sidebar' : 'Pin — keep the sidebar expanded'}
                 onClick={togglePin}
               >
                 <Ic name="pin" />
-              </button>
-              <button
-                className="px-btn px-btn--icon px-rail-toggle"
-                data-testid="sidebar-toggle"
-                aria-label="collapse sidebar"
-                aria-expanded
-                // a pinned sidebar refuses to collapse; a forced rail never
-                // renders this button at all, so only the pin can disable it
-                disabled={pinned}
-                title={pinned ? 'Pinned open — unpin it to collapse' : 'Collapse sidebar'}
-                onClick={toggleRail}
-              >
-                <Ic name="chevl" />
               </button>
             </div>
           )}

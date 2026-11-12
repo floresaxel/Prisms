@@ -233,7 +233,6 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
 .px-sidebar-ctl { margin-left: auto; display: flex; align-items: center; gap: 1px; flex: none; }
 .px-sidebar-ctl .px-btn { border: none; box-shadow: none; background: none; color: var(--px-faint); padding: 5px; border-radius: 6px; }
 .px-sidebar-ctl .px-btn:hover:not(:disabled) { background: var(--px-surface-2); color: var(--px-text); }
-.px-sidebar-ctl .px-btn:disabled { opacity: 0.35; cursor: default; }
 /* pinned reads as a held-down button, not merely a tinted glyph */
 .px-sidebar-ctl .px-pin-toggle--on,
 .px-sidebar-ctl .px-pin-toggle--on:hover { color: var(--px-blue); background: var(--px-blue-bg); }

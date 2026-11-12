@@ -28,7 +28,7 @@ const AWAY = { x: 900, y: 400 };
  */
 const PASSING_THROUGH_MS = 200;
 
-test('sidebar: collapses from inside itself, peeks on a resting pointer, and pins open', async ({ page }) => {
+test('sidebar: collapses by unpinning, peeks on a resting pointer, and pins open', async ({ page }) => {
   const email = `e2e-sidebar-${Date.now()}@prisms.test`;
   await page.goto('/');
   await page.getByRole('link', { name: 'Register' }).click();
@@ -39,19 +39,20 @@ test('sidebar: collapses from inside itself, peeks on a resting pointer, and pin
   await expect(page.getByTestId('sync-state')).toBeVisible();
 
   const sidebar = page.locator('.px-sidebar');
-  const toggle = page.getByTestId('sidebar-toggle');
   const pin = page.getByTestId('sidebar-pin');
 
-  // --- the control lives in the sidebar, not the topbar ------------------
-  await expect(sidebar.getByTestId('sidebar-toggle')).toBeVisible();
-  await expect(page.locator('.px-topbar').getByTestId('sidebar-toggle')).toHaveCount(0);
+  // --- the pin is the only control, in the sidebar, not the topbar -------
+  await expect(sidebar.getByTestId('sidebar-pin')).toBeVisible();
+  await expect(page.locator('.px-topbar').getByTestId('sidebar-pin')).toHaveCount(0);
+  await expect(page.getByTestId('sidebar-toggle')).toHaveCount(0); // no chevron
   await expect(sidebar).toHaveAttribute('data-state', 'open');
+  await expect(sidebar).toHaveAttribute('data-pinned', 'true'); // starts held open
 
-  // --- collapse: the rail keeps only the brand mark ----------------------
-  await toggle.click();
+  // --- unpinning collapses it: the rail keeps only the brand mark --------
+  await pin.click();
+  await page.mouse.move(AWAY.x, AWAY.y);
   await expect(sidebar).toHaveAttribute('data-state', 'rail');
-  await expect(toggle).toHaveCount(0); // the chevron goes; the mark takes over
-  await expect(pin).toHaveCount(0);
+  await expect(pin).toHaveCount(0); // the mark takes over
   await expect(page.getByTestId('brand-expand')).toBeVisible();
 
   // --- a pointer passing through must not open it ------------------------
@@ -93,7 +94,9 @@ test('sidebar: collapses from inside itself, peeks on a resting pointer, and pin
   await page.getByTestId('brand-expand').click();
   await expect(sidebar).toHaveAttribute('data-state', 'open');
   await expect(page.getByTestId('brand-home')).toBeVisible(); // now it means home
-  await toggle.click(); // back to the rail for the pin checks below
+  await expect(sidebar).toHaveAttribute('data-pinned', 'true'); // expanding by hand pins
+  await pin.click(); // back to the rail for the pin checks below
+  await page.mouse.move(AWAY.x, AWAY.y);
   await expect(sidebar).toHaveAttribute('data-state', 'rail');
 
   // --- pin the next peek open -------------------------------------------
@@ -103,11 +106,13 @@ test('sidebar: collapses from inside itself, peeks on a resting pointer, and pin
   await page.mouse.move(AWAY.x, AWAY.y);
   await expect(sidebar).toHaveAttribute('data-state', 'open'); // walking away no longer shuts it
   await expect(sidebar).toHaveAttribute('data-pinned', 'true');
-  await expect(toggle).toBeDisabled(); // the pin outranks the button
 
-  // --- the pin survives a reload, and releases the old preference --------
+  // --- the pin survives a reload, and unpinning still collapses ----------
   await page.reload();
   await expect(sidebar).toHaveAttribute('data-state', 'open');
   await page.getByTestId('sidebar-pin').click();
-  await expect(sidebar).toHaveAttribute('data-state', 'rail'); // back to the collapse it was hiding
+  await page.mouse.move(AWAY.x, AWAY.y);
+  await expect(sidebar).toHaveAttribute('data-state', 'rail');
+  await page.reload();
+  await expect(sidebar).toHaveAttribute('data-state', 'rail'); // …and that sticks too
 });

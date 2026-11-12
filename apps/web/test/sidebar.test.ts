@@ -1,13 +1,13 @@
 // @vitest-environment jsdom
 /**
- * The app shell's sidebar: where its controls live, and the three inputs that
- * argue over whether it is open — the user's collapse preference, the pin that
- * overrules it, and the window width that overrules them both.
+ * The app shell's sidebar: its one control, and the two inputs that argue over
+ * whether it is open — the pin (pinned = expanded, unpinned = the rail; there
+ * is no separate collapse button) and the window width that overrules it.
  *
  * The load-bearing property is the PEEK: resting the pointer on the rail opens
  * it after a delay and leaving shuts it again, WITHOUT that ever being mistaken
- * for the user's preference. Collapse it, peek at it, walk away, and it is
- * still collapsed.
+ * for the user's preference. Unpin it, peek at it, walk away, and it is still
+ * a rail.
  *
  * Driven through the real `Layout` from `@prisms/ui` (the web app is its only
  * consumer) with vitest's fake timers standing in for the peek's patience. The
@@ -68,8 +68,6 @@ function mount(extra: Partial<Parameters<typeof Layout>[0]> = {}) {
 
 const aside = () => document.querySelector('.px-sidebar') as HTMLElement;
 const state = () => aside().dataset.state;
-const toggle = () => screen.getByTestId('sidebar-toggle');
-const maybeToggle = () => screen.queryByTestId('sidebar-toggle');
 const pin = () => screen.queryByTestId('sidebar-pin');
 const navlink = () => document.querySelector('.px-navlink') as HTMLElement;
 /** The brand mark in each of its two jobs. */
@@ -82,16 +80,30 @@ function hoverFor(ms: number) {
   act(() => void vi.advanceTimersByTime(ms));
 }
 
-describe('where the controls live', () => {
-  it('puts the collapse button inside the sidebar, not the topbar', () => {
-    mount();
-    expect(aside().contains(toggle())).toBe(true);
-    expect(document.querySelector('.px-topbar')!.contains(toggle())).toBe(false);
-  });
-
-  it('keeps the pin beside it', () => {
+describe('where the control lives', () => {
+  it('puts the pin inside the sidebar, not the topbar', () => {
     mount();
     expect(aside().contains(pin()!)).toBe(true);
+    expect(document.querySelector('.px-topbar')!.contains(pin())).toBe(false);
+  });
+
+  it('has no collapse chevron — the pin is the only control', () => {
+    mount();
+    expect(screen.queryByTestId('sidebar-toggle')).toBeNull();
+    expect(aside().querySelectorAll('.px-sidebar-ctl button')).toHaveLength(1);
+  });
+
+  it('starts expanded and pinned for someone who has never touched it', () => {
+    mount();
+    expect(state()).toBe('open');
+    expect(pin()!.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('keeps an old collapse preference as an unpinned rail', () => {
+    // the retired chevron's key, read once for anyone with no pin stored yet
+    storage.setItem(RAIL_KEY, '1');
+    mount();
+    expect(state()).toBe('rail');
   });
 
   it('lets nothing in it be picked up', () => {
@@ -104,37 +116,35 @@ describe('where the controls live', () => {
     for (const a of anchors) expect(a.getAttribute('draggable')).toBe('false');
   });
 
-  it('collapses on click', () => {
+  it('collapses when unpinned', () => {
     mount();
-    expect(toggle().getAttribute('aria-label')).toBe('collapse sidebar');
-    fireEvent.click(toggle());
+    expect(pin()!.getAttribute('aria-label')).toBe('unpin sidebar');
+    fireEvent.click(pin()!);
     expect(state()).toBe('rail');
   });
 
   it('remembers the collapse across a remount', () => {
     mount();
-    fireEvent.click(toggle());
-    expect(storage.getItem(RAIL_KEY)).toBe('1');
+    fireEvent.click(pin()!);
+    expect(storage.getItem(PIN_KEY)).toBe('0');
     cleanup();
     mount();
     expect(state()).toBe('rail');
   });
 
-  it('takes BOTH controls away on the rail', () => {
-    // the chevron goes because the rail is opened by resting on it or by
-    // pressing the mark, not by aiming at a 34px target; and the pin has
-    // nothing to hold open while it is shut. The brand mark is not one of
-    // these — it stays, wearing its other job.
+  it('takes the pin away on the rail', () => {
+    // the rail is opened by resting on it or by pressing the mark, and the pin
+    // has nothing to hold open while it is shut. The brand mark stays, wearing
+    // its other job.
     mount();
-    fireEvent.click(toggle());
-    expect(maybeToggle()).toBeNull();
+    fireEvent.click(pin()!);
     expect(pin()).toBeNull();
     expect(aside().querySelector('.px-sidebar-ctl')).toBeNull();
   });
 });
 
 describe('resting the pointer on the rail', () => {
-  const collapse = () => fireEvent.click(toggle());
+  const collapse = () => fireEvent.click(pin()!);
 
   it('opens it, but only after the full delay', () => {
     mount();
@@ -152,7 +162,7 @@ describe('resting the pointer on the rail', () => {
   it('opens a rail that has no chevron of its own', () => {
     mount();
     collapse();
-    expect(maybeToggle()).toBeNull(); // the brand mark is the only press left
+    expect(pin()).toBeNull(); // the brand mark is the only press left
     hoverFor(PEEK_DELAY_MS);
     expect(state()).toBe('peek');
     expect(pin()).not.toBeNull(); // …and now there is something else to press
@@ -181,7 +191,7 @@ describe('resting the pointer on the rail', () => {
     collapse();
     hoverFor(PEEK_DELAY_MS);
     fireEvent.mouseLeave(aside());
-    expect(storage.getItem(RAIL_KEY)).toBe('1');
+    expect(storage.getItem(PIN_KEY)).toBe('0');
     cleanup();
     mount();
     expect(state()).toBe('rail');
@@ -193,13 +203,13 @@ describe('resting the pointer on the rail', () => {
     expect(state()).toBe('open'); // not 'peek' — it was never shut
   });
 
-  it('stays shut after a collapse, though the pointer never left the button', () => {
-    // the collapse button is ON the sidebar, so the pointer is always resting
+  it('stays shut after an unpin, though the pointer never left the button', () => {
+    // the pin is ON the sidebar, so the pointer is always resting
     // there when it is pressed. Re-arming from that would re-open what was just
     // shut a beat later, and read as a broken button.
     mount();
     fireEvent.mouseEnter(aside());
-    fireEvent.click(toggle());
+    fireEvent.click(pin()!);
     act(() => void vi.advanceTimersByTime(PEEK_DELAY_MS * 3));
     expect(state()).toBe('rail');
   });
@@ -207,7 +217,7 @@ describe('resting the pointer on the rail', () => {
   it('…and opens again once the pointer has actually been away and back', () => {
     mount();
     fireEvent.mouseEnter(aside());
-    fireEvent.click(toggle());
+    fireEvent.click(pin()!);
     fireEvent.mouseLeave(aside());
     hoverFor(PEEK_DELAY_MS);
     expect(state()).toBe('peek');
@@ -216,7 +226,9 @@ describe('resting the pointer on the rail', () => {
 
 describe('the pin', () => {
   it('holds the sidebar open across a remount', () => {
+    storage.setItem(PIN_KEY, '0');
     mount();
+    hoverFor(PEEK_DELAY_MS);
     fireEvent.click(pin()!);
     expect(pin()!.getAttribute('aria-pressed')).toBe('true');
     expect(storage.getItem(PIN_KEY)).toBe('1');
@@ -225,33 +237,25 @@ describe('the pin', () => {
     expect(state()).toBe('open');
   });
 
-  it('refuses the collapse button while it holds', () => {
+  it('says what pressing it will do', () => {
     mount();
+    expect(pin()!.getAttribute('title')).toContain('collapse');
     fireEvent.click(pin()!);
-    expect((toggle() as HTMLButtonElement).disabled).toBe(true);
-    expect(toggle().getAttribute('title')).toContain('unpin');
-    fireEvent.click(toggle());
-    expect(state()).toBe('open'); // the click did nothing
+    hoverFor(PEEK_DELAY_MS);
+    expect(pin()!.getAttribute('aria-pressed')).toBe('false');
+    expect(pin()!.getAttribute('title')).toContain('keep the sidebar expanded');
   });
 
-  it('overrules a collapse preference that is already set', () => {
+  it('outranks an old collapse preference once it is stored', () => {
     storage.setItem(RAIL_KEY, '1');
     storage.setItem(PIN_KEY, '1');
     mount();
     expect(state()).toBe('open');
   });
 
-  it('gives that preference back when unpinned, rather than guessing', () => {
-    storage.setItem(RAIL_KEY, '1');
-    storage.setItem(PIN_KEY, '1');
-    mount();
-    fireEvent.click(pin()!);
-    expect(state()).toBe('rail'); // back to what the user had chosen
-  });
-
   it('can be set from a peek, holding open what the pointer opened', () => {
     mount();
-    fireEvent.click(toggle());
+    fireEvent.click(pin()!);
     hoverFor(PEEK_DELAY_MS);
     expect(state()).toBe('peek');
     fireEvent.click(pin()!);
@@ -260,25 +264,25 @@ describe('the pin', () => {
     expect(aside().dataset.pinned).toBe('true');
   });
 
-  it('re-arms the peek when unpinned under the cursor', () => {
-    // unpinning drops it to the rail beneath a pointer that never left; without
-    // re-arming, the sidebar would be stuck shut until you moved away and back.
+  it('does not re-open a sidebar unpinned from a peek under the cursor', () => {
+    // unpinning IS the collapse now, so re-arming beneath the pointer that just
+    // pressed it would undo the press a beat later
     mount();
-    fireEvent.click(toggle());
+    fireEvent.click(pin()!);
     fireEvent.mouseEnter(aside());
     act(() => void vi.advanceTimersByTime(PEEK_DELAY_MS));
-    fireEvent.click(pin()!);
+    fireEvent.click(pin()!); // pin from the peek
     fireEvent.click(pin()!); // unpin, pointer still resting on it
     expect(state()).toBe('rail');
-    act(() => void vi.advanceTimersByTime(PEEK_DELAY_MS));
-    expect(state()).toBe('peek');
+    act(() => void vi.advanceTimersByTime(PEEK_DELAY_MS * 3));
+    expect(state()).toBe('rail');
   });
 });
 
 describe('the brand mark', () => {
   // One mark, two jobs, decided by what the sidebar is already doing: shut, it
   // opens; open, there is nothing left to expand so it goes home.
-  const collapse = () => fireEvent.click(toggle());
+  const collapse = () => fireEvent.click(pin()!);
 
   it('opens the sidebar when it is shut', () => {
     mount({ brandHref: HOME });
@@ -297,7 +301,7 @@ describe('the brand mark', () => {
     fireEvent.click(markExpand()!);
     fireEvent.mouseLeave(aside());
     expect(state()).toBe('open');
-    expect(storage.getItem(RAIL_KEY)).toBe('0');
+    expect(storage.getItem(PIN_KEY)).toBe('1'); // expanding by hand is pinning
     cleanup();
     mount({ brandHref: HOME });
     expect(state()).toBe('open');
@@ -339,14 +343,14 @@ describe('the brand mark', () => {
 
   it('still opens a shut sidebar with no brandHref — that job needs no route', () => {
     mount();
-    fireEvent.click(toggle());
+    fireEvent.click(pin()!);
     fireEvent.click(markExpand()!);
     expect(state()).toBe('open');
   });
 
   it('says which job it is doing', () => {
     mount({ brandHref: HOME });
-    fireEvent.click(toggle());
+    fireEvent.click(pin()!);
     expect(markExpand()!.getAttribute('aria-label')).toBe('expand sidebar');
     expect(markExpand()!.getAttribute('aria-expanded')).toBe('false');
   });
@@ -415,7 +419,6 @@ describe('a window too narrow for any of it', () => {
   it('forces the rail, controls and all', () => {
     mount();
     expect(state()).toBe('rail');
-    expect(maybeToggle()).toBeNull();
     expect(pin()).toBeNull();
   });
 
@@ -454,7 +457,7 @@ describe('reaching a rail by keyboard', () => {
   // mark is one press, but landing anywhere on the rail should already show you
   // what you are choosing between. A focus only counts while the KEYBOARD is
   // driving, so each of these tabs first — exactly as a keyboard user arrives.
-  const collapse = () => fireEvent.click(toggle());
+  const collapse = () => fireEvent.click(pin()!);
   const focusIn = (el: HTMLElement) =>
     act(() => {
       fireEvent.keyDown(window, { key: 'Tab' });
