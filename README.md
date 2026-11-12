@@ -233,6 +233,21 @@ wsl docker compose up -d
 WSL shuts down when idle; re-running any `wsl docker …` command boots it again
 and the containers restart automatically.
 
+### One click on Windows
+
+`scripts/prisms-stack.ps1` runs all of the above in order — WSL, Postgres,
+migrations, PowerSync, the API and the web app — with no network needed, and
+shows a status window that turns each part green and links to the site once
+it is up. Create the desktop shortcut once:
+
+```powershell
+pwsh scripts/prisms-stack.ps1 -InstallShortcut
+```
+
+Then double-click **Prisms** on the desktop. Closing the window asks whether
+to stop the stack or leave it running; `-Stop` stops it from a terminal, and
+`-NoGui` reports in the console instead of a window.
+
 ---
 
 ## Self-hosting
