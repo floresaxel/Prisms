@@ -255,7 +255,8 @@ export function VisionShape({
 /**
  * The path from the vision down to the focus: the way around the chart. Every
  * step above the focus is a link that zooms back to it; the focus itself is
- * where you are. Each step names its level, so the path reads as the hierarchy.
+ * where you are. Plain text, so it stays quiet; each step's level is in its
+ * accessible name and tooltip.
  */
 function Trail({ focus, onZoom }: { focus: ShapeNode; onZoom: (item: ShapeNode) => void }) {
   return (
@@ -271,10 +272,10 @@ function Trail({ focus, onZoom }: { focus: ShapeNode; onZoom: (item: ShapeNode) 
               data-testid={`shape-crumb-${n.node.id}`}
               aria-current={here ? 'location' : undefined}
               disabled={here}
-              title={here ? undefined : `Back to ${n.node.title}`}
+              aria-label={`${typeLabel(n.node.node_type)} ${n.node.title}`}
+              title={here ? undefined : `Back to ${typeLabel(n.node.node_type).toLowerCase()} ${n.node.title}`}
               onClick={() => onZoom(n)}
             >
-              <span className="px-shape-crumb-k">{typeLabel(n.node.node_type)}</span>
               <span className="px-shape-crumb-t">{n.node.title}</span>
             </button>
           </span>

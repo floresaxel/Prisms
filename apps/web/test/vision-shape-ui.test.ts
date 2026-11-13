@@ -75,7 +75,9 @@ describe('the Shape card', () => {
     expect(cell(ids.r2.id)).toBeNull(); // a sibling leaves with the zoom
     expect(path()).toEqual(['Become an author', 'Finish the novel']);
     expect(crumb(ids.r1.id).getAttribute('aria-current')).toBe('location');
-    expect(crumb(ids.v.id).textContent).toBe('VisionBecome an author'); // each step names its level
+    // plain text on screen; the level is in its accessible name
+    expect(crumb(ids.v.id).textContent).toBe('Become an author');
+    expect(crumb(ids.v.id).getAttribute('aria-label')).toBe('Vision Become an author');
 
     fireEvent.click(cell(ids.p2.id)!);
     expect(cell(ids.p2.id)!.dataset.row).toBe('0');

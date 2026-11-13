@@ -1232,30 +1232,23 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
 .px-shape-head b { font-size: 13px; }
 .px-shape-head .px-vd-unit { font-size: 12px; padding: 4px 11px; }
 .px-shape-by { font-size: 11.5px; color: var(--px-faint); }
-/* The path from the vision to the focus is the card's navigation: each step
-   above the focus is a tinted, bordered link chip (its level on top, its name
-   below) that zooms back to it; the focus is plain text, "you are here". */
-.px-shape-trail { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; margin: 2px 0 12px; }
-.px-shape-step { display: inline-flex; align-items: center; gap: 4px; min-width: 0; max-width: 100%; }
-.px-shape-sep { width: 13px; height: 13px; color: var(--px-faint); transform: rotate(-90deg); flex: none; }
+/* The path from the vision to the focus is the card's navigation, kept quiet:
+   plain text, no chips. Steps above the focus are links in the vision's colour
+   (underlined on hover) that zoom back to them; the focus is plain text. */
+.px-shape-trail { display: flex; align-items: center; gap: 2px; flex-wrap: wrap; margin: 0 0 10px; font-size: 12.5px; }
+.px-shape-step { display: inline-flex; align-items: center; gap: 2px; min-width: 0; max-width: 100%; }
+.px-shape-sep { width: 12px; height: 12px; color: var(--px-border-2); transform: rotate(-90deg); flex: none; }
 .px-shape-crumb {
-  display: inline-flex; flex-direction: column; align-items: flex-start; gap: 1px; min-width: 0; max-width: 30ch;
-  margin: 0; padding: 4px 10px 5px; font: inherit; text-align: left; cursor: pointer;
-  border: 1px solid color-mix(in srgb, var(--px-shape-c) 30%, var(--px-surface));
-  border-radius: 8px; background: color-mix(in srgb, var(--px-shape-c) 7%, var(--px-surface));
-  color: color-mix(in srgb, var(--px-shape-c) 78%, var(--px-text));
-  transition: background 120ms, border-color 120ms, box-shadow 120ms;
+  min-width: 0; max-width: 30ch; margin: 0; padding: 2px 3px; font: inherit; text-align: left; cursor: pointer;
+  border: none; border-radius: 4px; background: none;
+  color: color-mix(in srgb, var(--px-shape-c) 70%, var(--px-text-dim));
 }
-.px-shape-crumb:hover, .px-shape-crumb:focus-visible {
-  outline: none; background: color-mix(in srgb, var(--px-shape-c) 14%, var(--px-surface));
-  border-color: var(--px-shape-c); box-shadow: var(--px-shadow);
-}
-.px-shape-crumb:hover .px-shape-crumb-t, .px-shape-crumb:focus-visible .px-shape-crumb-t { text-decoration: underline; text-underline-offset: 2px; }
-.px-shape-crumb-k { font-size: 9.5px; font-weight: 640; letter-spacing: 0.5px; text-transform: uppercase; opacity: 0.75; }
-.px-shape-crumb-t { max-width: 100%; font-size: 12.5px; font-weight: 580; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.px-shape-crumb--here, .px-shape-crumb--here:disabled { cursor: default; border-color: transparent; background: none; color: var(--px-text); padding-left: 4px; }
-.px-shape-crumb--here .px-shape-crumb-k { color: var(--px-faint); opacity: 1; }
-.px-shape-crumb--here .px-shape-crumb-t { font-weight: 640; }
+.px-shape-crumb:hover, .px-shape-crumb:focus-visible { outline: none; color: var(--px-shape-c); }
+.px-shape-crumb:focus-visible { box-shadow: 0 0 0 2px color-mix(in srgb, var(--px-shape-c) 35%, transparent); }
+.px-shape-crumb:hover .px-shape-crumb-t, .px-shape-crumb:focus-visible .px-shape-crumb-t { text-decoration: underline; text-underline-offset: 3px; }
+.px-shape-crumb-t { display: block; max-width: 100%; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.px-shape-crumb--here, .px-shape-crumb--here:disabled { cursor: default; color: var(--px-text-dim); }
+.px-shape-crumb--here .px-shape-crumb-t { font-weight: 560; }
 .px-shape-note { font-size: 12px; color: var(--px-text-dim); margin: -4px 0 10px; line-height: 1.5; }
 .px-shape-body { display: grid; grid-template-columns: 74px minmax(0, 1fr); gap: 8px; }
 .px-shape-gutter { position: relative; }
