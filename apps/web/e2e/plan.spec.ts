@@ -43,7 +43,7 @@ async function expectNoRejection(page: Page): Promise<void> {
   await expect(page.getByTestId('rejection-toast')).toHaveCount(0);
 }
 
-test('Plan › Vision manages one vision at a time: create, rename, re-colour, re-time, describe', async ({ page }) => {
+test('Plan › Vision manages one vision at a time: create, rename, edit, reorder, delete', async ({ page }) => {
   await register(page, 'vision');
   const ids = { v: randomUUID(), r: randomUUID() };
   const seed = await page.request.post('/sync/upload', {
@@ -68,48 +68,54 @@ test('Plan › Vision manages one vision at a time: create, rename, re-colour, r
   await goto(page, 'vision');
   await expect(page.getByTestId('vis-detail')).toHaveAttribute('data-vision', ids.v, { timeout: 30_000 });
   await expect(page.getByTestId('vis-title')).toHaveValue('Build a company');
-  await expect(page.getByTestId('vis-color')).toHaveText('Blue');
-  await expect(page.getByTestId('vis-edit-horizon')).toHaveText('3 years');
+  await expect(page.getByTestId('vis-description')).toHaveText('the original description');
+  await expect(page.getByTestId('vis-swatch')).toHaveAttribute('data-color', 'blue');
+  await expect(page.getByTestId('vis-stats')).toContainText('3 years');
 
-  // --- rename ---
+  // --- rename in place ---
   await page.getByTestId('vis-title').fill('Build a studio');
   await page.getByTestId('vis-title').press('Enter');
 
-  // --- describe (saved on blur) ---
-  await page.getByTestId('vis-description').fill('A studio that ships one good thing a year.');
-  await page.getByTestId('vis-title').click(); // blur the textarea
+  // --- everything else through the vision's ⋯ menu → Edit…, which opens on its values ---
+  await page.getByTestId(`vis-menu-${ids.v}`).click();
+  await page.getByTestId('vis-menu-edit').click();
+  await expect(page.getByTestId('vision-dialog-title')).toHaveValue('Build a studio');
+  await expect(page.getByTestId('vision-dialog-description')).toHaveValue('the original description');
+  await expect(page.getByTestId('vision-dialog-color')).toHaveText('Blue');
+  await expect(page.getByTestId('vision-dialog-horizon')).toHaveText('3 years');
 
-  // --- re-colour: the swatch a vision wears is content, editable after creation ---
-  await page.getByTestId('vis-edit-swatch-emerald').click();
-  await expect(page.getByTestId('vis-color')).toHaveText('Emerald');
-
-  // --- re-time: a unit switch re-seeds the amount to that unit's first preset ---
-  await page.getByTestId('vis-edit-unit-months').click();
-  await expect(page.getByTestId('vis-edit-horizon')).toHaveText('3 months');
-  await page.getByTestId('vis-edit-preset-9').click();
-  await expect(page.getByTestId('vis-edit-horizon')).toHaveText('9 months');
+  await page.getByTestId('vision-dialog-description').fill('A studio that ships one good thing a year.');
+  // re-colour: the swatch a vision wears is content, editable after creation
+  await page.getByTestId('vision-dialog-swatch-emerald').click();
+  await expect(page.getByTestId('vision-dialog-color')).toHaveText('Emerald');
+  // re-time: a unit switch re-seeds the amount to that unit's first preset
+  await page.getByTestId('vision-dialog-unit-months').click();
+  await expect(page.getByTestId('vision-dialog-horizon')).toHaveText('3 months');
+  await page.getByTestId('vision-dialog-preset-9').click();
+  await expect(page.getByTestId('vision-dialog-horizon')).toHaveText('9 months');
+  await page.getByTestId('vision-dialog-save').click();
+  await expect(page.getByTestId('vision-dialog-save')).toHaveCount(0);
 
   await expectNoRejection(page);
 
-  // The preview above is the DRAFT: the field paints it from its own state, so it
-  // reads "9 months" whether or not a command was ever queued — it is no evidence
-  // the edit was kept. `vis-stats` renders the STORED node, so it only says 9 once
-  // the write is in the row, and the chip reports the QUEUE, so `synced` means the
-  // server took it. Read `data-sync` rather than the chip's words, which lag 200ms
-  // behind on purpose and would still say "synced" just after a fresh write.
-  //
-  // Without both, the reload below raced the write it was there to verify: it
-  // landed ~60ms after the click, before the command reached SQLite, and the edit
-  // was simply gone — while the draft preview happily claimed otherwise.
+  // `vis-stats`, the swatch and the description render the STORED node, so they
+  // only change once the write is in the row; the chip reports the QUEUE, so
+  // `synced` means the server took it. Read `data-sync` rather than the chip's
+  // words, which lag 200ms behind on purpose and would still say "synced" just
+  // after a fresh write. Without both, a reload races the write it is there to
+  // verify (it once landed ~60ms after the click, before the command reached
+  // SQLite, and the edit was simply gone).
   await expect(page.getByTestId('vis-stats')).toContainText('9 months');
+  await expect(page.getByTestId('vis-swatch')).toHaveAttribute('data-color', 'emerald');
+  await expect(page.getByTestId('vis-description')).toHaveText('A studio that ships one good thing a year.');
   await expect(page.getByTestId('sync-state')).toHaveAttribute('data-sync', 'synced', { timeout: 30_000 });
 
   // --- all four survive a reload: the server took them, nothing rolled back ---
   await page.reload();
   await expect(page.getByTestId('vis-title')).toHaveValue('Build a studio', { timeout: 30_000 });
-  await expect(page.getByTestId('vis-description')).toHaveValue('A studio that ships one good thing a year.');
-  await expect(page.getByTestId('vis-color')).toHaveText('Emerald');
-  await expect(page.getByTestId('vis-edit-horizon')).toHaveText('9 months');
+  await expect(page.getByTestId('vis-description')).toHaveText('A studio that ships one good thing a year.');
+  await expect(page.getByTestId('vis-swatch')).toHaveAttribute('data-color', 'emerald');
+  await expect(page.getByTestId('vis-stats')).toContainText('9 months');
 
   // --- the create dialog still creates from here, and the new vision is selected ---
   await expect(page.getByTestId('vis-count')).toHaveText('1 of 10');
@@ -122,8 +128,28 @@ test('Plan › Vision manages one vision at a time: create, rename, re-colour, r
   await expect(page.getByTestId('vis-title')).toHaveValue('Stay healthy');
   await expect(page.getByTestId('vis-no-roadmaps')).toBeVisible(); // brand new: nothing under it yet
 
+  // --- the menu moves a vision: the new one (last) up above the first ---
+  const list = page.getByTestId('vis-list');
+  const newId = await page.getByTestId('vis-detail').getAttribute('data-vision');
+  const order = () => list.locator('[data-testid^="vis-item-"]').evaluateAll((els) => els.map((e) => e.getAttribute('data-testid')));
+  await expect.poll(order).toEqual([`vis-item-${ids.v}`, `vis-item-${newId}`]);
+  await page.getByTestId(`vis-menu-${newId}`).click();
+  await expect(page.getByTestId('vis-menu-down')).toBeDisabled(); // already last
+  await page.getByTestId('vis-menu-up').click();
+  await expect.poll(order).toEqual([`vis-item-${newId}`, `vis-item-${ids.v}`]);
+
+  // --- and deletes it, after a confirm that names what goes with it ---
+  page.once('dialog', (d) => {
+    expect(d.message()).toContain('Delete "Stay healthy"?');
+    void d.accept();
+  });
+  await page.getByTestId(`vis-menu-${newId}`).click();
+  await page.getByTestId('vis-menu-delete').click();
+  await expect(page.getByTestId('vis-count')).toHaveText('1 of 10');
+  await expect(page.getByTestId(`vis-item-${newId}`)).toHaveCount(0);
+
   // --- a vision's roadmap chip hands the roadmap over to Plan › Roadmap ---
-  await page.getByTestId(`vis-item-${ids.v}`).click();
+  await page.getByTestId(`vis-item-${ids.v}`).locator('.px-mgr-pick').click();
   await page.getByTestId(`vis-roadmap-${ids.r}`).click();
   await expect(page).toHaveURL(new RegExp(`/roadmap#${ids.r}$`));
   await expect(page.getByTestId('rm-detail')).toHaveAttribute('data-roadmap', ids.r);

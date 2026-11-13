@@ -13,15 +13,17 @@
  * other visions already wear are struck through and disabled, and the form opens
  * on the first free one.
  *
- * The colour and timeline controls themselves live in VisionFields, shared with
- * the Vision screen's editor — creating and later correcting a vision ask for
- * the same things in the same shape.
+ * The same dialog EDITS an existing vision (pass `editing`): it opens on that
+ * vision's values, its own colour stays pickable, and the description may be
+ * left empty (older visions were created without one). Creating and later
+ * correcting a vision ask for the same things in the same shape.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import {
   firstFreeVisionColor,
   Modal,
+  readVisionHorizon,
   visionColorOf,
   HORIZON_MAX,
   HORIZON_MIN,
@@ -40,21 +42,38 @@ export interface NewVisionValues {
   horizon: VisionHorizon;
 }
 
+/** The vision being edited: the node's own fields, as the tree holds them. */
+export interface EditableVision {
+  id: string;
+  title: string;
+  description: string;
+  attributes?: Record<string, unknown>;
+}
+
 export function NewVisionDialog({
   open,
   onClose,
   onCreate,
   /** Visions that already exist — their colours are taken. */
   existing,
+  /** Set to edit this vision instead of creating one. */
+  editing = null,
   busy = false,
 }: {
   open: boolean;
   onClose: () => void;
+  /** Called with the form's values, for a new vision or for the one being edited. */
   onCreate: (values: NewVisionValues) => void;
   existing: readonly { id: string; attributes?: Record<string, unknown> }[];
+  editing?: EditableVision | null;
   busy?: boolean;
 }) {
-  const taken = useMemo(() => new Set(existing.map((v) => visionColorOf(v))), [existing]);
+  const editingId = editing?.id ?? null;
+  // A vision's own colour is not "taken" from itself.
+  const taken = useMemo(
+    () => new Set(existing.filter((v) => v.id !== editingId).map((v) => visionColorOf(v))),
+    [existing, editingId],
+  );
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -65,33 +84,39 @@ export function NewVisionDialog({
   const [amount, setAmount] = useState('1');
   const [touched, setTouched] = useState(false);
 
-  // Re-arm on each open: fresh form, and default to a colour that is still free.
-  // ONLY on open — `taken` is derived from the live node tree, so it takes a new
-  // identity on every sync tick, and depending on it here wiped a half-filled
-  // form under the user's hands. The ref keeps the colour default current
-  // without making the effect reactive to it.
+  // Re-arm on each open (and on switching which vision is edited): a fresh form,
+  // or the edited vision's values. ONLY then — `taken` and `editing` come from
+  // the live node tree, so they take a new identity on every sync tick, and
+  // depending on them here wiped a half-filled form under the user's hands. The
+  // refs keep the defaults current without making the effect reactive to them.
   const takenRef = useRef(taken);
   takenRef.current = taken;
+  const editingRef = useRef(editing);
+  editingRef.current = editing;
   useEffect(() => {
     if (!open) return;
-    setTitle('');
-    setDescription('');
-    setColor(firstFreeVisionColor(takenRef.current));
-    setUnit('years');
-    setAmount('1');
+    const v = editingRef.current;
+    const h = v ? readVisionHorizon(v.attributes) : null;
+    setTitle(v?.title ?? '');
+    setDescription(v?.description ?? '');
+    setColor(v ? visionColorOf(v) : firstFreeVisionColor(takenRef.current));
+    setUnit(h?.unit ?? 'years');
+    setAmount(String(h?.amount ?? 1));
     setTouched(false);
-  }, [open]);
+  }, [open, editingId]);
 
   const horizon: VisionHorizon | null = parseHorizon(unit, amount);
   const amountOk = horizon !== null;
   const titleOk = title.trim() !== '';
-  const descriptionOk = description.trim() !== '';
+  const descriptionOk = editingId !== null || description.trim() !== '';
   const valid = titleOk && descriptionOk && horizon !== null;
 
   function submit() {
     setTouched(true);
     if (!valid || busy || !horizon) return;
-    onCreate({ title: title.trim(), description: description.trim(), color, horizon });
+    // A new vision's description is trimmed; an edited one is kept as typed, so
+    // saving with no changes leaves the stored text exactly as it was.
+    onCreate({ title: title.trim(), description: editingId ? description : description.trim(), color, horizon });
   }
 
   const missing = !touched
@@ -108,19 +133,23 @@ export function NewVisionDialog({
     <Modal
       open={open}
       size="full"
-      title="New vision"
-      subtitle="A vision is the root everything else hangs from. Say what it means and roughly how long it runs — no dates, just the scale."
+      title={editingId ? 'Edit vision' : 'New vision'}
+      subtitle={
+        editingId
+          ? 'What it means, how long it runs and the colour everything under it wears.'
+          : 'A vision is the root everything else hangs from. Say what it means and roughly how long it runs — no dates, just the scale.'
+      }
       onClose={onClose}
       actions={
         <>
           <button className="px-btn" data-testid="vision-dialog-cancel" onClick={onClose}>Cancel</button>
           <button
             className="px-btn px-btn--primary"
-            data-testid="vision-dialog-create"
+            data-testid={editingId ? 'vision-dialog-save' : 'vision-dialog-create'}
             disabled={busy || !valid}
             onClick={submit}
           >
-            Create vision
+            {editingId ? 'Save changes' : 'Create vision'}
           </button>
         </>
       }
@@ -173,7 +202,9 @@ export function NewVisionDialog({
         </span>
         <ColorField value={color} taken={taken} onChange={setColor} testPrefix="vision-dialog" />
         <p className="px-vd-hint">
-          Every vision gets its own colour, and all of its roadmaps carry it. Struck-through swatches are taken.
+          {editingId
+            ? 'Everything under this vision re-tints when you save. Struck-through swatches belong to another vision.'
+            : 'Every vision gets its own colour, and all of its roadmaps carry it. Struck-through swatches are taken.'}
         </p>
       </div>
 
