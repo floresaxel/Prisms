@@ -75,6 +75,9 @@ test('Plan › Vision manages one vision at a time: create, rename, edit, reorde
   // --- rename in place ---
   await page.getByTestId('vis-title').fill('Build a studio');
   await page.getByTestId('vis-title').press('Enter');
+  // The list renders the STORED node; the dialog below opens on it, so wait for
+  // the rename to land there rather than racing it.
+  await expect(page.getByTestId(`vis-item-${ids.v}`)).toContainText('Build a studio');
 
   // --- everything else through the vision's ⋯ menu → Edit…, which opens on its values ---
   await page.getByTestId(`vis-menu-${ids.v}`).click();
