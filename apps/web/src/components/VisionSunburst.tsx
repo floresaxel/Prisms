@@ -148,14 +148,14 @@ export function VisionSunburst({
           type="button"
           className={`px-sun-center${focus.parent ? ' px-sun-center--up' : ''}`}
           data-testid="shape-center"
-          aria-label={`${typeLabel(focus.node.node_type)} ${focus.node.title}: ${donePercentLabel(focus)}% done${focus.parent ? '. Go up a level' : ''}`}
+          aria-label={`${typeLabel(focus.node.node_type)} ${focus.node.title}: ${donePercentLabel(focus)}% done${focus.parent ? `. Back to ${focus.parent.node.title}` : ''}`}
           disabled={!focus.parent}
           onClick={() => onSlice(focus)}
         >
           <span className="px-sun-center-k">{typeLabel(focus.node.node_type)}</span>
           <span className="px-sun-center-p">{donePercentLabel(focus)}%</span>
           <span className="px-sun-center-d">done</span>
-          {focus.parent && <span className="px-sun-center-u">↑ Up a level</span>}
+          {focus.parent && <span className="px-sun-center-u">↑ {focus.parent.node.title}</span>}
         </button>
       </div>
 

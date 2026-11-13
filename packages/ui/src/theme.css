@@ -1232,15 +1232,31 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
 .px-shape-head b { font-size: 13px; }
 .px-shape-head .px-vd-unit { font-size: 12px; padding: 4px 11px; }
 .px-shape-by { font-size: 11.5px; color: var(--px-faint); }
-.px-shape-insight { font-size: 12.5px; color: var(--px-text-dim); margin: 0 0 10px; line-height: 1.5; }
-.px-shape-insight b { color: var(--px-text); font-weight: 600; }
-.px-shape-trail { display: flex; align-items: center; gap: 2px; flex-wrap: wrap; font-size: 12px; margin: -2px 0 8px; min-height: 26px; }
-.px-shape-step { display: inline-flex; align-items: center; gap: 2px; min-width: 0; }
-.px-shape-step button { font: inherit; border: none; background: none; color: var(--px-text-dim); padding: 3px 6px; border-radius: 6px; cursor: pointer; max-width: 34ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.px-shape-step button:hover:not(:disabled) { background: var(--px-surface-2); color: var(--px-text); }
-.px-shape-step button:disabled { color: var(--px-text); font-weight: 600; cursor: default; }
-.px-shape-sep { color: var(--px-border-2); }
-.px-shape-up { margin-left: auto; }
+/* The path from the vision to the focus is the card's navigation: each step
+   above the focus is a tinted, bordered link chip (its level on top, its name
+   below) that zooms back to it; the focus is plain text, "you are here". */
+.px-shape-trail { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; margin: 2px 0 12px; }
+.px-shape-step { display: inline-flex; align-items: center; gap: 4px; min-width: 0; max-width: 100%; }
+.px-shape-sep { width: 13px; height: 13px; color: var(--px-faint); transform: rotate(-90deg); flex: none; }
+.px-shape-crumb {
+  display: inline-flex; flex-direction: column; align-items: flex-start; gap: 1px; min-width: 0; max-width: 30ch;
+  margin: 0; padding: 4px 10px 5px; font: inherit; text-align: left; cursor: pointer;
+  border: 1px solid color-mix(in srgb, var(--px-shape-c) 30%, var(--px-surface));
+  border-radius: 8px; background: color-mix(in srgb, var(--px-shape-c) 7%, var(--px-surface));
+  color: color-mix(in srgb, var(--px-shape-c) 78%, var(--px-text));
+  transition: background 120ms, border-color 120ms, box-shadow 120ms;
+}
+.px-shape-crumb:hover, .px-shape-crumb:focus-visible {
+  outline: none; background: color-mix(in srgb, var(--px-shape-c) 14%, var(--px-surface));
+  border-color: var(--px-shape-c); box-shadow: var(--px-shadow);
+}
+.px-shape-crumb:hover .px-shape-crumb-t, .px-shape-crumb:focus-visible .px-shape-crumb-t { text-decoration: underline; text-underline-offset: 2px; }
+.px-shape-crumb-k { font-size: 9.5px; font-weight: 640; letter-spacing: 0.5px; text-transform: uppercase; opacity: 0.75; }
+.px-shape-crumb-t { max-width: 100%; font-size: 12.5px; font-weight: 580; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.px-shape-crumb--here, .px-shape-crumb--here:disabled { cursor: default; border-color: transparent; background: none; color: var(--px-text); padding-left: 4px; }
+.px-shape-crumb--here .px-shape-crumb-k { color: var(--px-faint); opacity: 1; }
+.px-shape-crumb--here .px-shape-crumb-t { font-weight: 640; }
+.px-shape-note { font-size: 12px; color: var(--px-text-dim); margin: -4px 0 10px; line-height: 1.5; }
 .px-shape-body { display: grid; grid-template-columns: 74px minmax(0, 1fr); gap: 8px; }
 .px-shape-gutter { position: relative; }
 .px-shape-gutter span { position: absolute; left: 0; right: 0; height: 44px; display: flex; align-items: center; font-size: 10px; font-weight: 640; letter-spacing: 0.5px; line-height: 1.25; text-transform: uppercase; color: var(--px-faint); }
@@ -1269,11 +1285,6 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
 .px-shape-cell--tight { padding: 0; }
 .px-shape-cell--tight .px-shape-t, .px-shape-cell--tight .px-shape-s { display: none; }
 @keyframes px-shape-in { from { opacity: 0; } }
-.px-shape-legend { display: flex; gap: 6px 18px; flex-wrap: wrap; margin-top: 12px; font-size: 11.5px; color: var(--px-faint); }
-.px-shape-legend span { display: inline-flex; align-items: center; gap: 6px; }
-.px-shape-key { display: inline-block; width: 18px; height: 10px; border-radius: 3px; background: color-mix(in srgb, var(--px-shape-c) 17%, var(--px-surface)); }
-.px-shape-key--bar { height: 3px; border-radius: 2px; background: var(--px-shape-c); }
-.px-shape-key--done { background: color-mix(in srgb, var(--px-shape-c) 22%, var(--px-surface)); }
 .px-shape-detail { display: flex; align-items: center; gap: 6px 12px; flex-wrap: wrap; margin-top: 14px; padding: 10px 12px; border-radius: 9px; background: var(--px-surface-2); font-size: 12.5px; min-height: 46px; }
 .px-shape-kind { font-size: 10.5px; font-weight: 640; letter-spacing: 0.5px; text-transform: uppercase; color: var(--px-shape-c); }
 .px-shape-name { font-weight: 600; }

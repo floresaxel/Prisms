@@ -79,14 +79,18 @@ test('Plan › Vision charts where the work sits, and zooms into it', async ({ p
   await goto(page, 'vision');
   await expect(page.getByTestId('vis-detail')).toHaveAttribute('data-vision', id.v, { timeout: 30_000 });
   const shape = page.getByTestId('vis-shape');
-  const insight = shape.getByTestId('shape-insight');
+  const note = shape.getByTestId('shape-note');
+  const crumb = (nodeId: string) => shape.getByTestId(`shape-crumb-${nodeId}`);
   const cell = (nodeId: string) => shape.getByTestId(`shape-cell-${nodeId}`);
 
   // --- the whole vision, sized by open tasks: draft 4 (t2 t3 t4 t5), audience 1 (t6) ---
-  await expect(insight).toHaveText('80% of the open tasks sit in one roadmap: Finish the draft (4 of 5).', {
-    timeout: 30_000,
-  });
-  await expect(cell(id.r1)).toBeVisible();
+  // (counted from the SYNCED rows: the check-off and the obsolete task included)
+  await expect(cell(id.v)).toContainText('5 open', { timeout: 30_000 });
+  await expect(cell(id.r1)).toContainText('4 open');
+  await expect(cell(id.r2)).toContainText('1 open');
+  await expect(crumb(id.v)).toHaveAttribute('aria-current', 'location'); // the path: just the vision
+  await expect(shape.getByTestId('shape-insight')).toHaveCount(0);
+  await expect(shape.getByTestId('shape-up')).toHaveCount(0);
   await expect(cell(id.t7)).toHaveCount(0); // obsolete: descoped, never drawn
   await expect(cell(id.t1)).toHaveClass(/px-shape-cell--off/); // done: no open width to show
   await expect(cell(id.t5)).toHaveAttribute('data-row', '4'); // under the milestone, a row lower
@@ -95,16 +99,21 @@ test('Plan › Vision charts where the work sits, and zooms into it', async ({ p
   await cell(id.r1).click();
   await expect(cell(id.r1)).toHaveAttribute('data-row', '0');
   await expect(cell(id.r2)).toHaveCount(0);
-  await expect(insight).toHaveText('All of the open tasks sit in one project: Draft act two (4 of 4).');
+  await expect(crumb(id.r1)).toHaveAttribute('aria-current', 'location');
+  await expect(crumb(id.v)).toBeEnabled(); // a step back up the path
 
   // --- time left: the unestimated task cannot be drawn, and the card says so ---
   await shape.getByTestId('shape-metric-time').click();
-  await expect(insight).toHaveText(
-    'All of the time left sits in one project: Draft act two (14h of 14h). ' +
-      '1 open task has no estimate, so it is not shown at this width.',
-  );
+  await expect(note).toHaveText('1 open task has no estimate, so it is not shown at this width.');
 
-  // --- Esc goes back up a level ---
+  // --- the path goes back: into the project, then click the vision's step ---
+  await cell(id.p1).click();
+  await expect(cell(id.p1)).toHaveAttribute('data-row', '0');
+  await crumb(id.v).click();
+  await expect(cell(id.v)).toHaveAttribute('data-row', '0');
+
+  // --- and Esc goes back up a level ---
+  await cell(id.r1).click();
   await cell(id.r1).focus();
   await page.keyboard.press('Escape');
   await expect(cell(id.v)).toHaveAttribute('data-row', '0');
@@ -118,7 +127,7 @@ test('Plan › Vision charts where the work sits, and zooms into it', async ({ p
   await expect(arc(id.r1)).toHaveAttribute('data-ring', '1');
   await expect(arc(id.t5)).toHaveAttribute('data-ring', '4');
   await expect(center).toContainText('Vision');
-  await expect(insight).toContainText('so it is not shown at this size.');
+  await expect(note).toContainText('so it is not shown at this size.');
 
   // zoom by the list beside the chart, then back up by the centre
   await shape.getByTestId(`shape-row-${id.r1}`).click();

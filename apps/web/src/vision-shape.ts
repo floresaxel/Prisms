@@ -189,23 +189,6 @@ export function rowLabels(cells: readonly ShapeCell[]): string[] {
   });
 }
 
-/** The child of `focus` holding the most of the metric, and its share (0–1). */
-export interface ShapeLead {
-  readonly item: ShapeNode;
-  readonly share: number;
-}
-
-export function leadingBranch(focus: ShapeNode, metric: ShapeMetric): ShapeLead | null {
-  const total = shapeValue(focus, metric);
-  if (total <= 0) return null;
-  let best: ShapeNode | null = null;
-  for (const c of focus.children) {
-    if (best === null || shapeValue(c, metric) > shapeValue(best, metric)) best = c;
-  }
-  if (best === null || shapeValue(best, metric) <= 0) return null;
-  return { item: best, share: shapeValue(best, metric) / total };
-}
-
 export function findInShape(root: ShapeNode, id: string): ShapeNode | null {
   if (root.node.id === id) return root;
   for (const c of root.children) {

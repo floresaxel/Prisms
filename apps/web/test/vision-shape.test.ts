@@ -16,7 +16,6 @@ import {
   donePercentLabel,
   findInShape,
   layoutShape,
-  leadingBranch,
   roadmapOf,
   rowLabels,
   SHAPE_METRICS,
@@ -146,17 +145,6 @@ describe('naming the rows', () => {
 });
 
 describe('what the card says', () => {
-  it('names the branch holding the most, with its share', () => {
-    const lead = leadingBranch(shape, 'open')!;
-    expect(lead.item.node.id).toBe(ids.r1.id);
-    expect(lead.share).toBeCloseTo(5 / 6, 10);
-  });
-
-  it('has no lead when there is nothing of the measure left', () => {
-    expect(leadingBranch(at(ids.t10.id), 'open')).toBeNull(); // a done task
-    expect(leadingBranch(at(ids.r3.id), 'all')).toBeNull(); // an empty roadmap
-  });
-
   it('walks from the vision down to a block', () => {
     expect(trailOf(at(ids.t6.id)).map((n) => n.node.title)).toEqual([
       'Become an author',

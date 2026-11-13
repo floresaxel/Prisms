@@ -27,7 +27,10 @@ function mount(visionId = ids.v.id) {
 }
 
 const cell = (id: string) => screen.queryByTestId(`shape-cell-${id}`);
-const insight = () => screen.getByTestId('shape-insight').textContent;
+const note = () => screen.queryByTestId('shape-note')?.textContent ?? null;
+const crumb = (id: string) => screen.getByTestId(`shape-crumb-${id}`);
+/** The path's steps, as their names, in order. */
+const path = () => [...screen.getByTestId('shape-trail').querySelectorAll('.px-shape-crumb-t')].map((e) => e.textContent);
 const detail = () => screen.getByTestId('shape-detail').textContent;
 
 // The view choice is remembered per device: each test starts with empty storage.
@@ -38,12 +41,16 @@ describe('the Shape card', () => {
   it('opens on the whole vision, sized by open tasks', () => {
     mount();
     expect(screen.getByTestId('shape-metric-open').getAttribute('aria-checked')).toBe('true');
-    expect(insight()).toBe('83% of the open tasks sit in one roadmap: Finish the novel (5 of 6).');
     expect(detail()).toContain('Become an author');
     expect(detail()).toContain('9 tasks · 3 done');
-    // no trail at the top: it would only repeat the top row
-    expect(screen.queryByTestId('shape-trail')).toBeNull();
+    // no summary sentence, no "Up a level": the path is the navigation, and at
+    // the top it is just where you are
+    expect(screen.queryByTestId('shape-insight')).toBeNull();
     expect(screen.queryByTestId('shape-up')).toBeNull();
+    expect(note()).toBeNull();
+    expect(path()).toEqual(['Become an author']);
+    expect(crumb(ids.v.id).getAttribute('aria-current')).toBe('location');
+    expect((crumb(ids.v.id) as HTMLButtonElement).disabled).toBe(true);
   });
 
   it('hides a branch with nothing open, from sight and from the keyboard', () => {
@@ -61,26 +68,30 @@ describe('the Shape card', () => {
     expect(cell(ids.t8.id)).toBeNull();
   });
 
-  it('zooms into a block and back out by the button, the trail and Esc', () => {
+  it('zooms into a block and back out by the path and Esc', () => {
     mount();
     fireEvent.click(cell(ids.r1.id)!);
     expect(cell(ids.r1.id)!.dataset.row).toBe('0');
     expect(cell(ids.r2.id)).toBeNull(); // a sibling leaves with the zoom
-    expect(screen.getByTestId('shape-trail').textContent).toContain('Become an author›Finish the novel');
-    expect(insight()).toMatch(/^60% of the open tasks sit in one project: Draft act two \(3 of 5\)/);
+    expect(path()).toEqual(['Become an author', 'Finish the novel']);
+    expect(crumb(ids.r1.id).getAttribute('aria-current')).toBe('location');
+    expect(crumb(ids.v.id).textContent).toBe('VisionBecome an author'); // each step names its level
 
     fireEvent.click(cell(ids.p2.id)!);
     expect(cell(ids.p2.id)!.dataset.row).toBe('0');
+    expect(path()).toEqual(['Become an author', 'Finish the novel', 'Revise act one']);
 
     fireEvent.keyDown(cell(ids.p2.id)!, { key: 'Escape' });
     expect(cell(ids.r1.id)!.dataset.row).toBe('0');
 
-    fireEvent.click(screen.getByTestId('shape-up'));
-    expect(cell(ids.v.id)!.dataset.row).toBe('0');
+    fireEvent.click(cell(ids.p2.id)!);
+    fireEvent.click(crumb(ids.r1.id)); // a step in the middle of the path
+    expect(cell(ids.r1.id)!.dataset.row).toBe('0');
 
     fireEvent.click(cell(ids.p1.id)!);
-    fireEvent.click(screen.getByRole('button', { name: 'Become an author' })); // the trail's first step
+    fireEvent.click(crumb(ids.v.id)); // the path's first step: the whole vision
     expect(cell(ids.v.id)!.dataset.row).toBe('0');
+    expect(path()).toEqual(['Become an author']);
   });
 
   it('goes up a level when the top block is clicked', () => {
@@ -94,16 +105,10 @@ describe('the Shape card', () => {
     mount();
     fireEvent.click(screen.getByTestId('shape-metric-time'));
     expect(screen.getByTestId('shape-metric-time').getAttribute('aria-checked')).toBe('true');
-    expect(insight()).toBe(
-      '94% of the time left sits in one roadmap: Finish the novel (14.5h of 15.5h). ' +
-        '1 open task has no estimate, so it is not shown at this width.',
-    );
-  });
-
-  it('says "All" when one branch holds everything', () => {
-    mount();
+    expect(note()).toBe('1 open task has no estimate, so it is not shown at this width.');
+    // and the note goes when the branch in focus has none missing
     fireEvent.click(cell(ids.r2.id)!);
-    expect(insight()).toBe('All of the open tasks sit in one project: Newsletter (1 of 1).');
+    expect(note()).toBeNull();
   });
 
   it('pins a task and opens the roadmap it sits under', () => {
@@ -128,7 +133,7 @@ describe('the Shape card', () => {
   it('explains itself instead of drawing an empty chart', () => {
     mount(ids.empty.id);
     expect(screen.getByTestId('shape-empty').textContent).toContain('Nothing to chart yet');
-    expect(screen.queryByTestId('shape-insight')).toBeNull();
+    expect(screen.queryByTestId('shape-trail')).toBeNull();
   });
 
   it('draws nothing for a vision that is not in the tree', () => {
@@ -176,12 +181,11 @@ describe('the sunburst view', () => {
     expect(arc(ids.t1.id)).not.toBeNull();
   });
 
-  it('keeps the same summary, and says "size" where the icicle says "width"', () => {
+  it('says "size" where the icicle says "width"', () => {
     mount();
     toSunburst();
-    expect(insight()).toBe('83% of the open tasks sit in one roadmap: Finish the novel (5 of 6).');
     fireEvent.click(screen.getByTestId('shape-metric-time'));
-    expect(insight()).toContain('1 open task has no estimate, so it is not shown at this size.');
+    expect(note()).toBe('1 open task has no estimate, so it is not shown at this size.');
   });
 
   it('lists the children of the centre beside the chart', () => {
@@ -192,14 +196,15 @@ describe('the sunburst view', () => {
     expect(screen.getByTestId(`shape-row-${ids.r3.id}`).className).toContain('px-sun-row--zero');
   });
 
-  it('zooms by slice or by row, and goes back up by the centre, the trail and Esc', () => {
+  it('zooms by slice or by row, and goes back up by the centre, the path and Esc', () => {
     mount();
     toSunburst();
     fireEvent.click(arc(ids.r1.id)!);
     expect(center().textContent).toContain('Roadmap');
     expect(arc(ids.r1.id)).toBeNull(); // it is the centre now
     expect(arc(ids.p1.id)!.dataset.ring).toBe('1');
-    expect(screen.getByTestId('shape-trail').textContent).toContain('Become an author›Finish the novel');
+    expect(path()).toEqual(['Become an author', 'Finish the novel']);
+    expect(center().textContent).toContain('↑ Become an author'); // where the centre goes back to
 
     fireEvent.click(screen.getByTestId(`shape-row-${ids.p2.id}`));
     expect(center().textContent).toContain('Project');
@@ -212,7 +217,7 @@ describe('the sunburst view', () => {
     expect(center().textContent).toContain('Vision');
 
     fireEvent.click(arc(ids.r2.id)!);
-    fireEvent.click(screen.getByTestId('shape-up'));
+    fireEvent.click(crumb(ids.v.id));
     expect(center().textContent).toContain('Vision');
   });
 
