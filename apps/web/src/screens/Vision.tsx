@@ -5,20 +5,22 @@
  * parent), and it carries more identity than a title: a description, a dateless
  * horizon, and a colour every roadmap under it wears. Until now those could only
  * be set at creation, from a tab inside Projects; this screen is their home —
- * pick a vision on the left, correct anything about it on the right.
+ * pick a vision on the left, see where its work sits on the right.
  *
- * Everything writes immediately, one command per field, so an edit survives
- * offline and reconciles like any other (§7.2). The colour and timeline share
- * their controls with the create dialog (VisionFields), so a vision is described
- * the same way whether it is being created or corrected.
+ * Each vision in the list has a ⋯ menu: Edit… (the create dialog, opened on that
+ * vision: name, description, timeline, colour), Move up / Move down, and Delete.
+ * The name can also be renamed in place on the detail card. Every save writes
+ * one command per CHANGED field, so an edit survives offline and reconciles like
+ * any other (§7.2).
  *
  * Deleting a vision cascades (I10) to its roadmaps, projects and tasks, so the
  * confirm names what goes with it. I2 caps the workspace at MAX_VISIONS.
  *
  * Under its name and counts sits the Shape card (components/VisionShape): an
- * icicle chart of where the work under the vision is, and how much is done.
+ * icicle (or sunburst) chart of where the work under the vision is, and how
+ * much is done.
  */
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import {
   childrenOf,
@@ -40,12 +42,10 @@ import {
   visionColorOf,
   visionHex,
   type CommandContext,
-  type HorizonUnit,
   type VisionColor,
 } from '@prisms/ui';
 
 import { NewVisionDialog, type NewVisionValues } from '../components/NewVisionDialog';
-import { ColorField, colorLabel, HorizonField, parseHorizon } from '../components/VisionFields';
 import { VisionShape } from '../components/VisionShape';
 
 const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
@@ -90,8 +90,11 @@ export function Vision({ ctx, onNavigate }: { ctx: CommandContext; onNavigate: (
 
   const [busy, setBusy] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
-
-  const taken = useMemo(() => new Set(visions.map((v) => visionColorOf(v))), [visions]);
+  /** The vision open in the edit dialog; '' when it is closed (or creating). */
+  const [editingId, setEditingId] = useState('');
+  /** The vision whose ⋯ menu is open (kept here, so a row re-mount does not close it). */
+  const [menuFor, setMenuFor] = useState<string | null>(null);
+  const editing = editingId ? tree.byId.get(editingId) : undefined;
 
   async function addVision(values: NewVisionValues) {
     if (busy || visions.length >= MAX_VISIONS) return;
@@ -128,14 +131,52 @@ export function Vision({ ctx, onNavigate }: { ctx: CommandContext; onNavigate: (
     }
   }
 
+  /** Write only what the edit dialog changed, one command per field. */
+  function saveVision(v: Node, values: NewVisionValues) {
+    if (values.title !== v.title) void commands.rename(v.id, values.title);
+    if (values.description !== v.description) void commands.setDescription(v.id, values.description);
+    const h = readVisionHorizon(v.attributes);
+    const recolour = values.color !== visionColorOf(v);
+    const retime = h?.unit !== values.horizon.unit || h?.amount !== values.horizon.amount;
+    // Attributes are replaced whole (the verb's contract), so patch onto the current bag.
+    if (recolour || retime) {
+      void commands.setNodeAttributes(v.id, {
+        ...v.attributes,
+        color: values.color,
+        horizon: { unit: values.horizon.unit, amount: values.horizon.amount },
+      });
+    }
+    setEditingId('');
+  }
+
+  function removeVision(v: Node) {
+    const counts = countsFor(tree, v.id);
+    const owned = [
+      `${counts.roadmaps.length} roadmap${counts.roadmaps.length === 1 ? '' : 's'}`,
+      `${counts.projects} project${counts.projects === 1 ? '' : 's'}`,
+      `${counts.tasks} task${counts.tasks === 1 ? '' : 's'}`,
+    ].join(', ');
+    if (!window.confirm(`Delete "${v.title}"? Everything under it goes with it: ${owned}.`)) return;
+    void commands.softDelete(v.id);
+  }
+
   const dialog = (
-    <NewVisionDialog
-      open={dialogOpen}
-      busy={busy}
-      existing={visions}
-      onClose={() => setDialogOpen(false)}
-      onCreate={(values) => void addVision(values)}
-    />
+    <>
+      <NewVisionDialog
+        open={dialogOpen}
+        busy={busy}
+        existing={visions}
+        onClose={() => setDialogOpen(false)}
+        onCreate={(values) => void addVision(values)}
+      />
+      <NewVisionDialog
+        open={editing !== undefined}
+        existing={visions}
+        editing={editing ?? null}
+        onClose={() => setEditingId('')}
+        onCreate={(values) => editing && saveVision(editing, values)}
+      />
+    </>
   );
 
   const newVisionBtn = (
@@ -202,26 +243,20 @@ export function Vision({ ctx, onNavigate }: { ctx: CommandContext; onNavigate: (
                     </span>
                   </span>
                 </button>
-                <span className="px-mgr-order">
-                  <button
-                    className="px-btn px-btn--icon px-btn--sm"
-                    data-testid={`vis-up-${v.id}`}
-                    aria-label={`Move ${v.title} up`}
-                    disabled={i === 0 || busy}
-                    onClick={() => void reorder(i, -1)}
-                  >
-                    <Ic name="chevd" style={{ transform: 'rotate(180deg)' }} />
-                  </button>
-                  <button
-                    className="px-btn px-btn--icon px-btn--sm"
-                    data-testid={`vis-down-${v.id}`}
-                    aria-label={`Move ${v.title} down`}
-                    disabled={i === visions.length - 1 || busy}
-                    onClick={() => void reorder(i, 1)}
-                  >
-                    <Ic name="chevd" />
-                  </button>
-                </span>
+                <VisionMenu
+                  vision={v}
+                  open={menuFor === v.id}
+                  onOpenChange={(o) => setMenuFor(o ? v.id : null)}
+                  canUp={i > 0 && !busy}
+                  canDown={i < visions.length - 1 && !busy}
+                  onEdit={() => {
+                    setSelected(v.id);
+                    setEditingId(v.id);
+                  }}
+                  onUp={() => void reorder(i, -1)}
+                  onDown={() => void reorder(i, 1)}
+                  onDelete={() => removeVision(v)}
+                />
               </div>
             );
           })}
@@ -235,7 +270,6 @@ export function Vision({ ctx, onNavigate }: { ctx: CommandContext; onNavigate: (
             tree={tree}
             vision={active}
             counts={countsFor(tree, active.id)}
-            takenColors={taken}
             commands={commands}
             onNavigate={onNavigate}
           />
@@ -252,14 +286,12 @@ function VisionDetail({
   tree,
   vision,
   counts,
-  takenColors,
   commands,
   onNavigate,
 }: {
   tree: TreeIndex;
   vision: Node;
   counts: VisionCounts;
-  takenColors: ReadonlySet<VisionColor>;
   commands: ReturnType<typeof useCommands>;
   onNavigate: (href: string) => void;
 }) {
@@ -267,44 +299,21 @@ function VisionDetail({
   const horizon = readVisionHorizon(vision.attributes);
 
   const [title, setTitle] = useState(vision.title);
-  const [description, setDescription] = useState(vision.description);
-  const [unit, setUnit] = useState<HorizonUnit>(horizon?.unit ?? 'years');
-  // TEXT, like the create dialog: a half-typed amount has to survive in the box.
-  const [amount, setAmount] = useState(String(horizon?.amount ?? 1));
-
-  /** Attributes are replaced whole (the verb's contract), so patch onto the current bag. */
-  const writeAttrs = (patch: Record<string, unknown>) =>
-    void commands.setNodeAttributes(vision.id, { ...vision.attributes, ...patch });
+  // The name can also change from the Edit dialog (or another device): adopt it,
+  // unless the user is mid-rename here.
+  const typing = useRef(false);
+  useEffect(() => {
+    if (!typing.current) setTitle(vision.title);
+  }, [vision.title]);
 
   function commitTitle() {
+    typing.current = false;
     const t = title.trim();
     if (t === '' || t === vision.title) {
       setTitle(vision.title); // an empty name is not a rename — put the old one back
       return;
     }
     void commands.rename(vision.id, t);
-  }
-
-  function commitDescription() {
-    if (description === vision.description) return;
-    void commands.setDescription(vision.id, description);
-  }
-
-  function changeHorizon(u: HorizonUnit, a: string) {
-    setUnit(u);
-    setAmount(a);
-    const parsed = parseHorizon(u, a);
-    if (parsed) writeAttrs({ horizon: { unit: parsed.unit, amount: parsed.amount } });
-  }
-
-  function remove() {
-    const owned = [
-      `${counts.roadmaps.length} roadmap${counts.roadmaps.length === 1 ? '' : 's'}`,
-      `${counts.projects} project${counts.projects === 1 ? '' : 's'}`,
-      `${counts.tasks} task${counts.tasks === 1 ? '' : 's'}`,
-    ].join(', ');
-    if (!window.confirm(`Delete "${vision.title}"? Everything under it goes with it: ${owned}.`)) return;
-    void commands.softDelete(vision.id);
   }
 
   return (
@@ -317,6 +326,7 @@ function VisionDetail({
             data-testid="vis-title"
             aria-label="vision name"
             value={title}
+            onFocus={() => (typing.current = true)}
             onChange={(e) => setTitle(e.target.value)}
             onBlur={commitTitle}
             onKeyDown={(e) => {
@@ -324,10 +334,14 @@ function VisionDetail({
               if (e.key === 'Escape') setTitle(vision.title);
             }}
           />
-          <button className="px-btn px-btn--sm px-btn--danger" data-testid="vis-delete" onClick={remove}>
-            <Ic name="trash" /> Delete
-          </button>
         </div>
+
+        {/* What it means, read-only here: it is edited from the vision's ⋯ menu. */}
+        {vision.description.trim() !== '' && (
+          <p className="px-mgr-desc" data-testid="vis-description">
+            {vision.description}
+          </p>
+        )}
 
         <div className="px-mgr-stats" data-testid="vis-stats">
           <span className="px-mgr-stat">
@@ -348,43 +362,6 @@ function VisionDetail({
       {/* Where the work under this vision sits. Read-only: edits stay on the
           screen that owns each level, which the detail line links to. */}
       <VisionShape tree={tree} visionId={vision.id} color={solid(color)} onNavigate={onNavigate} />
-
-      <div className="px-mgr-card">
-        <div className="px-vd-field">
-          <label className="px-vd-lbl" htmlFor="vis-desc">What this vision means</label>
-          <textarea
-            id="vis-desc"
-            className="px-vd-input"
-            data-testid="vis-description"
-            placeholder="What does this vision mean, and how will you know you are living it?"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            onBlur={commitDescription}
-          />
-          <p className="px-vd-hint">Saved when you click away.</p>
-        </div>
-
-        <div className="px-vd-field">
-          <span className="px-vd-lbl">Expected timeline</span>
-          <HorizonField unit={unit} amount={amount} testPrefix="vis-edit" onChange={changeHorizon} />
-          <p className="px-vd-hint">No dates — a vision runs on the order of months, years or decades.</p>
-        </div>
-
-        <div className="px-vd-field" style={{ marginBottom: 0 }}>
-          <span className="px-vd-lbl">
-            Colour · <span className="px-swatch-name" data-testid="vis-color">{colorLabel(color)}</span>
-          </span>
-          <ColorField
-            value={color}
-            taken={takenColors}
-            testPrefix="vis-edit"
-            onChange={(c) => writeAttrs({ color: c })}
-          />
-          <p className="px-vd-hint">
-            Everything under this vision re-tints the moment you pick. Struck-through swatches belong to another vision.
-          </p>
-        </div>
-      </div>
 
       <div className="px-mgr-card">
         <div className="px-mgr-head" style={{ marginBottom: 10 }}>
@@ -415,6 +392,108 @@ function VisionDetail({
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * A vision's ⋯ menu in the list: edit it, move it, delete it. Closes on an
+ * outside click, on Escape (focus goes back to the button) and after any choice.
+ *
+ * Whether it is open is held by the SCREEN, not the row: a just-created vision's
+ * row can re-mount when its synced copy replaces the local one, and a menu that
+ * kept its own state closed under the user's pointer.
+ */
+function VisionMenu({
+  vision,
+  open,
+  onOpenChange,
+  canUp,
+  canDown,
+  onEdit,
+  onUp,
+  onDown,
+  onDelete,
+}: {
+  vision: Node;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  canUp: boolean;
+  canDown: boolean;
+  onEdit: () => void;
+  onUp: () => void;
+  onDown: () => void;
+  onDelete: () => void;
+}) {
+  const setOpen = (next: boolean | ((o: boolean) => boolean)) =>
+    onOpenChange(typeof next === 'function' ? next(open) : next);
+  const ref = useRef<HTMLDivElement | null>(null);
+  const btn = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDownOutside = (e: MouseEvent) => {
+      if (!ref.current?.contains(e.target as HTMLElement)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      setOpen(false);
+      btn.current?.focus();
+    };
+    document.addEventListener('mousedown', onDownOutside);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDownOutside);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  const pick = (fn: () => void) => () => {
+    setOpen(false);
+    fn();
+  };
+
+  return (
+    <div className="px-menu px-mgr-menu" ref={ref}>
+      <button
+        ref={btn}
+        className="px-btn px-menu-btn"
+        data-testid={`vis-menu-${vision.id}`}
+        aria-label={`Options for ${vision.title}`}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+      >
+        <Ic name="dots" />
+      </button>
+      {open && (
+        <div className="px-menu-pop" role="menu" data-testid="vis-menu-pop">
+          <button className="px-menu-item" role="menuitem" data-testid="vis-menu-edit" onClick={pick(onEdit)}>
+            <Ic name="pen" /> Edit…
+          </button>
+          <button className="px-menu-item" role="menuitem" data-testid="vis-menu-up" disabled={!canUp} onClick={pick(onUp)}>
+            <Ic name="chevd" style={{ transform: 'rotate(180deg)' }} /> Move up
+          </button>
+          <button
+            className="px-menu-item"
+            role="menuitem"
+            data-testid="vis-menu-down"
+            disabled={!canDown}
+            onClick={pick(onDown)}
+          >
+            <Ic name="chevd" /> Move down
+          </button>
+          <div className="px-menu-sep" />
+          <button
+            className="px-menu-item px-menu-item--danger"
+            role="menuitem"
+            data-testid="vis-menu-delete"
+            onClick={pick(onDelete)}
+          >
+            <Ic name="trash" /> Delete
+          </button>
+        </div>
+      )}
     </div>
   );
 }

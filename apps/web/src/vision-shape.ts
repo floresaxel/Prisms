@@ -1,10 +1,13 @@
 /**
- * Vision "Shape": the icicle chart on Plan › Vision.
+ * Vision "Shape": the chart on Plan › Vision, drawn as an icicle (default) or a
+ * sunburst.
  *
  * Everything under one vision, one row per level (vision → roadmaps → projects
  * → milestones/tasks), each block as wide as its share of the work, with a bar
- * along its bottom edge for how much of it is done. Pure, so the layout is unit
- * tested without a DOM; the screen only paints the cells placed here.
+ * along its bottom edge for how much of it is done. The sunburst is the same
+ * layout bent into a circle: rows become rings and widths become angles. Pure,
+ * so the layout is unit tested without a DOM; the screen only paints the cells
+ * placed here.
  *
  * Counting follows project completion (aggregates/completion, §7.2) so the chart
  * and the Dashboard can never disagree about a branch:
@@ -186,23 +189,6 @@ export function rowLabels(cells: readonly ShapeCell[]): string[] {
   });
 }
 
-/** The child of `focus` holding the most of the metric, and its share (0–1). */
-export interface ShapeLead {
-  readonly item: ShapeNode;
-  readonly share: number;
-}
-
-export function leadingBranch(focus: ShapeNode, metric: ShapeMetric): ShapeLead | null {
-  const total = shapeValue(focus, metric);
-  if (total <= 0) return null;
-  let best: ShapeNode | null = null;
-  for (const c of focus.children) {
-    if (best === null || shapeValue(c, metric) > shapeValue(best, metric)) best = c;
-  }
-  if (best === null || shapeValue(best, metric) <= 0) return null;
-  return { item: best, share: shapeValue(best, metric) / total };
-}
-
 export function findInShape(root: ShapeNode, id: string): ShapeNode | null {
   if (root.node.id === id) return root;
   for (const c of root.children) {
@@ -223,6 +209,133 @@ export function trailOf(item: ShapeNode): ShapeNode[] {
 export function roadmapOf(item: ShapeNode): ShapeNode | null {
   for (let n: ShapeNode | null = item; n; n = n.parent) if (n.node.node_type === 'roadmap') return n;
   return null;
+}
+
+// --- views ------------------------------------------------------------------
+
+/** How the same layout is drawn. The icicle is the default; the choice is per-device. */
+export const SHAPE_VIEWS = [
+  { value: 'icicle', label: 'Icicle' },
+  { value: 'sunburst', label: 'Sunburst' },
+] as const;
+export type ShapeView = (typeof SHAPE_VIEWS)[number]['value'];
+export const DEFAULT_SHAPE_VIEW: ShapeView = 'icicle';
+export const SHAPE_VIEW_KEY = 'prisms.vision.shapeView';
+
+const isShapeView = (v: unknown): v is ShapeView => SHAPE_VIEWS.some((s) => s.value === v);
+
+export function readShapeView(): ShapeView {
+  try {
+    const stored = localStorage.getItem(SHAPE_VIEW_KEY);
+    return isShapeView(stored) ? stored : DEFAULT_SHAPE_VIEW;
+  } catch {
+    return DEFAULT_SHAPE_VIEW; // no storage (private mode, or a bare Node global)
+  }
+}
+
+export function writeShapeView(view: ShapeView): void {
+  try {
+    localStorage.setItem(SHAPE_VIEW_KEY, view);
+  } catch {
+    /* best-effort: the session still shows the chosen view */
+  }
+}
+
+// --- sunburst ---------------------------------------------------------------
+
+const TAU = Math.PI * 2;
+/** Below this span (radians) a slice is not drawn at all. */
+const MIN_SPAN = 0.002;
+
+/**
+ * One sunburst slice. Angles are radians clockwise from 12 o'clock. Ring 0 is the
+ * focus, drawn as the centre disc; ring 1 is the innermost band.
+ */
+export interface ShapeArc {
+  readonly item: ShapeNode;
+  readonly a0: number;
+  readonly a1: number;
+  readonly ring: number;
+}
+
+/**
+ * The icicle layout bent into a circle: a cell's share of the width becomes its
+ * share of the turn, and its row becomes its ring. Both views therefore always
+ * agree on every branch's size.
+ */
+export function layoutSunburst(focus: ShapeNode, metric: ShapeMetric): ShapeArc[] {
+  return layoutShape(focus, metric).map(({ item, x, w, row }) => ({ item, a0: x * TAU, a1: (x + w) * TAU, ring: row }));
+}
+
+/** Inner and outer radius of rings 1..`rings`, sharing `inner`..`outer` evenly. */
+export function ringRadii(
+  rings: number,
+  { inner, outer, gap, maxBand }: { inner: number; outer: number; gap: number; maxBand: number },
+): { r0: number; r1: number }[] {
+  if (rings <= 0) return [];
+  const band = Math.min(maxBand, (outer - inner - gap * (rings - 1)) / rings);
+  return Array.from({ length: rings }, (_, i) => {
+    const r0 = inner + i * (band + gap);
+    return { r0, r1: r0 + band };
+  });
+}
+
+const fx = (n: number) => n.toFixed(2);
+const polar = (cx: number, cy: number, a: number, r: number) => [cx + r * Math.sin(a), cy - r * Math.cos(a)] as const;
+
+/**
+ * An annular sector as an SVG path; '' when it is too thin to draw. A slice that
+ * takes the whole turn (an only child) is drawn as a closed ring, two circles
+ * and no radial edges, so it has no seam at 12 o'clock.
+ */
+export function sectorPath(cx: number, cy: number, a0: number, a1: number, r0: number, r1: number): string {
+  if (r1 <= r0) return '';
+  if (a1 - a0 >= TAU - 1e-6) return ringPath(cx, cy, r0, r1);
+  const span = a1 - a0;
+  if (!(span >= MIN_SPAN)) return '';
+  const end = a0 + span;
+  const large = span > Math.PI ? 1 : 0;
+  const [x0, y0] = polar(cx, cy, a0, r1);
+  const [x1, y1] = polar(cx, cy, end, r1);
+  const [x2, y2] = polar(cx, cy, end, r0);
+  const [x3, y3] = polar(cx, cy, a0, r0);
+  return (
+    `M${fx(x0)} ${fx(y0)}A${fx(r1)} ${fx(r1)} 0 ${large} 1 ${fx(x1)} ${fx(y1)}` +
+    `L${fx(x2)} ${fx(y2)}A${fx(r0)} ${fx(r0)} 0 ${large} 0 ${fx(x3)} ${fx(y3)}Z`
+  );
+}
+
+/**
+ * A whole ring: the outer circle clockwise and the inner one counter-clockwise,
+ * each as two half arcs (one arc whose ends meet draws nothing), so the hole is
+ * cut out under either fill rule.
+ */
+function ringPath(cx: number, cy: number, r0: number, r1: number): string {
+  const circle = (r: number, sweep: 0 | 1) =>
+    `M${fx(cx)} ${fx(cy - r)}A${fx(r)} ${fx(r)} 0 1 ${sweep} ${fx(cx)} ${fx(cy + r)}` +
+    `A${fx(r)} ${fx(r)} 0 1 ${sweep} ${fx(cx)} ${fx(cy - r)}Z`;
+  return circle(r1, 1) + circle(r0, 0);
+}
+
+/**
+ * The arc a slice's label runs along. In the bottom half it runs right-to-left,
+ * so the text reads upright everywhere on the ring.
+ */
+export function labelArcPath(cx: number, cy: number, a0: number, a1: number, r: number): string {
+  const span = Math.min(a1 - a0, TAU - 0.02);
+  const end = a0 + span;
+  const mid = (a0 + end) / 2;
+  const flip = mid > Math.PI / 2 && mid < Math.PI * 1.5;
+  const [sx, sy] = polar(cx, cy, flip ? end : a0, r);
+  const [ex, ey] = polar(cx, cy, flip ? a0 : end, r);
+  return `M${fx(sx)} ${fx(sy)}A${fx(r)} ${fx(r)} 0 ${span > Math.PI ? 1 : 0} ${flip ? 0 : 1} ${fx(ex)} ${fx(ey)}`;
+}
+
+/** `text` cut to fit `room` characters with an ellipsis, or '' when under 4 would show. */
+export function fitLabel(text: string, room: number): string {
+  if (room >= text.length) return text;
+  if (room < 5) return '';
+  return text.slice(0, room - 1).trimEnd() + '…';
 }
 
 /** Compact minutes for a block too small for `1h 30m`: `45m`, `2.5h`, `34h`. */

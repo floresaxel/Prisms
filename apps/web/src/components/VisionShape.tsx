@@ -1,6 +1,8 @@
 /**
- * The "Shape" card on Plan › Vision: an icicle chart of everything under the
- * selected vision (layout and counting rules in ../vision-shape).
+ * The "Shape" card on Plan › Vision: a chart of everything under the selected
+ * vision (layout and counting rules in ../vision-shape), drawn as an icicle by
+ * default or as a sunburst (./VisionSunburst). The view toggle is remembered per
+ * device; the measure, zoom, pin, summary and detail line are shared by both.
  *
  * Read-only by design. It answers "where is the work under this vision?", and
  * every edit stays on the screen that owns that level: a block's detail line
@@ -24,17 +26,21 @@ import {
   donePercentLabel,
   findInShape,
   layoutShape,
-  leadingBranch,
   roadmapOf,
+  readShapeView,
   rowLabels,
   SHAPE_METRICS,
+  SHAPE_VIEWS,
   shapeValue,
-  shortMinutes,
   trailOf,
   typeLabel,
+  writeShapeView,
   type ShapeMetric,
   type ShapeNode,
+  type ShapeView,
 } from '../vision-shape';
+
+import { VisionSunburst } from './VisionSunburst';
 
 /** Row pitch: a 44px block plus a 4px gap, matched by `.px-shape-cell` in theme.css. */
 const ROW = 48;
@@ -57,6 +63,12 @@ export function VisionShape({
 }) {
   const shape = useMemo(() => buildShape(tree, visionId), [tree, visionId]);
   const [metric, setMetric] = useState<ShapeMetric>('open');
+  const [view, setViewState] = useState<ShapeView>(readShapeView);
+  const setView = (v: ShapeView) => {
+    setViewState(v);
+    writeShapeView(v);
+  };
+  const sizeWord = view === 'icicle' ? 'width' : 'size';
   const [focusId, setFocusId] = useState<string | null>(null);
   const [hoverId, setHoverId] = useState<string | null>(null);
   const [pinnedId, setPinnedId] = useState<string | null>(null);
@@ -108,9 +120,24 @@ export function VisionShape({
   const head = (
     <div className="px-shape-head">
       <b>Shape</b>
+      <div className="px-vd-units px-shape-views" role="radiogroup" aria-label="View">
+        {SHAPE_VIEWS.map((v) => (
+          <button
+            key={v.value}
+            type="button"
+            role="radio"
+            aria-checked={view === v.value}
+            className={`px-vd-unit${view === v.value ? ' px-vd-unit--on' : ''}`}
+            data-testid={`shape-view-${v.value}`}
+            onClick={() => setView(v.value)}
+          >
+            {v.label}
+          </button>
+        ))}
+      </div>
       <div className="px-head-actions">
-        <span className="px-shape-by">Width by</span>
-        <div className="px-vd-units" role="radiogroup" aria-label="Width by">
+        <span className="px-shape-by">{view === 'icicle' ? 'Width by' : 'Size by'}</span>
+        <div className="px-vd-units" role="radiogroup" aria-label={view === 'icicle' ? 'Width by' : 'Size by'}>
           {SHAPE_METRICS.map((m) => (
             <button
               key={m.value}
@@ -144,20 +171,25 @@ export function VisionShape({
 
   const cells = layoutShape(focus, metric);
   const rows = rowLabels(cells);
-  const total = shapeValue(focus, metric);
   const style = { '--px-shape-c': color } as CSSProperties;
 
   return (
     <div className="px-mgr-card px-shape" data-testid="vis-shape" style={style} onKeyDown={onKeyDown}>
       {head}
 
-      <p className="px-shape-insight" data-testid="shape-insight">
-        <Insight focus={focus} metric={metric} />
-      </p>
+      <Trail focus={focus} onZoom={zoomTo} />
+      <Note focus={focus} metric={metric} sizeWord={sizeWord} />
 
-      {/* Only while zoomed: at the top the trail would just repeat the top row. */}
-      {focus.parent && <Trail focus={focus} up={focus.parent} onZoom={zoomTo} />}
-
+      {view === 'sunburst' ? (
+        <VisionSunburst
+          focus={focus}
+          metric={metric}
+          hovered={hovered}
+          pinned={pinned}
+          onSlice={onCell}
+          onHover={setHoverId}
+        />
+      ) : (
       <div className="px-shape-body">
         <div className="px-shape-gutter" aria-hidden="true" style={{ height: rows.length * ROW - 4 }}>
           {rows.map((label, i) => (
@@ -213,75 +245,66 @@ export function VisionShape({
           })}
         </div>
       </div>
-
-      <div className="px-shape-legend">
-        <span>
-          <i className="px-shape-key" /> Width = {SHAPE_METRICS.find((m) => m.value === metric)!.label.toLowerCase()}
-          {total > 0 && metric === 'time' && ` (${shortMinutes(total)})`}
-        </span>
-        <span>
-          <i className="px-shape-key px-shape-key--bar" /> Bottom edge = share done
-        </span>
-        <span>
-          <i className="px-shape-key px-shape-key--done" /> Done task
-        </span>
-        <span>Click a block to zoom in · Esc goes back up</span>
-      </div>
+      )}
 
       <Detail item={shown} onNavigate={onNavigate} />
     </div>
   );
 }
 
-/** Where the zoom is, from the vision down; every step but the last zooms back to it. */
-function Trail({ focus, up, onZoom }: { focus: ShapeNode; up: ShapeNode; onZoom: (item: ShapeNode) => void }) {
+/**
+ * The path from the vision down to the focus: the way around the chart. Every
+ * step above the focus is a link that zooms back to it; the focus itself is
+ * where you are. Plain text, so it stays quiet; each step's level is in its
+ * accessible name and tooltip.
+ */
+function Trail({ focus, onZoom }: { focus: ShapeNode; onZoom: (item: ShapeNode) => void }) {
   return (
-    <div className="px-shape-trail" data-testid="shape-trail">
-      {trailOf(focus).map((n, i) => (
-        <span key={n.node.id} className="px-shape-step">
-          {i > 0 && <span className="px-shape-sep">›</span>}
-          <button
-            type="button"
-            aria-current={n === focus ? 'location' : undefined}
-            disabled={n === focus}
-            onClick={() => onZoom(n)}
-          >
-            {n.node.title}
-          </button>
-        </span>
-      ))}
-      <button type="button" className="px-btn px-btn--sm px-shape-up" data-testid="shape-up" onClick={() => onZoom(up)}>
-        <Ic name="up" /> Up a level
-      </button>
-    </div>
+    <nav className="px-shape-trail" data-testid="shape-trail" aria-label="Where you are in this vision">
+      {trailOf(focus).map((n, i) => {
+        const here = n === focus;
+        return (
+          <span key={n.node.id} className="px-shape-step">
+            {i > 0 && <Ic name="chevd" className="px-ic px-shape-sep" />}
+            <button
+              type="button"
+              className={`px-shape-crumb${here ? ' px-shape-crumb--here' : ''}`}
+              data-testid={`shape-crumb-${n.node.id}`}
+              aria-current={here ? 'location' : undefined}
+              disabled={here}
+              aria-label={`${typeLabel(n.node.node_type)} ${n.node.title}`}
+              title={here ? undefined : `Back to ${typeLabel(n.node.node_type).toLowerCase()} ${n.node.title}`}
+              onClick={() => onZoom(n)}
+            >
+              <span className="px-shape-crumb-t">{n.node.title}</span>
+            </button>
+          </span>
+        );
+      })}
+    </nav>
   );
 }
 
-/** One sentence on where the weight sits inside the focused block. */
-function Insight({ focus, metric }: { focus: ShapeNode; metric: ShapeMetric }) {
-  const lead = leadingBranch(focus, metric);
-  const missing =
-    metric === 'time' && focus.openUnestimated > 0
-      ? ` ${plural(focus.openUnestimated, 'open task')} ${focus.openUnestimated === 1 ? 'has' : 'have'} no estimate, so ${focus.openUnestimated === 1 ? 'it is' : 'they are'} not shown at this width.`
-      : '';
-
+/**
+ * A line under the path ONLY when the chart cannot show something on its own:
+ * open tasks with no estimate under "Time left", or nothing left to draw.
+ */
+function Note({ focus, metric, sizeWord }: { focus: ShapeNode; metric: ShapeMetric; sizeWord: string }) {
+  let text: string | null = null;
   if (shapeValue(focus, metric) <= 0) {
-    if (metric === 'time' && focus.openTasks > 0) return <>None of the open tasks here has an estimate yet, so there is no time to show.</>;
-    return <>Everything here is done.</>;
+    text =
+      metric === 'time' && focus.openTasks > 0
+        ? 'None of the open tasks here has an estimate yet, so there is no time to show.'
+        : 'Everything here is done.';
+  } else if (metric === 'time' && focus.openUnestimated > 0) {
+    const n = focus.openUnestimated;
+    text = `${plural(n, 'open task')} ${n === 1 ? 'has' : 'have'} no estimate, so ${n === 1 ? 'it is' : 'they are'} not shown at this ${sizeWord}.`;
   }
-  if (!lead) return <>{missing.trim()}</>;
-
-  const v = shapeValue(lead.item, metric);
-  const t = shapeValue(focus, metric);
-  const share = lead.share >= 1 ? 'All' : `${Math.round(lead.share * 100)}%`;
-  const noun = { open: 'the open tasks sit', time: 'the time left sits', all: 'the tasks sit' }[metric];
-  const amount = metric === 'time' ? `${shortMinutes(v)} of ${shortMinutes(t)}` : `${v} of ${t}`;
-  return (
-    <>
-      {share} of {noun} in one {typeLabel(lead.item.node.node_type).toLowerCase()}: <b>{lead.item.node.title}</b> ({amount}).
-      {missing}
-    </>
-  );
+  return text ? (
+    <p className="px-shape-note" data-testid="shape-note">
+      {text}
+    </p>
+  ) : null;
 }
 
 /** The strip under the chart: whatever is hovered, else pinned, else in focus. */

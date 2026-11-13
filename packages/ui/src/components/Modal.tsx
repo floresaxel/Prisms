@@ -10,9 +10,11 @@ export interface ModalProps {
   /**
    * `'panel'` (default) is the compact centered card. `'full'` covers the
    * viewport and blurs what is behind it — for a dialog that is a task in its
-   * own right rather than a confirmation.
+   * own right rather than a confirmation. `'card'` sits between them: a wider
+   * centered card over a lightly blurred page, for a form that edits something
+   * already on screen; it scrolls inside itself when it is taller than the window.
    */
-  size?: 'panel' | 'full';
+  size?: 'panel' | 'card' | 'full';
   /** Optional lead-in under the title, inside the full-screen header. */
   subtitle?: ReactNode;
 }
@@ -27,9 +29,9 @@ export function Modal({ open, title, onClose, children, actions, size = 'panel',
     return () => window.removeEventListener('keydown', onKey);
   }, [open, onClose]);
 
-  // A full-screen dialog owns the viewport: stop the page behind it scrolling.
+  // A full-screen or card dialog owns the viewport: stop the page behind it scrolling.
   useEffect(() => {
-    if (!open || size !== 'full') return;
+    if (!open || size === 'panel') return;
     const previous = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     return () => {
@@ -39,10 +41,11 @@ export function Modal({ open, title, onClose, children, actions, size = 'panel',
 
   if (!open) return null;
   const full = size === 'full';
+  const scrim = full ? ' px-scrim--blur' : size === 'card' ? ' px-scrim--soft' : '';
   return (
-    <div className={`px-scrim${full ? ' px-scrim--blur' : ''}`} onClick={onClose} role="presentation">
+    <div className={`px-scrim${scrim}`} onClick={onClose} role="presentation">
       <div
-        className={`px-modal${full ? ' px-modal--full' : ''}`}
+        className={`px-modal${full ? ' px-modal--full' : size === 'card' ? ' px-modal--card' : ''}`}
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
