@@ -283,11 +283,16 @@ export function ringRadii(
 const fx = (n: number) => n.toFixed(2);
 const polar = (cx: number, cy: number, a: number, r: number) => [cx + r * Math.sin(a), cy - r * Math.cos(a)] as const;
 
-/** An annular sector as an SVG path; '' when it is too thin to draw. */
+/**
+ * An annular sector as an SVG path; '' when it is too thin to draw. A slice that
+ * takes the whole turn (an only child) is drawn as a closed ring, two circles
+ * and no radial edges, so it has no seam at 12 o'clock.
+ */
 export function sectorPath(cx: number, cy: number, a0: number, a1: number, r0: number, r1: number): string {
-  // A full turn is drawn a hair short: an arc whose ends meet draws nothing.
-  const span = Math.min(a1 - a0, TAU - 1e-3);
-  if (!(span >= MIN_SPAN) || r1 <= r0) return '';
+  if (r1 <= r0) return '';
+  if (a1 - a0 >= TAU - 1e-6) return ringPath(cx, cy, r0, r1);
+  const span = a1 - a0;
+  if (!(span >= MIN_SPAN)) return '';
   const end = a0 + span;
   const large = span > Math.PI ? 1 : 0;
   const [x0, y0] = polar(cx, cy, a0, r1);
@@ -298,6 +303,18 @@ export function sectorPath(cx: number, cy: number, a0: number, a1: number, r0: n
     `M${fx(x0)} ${fx(y0)}A${fx(r1)} ${fx(r1)} 0 ${large} 1 ${fx(x1)} ${fx(y1)}` +
     `L${fx(x2)} ${fx(y2)}A${fx(r0)} ${fx(r0)} 0 ${large} 0 ${fx(x3)} ${fx(y3)}Z`
   );
+}
+
+/**
+ * A whole ring: the outer circle clockwise and the inner one counter-clockwise,
+ * each as two half arcs (one arc whose ends meet draws nothing), so the hole is
+ * cut out under either fill rule.
+ */
+function ringPath(cx: number, cy: number, r0: number, r1: number): string {
+  const circle = (r: number, sweep: 0 | 1) =>
+    `M${fx(cx)} ${fx(cy - r)}A${fx(r)} ${fx(r)} 0 1 ${sweep} ${fx(cx)} ${fx(cy + r)}` +
+    `A${fx(r)} ${fx(r)} 0 1 ${sweep} ${fx(cx)} ${fx(cy - r)}Z`;
+  return circle(r1, 1) + circle(r0, 0);
 }
 
 /**

@@ -79,10 +79,20 @@ describe('ring geometry', () => {
     expect(sectorPath(220, 220, 0, 0, 70, 140)).toBe('');
   });
 
-  it('draws a whole turn a hair short, since an arc whose ends meet draws nothing', () => {
+  it('draws a whole turn (an only child) as a closed ring with no seam', () => {
     const d = sectorPath(220, 220, 0, TAU, 70, 140);
-    expect(d).not.toBe('');
-    expect(d).toContain(' 0 1 1 '); // the large-arc flag
+    // two circles, outer clockwise and inner counter-clockwise, and no radial edge
+    expect(d).toBe(
+      'M220.00 80.00A140.00 140.00 0 1 1 220.00 360.00A140.00 140.00 0 1 1 220.00 80.00Z' +
+        'M220.00 150.00A70.00 70.00 0 1 0 220.00 290.00A70.00 70.00 0 1 0 220.00 150.00Z',
+    );
+    expect(d).not.toContain('L');
+    // the same for a turn that floating point leaves a hair short, and from any start
+    expect(sectorPath(220, 220, 1, 1 + TAU * (1 - 1e-12), 70, 140)).toBe(d);
+  });
+
+  it('still draws a slice just short of the whole turn with its edges', () => {
+    expect(sectorPath(220, 220, 0, TAU - 0.01, 70, 140)).toContain('L');
   });
 
   it('runs a label clockwise on top and backwards underneath, so it is never upside down', () => {
