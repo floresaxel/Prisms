@@ -45,6 +45,7 @@ import {
   type DecisionBoard,
   type DecisionCriterion,
   type DiagramGroup,
+  type Edge,
   type EdgeIndex,
   type FactContext,
   type Habit,
@@ -297,6 +298,16 @@ export const useReviewInboxHydrated = (): boolean => useScreenLocalHydrated(Q_RE
 /** Live tree of non-deleted nodes — served warm from the session read layer (§7.14). */
 export function useNodeTree(): TreeIndex {
   return usePrismsData().tree;
+}
+
+/**
+ * Every live dependency edge (predecessor → successor), warm from the session
+ * read layer. For screens that read the dependency graph as a whole rather than
+ * one diagram of it (Plan › Roadmap rolls them up to "project waits on project").
+ */
+export function useDependencyEdges(): Edge[] {
+  const edgeRows = usePrismsData().rows.edges;
+  return useMemo(() => edgeRows.map(toEdge), [edgeRows]);
 }
 
 /**

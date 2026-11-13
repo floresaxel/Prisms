@@ -123,6 +123,7 @@ export { explainProvenance, type ProvenanceFields, type ProvenanceExplanation } 
 // hooks
 export {
   useNodeTree,
+  useDependencyEdges,
   useFactContext,
   useWorklist,
   useRunningTimer,

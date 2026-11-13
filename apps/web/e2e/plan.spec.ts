@@ -189,32 +189,49 @@ test('Plan › Roadmap manages one roadmap at a time: create, fill, re-home unde
   const detail = page.getByTestId('rm-detail');
   await expect(detail).toBeVisible();
   await expect(page.getByTestId('rm-title')).toHaveValue('Ship v1');
-  await expect(page.getByTestId('rm-vision')).toHaveValue(ids.work);
+  await expect(page.getByTestId('rm-vision-name')).toHaveText('Work');
   await expect(page.getByTestId('rm-no-projects')).toBeVisible();
 
-  // --- a project added here lands under the roadmap, in the graph ---
+  // --- a project added here lands under the roadmap, in the views ---
   await page.getByTestId('rm-new-project-title').fill('Landing page');
   await page.getByTestId('rm-add-project').click();
-  await expect(page.getByTestId('rm-project-count')).toHaveText('1 project');
-  await expect(page.getByTestId('roadmap-canvas').getByText('Landing page')).toBeVisible();
+  await expect(page.getByTestId('rm-project-count')).toHaveText('1');
+  await expect(page.getByTestId('rm-views').getByText('Landing page')).toBeVisible();
 
-  // --- describe + rename ---
-  await page.getByTestId('rm-description').fill('Everything the first release needs.');
+  // --- rename in place ---
   await page.getByTestId('rm-title').click();
   await page.getByTestId('rm-title').fill('Ship v1.0');
   await page.getByTestId('rm-title').press('Enter');
+  await expect(page.getByTestId(`rm-item-${await page.getByTestId('rm-detail').getAttribute('data-roadmap')}`)).toContainText('Ship v1.0');
 
-  // --- re-home under the other vision: I1 keeps the parent a vision, and the
-  //     roadmap re-tints because colour comes from whichever vision owns it ---
-  await page.getByTestId('rm-vision').selectOption(ids.side);
+  // --- describe + re-home through the ⋯ menu: I1 keeps the parent a vision, and
+  //     the roadmap re-tints because colour comes from whichever vision owns it ---
+  await page.getByTestId('rm-menu').click();
+  await page.getByTestId('rm-menu-edit').click();
+  await expect(page.getByTestId('rm-dialog-title')).toHaveValue('Ship v1.0');
+  await page.getByTestId('rm-dialog-description').fill('Everything the first release needs.');
+  await page.getByTestId('rm-dialog-vision').selectOption(ids.side);
+  await page.getByTestId('rm-dialog-save').click();
   await expect(page.getByTestId('rm-vision-swatch')).toHaveAttribute('data-color', 'amber');
+  await expect(page.getByTestId('rm-description')).toHaveText('Everything the first release needs.');
   await expectNoRejection(page);
+  await expect(page.getByTestId('sync-state')).toHaveAttribute('data-sync', 'synced', { timeout: 30_000 });
 
   await page.reload();
   await expect(page.getByTestId('rm-title')).toHaveValue('Ship v1.0', { timeout: 30_000 });
-  await expect(page.getByTestId('rm-description')).toHaveValue('Everything the first release needs.');
-  await expect(page.getByTestId('rm-vision')).toHaveValue(ids.side);
-  await expect(page.getByTestId('rm-project-count')).toHaveText('1 project');
+  await expect(page.getByTestId('rm-description')).toHaveText('Everything the first release needs.');
+  await expect(page.getByTestId('rm-vision-name')).toHaveText('Side');
+  await expect(page.getByTestId('rm-project-count')).toHaveText('1');
+
+  // --- the "+" at the end of a vision's run starts a roadmap under THAT vision ---
+  await page.getByTestId(`rm-add-${ids.work}`).click();
+  await expect(page.getByTestId('rm-roadmap-vision')).toHaveValue(ids.work);
+  await page.getByTestId('rm-new-roadmap-title').fill('Hire a designer');
+  await page.getByTestId('rm-create-roadmap').click();
+  await expect(page.getByTestId('rm-title')).toHaveValue('Hire a designer');
+  await expect(page.getByTestId('rm-vision-name')).toHaveText('Work');
+  await expect(page.getByTestId('rm-count')).toHaveText('2 roadmaps across 2 visions');
+  await page.getByTestId('rm-list').getByText('Ship v1.0').click();
 
   // --- the old deep link follows the tab to its new route. A COLD load (a
   //     different pathname), the way a bookmark arrives: the redirect runs at
@@ -230,11 +247,15 @@ test('Plan › Roadmap manages one roadmap at a time: create, fill, re-home unde
 
   // --- delete takes the subtree with it, and says so first ---
   await goto(page, 'roadmap');
+  await page.getByTestId('rm-list').getByText('Ship v1.0').click();
+  await expect(page.getByTestId('rm-title')).toHaveValue('Ship v1.0');
   page.once('dialog', (d) => {
     expect(d.message()).toContain('1 project');
     void d.accept();
   });
+  await page.getByTestId('rm-menu').click();
   await page.getByTestId('rm-delete').click();
-  await expect(page.getByTestId('roadmap-empty')).toBeVisible();
+  await expect(page.getByTestId('rm-count')).toHaveText('1 roadmap across 2 visions');
+  await expect(page.getByTestId('rm-title')).toHaveValue('Hire a designer');
   await expectNoRejection(page);
 });
