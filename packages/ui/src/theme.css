@@ -1272,6 +1272,68 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
   .px-shape-cell, .px-shape-bar { transition: none; animation: none; }
 }
 
+/* The Shape card's sunburst view (components/VisionSunburst.tsx): the focus in
+   the centre, one ring per level outward, a slice's angle = its share. Same
+   tints as the icicle; the band on each slice's outer edge is "% done". Beside
+   the chart, the focus's children as a list, since only wide slices fit a label. */
+.px-shape { container-type: inline-size; }
+.px-shape-views .px-vd-unit { font-size: 12px; padding: 4px 11px; }
+/* Two toggles share the head: on a narrow card the measure group drops to its
+   own line whole, instead of squeezing every label onto two lines. */
+.px-shape-head .px-vd-unit { white-space: nowrap; }
+.px-shape-head .px-head-actions { flex-wrap: wrap; }
+.px-sun { display: grid; grid-template-columns: minmax(0, 420px) minmax(0, 1fr); gap: 24px; align-items: center; }
+@container (max-width: 680px) { .px-sun { grid-template-columns: minmax(0, 1fr); gap: 12px; } }
+.px-sun-chart { position: relative; width: 100%; max-width: 420px; aspect-ratio: 1; margin: 0 auto; }
+.px-sun-chart svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.px-sun-node { --px-shape-mix: 11%; animation: px-shape-in 200ms ease-out; }
+.px-sun-node--roadmap { --px-shape-mix: 24%; }
+.px-sun-node--project { --px-shape-mix: 15%; }
+.px-sun-node--milestone { --px-shape-mix: 11%; }
+.px-sun-node--task { --px-shape-mix: 8%; }
+.px-sun-node--done { --px-shape-mix: 26%; }
+.px-sun-node--hot { --px-shape-mix: 34%; }
+.px-sun-node--task.px-sun-node--hot { --px-shape-mix: 18%; }
+.px-sun-node--done.px-sun-node--hot { --px-shape-mix: 36%; }
+.px-sun-seg { fill: color-mix(in srgb, var(--px-shape-c) var(--px-shape-mix), var(--px-surface)); stroke: var(--px-surface); stroke-width: 1.5; cursor: pointer; outline: none; transition: fill 150ms; }
+.px-sun-seg:focus-visible, .px-sun-node--pinned .px-sun-seg { stroke: var(--px-shape-c); stroke-width: 2; }
+.px-sun-edge { fill: var(--px-shape-c); stroke: var(--px-surface); stroke-width: 1.5; pointer-events: none; }
+.px-sun-lblpath { fill: none; stroke: none; }
+.px-sun-lbl { font-size: 11px; font-weight: 560; fill: var(--px-text); pointer-events: none; user-select: none; }
+.px-sun-node--roadmap .px-sun-lbl { font-weight: 620; }
+.px-sun-center {
+  position: absolute; left: 50%; top: 50%; width: 30%; aspect-ratio: 1; transform: translate(-50%, -50%);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; margin: 0; padding: 0;
+  border: none; border-radius: 50%; font: inherit; color: var(--px-text);
+  background: color-mix(in srgb, var(--px-shape-c) 9%, var(--px-surface)); transition: background 150ms;
+}
+.px-sun-center:disabled { cursor: default; opacity: 1; }
+.px-sun-center--up { cursor: pointer; }
+.px-sun-center--up:hover, .px-sun-center--up:focus-visible { outline: none; background: color-mix(in srgb, var(--px-shape-c) 18%, var(--px-surface)); }
+.px-sun-center-k { font-size: 9.5px; font-weight: 640; letter-spacing: 0.6px; text-transform: uppercase; color: var(--px-shape-c); }
+.px-sun-center-p { font-size: 24px; font-weight: 650; line-height: 1.15; font-variant-numeric: tabular-nums; }
+.px-sun-center-d, .px-sun-center-u { font-size: 10.5px; color: var(--px-text-dim); }
+.px-sun-center-u { display: none; }
+.px-sun-center--up:hover .px-sun-center-d, .px-sun-center--up:focus-visible .px-sun-center-d { display: none; }
+.px-sun-center--up:hover .px-sun-center-u, .px-sun-center--up:focus-visible .px-sun-center-u { display: block; }
+.px-sun-side { min-width: 0; }
+.px-sun-side-h { font-size: 10.5px; font-weight: 640; letter-spacing: 0.5px; text-transform: uppercase; color: var(--px-faint); margin-bottom: 6px; }
+.px-sun-rows { display: flex; flex-direction: column; gap: 2px; }
+.px-sun-row { display: block; width: 100%; margin: 0; padding: 7px 8px; border: none; border-radius: 8px; background: none; font: inherit; text-align: left; color: var(--px-text); cursor: pointer; }
+.px-sun-row--hot, .px-sun-row:focus-visible { outline: none; background: var(--px-surface-2); }
+.px-sun-row--zero { opacity: 0.5; }
+.px-sun-row-top { display: flex; align-items: baseline; gap: 10px; }
+.px-sun-row-t { flex: 1; min-width: 0; font-size: 12.5px; font-weight: 560; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.px-sun-row-v { font-size: 11.5px; color: var(--px-text-dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.px-sun-row-bot { display: flex; align-items: center; gap: 10px; margin-top: 5px; }
+.px-sun-track { flex: 1; height: 4px; border-radius: 2px; background: var(--px-surface-2); overflow: hidden; }
+.px-sun-row--hot .px-sun-track { background: var(--px-border); }
+.px-sun-track i { display: block; height: 100%; border-radius: 2px; background: color-mix(in srgb, var(--px-shape-c) 55%, var(--px-surface)); transition: width 320ms cubic-bezier(0.4, 0, 0.2, 1); }
+.px-sun-row-pc { width: 64px; font-size: 10.5px; color: var(--px-faint); font-variant-numeric: tabular-nums; text-align: right; }
+@media (prefers-reduced-motion: reduce) {
+  .px-sun-node, .px-sun-seg, .px-sun-center, .px-sun-track i { transition: none; animation: none; }
+}
+
 /* ── Roadmap graph — a top-to-bottom graph of a roadmap's projects, grouped and
    tinted by the owning VISION's colour (stored in the vision's attributes) ── */
 .px-rm-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }

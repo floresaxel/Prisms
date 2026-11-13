@@ -1,8 +1,8 @@
 /**
  * Plan › Vision's Shape card against the live stack: a seeded vision is charted
  * from the SYNCED rows (not from anything the page wrote itself), zooms into a
- * roadmap and back out, re-sizes by time left, and hands a task off to the
- * Roadmap screen.
+ * roadmap and back out, re-sizes by time left, switches to the sunburst view (and
+ * remembers it across a reload), and hands a task off to the Roadmap screen.
  *
  * The rules themselves (counting, layout, the sentence) are unit tested in
  * test/vision-shape*.test.ts; this proves they hold on real replicated data —
@@ -107,6 +107,32 @@ test('Plan › Vision charts where the work sits, and zooms into it', async ({ p
   // --- Esc goes back up a level ---
   await cell(id.r1).focus();
   await page.keyboard.press('Escape');
+  await expect(cell(id.v)).toHaveAttribute('data-row', '0');
+
+  // --- the same chart as a sunburst: the vision in the centre, roadmaps in ring 1 ---
+  const arc = (nodeId: string) => shape.getByTestId(`shape-arc-${nodeId}`);
+  const center = shape.getByTestId('shape-center');
+  await expect(shape.getByTestId('shape-view-icicle')).toHaveAttribute('aria-checked', 'true'); // the default
+  await shape.getByTestId('shape-view-sunburst').click();
+  await expect(cell(id.r1)).toHaveCount(0);
+  await expect(arc(id.r1)).toHaveAttribute('data-ring', '1');
+  await expect(arc(id.t5)).toHaveAttribute('data-ring', '4');
+  await expect(center).toContainText('Vision');
+  await expect(insight).toContainText('so it is not shown at this size.');
+
+  // zoom by the list beside the chart, then back up by the centre
+  await shape.getByTestId(`shape-row-${id.r1}`).click();
+  await expect(center).toContainText('Roadmap');
+  await expect(arc(id.r2)).toHaveCount(0);
+  await expect(arc(id.p1)).toHaveAttribute('data-ring', '1');
+  await center.click();
+  await expect(center).toContainText('Vision');
+
+  // the choice outlives a reload, and the icicle is one click away
+  await page.reload();
+  await expect(page.getByTestId('vis-detail')).toHaveAttribute('data-vision', id.v, { timeout: 30_000 });
+  await expect(arc(id.r1)).toBeVisible({ timeout: 30_000 });
+  await shape.getByTestId('shape-view-icicle').click();
   await expect(cell(id.v)).toHaveAttribute('data-row', '0');
 
   // --- pin a task, then open the roadmap it sits under ---
