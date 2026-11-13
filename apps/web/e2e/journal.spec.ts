@@ -136,8 +136,15 @@ test('create → reload → edit → delete (WYSIWYG) with emoji; day Export .md
   // above run well inside that window, so clicking straight through them lands
   // in it and is dropped — wait it out, then prove the unlock actually took
   // rather than discovering it much later as an empty editor.
+  // On a slow runner a click can still land inside that window and be dropped
+  // (CI, main, 2026-11-13), so retry — but only while the toggle still says
+  // locked, so a click that DID take is never toggled straight back.
   await page.waitForTimeout(300);
-  await page.getByTestId('journal-preview-toggle').click(); // back to editing
+  const toggle = page.getByTestId('journal-preview-toggle');
+  await expect(async () => {
+    if ((await toggle.getAttribute('data-state')) === 'locked') await toggle.click(); // back to editing
+    await expect(toggle).toHaveAttribute('data-state', 'unlocked', { timeout: 1_000 });
+  }).toPass({ timeout: 15_000 });
   await expect(page.getByTestId('journal-rich')).toBeVisible();
 
   // Export .md downloads exactly the stored markdown, named <today>.md. Wait for
