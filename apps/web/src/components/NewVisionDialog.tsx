@@ -132,7 +132,9 @@ export function NewVisionDialog({
   return (
     <Modal
       open={open}
-      size="full"
+      // Creating is a task of its own (full screen); editing corrects a vision
+      // that stays on screen, so it opens as a card over a lightly blurred page.
+      size={editingId ? 'card' : 'full'}
       title={editingId ? 'Edit vision' : 'New vision'}
       subtitle={
         editingId
