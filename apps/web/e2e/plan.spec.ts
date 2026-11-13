@@ -44,6 +44,9 @@ async function expectNoRejection(page: Page): Promise<void> {
 }
 
 test('Plan › Vision manages one vision at a time: create, rename, edit, reorder, delete', async ({ page }) => {
+  // Two reloads and two waits for the server to take a write: ~18s warm, close
+  // to the 60s default on a cold stack or a slow runner.
+  test.setTimeout(120_000);
   await register(page, 'vision');
   const ids = { v: randomUUID(), r: randomUUID() };
   const seed = await page.request.post('/sync/upload', {
@@ -136,6 +139,9 @@ test('Plan › Vision manages one vision at a time: create, rename, edit, reorde
   const newId = await page.getByTestId('vis-detail').getAttribute('data-vision');
   const order = () => list.locator('[data-testid^="vis-item-"]').evaluateAll((els) => els.map((e) => e.getAttribute('data-testid')));
   await expect.poll(order).toEqual([`vis-item-${ids.v}`, `vis-item-${newId}`]);
+  // Let the new vision's synced row land before working its menu: the handoff
+  // from the local copy is where the row once re-mounted under the click.
+  await expect(page.getByTestId('sync-state')).toHaveAttribute('data-sync', 'synced', { timeout: 30_000 });
   await page.getByTestId(`vis-menu-${newId}`).click();
   await expect(page.getByTestId('vis-menu-down')).toBeDisabled(); // already last
   await page.getByTestId('vis-menu-up').click();
