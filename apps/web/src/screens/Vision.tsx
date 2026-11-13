@@ -92,6 +92,8 @@ export function Vision({ ctx, onNavigate }: { ctx: CommandContext; onNavigate: (
   const [dialogOpen, setDialogOpen] = useState(false);
   /** The vision open in the edit dialog; '' when it is closed (or creating). */
   const [editingId, setEditingId] = useState('');
+  /** The vision whose ⋯ menu is open (kept here, so a row re-mount does not close it). */
+  const [menuFor, setMenuFor] = useState<string | null>(null);
   const editing = editingId ? tree.byId.get(editingId) : undefined;
 
   async function addVision(values: NewVisionValues) {
@@ -243,6 +245,8 @@ export function Vision({ ctx, onNavigate }: { ctx: CommandContext; onNavigate: (
                 </button>
                 <VisionMenu
                   vision={v}
+                  open={menuFor === v.id}
+                  onOpenChange={(o) => setMenuFor(o ? v.id : null)}
                   canUp={i > 0 && !busy}
                   canDown={i < visions.length - 1 && !busy}
                   onEdit={() => {
@@ -395,9 +399,15 @@ function VisionDetail({
 /**
  * A vision's ⋯ menu in the list: edit it, move it, delete it. Closes on an
  * outside click, on Escape (focus goes back to the button) and after any choice.
+ *
+ * Whether it is open is held by the SCREEN, not the row: a just-created vision's
+ * row can re-mount when its synced copy replaces the local one, and a menu that
+ * kept its own state closed under the user's pointer.
  */
 function VisionMenu({
   vision,
+  open,
+  onOpenChange,
   canUp,
   canDown,
   onEdit,
@@ -406,6 +416,8 @@ function VisionMenu({
   onDelete,
 }: {
   vision: Node;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   canUp: boolean;
   canDown: boolean;
   onEdit: () => void;
@@ -413,7 +425,8 @@ function VisionMenu({
   onDown: () => void;
   onDelete: () => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const setOpen = (next: boolean | ((o: boolean) => boolean)) =>
+    onOpenChange(typeof next === 'function' ? next(open) : next);
   const ref = useRef<HTMLDivElement | null>(null);
   const btn = useRef<HTMLButtonElement | null>(null);
 
