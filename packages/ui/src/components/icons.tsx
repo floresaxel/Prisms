@@ -12,7 +12,8 @@ export type IconName =
   | 'chart' | 'zap' | 'sliders' | 'search' | 'plus' | 'clock' | 'lock' | 'check'
   | 'x' | 'chevd' | 'chevl' | 'chevr' | 'play' | 'stop' | 'down' | 'up' | 'info'
   | 'alert' | 'flame' | 'trash' | 'cols' | 'gantt' | 'net' | 'scale' | 'list' | 'pen'
-  | 'dots' | 'route' | 'note' | 'tasklist' | 'eye' | 'lockbody' | 'lockshackle' | 'pin';
+  | 'dots' | 'route' | 'note' | 'tasklist' | 'eye' | 'lockbody' | 'lockshackle' | 'pin'
+  | 'order' | 'mindmap' | 'outline';
 
 /** Mount once, high in the tree (the app shell). Renders no visible output. */
 export function IconSprite() {
@@ -89,6 +90,11 @@ export function IconSprite() {
           between two points) already carries Roadmap, so the pair reads as
           "where you are going" / "how you get there". */}
       <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12Z" /><circle cx="12" cy="12" r="2.8" /></symbol>
+      {/* Plan › Roadmap's views: one box feeding two (what has to happen first),
+          a centre with branches both ways, and a tree indented under a line. */}
+      <symbol id="i-order" viewBox="0 0 24 24"><rect x="2" y="9" width="6" height="6" rx="1.5" /><rect x="16" y="3" width="6" height="6" rx="1.5" /><rect x="16" y="15" width="6" height="6" rx="1.5" /><path d="M8 12h3a2 2 0 0 0 2-2V8a2 2 0 0 1 2-2h1M11 12a2 2 0 0 1 2 2v2a2 2 0 0 0 2 2h1" /></symbol>
+      <symbol id="i-mindmap" viewBox="0 0 24 24"><circle cx="12" cy="12" r="2.6" /><circle cx="4" cy="6" r="1.8" /><circle cx="20" cy="6" r="1.8" /><circle cx="4" cy="18" r="1.8" /><circle cx="20" cy="18" r="1.8" /><path d="M5.6 7 9.8 10.5M18.4 7 14.2 10.5M5.6 17l4.2-3.5M18.4 17l-4.2-3.5" /></symbol>
+      <symbol id="i-outline" viewBox="0 0 24 24"><path d="M4 5h16M9 12h11M14 19h6M4 5v7h5M9 12v7h5" /></symbol>
     </svg>
   );
 }
