@@ -107,10 +107,20 @@ export function createCommands(store: OverlayStore, ctx: CommandContext, deps: E
     async promoteActivity(id: string, target: { parentId: string } | { habitId: string }): Promise<void> {
       await run('activity.promote', 'parentId' in target ? { id, parent_id: target.parentId } : { id, habit_id: target.habitId });
     },
-    /** A project under a roadmap (I1: `project`'s only legal parent). Roadmap tab. */
-    async createProject(input: { id?: string; roadmapId: string; title: string; sortOrder: string }): Promise<string> {
+    /**
+     * A project under a roadmap (I1: `project`'s only legal parent). Roadmap tab.
+     * `attributes` lets Plan › Roadmap › Flow create it already delivering an outcome.
+     */
+    async createProject(input: { id?: string; roadmapId: string; title: string; sortOrder: string; attributes?: Record<string, unknown> }): Promise<string> {
       const id = input.id ?? newId();
-      await run('node.create', { id, parent_id: input.roadmapId, node_type: 'project', title: input.title, sort_order: input.sortOrder });
+      await run('node.create', {
+        id,
+        parent_id: input.roadmapId,
+        node_type: 'project',
+        title: input.title,
+        sort_order: input.sortOrder,
+        ...(input.attributes && Object.keys(input.attributes).length > 0 ? { attributes: input.attributes } : {}),
+      });
       return id;
     },
     /** A roadmap under a vision (I1: `roadmap`'s only legal parent). */

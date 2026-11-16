@@ -11,12 +11,31 @@
  * the projects themselves) makes the successor's project wait on the
  * predecessor's. A project is BLOCKED while anything it waits on is unfinished,
  * and finished when it has tasks and none of them is open.
+ *
+ * One exception, for links drawn on the Flow view: an SS ("start together")
+ * edge straight from one project to another lets the successor start once the
+ * predecessor has STARTED, and the two share a step. A rolled-up link counts as
+ * SS only when every edge behind it is such a project-to-project SS edge.
  */
 import type { Edge, Node, TreeIndex } from '@prisms/core';
 
 import { buildShape, donePercentLabel, type ShapeNode } from './vision-shape';
 
 export type ProjectState = 'done' | 'blocked' | 'progress' | 'todo';
+
+/** How one project waits on another. */
+export type LinkKind = 'FS' | 'SS';
+
+/** One rolled-up "waits on" between two projects of the roadmap. */
+export interface RoadmapLink {
+  readonly from: string;
+  readonly to: string;
+  readonly kind: LinkKind;
+  /** The edge drawn straight from project to project, when there is one (editable on Flow). */
+  readonly edge: Edge | null;
+  /** True when edges between things INSIDE the two projects also make this link. */
+  readonly inner: boolean;
+}
 
 export interface RoadmapProject {
   readonly node: Node;
@@ -43,6 +62,8 @@ export interface RoadmapModel {
   readonly steps: readonly (readonly RoadmapProject[])[];
   /** Projects no dependency touches: they can happen any time. */
   readonly free: readonly RoadmapProject[];
+  /** Every rolled-up link, in roadmap order of the waiting project. */
+  readonly links: readonly RoadmapLink[];
   readonly tasks: number;
   readonly openTasks: number;
   readonly openMinutes: number;
@@ -71,17 +92,28 @@ export function buildRoadmapModel(tree: TreeIndex, edges: readonly Edge[], roadm
 
   const waits = new Map<string, Set<string>>();
   const unblocks = new Map<string, Set<string>>();
+  /** Per `from>to` pair: the direct project edge, whether all of it is SS, and whether inner edges add to it. */
+  const pairs = new Map<string, { edge: Edge | null; allSS: boolean; inner: boolean }>();
   for (const e of edges) {
     const from = projectOf(e.predecessor_id);
     const to = projectOf(e.successor_id);
     if (!from || !to || from === to) continue;
     (waits.get(to) ?? waits.set(to, new Set()).get(to)!).add(from);
     (unblocks.get(from) ?? unblocks.set(from, new Set()).get(from)!).add(to);
+    const direct = e.predecessor_id === from && e.successor_id === to;
+    const key = `${from}>${to}`;
+    const pair = pairs.get(key) ?? { edge: null, allSS: true, inner: false };
+    if (direct) pair.edge = e;
+    else pair.inner = true;
+    if (!direct || e.edge_type !== 'SS') pair.allSS = false;
+    pairs.set(key, pair);
   }
+  const kindOf = (from: string, to: string): LinkKind => (pairs.get(`${from}>${to}`)?.allSS ? 'SS' : 'FS');
   const inOrder = (ids: Set<string> | undefined) => [...(ids ?? [])].sort((a, b) => order.get(a)! - order.get(b)!);
 
-  // Step = the longest chain of prerequisites in front of a project. A rolled-up
-  // cycle (A's task waits on B's, B's on A's) is cut where it closes.
+  // Step = the longest chain of prerequisites in front of a project; an SS link
+  // shares its predecessor's step. A rolled-up cycle (A's task waits on B's,
+  // B's on A's) is cut where it closes.
   const depth = new Map<string, number>();
   const onPath = new Set<string>();
   const stepOf = (id: string): number => {
@@ -89,17 +121,19 @@ export function buildRoadmapModel(tree: TreeIndex, edges: readonly Edge[], roadm
     if (known !== undefined) return known;
     onPath.add(id);
     let d = 0;
-    for (const p of waits.get(id) ?? []) if (!onPath.has(p)) d = Math.max(d, stepOf(p) + 1);
+    for (const p of waits.get(id) ?? []) if (!onPath.has(p)) d = Math.max(d, stepOf(p) + (kindOf(p, id) === 'SS' ? 0 : 1));
     onPath.delete(id);
     depth.set(id, d);
     return d;
   };
 
   const finished = new Map(shapes.map((s) => [s.node.id, isFinished(s)]));
+  const started = new Map(shapes.map((s) => [s.node.id, isFinished(s) || s.tasks - s.openTasks > 0]));
   const projects: RoadmapProject[] = shapes.map((shape) => {
     const id = shape.node.id;
     const waitsOn = inOrder(waits.get(id));
-    const blockedBy = waitsOn.filter((p) => !finished.get(p));
+    // FS waits for the predecessor to finish; SS only for it to start.
+    const blockedBy = waitsOn.filter((p) => (kindOf(p, id) === 'SS' ? !started.get(p) : !finished.get(p)));
     const linked = waitsOn.length > 0 || (unblocks.get(id)?.size ?? 0) > 0;
     const state: ProjectState = finished.get(id)
       ? 'done'
@@ -123,12 +157,20 @@ export function buildRoadmapModel(tree: TreeIndex, edges: readonly Edge[], roadm
   const steps: RoadmapProject[][] = [];
   for (const p of projects) if (p.step !== null) (steps[p.step] ??= []).push(p);
 
+  const links: RoadmapLink[] = projects.flatMap((p) =>
+    p.waitsOn.map((from) => {
+      const pair = pairs.get(`${from}>${p.node.id}`)!;
+      return { from, to: p.node.id, kind: kindOf(from, p.node.id), edge: pair.edge, inner: pair.inner };
+    }),
+  );
+
   return {
     roadmap,
     projects,
     byId: new Map(projects.map((p) => [p.node.id, p])),
     steps: steps.filter(Boolean),
     free: projects.filter((p) => p.step === null),
+    links,
     tasks: root.tasks,
     openTasks: root.openTasks,
     openMinutes: root.openMinutes,
@@ -298,16 +340,21 @@ export const ROADMAP_VIEWS = [
   { value: 'outline', label: 'Outline', icon: 'outline' },
   { value: 'list', label: 'List', icon: 'list' },
 ] as const;
-export type RoadmapView = (typeof ROADMAP_VIEWS)[number]['value'];
+/** The builder (components/RoadmapFlow): first, and the default, wherever the screen offers it. */
+export const FLOW_VIEW = { value: 'flow', label: 'Flow', icon: 'flow' } as const;
+export type RoadmapView = (typeof ROADMAP_VIEWS)[number]['value'] | typeof FLOW_VIEW.value;
 export const DEFAULT_ROADMAP_VIEW: RoadmapView = 'order';
 export const ROADMAP_VIEW_KEY = 'prisms.roadmap.view';
 
-export function readRoadmapView(): RoadmapView {
+/** The remembered view; `withFlow` when Flow is on offer (it is then the default). */
+export function readRoadmapView(withFlow = false): RoadmapView {
+  const fallback: RoadmapView = withFlow ? FLOW_VIEW.value : DEFAULT_ROADMAP_VIEW;
   try {
     const v = localStorage.getItem(ROADMAP_VIEW_KEY);
-    return ROADMAP_VIEWS.some((x) => x.value === v) ? (v as RoadmapView) : DEFAULT_ROADMAP_VIEW;
+    if (v === FLOW_VIEW.value) return fallback;
+    return ROADMAP_VIEWS.some((x) => x.value === v) ? (v as RoadmapView) : fallback;
   } catch {
-    return DEFAULT_ROADMAP_VIEW;
+    return fallback;
   }
 }
 

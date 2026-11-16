@@ -158,6 +158,24 @@ describe('the card', () => {
     expect(view()).toBe('list');
   });
 
+  it('puts Flow first, and opens on it, when the screen offers it', () => {
+    render(createElement(RoadmapViews, { model, color: '#2563eb', onNavigate: vi.fn(), flow: createElement('div', { 'data-testid': 'the-flow' }) }));
+    expect(view()).toBe('flow');
+    const toggles = within(screen.getByRole('radiogroup', { name: 'Roadmap view' })).getAllByRole('radio');
+    expect(toggles.map((t) => t.textContent?.trim())).toEqual(['Flow', 'Order', 'Mind map', 'Outline', 'List']);
+    expect(screen.getByTestId('the-flow')).toBeTruthy();
+    expect(screen.queryByTestId('rm-strip')).toBeNull(); // Flow has its own details panel
+    fireEvent.click(screen.getByTestId('rm-view-order'));
+    expect(screen.queryByTestId('the-flow')).toBeNull();
+    expect(screen.getByTestId('rm-strip')).toBeTruthy();
+  });
+
+  it('falls back to Order when Flow was remembered but is not on offer', () => {
+    localStorage.setItem('prisms.roadmap.view', 'flow');
+    mount();
+    expect(view()).toBe('order');
+  });
+
   it('says what to do when the roadmap has no projects', () => {
     const f = roadmapFixture();
     const empty = buildRoadmapModel(f.tree, f.edges, f.ids.r2.id)!; // one project…
