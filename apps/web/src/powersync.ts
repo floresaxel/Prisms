@@ -1,6 +1,16 @@
 /** PowerSync web SDK setup (wa-sqlite/OPFS, §12.3) — two-layer store (M8). */
 import { PowerSyncDatabase } from '@powersync/web';
-import { clearReadCaches, clientSchema, createConnector, getDeviceId, startCommandUpload, type CommandRejection, type WatchableDb } from '@prisms/ui';
+import {
+  clearReadCaches,
+  CLIENT_TABLE_NAMES,
+  clientSchema,
+  createConnector,
+  getDeviceId,
+  startCommandUpload,
+  watchTablesFromSql,
+  type CommandRejection,
+  type WatchableDb,
+} from '@prisms/ui';
 
 import { config } from './config';
 
@@ -9,7 +19,10 @@ export function createDb(userId: string): PowerSyncDatabase {
   // (client_commands / overlay_effects / sync_review_items) the two-layer store needs.
   // §13.2/S9-F1: the OPFS filename is PER ACCOUNT, so signing in as a different
   // user on a shared device never opens the previous account's replica/queue.
-  return new PowerSyncDatabase({ schema: clientSchema, database: { dbFilename: `prisms-${userId}.db` } });
+  const db = new PowerSyncDatabase({ schema: clientSchema, database: { dbFilename: `prisms-${userId}.db` } });
+  // Each watch names its table in its SQL; reading it there saves the two lookup
+  // round-trips PowerSync otherwise makes per watch before the query can run.
+  return watchTablesFromSql(db, CLIENT_TABLE_NAMES);
 }
 
 export async function connectDb(db: PowerSyncDatabase, onReject: (r: CommandRejection[]) => void): Promise<() => void> {

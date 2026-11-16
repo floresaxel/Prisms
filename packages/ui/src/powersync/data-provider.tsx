@@ -194,6 +194,21 @@ export interface SharedRows {
   user_settings: Row[];
 }
 
+/**
+ * The pending optimistic effects, as the provider's ONE `overlay_effects`
+ * subscription read them. Screen-local reads merge their table's slice from here
+ * rather than each opening an overlay watch of its own: a watch is a round-trip
+ * to the database worker, and eleven of them asking the same table the same
+ * question were a third of the queries a cold load made before its first row.
+ */
+export interface OverlayRead {
+  /** Pending effects by `table_name`; a table with none has no entry. */
+  byTable: ReadonlyMap<string, readonly OverlayEffect[]>;
+  /** No overlay result yet this session — a merged read may still be missing a pending write. */
+  isLoading: boolean;
+  isFetching: boolean;
+}
+
 export interface PrismsData {
   /** The session-scoped fact context (built once, memoized on the shared rows). */
   factContext: FactContext;
@@ -201,6 +216,8 @@ export interface PrismsData {
   tree: TreeIndex;
   /** The merged shared row sets. */
   rows: SharedRows;
+  /** The shared overlay read, for the screen-local merges in `hooks.ts`. */
+  overlay: OverlayRead;
   /** A shared subscription is refetching (any base table). */
   isFetching: boolean;
   /**
@@ -298,9 +315,14 @@ export function PrismsDataProvider({ children }: { children: ReactNode }) {
     rows.blocker_rules.length > 0;
   const isHydrated = firstResult && (status.hasSynced === true || anyRow);
 
+  const overlay = useMemo<OverlayRead>(
+    () => ({ byTable: overlayByTable, isLoading: overlayQ.isLoading, isFetching: overlayQ.isFetching }),
+    [overlayByTable, overlayQ.isLoading, overlayQ.isFetching],
+  );
+
   const value = useMemo<PrismsData>(
-    () => ({ factContext, tree: factContext.tree, rows, isFetching, isHydrated }),
-    [factContext, rows, isFetching, isHydrated],
+    () => ({ factContext, tree: factContext.tree, rows, overlay, isFetching, isHydrated }),
+    [factContext, rows, overlay, isFetching, isHydrated],
   );
 
   return <PrismsDataContext.Provider value={value}>{children}</PrismsDataContext.Provider>;

@@ -414,3 +414,6 @@ export const clientSchema = new Schema({
   client_commands,
   overlay_effects,
 });
+
+/** Every table the device has, by name — what a watched query can be reading. */
+export const CLIENT_TABLE_NAMES: readonly string[] = clientSchema.tables.map((table) => table.name);

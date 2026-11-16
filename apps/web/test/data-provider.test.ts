@@ -27,10 +27,18 @@ const EMPTY: Row[] = [];
 let OVERLAY: Row[] = [];
 const RENAME_EFFECT: Row = { command_id: 'c1', hlc: '000000000001-0000-dev', table_name: 'nodes', row_id: 'n1', op: 'update', fields: '{"title":"RENAMED"}', seq: 0 };
 
+// A screen-local table (read through `useRows`, not the provider) and a pending
+// optimistic relabel of its one row.
+const TAGS: Row[] = [
+  { id: 't1', user_id: 'u1', label: 'Alpha', habit_id: null, deleted_at: null, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' },
+];
+const RELABEL_EFFECT: Row = { command_id: 'c2', hlc: '000000000002-0000-dev', table_name: 'tags', row_id: 't1', op: 'update', fields: '{"label":"RELABELED"}', seq: 0 };
+
 const useQueryCalls: string[] = [];
 function dataFor(sql: string): Row[] {
   if (/overlay_effects/i.test(sql)) return OVERLAY;
   if (/from\s+nodes\b/i.test(sql)) return NODES;
+  if (/from\s+tags\b/i.test(sql)) return TAGS;
   return EMPTY;
 }
 
@@ -57,7 +65,7 @@ vi.mock('@prisms/core', async (importOriginal) => {
 });
 
 // Imported AFTER the mocks (vitest hoists vi.mock).
-import { PrismsDataProvider, useFactContext } from '@prisms/ui';
+import { __resetReadCacheForTests, PrismsDataProvider, useFactContext, useTagCatalog } from '@prisms/ui';
 
 function ScreenA() {
   useFactContext();
@@ -110,11 +118,27 @@ function RenameHarness() {
   );
 }
 
+/** A screen over a SCREEN-LOCAL table, plus a button that adds a pending relabel of its row. */
+function TagScreen() {
+  const tags = useTagCatalog();
+  return createElement('div', { 'data-testid': 'tags' }, tags.map((t) => t.label).join(','));
+}
+function TagHarness() {
+  const [, force] = useState(0);
+  return createElement(
+    Fragment,
+    null,
+    createElement('button', { 'data-testid': 'relabel', onClick: () => { OVERLAY = [RELABEL_EFFECT]; force((x) => x + 1); } }, 'relabel'),
+    createElement(PrismsDataProvider, null, createElement(TagScreen)),
+  );
+}
+
 afterEach(() => {
   cleanup();
   useQueryCalls.length = 0;
   OVERLAY = [];
   h.seeds = 0;
+  __resetReadCacheForTests();
 });
 
 describe('§7.14/§7.12 PrismsDataProvider — seed-once + incremental maintenance', () => {
@@ -155,5 +179,22 @@ describe('§7.14/§7.12 PrismsDataProvider — seed-once + incremental maintenan
     expect(screen.getByTestId('title').textContent).toBe('RENAMED');
     // … WITHOUT rebuilding the index (the whole point of S8-F1)
     expect(h.seeds).toBe(1);
+  });
+
+  it('a screen-local read merges its overlay from the provider — it opens no overlay watch of its own', () => {
+    render(createElement(TagHarness));
+    expect(screen.getByTestId('tags').textContent).toBe('Alpha'); // canonical
+
+    fireEvent.click(screen.getByTestId('relabel')); // a pending optimistic write on `tags`
+
+    // the screen-local read shows it, having sliced it out of the shared overlay…
+    expect(screen.getByTestId('tags').textContent).toBe('RELABELED');
+    // …so the overlay is still subscribed exactly once, by the provider: every
+    // watch is a round-trip to the database worker, and a per-read overlay watch
+    // was a third of a cold load's queries.
+    const overlayReads = new Set(useQueryCalls.filter((sql) => /overlay_effects/i.test(sql)));
+    expect(overlayReads.size).toBe(1);
+    // the 9 shared tables + the overlay + this screen's one table
+    expect(new Set(useQueryCalls).size).toBe(11);
   });
 });
