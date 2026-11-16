@@ -226,7 +226,13 @@ function useRowsRead(sql: string, params: readonly unknown[] = EMPTY_ROWS as rea
   // The overlay comes from the provider's single subscription, sliced by table —
   // not from a watch of its own per read (see `OverlayRead`).
   const { overlay } = usePrismsData();
-  const replica = replicaQ.data; // undefined while first-loading (distinct from an empty result)
+  // `undefined` while first-loading — which is not what the hook itself hands
+  // back: `useQuery` returns an EMPTY ARRAY until its first result. Taken at face
+  // value that placeholder read as "loaded, and empty", so a cold read merged
+  // the pending overlay onto no rows, overwrote the cached rows it was supposed
+  // to fall back on, and reported the table as produced before anything had been
+  // read. A table that has not been read yet is not an empty table.
+  const replica = replicaQ.isLoading ? undefined : replicaQ.data;
   const effects = (table === null ? undefined : overlay.byTable.get(table)) ?? EMPTY_EFFECTS;
   const produced = replica !== undefined;
 

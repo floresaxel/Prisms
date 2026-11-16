@@ -34,17 +34,43 @@ const TAGS: Row[] = [
 ];
 const RELABEL_EFFECT: Row = { command_id: 'c2', hlc: '000000000002-0000-dev', table_name: 'tags', row_id: 't1', op: 'update', fields: '{"label":"RELABELED"}', seq: 0 };
 
+// A running timer on n1 that is already canonical, and a pending clock-out of it:
+// an UPDATE of one column, with no insert beside it in the overlay.
+const OPEN_ENTRY: Row = {
+  id: 'e1', user_id: 'u1', task_id: 'n1', started_at: '2026-01-01T09:00:00Z', ended_at: null, focus_factor: null,
+  completed_session: null, planned: 0, device_id: 'd1', deleted_at: null, created_at: '2026-01-01T09:00:00Z', updated_at: '2026-01-01T09:00:00Z',
+};
+const CLOCK_OUT_EFFECT: Row = { command_id: 'c3', hlc: '000000000003-0000-dev', table_name: 'time_entries', row_id: 'e1', op: 'update', fields: '{"ended_at":"2026-01-01T10:00:00Z"}', seq: 0 };
+// A second timer started on this device and not yet uploaded: a pending INSERT, a whole row.
+const CLOCK_IN_EFFECT: Row = {
+  command_id: 'c5', hlc: '000000000005-0000-dev', table_name: 'time_entries', row_id: 'e2', op: 'insert', seq: 0,
+  fields: JSON.stringify({ ...OPEN_ENTRY, id: 'e2', started_at: '2026-01-01T11:00:00Z' }),
+};
+// A pending settings.update on a device whose settings row the server has not created yet.
+const RESET_HOUR_EFFECT: Row = { command_id: 'c4', hlc: '000000000004-0000-dev', table_name: 'user_settings', row_id: 'u1', op: 'update', fields: '{"day_reset_hour":7}', seq: 0 };
+let ENTRY_ROWS: Row[] = EMPTY;
+/**
+ * Hold the time-entries read in its loading state, the way every read is for a
+ * few milliseconds at boot. While it loads, the real `useQuery` hands back an
+ * EMPTY ARRAY — not `undefined` — and that placeholder is what got mistaken for
+ * a table with no rows in it.
+ */
+let ENTRIES_LOADING = false;
+const LOADING_PLACEHOLDER: Row[] = [];
+
 const useQueryCalls: string[] = [];
 function dataFor(sql: string): Row[] {
   if (/overlay_effects/i.test(sql)) return OVERLAY;
   if (/from\s+nodes\b/i.test(sql)) return NODES;
   if (/from\s+tags\b/i.test(sql)) return TAGS;
+  if (/from\s+time_entries\b/i.test(sql)) return ENTRY_ROWS;
   return EMPTY;
 }
 
 vi.mock('@powersync/react', () => ({
   useQuery: (sql: string) => {
     useQueryCalls.push(sql);
+    if (ENTRIES_LOADING && /from\s+time_entries\b/i.test(sql)) return { data: LOADING_PLACEHOLDER, isLoading: true, isFetching: true };
     return { data: dataFor(sql), isLoading: false, isFetching: false };
   },
   useStatus: () => ({ hasSynced: true }),
@@ -65,7 +91,7 @@ vi.mock('@prisms/core', async (importOriginal) => {
 });
 
 // Imported AFTER the mocks (vitest hoists vi.mock).
-import { __resetReadCacheForTests, PrismsDataProvider, useFactContext, useTagCatalog } from '@prisms/ui';
+import { __resetReadCacheForTests, PrismsDataProvider, useFactContext, usePrismsData, useTagCatalog } from '@prisms/ui';
 
 function ScreenA() {
   useFactContext();
@@ -133,10 +159,36 @@ function TagHarness() {
   );
 }
 
+/** The merged time entries as the provider serves them, and the fact index built over them. */
+function EntryScreen() {
+  useFactContext(); // the index is where a time entry with no start threw
+  const entries = usePrismsData().rows.time_entries;
+  return createElement(
+    'div',
+    { 'data-testid': 'entries' },
+    entries.map((r) => `${String(r['id'])}:${r['ended_at'] == null ? 'running' : 'stopped'}`).join(','),
+  );
+}
+function EntryHarness() {
+  const [, force] = useState(0);
+  return createElement(
+    Fragment,
+    null,
+    createElement('button', { 'data-testid': 'entries-arrive', onClick: () => { ENTRIES_LOADING = false; force((x) => x + 1); } }, 'arrive'),
+    createElement(PrismsDataProvider, null, createElement(EntryScreen)),
+  );
+}
+
+function ResetHourScreen() {
+  return createElement('div', { 'data-testid': 'reset-hour' }, String(useFactContext().dayResetHour));
+}
+
 afterEach(() => {
   cleanup();
   useQueryCalls.length = 0;
   OVERLAY = [];
+  ENTRY_ROWS = EMPTY;
+  ENTRIES_LOADING = false;
   h.seeds = 0;
   __resetReadCacheForTests();
 });
@@ -196,5 +248,41 @@ describe('§7.14/§7.12 PrismsDataProvider — seed-once + incremental maintenan
     expect(overlayReads.size).toBe(1);
     // the 9 shared tables + the overlay + this screen's one table
     expect(new Set(useQueryCalls).size).toBe(11);
+  });
+
+  it('a pending UPDATE is not merged onto a table that has not been read yet — the boot order that blanked the app', () => {
+    // Clock out of a timer that had already synced, with the upload unable to go
+    // through, then reload. At boot the overlay is read before time_entries, so
+    // for a moment the clock-out is in hand and the entry it patches is not.
+    ENTRY_ROWS = [OPEN_ENTRY];
+    ENTRIES_LOADING = true;
+    OVERLAY = [CLOCK_OUT_EFFECT, CLOCK_IN_EFFECT];
+
+    // Merging in that gap made a time entry of `ended_at` alone; with no start it
+    // threw in the fact index — at boot, so every reload hit it again, and the
+    // upload that would have cleared the command never got to run.
+    expect(() => render(createElement(EntryHarness))).not.toThrow();
+    // Not read yet means NOTHING is merged — no half-row, and not the pending
+    // insert either: the table goes from unread to whole in one step.
+    expect(screen.getByTestId('entries').textContent).toBe('');
+
+    fireEvent.click(screen.getByTestId('entries-arrive'));
+    // the table arrives: the pending update patches a real row, the pending insert joins it
+    expect(screen.getByTestId('entries').textContent).toBe('e1:stopped,e2:running');
+  });
+
+  it('a pending update whose row is simply not there is dropped, not shown as a row', () => {
+    // read and loaded — but the entry is gone (tombstoned from another device)
+    OVERLAY = [CLOCK_OUT_EFFECT];
+    expect(() => render(createElement(EntryHarness))).not.toThrow();
+    expect(screen.getByTestId('entries').textContent).toBe('');
+  });
+
+  it('user_settings is the exception: a pending settings.update shows before the server has created the row', () => {
+    // no settings row has ever synced to this device; the server creates it on
+    // the first settings.update, so until then the pending update IS the row
+    OVERLAY = [RESET_HOUR_EFFECT];
+    render(createElement(PrismsDataProvider, null, createElement(ResetHourScreen)));
+    expect(screen.getByTestId('reset-hour').textContent).toBe('7');
   });
 });
