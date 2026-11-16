@@ -1,5 +1,6 @@
 /** Better Auth client calls (§13) — plain fetch against the proxied API. */
 import { config } from './config';
+import type { SessionAnswer } from './session-boot';
 
 export interface SessionUser {
   id: string;
@@ -9,11 +10,30 @@ export interface SessionUser {
 
 const api = config.apiBaseUrl;
 
-export async function getSession(): Promise<SessionUser | null> {
-  const res = await fetch(`${api}/api/auth/get-session`, { credentials: 'include' });
-  if (!res.ok) return null;
-  const body = (await res.json()) as { user?: SessionUser } | null;
-  return body?.user ?? null;
+/**
+ * Who is signed in, as the server sees it.
+ *
+ * Only a real answer is one: a signed-out session comes back as `200 null`
+ * (or a 401/403), and that is "signed out". Anything else — no network, a 5xx
+ * while the API restarts — is "unknown", not "signed out": the app already on
+ * screen from local data stays there rather than being thrown back to the
+ * sign-in form by a server hiccup.
+ */
+export async function checkSession(doFetch: typeof fetch = fetch): Promise<SessionAnswer> {
+  let res: Response;
+  try {
+    res = await doFetch(`${api}/api/auth/get-session`, { credentials: 'include' });
+  } catch {
+    return { kind: 'unknown' };
+  }
+  if (res.status === 401 || res.status === 403) return { kind: 'signed-out' };
+  if (!res.ok) return { kind: 'unknown' };
+  try {
+    const body = (await res.json()) as { user?: SessionUser } | null;
+    return body?.user ? { kind: 'user', user: body.user } : { kind: 'signed-out' };
+  } catch {
+    return { kind: 'unknown' };
+  }
 }
 
 async function post(path: string, payload: unknown): Promise<Response> {
