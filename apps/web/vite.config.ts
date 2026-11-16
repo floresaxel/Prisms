@@ -17,7 +17,8 @@ export default defineConfig({
       // (app shell from cache + data from OPFS) is exercisable by the e2e.
       devOptions: { enabled: true, type: 'module' },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,wasm,png}'],
+        // woff2: the bundled brand fonts, so an offline reload keeps its type
+        globPatterns: ['**/*.{js,css,html,wasm,png,svg,woff2}'],
         maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
         // SPA offline: serve the cached shell for navigations (airplane mode),
         // but never intercept the proxied API/sync calls or the PowerSync
@@ -28,19 +29,28 @@ export default defineConfig({
       manifest: {
         name: 'Prisms',
         short_name: 'Prisms',
-        theme_color: '#ffffff',
-        background_color: '#f6f7f9',
+        theme_color: '#0e1726',
+        background_color: '#f4f5f7',
         display: 'standalone',
         // Installability requires real icons (audit S10-F7); generated under
         // apps/web/public/ (R1), maskable variant keeps the glyph in the safe zone.
+        // The Threshold mark; new file names (not the old ones overwritten) so
+        // browsers and OS launchers that cache install icons by URL pick it up.
         icons: [
-          { src: '/icon-192.png', sizes: '192x192', type: 'image/png' },
-          { src: '/icon-512.png', sizes: '512x512', type: 'image/png' },
-          { src: '/icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+          { src: '/icon-threshold-192.png', sizes: '192x192', type: 'image/png' },
+          { src: '/icon-threshold-512.png', sizes: '512x512', type: 'image/png' },
+          { src: '/icon-threshold-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
       },
     }),
   ],
+  build: {
+    // Never inline a font as a data: URL. Some bundled font subsets are under
+    // Vite's 4 KB inline limit, and production serves `font-src 'self'`
+    // (infra/nginx/web.conf), which refuses data: fonts. Everything else keeps
+    // the default limit.
+    assetsInlineLimit: (file) => (/\.(woff2?|ttf|otf)$/.test(file) ? false : undefined),
+  },
   optimizeDeps: { exclude: ['@journeyapps/wa-sqlite', '@powersync/web'] },
   worker: { format: 'es' },
   server: {

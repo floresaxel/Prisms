@@ -228,3 +228,12 @@ export { Layout, PEEK_DELAY_MS, type LayoutProps, type NavItemSpec, type NavGrou
 export { Ic, IconSprite, type IcProps, type IconName } from './components/icons';
 export { List, ListItem, Skeleton, ListSkeleton, type ListProps, type ListItemProps, type SkeletonProps } from './components/List';
 export { Modal, type ModalProps } from './components/Modal';
+export {
+  ThresholdMark,
+  DepthDoor,
+  LAYER_DOORS,
+  markStroke,
+  type ThresholdMarkProps,
+  type DepthDoorProps,
+  type MarkTone,
+} from './components/Mark';

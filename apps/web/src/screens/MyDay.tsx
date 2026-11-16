@@ -11,9 +11,11 @@
  */
 import { useEffect, useState } from 'react';
 
-import { asEpochMillis, bucketDate, type Instant } from '@prisms/core';
+import { ancestorsOf, asEpochMillis, bucketDate, type Instant, type NodeType, type TreeIndex } from '@prisms/core';
 import {
+  DepthDoor,
   Modal,
+  ThresholdMark,
   Skeleton,
   useAgenda,
   useBlockedTasks,
@@ -199,7 +201,7 @@ export function MyDay({ ctx, onNavigate }: { ctx: CommandContext; onNavigate?: (
         <div className="px-day-left">
           {running && (
             <div className="px-run-banner" data-testid="run-banner">
-              <span className="px-dot" />
+              <ThresholdMark size={18} compact />
               <div>
                 <div className="px-run-title">{running.task?.title ?? 'Running task'}</div>
                 <div className="px-run-sub">
@@ -298,6 +300,7 @@ export function MyDay({ ctx, onNavigate }: { ctx: CommandContext; onNavigate?: (
         </div>
 
         <div className="px-day-rail">
+          {running && <WhyThisMatters taskId={running.entry.task_id} tree={ctxFacts.tree} />}
           <TodayPlan agenda={agenda} now={nowMin} ctxFacts={ctxFacts} commands={commands} onNavigate={onNavigate} />
           <HabitsToday habits={habits} onNavigate={onNavigate} />
         </div>
@@ -383,13 +386,57 @@ function TodayPlan({
               ) : b.anchored ? (
                 <Ic name="lock" style={{ color: 'var(--px-slate)', width: 13, height: 13 }} />
               ) : now2 ? (
-                <span className="px-tag px-tag--amber">now</span>
+                <span className="px-tag px-tag--now"><ThresholdMark size={11} compact />now</span>
               ) : null}
             </div>
           );
         })}
       </div>
       <div className="px-rail-foot"><button className="px-linklike" onClick={() => onNavigate?.('/agenda')}>Open the week →</button></div>
+    </div>
+  );
+}
+
+/** Door depth per layer of the plan (brand: one door per layer, vision outermost). */
+const LAYER_DEPTH: Record<NodeType, number> = { vision: 0, roadmap: 1, project: 2, milestone: 3, task: 4, activity: 5 };
+const LAYER_LABEL: Record<NodeType, string> = {
+  vision: 'Vision',
+  roadmap: 'Roadmap',
+  project: 'Project',
+  milestone: 'Milestone',
+  task: 'Task',
+  activity: 'Activity',
+};
+
+/**
+ * Right-rail "Why this matters": the running task walked back to its vision,
+ * outermost door first. Each row's glyph is that layer's door at its depth; the
+ * running task's door is the filled one, because it is the one happening now.
+ * A task with no parents (a habit occurrence, an inbox capture) shows nothing —
+ * there is no chain to draw.
+ */
+function WhyThisMatters({ taskId, tree }: { taskId: string; tree: TreeIndex }) {
+  const self = tree.byId.get(taskId);
+  if (!self) return null;
+  const chain = [...ancestorsOf(tree, taskId).reverse(), self];
+  if (chain.length < 2) return null;
+  return (
+    <div className="px-card" data-testid="why-this-matters">
+      <div className="px-card-h">Why this matters <span className="px-hint">{chain.length} doors</span></div>
+      <ol className="px-trail">
+        {chain.map((n) => {
+          const now = n.id === taskId;
+          return (
+            <li key={n.id} className={`px-trail-row${now ? ' px-trail-row--now' : ''}`} aria-current={now ? 'step' : undefined}>
+              <DepthDoor depth={LAYER_DEPTH[n.node_type]} now={now} size={24} />
+              <span className="px-trail-txt">
+                <span className="px-trail-lvl">{LAYER_LABEL[n.node_type]}</span>
+                <span className="px-trail-name">{n.title}</span>
+              </span>
+            </li>
+          );
+        })}
+      </ol>
     </div>
   );
 }
