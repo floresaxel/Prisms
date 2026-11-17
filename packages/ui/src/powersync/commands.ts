@@ -97,10 +97,20 @@ export function createCommands(store: OverlayStore, ctx: CommandContext, deps: E
       });
       return id;
     },
-    /** Inbox item (§1.2): a parentless `activity` node, justification deferred until promote. */
-    async createActivity(input: { title: string; sortOrder: string }): Promise<string> {
+    /**
+     * Inbox item (§1.2): a parentless `activity` node, justification deferred until
+     * promote. `dueDate` is set when it is captured FROM My Day — it was meant for
+     * that day, and the date survives promotion into a real task.
+     */
+    async createActivity(input: { title: string; sortOrder: string; dueDate?: string }): Promise<string> {
       const id = newId();
-      await run('node.create', { id, node_type: 'activity', title: input.title, sort_order: input.sortOrder });
+      await run('node.create', {
+        id,
+        node_type: 'activity',
+        title: input.title,
+        sort_order: input.sortOrder,
+        ...(input.dueDate ? { due_date: input.dueDate } : {}),
+      });
       return id;
     },
     /** activity.promote (§8.1, I3): an inbox item becomes a real task by gaining a justification. */
