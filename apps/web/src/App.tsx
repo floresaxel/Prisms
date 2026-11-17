@@ -35,35 +35,29 @@ import { ReviewBanner } from './components/ReviewBanner';
 import { SyncChip } from './components/SyncChip';
 import { isDesktop, osNotify } from './desktop';
 import { rejectionMessage } from './format';
+import { ScreenBoundary } from './components/ScreenBoundary';
 import { clearLocalAccount, connectDb, dbFor, forgetDb } from './powersync';
-import { Agenda } from './screens/Agenda';
-import { Automations } from './screens/Automations';
-import { Dashboard } from './screens/Dashboard';
-import { Habits } from './screens/Habits';
-import { Journal } from './screens/Journal';
+import {
+  Agenda,
+  Automations,
+  Dashboard,
+  Habits,
+  Journal,
+  MyDay,
+  preloadAllScreens,
+  preloadScreen,
+  Projects,
+  Review,
+  Roadmap,
+  Settings,
+  Tasks,
+  Vision,
+  whenIdle,
+  type Route,
+} from './screens';
+// Not split: it is the first thing a signed-out browser sees, and small.
 import { Login } from './screens/Login';
-import { MyDay } from './screens/MyDay';
-import { Projects } from './screens/Projects';
-import { Review } from './screens/Review';
-import { Roadmap } from './screens/Roadmap';
-import { Settings } from './screens/Settings';
-import { Tasks } from './screens/Tasks';
-import { Vision } from './screens/Vision';
 import { forgetCachedUser, readCachedUser, rememberUser, settleBootSession } from './session-boot';
-
-type Route =
-  | '/'
-  | '/tasks'
-  | '/agenda'
-  | '/habits'
-  | '/journal'
-  | '/vision'
-  | '/roadmap'
-  | '/projects'
-  | '/dashboard'
-  | '/automations'
-  | '/review'
-  | '/settings';
 
 const ROUTES = new Set<Route>(['/', '/tasks', '/agenda', '/habits', '/journal', '/vision', '/roadmap', '/projects', '/dashboard', '/automations', '/review', '/settings']);
 
@@ -105,27 +99,44 @@ const CRUMBS: Record<Route, BreadcrumbSpec> = {
   '/settings': { section: 'Workspace', page: 'Settings' },
 };
 
-/** Boot route: apply an old→new redirect (replaceState) if the path is legacy. */
-function resolveBootRoute(): Route {
-  const path = window.location.pathname;
+/**
+ * Where a URL lands, and the address-bar rewrites that gets it there — pure, so
+ * the landing screen can be preloaded before anything is rewritten. First hop:
+ * an old→new redirect for a legacy path; second hop: a route whose HASH moved
+ * to a route of its own (`/projects#roadmap`). An unknown path lands on My Day
+ * and keeps its URL.
+ */
+function landingFor(path: string, hash: string): { route: Route; rewrites: string[] } {
+  const rewrites: string[] = [];
   const redirect = REDIRECTS[path];
+  let href: string;
   if (redirect) {
-    window.history.replaceState({}, '', redirect);
-    return resolveHash(redirect);
+    rewrites.push(redirect);
+    href = redirect;
+  } else if (ROUTES.has(path as Route)) {
+    href = path + hash;
+  } else {
+    return { route: '/', rewrites };
   }
-  return ROUTES.has(path as Route) ? resolveHash(path + window.location.hash) : '/';
+  const [hrefPath = '/', hrefHash] = href.split('#');
+  const moved = hrefHash ? HASH_REDIRECTS[hrefPath]?.[`#${hrefHash}`] : undefined;
+  if (moved) {
+    rewrites.push(moved);
+    return { route: moved as Route, rewrites };
+  }
+  return { route: hrefPath as Route, rewrites };
 }
 
-/** Second hop: a route whose HASH moved to a route of its own (`/projects#roadmap`). */
-function resolveHash(href: string): Route {
-  const [path = '/', hash] = href.split('#');
-  const moved = hash ? HASH_REDIRECTS[path]?.[`#${hash}`] : undefined;
-  if (moved) {
-    window.history.replaceState({}, '', moved);
-    return moved as Route;
-  }
-  return path as Route;
+/** Boot route: apply the old→new redirects (replaceState) if the path is legacy. */
+function resolveBootRoute(): Route {
+  const { route, rewrites } = landingFor(window.location.pathname, window.location.hash);
+  for (const href of rewrites) window.history.replaceState({}, '', href);
+  return route;
 }
+
+// Start fetching the screen this page opens on now, while the rest of the
+// startup chunk is still being evaluated (see `screens.ts`).
+preloadScreen(landingFor(window.location.pathname, window.location.hash).route);
 
 /** Shell composition — mounted inside PrismsDataProvider so it can read the
  *  inbox/review counts for the nav badges. Layout itself stays presentational. */
@@ -238,7 +249,8 @@ function Shell({
           {rejections.map((r) => rejectionMessage(r.reject_code)).join(' ')}
         </div>
       )}
-      {screen}
+      {/* keyed by route: a screen that failed to load does not take the next one down with it */}
+      <ScreenBoundary key={route}>{screen}</ScreenBoundary>
     </Layout>
   );
 }
@@ -323,6 +335,10 @@ function AuthedApp({
     window.history.pushState({}, '', href);
     setRoute((href.split('#')[0] || '/') as Route);
   }, []);
+
+  // Once the first screen is up and the browser has a quiet moment, fetch the
+  // others, so moving between screens never waits on a chunk.
+  useEffect(() => whenIdle(preloadAllScreens), []);
 
   const ctx: CommandContext = useMemo(() => ({ userId: user.id, deviceId: getDeviceId() }), [user.id]);
 
