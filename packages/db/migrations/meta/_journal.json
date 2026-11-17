@@ -106,6 +106,13 @@
       "when": 1786056000000,
       "tag": "0014_journal_title",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1786058000000,
+      "tag": "0016_journal_tags",
+      "breakpoints": true
     }
   ]
 }

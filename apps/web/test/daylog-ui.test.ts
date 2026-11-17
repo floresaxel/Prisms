@@ -160,7 +160,7 @@ describe('DayLogFooter — the full marker matrix', () => {
   it('renders nothing for a null or empty log', () => {
     const { container, rerender } = render(createElement(DayLogFooter, { entries: null, timezone: NY }));
     expect(container.innerHTML).toBe('');
-    rerender(createElement(DayLogFooter, { entries: { v: 1, scheduled: [], completed: [] }, timezone: NY }));
+    rerender(createElement(DayLogFooter, { entries: { v: 2, scheduled: [], clocked: [], clocked_minutes: 0, completed: [] }, timezone: NY }));
     expect(container.innerHTML).toBe('');
   });
 });

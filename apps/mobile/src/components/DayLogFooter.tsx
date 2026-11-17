@@ -9,14 +9,13 @@
  */
 import { StyleSheet, Text, View } from 'react-native';
 
-import { formatDayLogTime, type DayLogEntries } from '@prisms/core';
+import { formatDayLogDuration, formatDayLogTime, isDayLogEmpty, type DayLogEntries } from '@prisms/core';
 
 import { theme } from '../ui';
 
 export function DayLogFooter({ entries, timezone }: { entries: DayLogEntries | null; timezone: string }) {
-  if (!entries) return null;
-  const { scheduled, completed, truncated } = entries;
-  if (scheduled.length === 0 && completed.length === 0) return null;
+  if (!entries || isDayLogEmpty(entries)) return null;
+  const { scheduled, clocked, completed, truncated } = entries;
   const at = (ts: string) => formatDayLogTime(ts, timezone);
 
   return (
@@ -38,6 +37,22 @@ export function DayLogFooter({ entries, timezone }: { entries: DayLogEntries | n
           ))}
           {truncated && truncated.scheduled > 0 && (
             <Text style={s.more} testID="daylog-sched-more">+{truncated.scheduled} more</Text>
+          )}
+        </View>
+      )}
+
+      {clocked.length > 0 && (
+        <View style={s.section} testID="daylog-clocked">
+          <Text style={s.label}>Clocked · {formatDayLogDuration(entries.clocked_minutes)}</Text>
+          {clocked.map((k) => (
+            <View key={k.entry_id} style={s.row}>
+              <Text style={s.time}>{at(k.started_at)}–{k.ended_at === null ? '' : at(k.ended_at)}</Text>
+              <Text style={s.title2} numberOfLines={1}>{k.title}</Text>
+              <Text style={s.mark}>{k.minutes === null ? 'running' : formatDayLogDuration(k.minutes)}</Text>
+            </View>
+          ))}
+          {truncated && truncated.clocked > 0 && (
+            <Text style={s.more} testID="daylog-clock-more">+{truncated.clocked} more</Text>
           )}
         </View>
       )}

@@ -631,6 +631,9 @@ export const journal_entries = pgTable(
     // User-editable heading (migration 0014). '' = untitled: clients render the
     // default "Note · <date>" rather than storing it.
     title: text('title').notNull().default(''),
+    // Free-text labels for grouping/filtering notes (migration 0016): a JSON array
+    // of canonical (lower-cased, de-duplicated) strings. [] = untagged.
+    tags: jsonb('tags').$type<string[]>().notNull().default([]),
   },
   (t) => [
     // [0-9] not \d — Drizzle's sql template is JS; \d would lose its backslash.

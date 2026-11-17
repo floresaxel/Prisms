@@ -72,8 +72,13 @@ describe.skipIf(!adminUrl)('J2 journal dispatcher + export', () => {
       device_id: device,
       commands: [{ id: randomUUID(), name: 'journal.set_title', hlc, payload: { id, title }, schema_version: 1 }],
     });
+  const setTags = (userId: string, id: string, tags: string[], hlc: string, device = 'deva') =>
+    dispatcher.handleUpload(userId, {
+      device_id: device,
+      commands: [{ id: randomUUID(), name: 'journal.set_tags', hlc, payload: { id, tags }, schema_version: 1 }],
+    });
   const liveRows = (userId: string, date: string) =>
-    sql`SELECT id, content, month_key, locked, title FROM journal_entries WHERE user_id = ${userId} AND entry_date = ${date} AND deleted_at IS NULL`;
+    sql`SELECT id, content, month_key, locked, title, tags FROM journal_entries WHERE user_id = ${userId} AND entry_date = ${date} AND deleted_at IS NULL`;
   const conflicts = (userId: string) =>
     sql`SELECT detail FROM sync_review_items WHERE user_id = ${userId} AND item_type = 'hlc_conflict'`;
 
@@ -287,6 +292,58 @@ describe.skipIf(!adminUrl)('J2 journal dispatcher + export', () => {
     expect(rows[0]!['title']).toBe('Named on B');
   });
 
+  // --- note tags (migration 0016) ------------------------------------------
+
+  it('tags a note: stored canonical (lower-cased, de-duplicated), content untouched', async () => {
+    const u = randomUUID();
+    const row = randomUUID();
+    ok(await write(u, row, '2026-09-10', 'the prose', hlcOf(1)));
+    expect((await liveRows(u, '2026-09-10'))[0]!['tags']).toEqual([]); // untagged by default
+
+    ok(await setTags(u, row, ['Work', ' #health ', 'work', ''], hlcOf(2)));
+    const rows = await liveRows(u, '2026-09-10');
+    expect(rows[0]!['tags']).toEqual(['work', 'health']); // the server re-normalises
+    expect(rows[0]!['content']).toBe('the prose');
+
+    ok(await setTags(u, row, [], hlcOf(3)));
+    expect((await liveRows(u, '2026-09-10'))[0]!['tags']).toEqual([]);
+  });
+
+  it('tags on a day with no note are rejected — nothing to tag', async () => {
+    const u = randomUUID();
+    const [r] = ok(await setTags(u, randomUUID(), ['x'], hlcOf(1)));
+    expect(r).toMatchObject({ result: 'rejected', reject_code: 'E_NOT_FOUND' });
+  });
+
+  it("cannot tag another user's note", async () => {
+    const owner = randomUUID();
+    const row = randomUUID();
+    ok(await write(owner, row, '2026-09-11', 'mine', hlcOf(1)));
+    const [r] = ok(await setTags(randomUUID(), row, ['stolen'], hlcOf(2)));
+    expect(r).toMatchObject({ result: 'rejected' });
+    expect((await liveRows(owner, '2026-09-11'))[0]!['tags']).toEqual([]);
+  });
+
+  it('tags and a content edit from two devices BOTH survive; a stale tag write loses', async () => {
+    const u = randomUUID();
+    const row = randomUUID();
+    ok(await write(u, row, '2026-09-12', 'first', hlcOf(1, 'deva')));
+    ok(await setTags(u, row, ['from-b'], hlcOf(2, 'devb'), 'devb'));
+    ok(await write(u, row, '2026-09-12', 'second', hlcOf(3, 'deva')));
+    ok(await setTags(u, row, ['stale'], hlcOf(1, 'devc'), 'devc')); // strictly older → loses
+    const rows = await liveRows(u, '2026-09-12');
+    expect(rows[0]!['content']).toBe('second');
+    expect(rows[0]!['tags']).toEqual(['from-b']);
+  });
+
+  it('a hand-built payload cannot exceed the bounds', async () => {
+    const u = randomUUID();
+    const row = randomUUID();
+    ok(await write(u, row, '2026-09-13', 'x', hlcOf(1)));
+    const [r] = ok(await setTags(u, row, Array.from({ length: 500 }, (_, i) => `t${i}`), hlcOf(2)));
+    expect(r).toMatchObject({ result: 'rejected' }); // schema ceiling, before storage
+    expect((await liveRows(u, '2026-09-13'))[0]!['tags']).toEqual([]);
+  });
   it('server-derives month_key = entry_date.slice(0,7)', async () => {
     const user = randomUUID();
     const days = ['2026-01-31', '2026-12-01', '2026-06-15'];

@@ -359,8 +359,12 @@ test('standalone Journal screen: lists the current month, opens a note, lazily l
     timeout: 15_000,
   });
 
-  // the archive is server-sourced, so it includes BOTH months (even the lazy one).
-  const [dl] = await Promise.all([page.waitForEvent('download'), page.getByTestId('journal-archive').click()]);
+  // the Journal screen no longer offers the archive; it lives in Settings and is
+  // server-sourced, so it includes BOTH months (even the lazy one).
+  await expect(page.getByTestId('journal-archive')).toHaveCount(0);
+  await goto(page, 'settings');
+  await page.getByTestId('settings-tab-data').click();
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.getByTestId('journal-export-archive').click()]);
   expect(dl.suggestedFilename()).toMatch(/^prisms-journal_.*\.zip$/);
   const files = unzipSync(new Uint8Array(await readFile(await dl.path())));
   expect(strFromU8(files[`journal/${yearOf(pastA)}/${pastA}.md`]!)).toBe(pastContent);

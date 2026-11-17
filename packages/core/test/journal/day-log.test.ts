@@ -21,13 +21,16 @@ import {
   computeDayLogsByDate,
   DAY_LOG_MAX_ENTRIES,
   dayLogEntriesSchema,
+  dayLogRefs,
+  filterDayLog,
+  formatDayLogDuration,
   formatDayLogTime,
   isDayLogEmpty,
   renderDayLogMarkdown,
   type DayLogEntries,
 } from '../../src/journal/day-log';
 import type { Node, ScheduleBlock } from '../../src/domain/entities';
-import { idOf, makeBlock, makeNode } from '../helpers/fixtures';
+import { idOf, makeBlock, makeEntry, makeNode } from '../helpers/fixtures';
 
 const NY = 'America/New_York';
 
@@ -180,7 +183,7 @@ describe('computeDayLog — membership (D2)', () => {
     const t = task(1, { completed_at: one });
     const log = computeDayLog({ date: day, nodes: [t], blocks: [block(1, t.id, noon, one)], ...settings });
     expect(dayLogEntriesSchema.parse(log)).toEqual(log);
-    expect(log!.v).toBe(1);
+    expect(log!.v).toBe(2);
   });
 });
 
@@ -204,7 +207,7 @@ describe('computeDayLog — determinism and truncation', () => {
     const log = computeDayLog({ date: day, ...crowd(), ...settings })!;
     expect(log.scheduled).toHaveLength(DAY_LOG_MAX_ENTRIES);
     expect(log.completed).toHaveLength(DAY_LOG_MAX_ENTRIES);
-    expect(log.truncated).toEqual({ scheduled: 20, completed: 20 });
+    expect(log.truncated).toEqual({ scheduled: 20, clocked: 0, completed: 20 });
   });
 
   it('omits `truncated` when nothing overflowed', () => {
@@ -392,10 +395,19 @@ describe('rendering (D7)', () => {
   });
 
   it('renders "+N more" for a truncated list', () => {
-    const many: DayLogEntries = { v: 1, scheduled: [], completed: [], truncated: { scheduled: 0, completed: 7 } };
+    const many: DayLogEntries = {
+      v: 2,
+      scheduled: [],
+      clocked: [],
+      clocked_minutes: 0,
+      completed: [],
+      truncated: { scheduled: 0, clocked: 0, completed: 7 },
+    };
     many.completed.push({
       task_id: idOf(1),
       title: 'One of many',
+      project: null,
+      vision: null,
       completed_at: '2026-05-08T17:00:00.000Z',
       disposition: 'completed',
       planned: true,
@@ -446,8 +458,9 @@ describe('composeDayMarkdown (D7) — content is verbatim', () => {
   it('returns content untouched when there is no log', () => {
     expect(composeDayMarkdown('just a note', null)).toBe('just a note');
     expect(composeDayMarkdown('just a note', undefined)).toBe('just a note');
-    expect(composeDayMarkdown('just a note', { v: 1, scheduled: [], completed: [] })).toBe('just a note');
-    expect(isDayLogEmpty({ v: 1, scheduled: [], completed: [] })).toBe(true);
+    const empty: DayLogEntries = { v: 2, scheduled: [], clocked: [], clocked_minutes: 0, completed: [] };
+    expect(composeDayMarkdown('just a note', empty)).toBe('just a note');
+    expect(isDayLogEmpty(empty)).toBe(true);
   });
 
   it('property: content is always a verbatim prefix of the composed file', () => {
@@ -457,5 +470,185 @@ describe('composeDayMarkdown (D7) — content is verbatim', () => {
       }),
       { numRuns: 100 },
     );
+  });
+});
+
+describe('computeDayLog — clocked time + project/vision attribution', () => {
+  const day = '2026-05-08';
+  // vision 1 › roadmap 2 › project 3 › task 4;  vision 5 › project 6 › task 7
+  const tree: Node[] = [
+    makeNode({ id: idOf(1), node_type: 'vision', title: 'Health' }),
+    makeNode({ id: idOf(2), node_type: 'roadmap', parent_id: idOf(1), title: 'Roadmap' }),
+    makeNode({ id: idOf(3), node_type: 'project', parent_id: idOf(2), title: 'Marathon' }),
+    makeNode({ id: idOf(4), node_type: 'task', parent_id: idOf(3), title: 'Long run' }),
+    makeNode({ id: idOf(5), node_type: 'vision', title: 'Craft' }),
+    makeNode({ id: idOf(6), node_type: 'project', parent_id: idOf(5), title: 'Novel' }),
+    makeNode({ id: idOf(7), node_type: 'task', parent_id: idOf(6), title: 'Draft ch. 3' }),
+  ];
+  const runStart = '2026-05-08T12:00:00.000Z'; // 08:00 EDT
+  const runEnd = '2026-05-08T13:30:00.000Z'; // 09:30 EDT → 90 min
+  const entries = [
+    makeEntry({ id: idOf(501), task_id: idOf(4), started_at: runStart, ended_at: runEnd }),
+    makeEntry({ id: idOf(502), task_id: idOf(7), started_at: '2026-05-08T18:00:00.000Z', ended_at: '2026-05-08T18:45:00.000Z' }),
+  ];
+
+  it('logs clocked time per entry with its duration and the day total', () => {
+    const log = computeDayLog({ date: day, nodes: tree, blocks: [], timeEntries: entries, ...settings })!;
+    expect(log.clocked.map((c) => [c.entry_id, c.minutes])).toEqual([[idOf(501), 90], [idOf(502), 45]]);
+    expect(log.clocked_minutes).toBe(135);
+  });
+
+  it('rolls each line up to its nearest project and vision', () => {
+    const log = computeDayLog({ date: day, nodes: tree, blocks: [], timeEntries: entries, ...settings })!;
+    expect(log.clocked[0]).toMatchObject({
+      project: { id: idOf(3), title: 'Marathon' },
+      vision: { id: idOf(1), title: 'Health' },
+    });
+    expect(log.clocked[1]).toMatchObject({ project: { id: idOf(6) }, vision: { id: idOf(5) } });
+  });
+
+  it('attributes scheduled and completed lines too, and leaves a rootless task unattributed', () => {
+    const loose = makeNode({ id: idOf(8), node_type: 'task', title: 'Loose', completed_at: '2026-05-08T17:00:00.000Z' });
+    const done = makeNode({ id: idOf(9), node_type: 'task', parent_id: idOf(3), title: 'Stretch', completed_at: '2026-05-08T17:30:00.000Z' });
+    const b = block(1, idOf(4), '2026-05-08T20:00:00.000Z', '2026-05-08T21:00:00.000Z');
+    const log = computeDayLog({ date: day, nodes: [...tree, loose, done], blocks: [b], ...settings })!;
+    expect(log.scheduled[0]?.project?.id).toBe(idOf(3));
+    expect(log.completed.find((c) => c.task_id === loose.id)).toMatchObject({ project: null, vision: null });
+    expect(log.completed.find((c) => c.task_id === done.id)?.vision?.id).toBe(idOf(1));
+  });
+
+  it('a running clock has no end and no duration, and adds nothing to the total', () => {
+    const running = makeEntry({ id: idOf(503), task_id: idOf(4), started_at: runStart, ended_at: null });
+    const log = computeDayLog({ date: day, nodes: tree, blocks: [], timeEntries: [running], ...settings })!;
+    expect(log.clocked[0]).toMatchObject({ ended_at: null, minutes: null });
+    expect(log.clocked_minutes).toBe(0);
+    expect(renderDayLogMarkdown(log, { timezone: NY })).toContain('- 08:00– (running) Long run');
+  });
+
+  it('buckets a clock to the day it STARTED on, and a clock-only day is not empty', () => {
+    // 23:30 EDT on the 8th → 00:30 on the 9th: still the 8th.
+    const late = makeEntry({ id: idOf(504), task_id: idOf(4), started_at: '2026-05-09T03:30:00.000Z', ended_at: '2026-05-09T04:30:00.000Z' });
+    const facts = { nodes: tree, blocks: [], timeEntries: [late] };
+    expect(computeDayLog({ date: '2026-05-08', ...facts, ...settings })?.clocked).toHaveLength(1);
+    expect(computeDayLog({ date: '2026-05-09', ...facts, ...settings })).toBeNull();
+  });
+
+  it('skips deleted entries, entries on a gone task, and dirty timestamps', () => {
+    const facts = {
+      nodes: tree,
+      blocks: [],
+      timeEntries: [
+        makeEntry({ id: idOf(510), task_id: idOf(4), started_at: runStart, ended_at: runEnd, deleted_at: runEnd }),
+        makeEntry({ id: idOf(511), task_id: idOf(99), started_at: runStart, ended_at: runEnd }),
+        makeEntry({ id: idOf(512), task_id: idOf(4), started_at: 'nope', ended_at: runEnd }),
+      ],
+    };
+    expect(computeDayLog({ date: day, ...facts, ...settings })).toBeNull();
+  });
+
+  it('treats a backwards end as still running rather than a negative duration', () => {
+    const odd = makeEntry({ id: idOf(513), task_id: idOf(4), started_at: runEnd, ended_at: runStart });
+    const log = computeDayLog({ date: day, nodes: tree, blocks: [], timeEntries: [odd], ...settings })!;
+    expect(log.clocked[0]?.minutes).toBeNull();
+  });
+
+  it('survives a parent cycle without looping', () => {
+    const a = makeNode({ id: idOf(20), node_type: 'task', parent_id: idOf(21), title: 'A' });
+    const c = makeNode({ id: idOf(21), node_type: 'task', parent_id: idOf(20), title: 'B' });
+    const e = makeEntry({ id: idOf(514), task_id: idOf(20), started_at: runStart, ended_at: runEnd });
+    const log = computeDayLog({ date: day, nodes: [a, c], blocks: [], timeEntries: [e], ...settings })!;
+    expect(log.clocked[0]).toMatchObject({ project: null, vision: null });
+  });
+
+  it('the day total counts every entry even when the list is capped', () => {
+    const many = Array.from({ length: DAY_LOG_MAX_ENTRIES + 5 }, (_, i) =>
+      makeEntry({
+        id: idOf(600 + i),
+        task_id: idOf(4),
+        started_at: new Date(Date.parse(runStart) + i * 60_000).toISOString(),
+        ended_at: new Date(Date.parse(runStart) + i * 60_000 + 30_000 * 2).toISOString(),
+      }),
+    );
+    const log = computeDayLog({ date: day, nodes: tree, blocks: [], timeEntries: many, ...settings })!;
+    expect(log.clocked).toHaveLength(DAY_LOG_MAX_ENTRIES);
+    expect(log.truncated?.clocked).toBe(5);
+    expect(log.clocked_minutes).toBe(DAY_LOG_MAX_ENTRIES + 5);
+  });
+
+  it('is deterministic under row order and matches the by-date path', () => {
+    const forward = computeDayLog({ date: day, nodes: tree, blocks: [], timeEntries: entries, ...settings });
+    const reversed = computeDayLog({ date: day, nodes: [...tree].reverse(), blocks: [], timeEntries: [...entries].reverse(), ...settings });
+    expect(reversed).toEqual(forward);
+    const byDate = computeDayLogsByDate({ nodes: tree, blocks: [], timeEntries: entries }, settings);
+    expect(byDate.get(day)).toEqual(forward);
+    expect(dayLogEntriesSchema.safeParse(forward).success).toBe(true);
+  });
+
+  it('renders a Clocked section with the total, between Scheduled and Completed', () => {
+    const done = makeNode({ id: idOf(9), node_type: 'task', parent_id: idOf(3), title: 'Stretch', completed_at: '2026-05-08T17:30:00.000Z' });
+    const b = block(1, idOf(4), '2026-05-08T20:00:00.000Z', '2026-05-08T21:00:00.000Z');
+    const log = computeDayLog({ date: day, nodes: [...tree, done], blocks: [b], timeEntries: entries, ...settings })!;
+    const md = renderDayLogMarkdown(log, { timezone: NY });
+    expect(md).toContain('**Clocked** — 2h 15m');
+    expect(md).toContain('- 08:00–09:30 (1h 30m) Long run');
+    expect(md).toContain('- 14:00–14:45 (45m) Draft ch. 3');
+    expect(md.indexOf('**Scheduled**')).toBeLessThan(md.indexOf('**Clocked**'));
+    expect(md.indexOf('**Clocked**')).toBeLessThan(md.indexOf('**Completed**'));
+  });
+});
+
+describe('formatDayLogDuration', () => {
+  it('formats whole minutes', () => {
+    expect(formatDayLogDuration(0)).toBe('0m');
+    expect(formatDayLogDuration(45)).toBe('45m');
+    expect(formatDayLogDuration(60)).toBe('1h');
+    expect(formatDayLogDuration(135)).toBe('2h 15m');
+    expect(formatDayLogDuration(-5)).toBe('0m');
+    expect(formatDayLogDuration(Number.NaN)).toBe('0m');
+  });
+});
+
+describe('filterDayLog / dayLogRefs — narrowing by project and vision', () => {
+  const day = '2026-05-08';
+  const tree: Node[] = [
+    makeNode({ id: idOf(1), node_type: 'vision', title: 'Health' }),
+    makeNode({ id: idOf(3), node_type: 'project', parent_id: idOf(1), title: 'Marathon' }),
+    makeNode({ id: idOf(4), node_type: 'task', parent_id: idOf(3), title: 'Long run' }),
+    makeNode({ id: idOf(5), node_type: 'vision', title: 'Craft' }),
+    makeNode({ id: idOf(6), node_type: 'project', parent_id: idOf(5), title: 'Novel' }),
+    makeNode({ id: idOf(7), node_type: 'task', parent_id: idOf(6), title: 'Draft', completed_at: '2026-05-08T19:00:00.000Z' }),
+  ];
+  const timeEntries = [
+    makeEntry({ id: idOf(501), task_id: idOf(4), started_at: '2026-05-08T12:00:00.000Z', ended_at: '2026-05-08T13:00:00.000Z' }),
+    makeEntry({ id: idOf(502), task_id: idOf(7), started_at: '2026-05-08T18:00:00.000Z', ended_at: '2026-05-08T18:30:00.000Z' }),
+  ];
+  const log = computeDayLog({ date: day, nodes: tree, blocks: [], timeEntries, ...settings })!;
+
+  it('no filter returns the log unchanged', () => {
+    expect(filterDayLog(log, { project_id: null, vision_id: null })).toBe(log);
+    expect(filterDayLog(null, { project_id: idOf(3), vision_id: null })).toBeNull();
+  });
+
+  it('narrows every list and recomputes the clocked total', () => {
+    const out = filterDayLog(log, { project_id: idOf(6), vision_id: null })!;
+    expect(out.clocked.map((c) => c.entry_id)).toEqual([idOf(502)]);
+    expect(out.completed.map((c) => c.task_id)).toEqual([idOf(7)]);
+    expect(out.clocked_minutes).toBe(30);
+  });
+
+  it('a vision filter keeps everything under it', () => {
+    expect(filterDayLog(log, { project_id: null, vision_id: idOf(1) })?.clocked.map((c) => c.entry_id)).toEqual([idOf(501)]);
+  });
+
+  it('both set means BOTH must match, and a miss yields null', () => {
+    expect(filterDayLog(log, { project_id: idOf(3), vision_id: idOf(5) })).toBeNull();
+    expect(filterDayLog(log, { project_id: idOf(99), vision_id: null })).toBeNull();
+  });
+
+  it('lists the distinct projects and visions of a day, A–Z', () => {
+    const refs = dayLogRefs(log);
+    expect(refs.projects.map((p) => p.title)).toEqual(['Marathon', 'Novel']);
+    expect(refs.visions.map((v) => v.title)).toEqual(['Craft', 'Health']);
+    expect(dayLogRefs(null)).toEqual({ projects: [], visions: [] });
   });
 });

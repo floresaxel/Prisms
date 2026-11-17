@@ -32,8 +32,8 @@ import { buildTreeIndex } from '../../src/graph/tree';
 import { idOf, makeEdge, makeEntry, makeNode } from '../helpers/fixtures';
 
 describe('catalog completeness + strictness (DoD schema test)', () => {
-  it('registers all 50 §8.1 verbs (incl. layout.renormalize_order) + 7 tag + 2 review + 4 journal + 5 step verbs and resolves names', () => {
-    expect(COMMAND_NAMES.length).toBe(69);
+  it('registers all 50 §8.1 verbs (incl. layout.renormalize_order) + 7 tag + 2 review + 5 journal + 5 step verbs and resolves names', () => {
+    expect(COMMAND_NAMES.length).toBe(70);
     expect(isCommandName('node.create')).toBe(true);
     expect(isCommandName('node.set_attributes')).toBe(true); // vision colour + horizon, after creation
     expect(isCommandName('layout.renormalize_order')).toBe(true); // §7.10a, M1
@@ -43,6 +43,7 @@ describe('catalog completeness + strictness (DoD schema test)', () => {
     expect(isCommandName('journal.delete')).toBe(true);
     expect(isCommandName('journal.set_locked')).toBe(true); // per-day read-only, synced (0013)
     expect(isCommandName('journal.set_title')).toBe(true); // editable heading (0014)
+    expect(isCommandName('journal.set_tags')).toBe(true); // note tags (0016)
     expect(isCommandName('step.add')).toBe(true); // task checklist, W3/D4
     expect(isCommandName('step.toggle')).toBe(true);
     expect(isCommandName('step.remove')).toBe(true);

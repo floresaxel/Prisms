@@ -18,6 +18,7 @@ import {
   canonicalStreak,
   childrenOf,
   computeDayLog,
+  computeDayLogsByDate,
   criticalPath,
   DEFAULT_JOURNAL_DAY_LOG,
   DEFAULT_WINDOWS,
@@ -1517,16 +1518,43 @@ export function useDayLog(date: IsoDate): DayLogEntries | null {
   const { factContext: ctx, rows } = usePrismsData();
   const { journalDayLog } = useUserSettings();
   const blockRows = rows.schedule_blocks;
+  const entryRows = rows.time_entries;
   return useMemo(() => {
     if (!journalDayLog) return null;
     return computeDayLog({
       date,
       nodes: ctx.tree.byId.values(), // live nodes only (tombstones excluded)
       blocks: blockRows.map(toScheduleBlock),
+      timeEntries: entryRows.map(toTimeEntry),
       dayResetHour: ctx.dayResetHour,
       timezone: ctx.timezone,
     });
-  }, [ctx, blockRows, date, journalDayLog]);
+  }, [ctx, blockRows, entryRows, date, journalDayLog]);
+}
+
+/**
+ * Every day's generated log in one pass, keyed by day — what the Journal screen's
+ * project / vision filter reads to decide which days a project or vision touches.
+ * Same inputs and the same core function as `useDayLog`, so the two cannot
+ * disagree; one traversal instead of one per listed day. Empty when the built-in
+ * automation is off.
+ */
+export function useDayLogsByDate(): ReadonlyMap<IsoDate, DayLogEntries> {
+  const { factContext: ctx, rows } = usePrismsData();
+  const { journalDayLog } = useUserSettings();
+  const blockRows = rows.schedule_blocks;
+  const entryRows = rows.time_entries;
+  return useMemo(() => {
+    if (!journalDayLog) return new Map<IsoDate, DayLogEntries>();
+    return computeDayLogsByDate(
+      {
+        nodes: ctx.tree.byId.values(),
+        blocks: blockRows.map(toScheduleBlock),
+        timeEntries: entryRows.map(toTimeEntry),
+      },
+      { dayResetHour: ctx.dayResetHour, timezone: ctx.timezone },
+    );
+  }, [ctx, blockRows, entryRows, journalDayLog]);
 }
 
 /** Server-computed aggregates (burndown, streaks, …) with their freshness. */

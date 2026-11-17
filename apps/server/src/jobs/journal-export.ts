@@ -22,8 +22,8 @@ import {
   DEFAULT_TIMEZONE,
   type DayLogEntries,
 } from '@prisms/core';
-import { journal_entries, nodes, schedule_blocks, user_settings } from '@prisms/db';
-import { and, asc, eq, isNotNull, isNull, inArray, or } from 'drizzle-orm';
+import { journal_entries, nodes, schedule_blocks, time_entries, user_settings } from '@prisms/db';
+import { and, asc, eq, isNull } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 
 export interface JournalExportEntry {
@@ -79,34 +79,34 @@ export async function runJournalExport(db: PostgresJsDatabase, userId: string): 
     .from(schedule_blocks)
     .where(liveCommittedBlocks);
 
-  // Only the nodes the log can name: the completions themselves, plus whatever a
-  // committed block points at (a scheduled task need not be done — it renders as
-  // an unchecked line, and without its row there would be no title to render).
+  // Every live node, not just the ones a line names: the project / vision a line
+  // rolls up to is found by walking UP from the task, so the ancestors must be
+  // here too. One user's tree is small next to the rows already read above.
   const factNodes = await db
     .select({
       id: nodes.id,
       title: nodes.title,
+      parent_id: nodes.parent_id,
+      node_type: nodes.node_type,
       completed_at: nodes.completed_at,
       completion_disposition: nodes.completion_disposition,
       deleted_at: nodes.deleted_at,
     })
     .from(nodes)
-    .where(
-      and(
-        eq(nodes.user_id, userId),
-        isNull(nodes.deleted_at),
-        or(
-          isNotNull(nodes.completed_at),
-          inArray(
-            nodes.id,
-            db.select({ task_id: schedule_blocks.task_id }).from(schedule_blocks).where(liveCommittedBlocks),
-          ),
-        ),
-      ),
-    );
+    .where(and(eq(nodes.user_id, userId), isNull(nodes.deleted_at)));
 
+  const timeEntryRows = await db
+    .select({
+      id: time_entries.id,
+      task_id: time_entries.task_id,
+      started_at: time_entries.started_at,
+      ended_at: time_entries.ended_at,
+      deleted_at: time_entries.deleted_at,
+    })
+    .from(time_entries)
+    .where(and(eq(time_entries.user_id, userId), isNull(time_entries.deleted_at)));
   const logs = computeDayLogsByDate(
-    { nodes: factNodes, blocks },
+    { nodes: factNodes, blocks, timeEntries: timeEntryRows },
     {
       dayResetHour: settings?.day_reset_hour ?? DEFAULT_DAY_RESET_HOUR,
       timezone: settings?.timezone ?? DEFAULT_TIMEZONE,

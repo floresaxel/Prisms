@@ -183,6 +183,8 @@ const task_steps = new Table({
 const decision_boards = new Table({
   user_id: column.text,
   title: column.text,
+  // free-text note tags (migration 0016); a JSON array, shipped as text.
+  tags: column.text,
   created_at: column.text,
   updated_at: column.text,
   deleted_at: column.text,
