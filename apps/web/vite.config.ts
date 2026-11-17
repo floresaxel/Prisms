@@ -3,6 +3,23 @@ import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
 /**
+ * The wa-sqlite builds this app never loads (load plan, phase 4).
+ *
+ * `@powersync/web` ships four: sync and async, each plain and Multiple-Ciphers
+ * (`mc-`). Which one runs is decided by the VFS and the encryption key — the
+ * default IndexedDB VFS with no key, as `createDb` opens it, loads ONLY
+ * `wa-sqlite-async` (`DEFAULT_MODULE_FACTORIES` in its `vfs.js`). Precaching the
+ * other three cost every first visit ~5 MB of WASM it would never run, so they
+ * are left out of the precache — and the OPFS VFS glue goes with them.
+ *
+ * If `createDb` ever moves to an OPFS VFS or an encryption key, a different
+ * build loads: the runtime rule below still caches it on first use, but update
+ * this list so it is precached for offline too.
+ */
+export const UNUSED_SQLITE_ASSET =
+  /\/assets\/(?:mc-wa-sqlite[\w-]*|wa-sqlite-(?!async-)[\w-]+|OPFSCoopSyncVFS-[\w-]+|OPFSWriteAheadVFS-[\w-]+|AccessHandlePoolVFS-[\w-]+)\.(?:wasm|js)$/;
+
+/**
  * Dev: the API and /sync are reverse-proxied so the browser treats them as
  * same-origin (cookies + CSRF just work). PowerSync's wa-sqlite WASM is
  * excluded from dep optimization. vite-plugin-pwa generates the Workbox
@@ -19,6 +36,19 @@ export default defineConfig({
       workbox: {
         globPatterns: ['**/*.{js,css,html,wasm,png}'],
         maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
+        // every screen chunk stays precached (offline navigation); only the
+        // SQLite builds nothing loads are dropped — see UNUSED_SQLITE_ASSET
+        manifestTransforms: [
+          async (entries) => ({ manifest: entries.filter((e) => !UNUSED_SQLITE_ASSET.test(`/${e.url.replace(/^\//, '')}`)), warnings: [] }),
+        ],
+        // …and should one of them ever load after all, keep it for next time
+        runtimeCaching: [
+          {
+            urlPattern: ({ url }) => UNUSED_SQLITE_ASSET.test(url.pathname),
+            handler: 'CacheFirst',
+            options: { cacheName: 'prisms-sqlite-builds' },
+          },
+        ],
         // SPA offline: serve the cached shell for navigations (airplane mode),
         // but never intercept the proxied API/sync calls or the PowerSync
         // stream path (audit S10-F7).
