@@ -8,6 +8,7 @@ export const UI_PACKAGE = '@prisms/ui' as const;
 // data layer
 export { appSchema, clientSchema, client_commands, overlay_effects, sync_review_items, CLIENT_TABLE_NAMES, LOCAL_ONLY_TABLE_NAMES } from './powersync/schema';
 export {
+  CONFIRM_SETTLE_MS,
   createConnector,
   startCommandUpload,
   type ConnectorOptions,
@@ -91,6 +92,7 @@ export {
   createSqlOverlayStore,
   readMergedRows,
   type OverlayStore,
+  type OverlayStoreOptions,
   type PendingCommand,
   type SqlExecutor,
   type SqlTx,
