@@ -111,6 +111,36 @@ describe('startCommandUpload — envelope upload driven by client_commands', () 
     stop();
   });
 
+  it('comes back for writes that are settling, about settleMs later, instead of on the 15s retry', async () => {
+    // one applied command whose stamped row is in the replica: arrived, now settling
+    const { db, raw } = fakeWatchableDb([]);
+    raw.getAll.mockImplementation(async (sql: string) => {
+      if (sql.includes("status = 'applied'")) return [{ id: 'c9' }];
+      if (sql.includes('FROM overlay_effects WHERE command_id')) return [{ table_name: 'nodes', row_id: 'n1', op: 'update' }];
+      if (sql.startsWith('SELECT * FROM nodes')) return [{ id: 'n1', deleted_at: null, last_modified_by_command_id: 'c9' }];
+      return [];
+    });
+    const timeouts: { fn: () => void; ms: number }[] = [];
+    const stop = startCommandUpload(db, {
+      apiBaseUrl: 'http://api.test',
+      deviceId: 'web-1',
+      fetch: vi.fn() as never,
+      settleMs: 300,
+      setInterval: vi.fn(() => 0 as never),
+      setTimeout: ((fn: () => void, ms: number) => {
+        timeouts.push({ fn, ms });
+        return 0 as never;
+      }) as never,
+    });
+    await vi.waitFor(() => expect(timeouts).toHaveLength(1));
+    expect(timeouts[0]!.ms).toBeGreaterThanOrEqual(300); // after the settle, not before it
+    expect(raw.writeTransaction).not.toHaveBeenCalled(); // nothing dropped yet
+
+    timeouts[0]!.fn(); // the come-back pass: the store's clock has moved on by then in real use
+    await vi.waitFor(() => expect(raw.getAll.mock.calls.filter((c) => String(c[0]).includes("status = 'applied'")).length).toBe(2));
+    stop();
+  });
+
   it('a network failure leaves the queue intact (no throw escapes the driver)', async () => {
     const { db } = fakeWatchableDb(pending);
     const fetch = vi.fn(async () => ({ ok: false, status: 429 }) as Response);

@@ -93,6 +93,14 @@ const localCount = (page: Page, entryDate: string): Promise<number> =>
     return Number(rows[0]?.n ?? 0);
   }, entryDate);
 
+/** Optimistic journal effects still held on this device (the overlay, via __db). */
+const heldJournalEffects = (page: Page): Promise<number> =>
+  page.evaluate(async () => {
+    const db = (window as unknown as { __db: { getAll(sql: string): Promise<{ n: number }[]> } }).__db;
+    const rows = await db.getAll("SELECT count(*) AS n FROM overlay_effects WHERE table_name = 'journal_entries'");
+    return Number(rows[0]?.n ?? 0);
+  });
+
 /** All live journal days the SERVER holds for the signed-in user (source of truth). */
 const serverDays = async (page: Page): Promise<string[]> => {
   const res = await page.request.get('/sync/journal/export');
@@ -141,6 +149,12 @@ test('create → reload → edit → delete (WYSIWYG) with emoji; day Export .md
   // locked, so a click that DID take is never toggled straight back.
   await page.waitForTimeout(300);
   const toggle = page.getByTestId('journal-preview-toggle');
+  // And let the lock SETTLE first — acked, and its locked row synced down — so the
+  // state read below is the note's and not a frame in between. Reading it early
+  // once found "unlocked" with no unlock sent (CI, PR #27): the lock had been
+  // dropped from the overlay on the ack while the row still said unlocked.
+  await expect.poll(() => heldJournalEffects(page), { timeout: 30_000 }).toBe(0);
+  await expect(toggle).toHaveAttribute('data-state', 'locked');
   await expect(async () => {
     if ((await toggle.getAttribute('data-state')) === 'locked') await toggle.click(); // back to editing
     await expect(toggle).toHaveAttribute('data-state', 'unlocked', { timeout: 1_000 });
@@ -188,6 +202,47 @@ test('create → reload → edit → delete (WYSIWYG) with emoji; day Export .md
   await expect.poll(async () => (await serverDays(page)).length, { timeout: 30_000 }).toBe(0);
   await goto(page, 'agenda');
   await expect(page.getByTestId(`note-dot-${today}`)).toHaveCount(0);
+});
+
+test('a lock the server has acked stays locked while its row has not synced down', async ({ page }) => {
+  // The note's row is already on this device, so "the row is here" says nothing
+  // about whether the LOCK has arrived. Confirming on presence dropped the lock
+  // from the overlay at the ack and the note read unlocked again until the locked
+  // row synced. Downloads are stopped here so that window never closes: the lock
+  // has to hold on its own, from the row's stamp.
+  await register(page, 'journal-lockhold');
+  await goto(page, 'agenda');
+  await page.getByTestId('day-head-0').click();
+  const editor = await setEditor(page, 'Locked while offline-ish');
+  await editor.blur();
+  await expect.poll(() => serverContent(page, today), { timeout: 30_000 }).toContain('Locked while offline-ish');
+  await expect.poll(() => heldJournalEffects(page), { timeout: 30_000 }).toBe(0); // written AND synced down
+
+  // stop downloads; uploads are driven separately and keep going
+  await page.evaluate(async () => {
+    await (window as unknown as { __db: { disconnect(): Promise<void> } }).__db.disconnect();
+  });
+  const toggle = page.getByTestId('journal-preview-toggle');
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('data-state', 'locked');
+
+  // the server takes the lock…
+  await expect
+    .poll(
+      () =>
+        page.evaluate(async () => {
+          const db = (window as unknown as { __db: { getAll(sql: string): Promise<{ n: number }[]> } }).__db;
+          return Number((await db.getAll("SELECT count(*) AS n FROM client_commands WHERE status = 'pending'"))[0]?.n ?? 0);
+        }),
+      { timeout: 30_000 },
+    )
+    .toBe(0);
+  // …and through the drains that follow, with the locked row unable to arrive,
+  // the note stays locked: the overlay holds the lock until a row stamped by it.
+  await page.waitForTimeout(1_500);
+  await expect(toggle).toHaveAttribute('data-state', 'locked');
+  await expect(page.getByTestId('journal-rich')).toHaveCount(0);
+  expect(await heldJournalEffects(page)).toBe(1);
 });
 
 test('fresh-device lazy-load: a past-month note is NOT local until viewed; the .md archive is server-sourced', async ({ page }) => {

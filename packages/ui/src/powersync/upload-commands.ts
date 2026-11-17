@@ -65,6 +65,8 @@ export interface UploadSummary {
   applied: number;
   rejected: number;
   noop: number;
+  /** Commands whose writes have arrived but whose overlay is still settling (come back for them). Absent when none. */
+  settling?: number;
 }
 
 function chunk<T>(items: readonly T[], size: number): T[][] {
@@ -96,10 +98,10 @@ export async function uploadClientCommands(options: UploadCommandsOptions): Prom
   // First drop any overlay whose canonical row has already synced down (and prune
   // long-dead rejected rows) — this also runs when the queue is empty, so applied
   // commands reconcile on each drain even after the queue drains (S7-F6/F9).
-  await store.reconcileConfirmed();
+  const { settling = 0 } = await store.reconcileConfirmed();
 
   const commands = await store.pendingCommands();
-  const summary: UploadSummary = { uploaded: commands.length, applied: 0, rejected: 0, noop: 0 };
+  const summary: UploadSummary = { uploaded: commands.length, applied: 0, rejected: 0, noop: 0, ...(settling > 0 ? { settling } : {}) };
   if (commands.length === 0) return summary;
 
   const rejections: CommandRejection[] = [];

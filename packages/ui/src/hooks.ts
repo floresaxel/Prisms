@@ -53,6 +53,7 @@ import {
   type IsoDate,
   type JournalEntry,
   type Node,
+  type OverlayEffect,
   type PracticeValue,
   type ProgressValue,
   type ScheduleBlock,
@@ -69,7 +70,7 @@ import {
 } from '@prisms/core';
 
 import { createCommands, type CommandContext } from './powersync/commands';
-import { usePrismsData, toOverlayEffect } from './powersync/data-provider';
+import { usePrismsData } from './powersync/data-provider';
 import { createSqlOverlayStore, type SqlExecutor } from './powersync/overlay-store';
 import { createJournalMonthSubscriptions, type JournalMonthSubscriptions, type StreamSubscriber } from './powersync/streams';
 import { type ProvenanceFields } from './provenance';
@@ -104,6 +105,7 @@ import {
 type Row = Record<string, unknown>;
 
 const EMPTY_ROWS: readonly Row[] = Object.freeze([]);
+const EMPTY_EFFECTS: readonly OverlayEffect[] = Object.freeze([]);
 
 /** The table a simple `SELECT … FROM <table> …` reads (each hook queries one table). */
 function tableFromSql(sql: string): string | null {
@@ -206,8 +208,9 @@ export interface RowsRead {
 /**
  * The merged read (1.3 §7.2) for SCREEN-LOCAL tables, made loading-aware and
  * remount-surviving (§7.15). The replica query is patched by the pending overlay
- * for its table; optimistic writes (`overlay_effects`) show instantly and a
- * rollback (overlay dropped) reverts. While the replica is first loading, the
+ * for its table — the provider's shared overlay read, sliced — so optimistic
+ * writes show instantly and a rollback (overlay dropped) reverts. While the
+ * replica is first loading, the
  * last-known merged rows from `ROWS_CACHE` are returned so a remount does not
  * flash empty.
  *
@@ -220,21 +223,25 @@ function useRowsRead(sql: string, params: readonly unknown[] = EMPTY_ROWS as rea
   const key = keyOf(sql, params);
   const table = tableFromSql(sql);
   const replicaQ = useQuery<Row>(sql, params as unknown[]);
-  const overlayQ = useQuery<Row>(
-    'SELECT command_id, hlc, table_name, row_id, op, fields, seq FROM overlay_effects WHERE table_name = ?',
-    [table ?? ''],
-  );
-  const replica = replicaQ.data; // undefined while first-loading (distinct from an empty result)
-  const effectRows = overlayQ.data ?? (EMPTY_ROWS as Row[]);
+  // The overlay comes from the provider's single subscription, sliced by table —
+  // not from a watch of its own per read (see `OverlayRead`).
+  const { overlay } = usePrismsData();
+  // `undefined` while first-loading — which is not what the hook itself hands
+  // back: `useQuery` returns an EMPTY ARRAY until its first result. Taken at face
+  // value that placeholder read as "loaded, and empty", so a cold read merged
+  // the pending overlay onto no rows, overwrote the cached rows it was supposed
+  // to fall back on, and reported the table as produced before anything had been
+  // read. A table that has not been read yet is not an empty table.
+  const replica = replicaQ.isLoading ? undefined : replicaQ.data;
+  const effects = (table === null ? undefined : overlay.byTable.get(table)) ?? EMPTY_EFFECTS;
   const produced = replica !== undefined;
 
   const data = useMemo(() => {
     if (!produced || replica === undefined) return ROWS_CACHE.get(key) ?? (EMPTY_ROWS as Row[]);
-    const merged =
-      effectRows.length === 0 ? replica : (mergeTable(replica, effectRows.map(toOverlayEffect)) as Row[]);
+    const merged = effects.length === 0 ? replica : (mergeTable(replica, effects) as Row[]);
     ROWS_CACHE.set(key, merged);
     return merged;
-  }, [produced, replica, effectRows, key]);
+  }, [produced, replica, effects, key]);
 
   // Flip the reactive hydration signal AFTER commit (never setState-during-render).
   useEffect(() => {
@@ -247,8 +254,8 @@ function useRowsRead(sql: string, params: readonly unknown[] = EMPTY_ROWS as rea
     // The OVERLAY has to have produced too: a pending write patches fields onto
     // the canonical row, so a replica-only read can still be missing a value the
     // user has already set on this device.
-    isSettled: produced && overlayQ.data !== undefined,
-    isFetching: replicaQ.isFetching || overlayQ.isFetching,
+    isSettled: produced && !overlay.isLoading,
+    isFetching: replicaQ.isFetching || overlay.isFetching,
   };
 }
 

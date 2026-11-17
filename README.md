@@ -248,6 +248,17 @@ Then double-click **Prisms** on the desktop. Closing the window asks whether
 to stop the stack or leave it running; `-Stop` stops it from a terminal, and
 `-NoGui` reports in the console instead of a window.
 
+The launcher serves the web app **built** (`vite build`, then `vite preview`),
+so a page load is a few cached files rather than the dev server's ~200 modules
+compiled on demand. It rebuilds only when the app's source has changed (about
+25 seconds), and a page left open reloads itself once the new build is in. While
+working on the app, pass `-Dev` to get the Vite dev server and hot reload
+instead:
+
+```powershell
+pwsh scripts/prisms-stack.ps1 -Dev
+```
+
 ---
 
 ## Self-hosting

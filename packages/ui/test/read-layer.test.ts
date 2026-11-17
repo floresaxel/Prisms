@@ -52,8 +52,10 @@ describe('§7.14 persistent read layer — shared subscriptions live only in the
   it('hooks.ts calls useQuery only inside useRows — plus the local command queue', () => {
     // The rule this guards is about the SHARED SYNCED tables: no screen hook may
     // open its own base subscription over one, they all moved to the provider.
-    // The two permitted calls are the pair inside `useRows` — the screen-local
-    // replica read and its overlay read.
+    // The one permitted call is the screen-local replica read inside `useRows`.
+    // Its overlay half is NOT a second call: it is sliced from the provider's
+    // single overlay subscription (a watch per read was a third of a cold load's
+    // queries, all asking `overlay_effects` the same thing).
     //
     // `client_commands` is allowed beside them and is NOT a hole in the rule: it
     // is this device's own outbound queue, never synced down, belonging to no
@@ -64,8 +66,12 @@ describe('§7.14 persistent read layer — shared subscriptions live only in the
     expect(queue.length, 'the outbound-queue count should be the only extra useQuery').toBe(1);
     expect(
       all.length - queue.length,
-      'hooks.ts should otherwise call useQuery only twice (replica + overlay, both in useRows)',
-    ).toBe(2);
+      'hooks.ts should otherwise call useQuery only once (the replica read in useRows)',
+    ).toBe(1);
+    expect(
+      /\bfrom\s+overlay_effects\b/i.test(hooksSrc),
+      'hooks.ts must not query overlay_effects itself — the provider owns the one overlay subscription',
+    ).toBe(false);
   });
 
   it('the provider subscribes exactly the 9 shared base tables (one each) + one overlay read', () => {

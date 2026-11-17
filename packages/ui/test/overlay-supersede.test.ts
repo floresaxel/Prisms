@@ -25,7 +25,7 @@ let store: OverlayStore;
 beforeEach(() => {
   db = new Database(':memory:');
   db.exec(`
-    CREATE TABLE client_commands (id TEXT PRIMARY KEY, name TEXT, hlc TEXT, payload TEXT, status TEXT, created_at TEXT, command_version INTEGER, schema_version INTEGER, client_version TEXT, depends_on TEXT);
+    CREATE TABLE client_commands (id TEXT PRIMARY KEY, name TEXT, hlc TEXT, payload TEXT, status TEXT, created_at TEXT, reject_code TEXT, reject_reason TEXT, command_version INTEGER, schema_version INTEGER, client_version TEXT, depends_on TEXT);
     CREATE TABLE overlay_effects (id TEXT PRIMARY KEY, command_id TEXT, hlc TEXT, table_name TEXT, row_id TEXT, op TEXT, fields TEXT, seq INTEGER, created_at TEXT);
     CREATE TABLE nodes (id TEXT PRIMARY KEY, title TEXT, attributes TEXT, last_modified_by_command_id TEXT, created_at TEXT, updated_at TEXT, deleted_at TEXT);
   `);
@@ -111,5 +111,56 @@ describe('an applied overlay whose row was written again', () => {
     const { cleared } = await store.reconcileConfirmed();
     expect(cleared).toContain(FIRST);
     expect(await shown()).toBe('{"amount":3}');
+  });
+});
+
+/**
+ * The settle (`OverlayStoreOptions.settleMs`). Deleting an overlay the instant
+ * its stamped row is in SQLite let a screen render one frame between the two
+ * watched queries — the overlay already gone, the replica not yet re-read — so a
+ * just-placed block vanished and its task jumped back into the to-do list, where
+ * the next drag picked it up instead of the task under the pointer (CI, PR #27).
+ */
+describe('a confirmed write waits out the settle before its overlay goes', () => {
+  let settled: OverlayStore;
+  beforeEach(() => {
+    const run = async (s: string, params: unknown[] = []): Promise<void> => {
+      db.prepare(s).run(...(params as never[]));
+    };
+    const all = async <T,>(s: string, params: unknown[] = []): Promise<T[]> => db.prepare(s).all(...(params as never[])) as T[];
+    const tx = { execute: run, getAll: all };
+    settled = createSqlOverlayStore({ execute: run, getAll: all, writeTransaction: async (fn) => fn(tx) }, { settleMs: 500 });
+  });
+
+  it('keeps the overlay for settleMs after the stamped row is first seen, then drops it', async () => {
+    await settled.enqueue(cmd(FIRST, 'hlc-1'), [attrEffect(FIRST, 'hlc-1', '{"amount":3}')]);
+    await settled.markApplied(FIRST);
+    setCanonical('{"amount":3}', FIRST); // arrived
+
+    expect(await settled.reconcileConfirmed(10_000)).toEqual({ cleared: [], settling: 1 });
+    expect(await settled.effectsFor('nodes')).toHaveLength(1); // still held: it changes nothing on screen
+    expect(await settled.reconcileConfirmed(10_499)).toEqual({ cleared: [], settling: 1 });
+    expect(await settled.reconcileConfirmed(10_500)).toEqual({ cleared: [FIRST] });
+    expect(await settled.effectsFor('nodes')).toHaveLength(0);
+    expect(await shown()).toBe('{"amount":3}');
+  });
+
+  it('starts counting only once the row has actually arrived', async () => {
+    await settled.enqueue(cmd(SECOND, 'hlc-2'), [attrEffect(SECOND, 'hlc-2', '{"amount":9}')]);
+    await settled.markApplied(SECOND);
+    setCanonical('{"amount":3}', FIRST); // the older write: ours has not come down yet
+
+    expect(await settled.reconcileConfirmed(10_000)).toEqual({ cleared: [] }); // waiting, not settling
+    setCanonical('{"amount":9}', SECOND);
+    expect(await settled.reconcileConfirmed(20_000)).toEqual({ cleared: [], settling: 1 }); // the clock starts here
+    expect(await settled.reconcileConfirmed(20_500)).toEqual({ cleared: [SECOND] });
+  });
+
+  it('a rejected command still rolls back at once — the settle is for confirmations only', async () => {
+    await settled.enqueue(cmd(FIRST, 'hlc-1'), [attrEffect(FIRST, 'hlc-1', '{"amount":3}')]);
+    setCanonical('{"amount":1}', 'some-earlier-command');
+    await settled.rollbackRejected({ commandId: FIRST, rejectCode: 'E_TEST' });
+    expect(await settled.effectsFor('nodes')).toHaveLength(0);
+    expect(await shown()).toBe('{"amount":1}');
   });
 });

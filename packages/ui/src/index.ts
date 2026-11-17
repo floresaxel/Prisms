@@ -6,8 +6,9 @@
 export const UI_PACKAGE = '@prisms/ui' as const;
 
 // data layer
-export { appSchema, clientSchema, client_commands, overlay_effects, sync_review_items, LOCAL_ONLY_TABLE_NAMES } from './powersync/schema';
+export { appSchema, clientSchema, client_commands, overlay_effects, sync_review_items, CLIENT_TABLE_NAMES, LOCAL_ONLY_TABLE_NAMES } from './powersync/schema';
 export {
+  CONFIRM_SETTLE_MS,
   createConnector,
   startCommandUpload,
   type ConnectorOptions,
@@ -91,6 +92,7 @@ export {
   createSqlOverlayStore,
   readMergedRows,
   type OverlayStore,
+  type OverlayStoreOptions,
   type PendingCommand,
   type SqlExecutor,
   type SqlTx,
@@ -102,7 +104,8 @@ export { buildOptimisticEffects, buildAcceptSuggestionEffects, type EffectSpec, 
 export { uploadClientCommands, UploadClientError, MAX_UPLOAD_BATCH, type UploadCommandsOptions, type UploadSummary } from './powersync/upload-commands';
 
 // persistent client read layer (1.4 §7.14, Fix A) — M11
-export { PrismsDataProvider, usePrismsData, toOverlayEffect, type PrismsData, type SharedRows } from './powersync/data-provider';
+export { PrismsDataProvider, usePrismsData, toOverlayEffect, type OverlayRead, type PrismsData, type SharedRows } from './powersync/data-provider';
+export { tablesFromSql, watchTablesFromSql, type ResolvesTables } from './powersync/watched-tables';
 
 // sync-stream tiers — lazy Tier 2 (1.3 §7.3) — M14; lazy journal months (D3) — J3
 export {

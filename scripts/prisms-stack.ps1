@@ -14,6 +14,13 @@ Once all of it is up the window says so and shows a clickable link to the
 site. It keeps watching after that, so a part that dies turns red instead of
 the window going on claiming the stack is up.
 
+The web app is served BUILT: `vite build` once, then `vite preview`. A page load
+is then a handful of cached files (data on screen in well under a second)
+instead of the dev server's ~200 modules compiled on demand out of OneDrive
+(8 s on the first load after a start, 1.5 s on every one after). The build is
+redone only when what it is made from has changed. Pass -Dev for the Vite dev
+server and its hot reload while working on the app.
+
 Closing the window asks whether to stop the stack or leave it running. Only
 what a launch of THIS script started is ever stopped: an API or web server
 that some terminal already had running shows as "already running" and is left
@@ -35,6 +42,9 @@ found most of them first):
     restarted after a migration that actually applied something.
   * The web server must be on :5173 exactly (the origin auth trusts), so it
     fails loudly instead of drifting to :5174.
+  * A web server this launcher started is started over when it is the wrong
+    kind (dev vs built) or the bundle under it was just rebuilt, so the page
+    is never an older build than the source.
   * The repo lives in OneDrive, which can leave files online-only and then stop
     handing them over. Those are fetched up front, and a OneDrive that is not
     serving them is named plainly instead of surfacing later as a read error.
@@ -50,6 +60,7 @@ outside AppData for the same packaged-app reason.
 pwsh scripts/prisms-stack.ps1 -InstallShortcut   # put a "Prisms" shortcut on the desktop
 pwsh scripts/prisms-stack.ps1                    # the status window (what the shortcut opens)
 pwsh scripts/prisms-stack.ps1 -NoGui             # the same, reported in this console
+pwsh scripts/prisms-stack.ps1 -Dev               # the Vite dev server (hot reload) instead of the built app
 pwsh scripts/prisms-stack.ps1 -Stop              # stop whatever an earlier launch started
 #>
 [CmdletBinding()]
@@ -60,6 +71,8 @@ param(
   [switch]$Stop,
   # (re)create the "Prisms" desktop shortcut, then exit
   [switch]$InstallShortcut,
+  # serve the web app from the Vite dev server (hot reload) instead of a build
+  [switch]$Dev,
   [string]$Distro = 'Ubuntu'
 )
 
@@ -234,29 +247,36 @@ $Engine = {
   function Get-FailureReason([string]$Log) {
     $text = ''
     try { $text = [IO.File]::ReadAllText($Log) } catch { }
-    if ($text -match 'cloud file provider|cloud operation|UNKNOWN: unknown error, read|EIO: i/o error') {
+    Get-FailureText $text
+  }
+
+  function Get-FailureText([string]$Text) {
+    if ($Text -match 'cloud file provider|cloud operation|UNKNOWN: unknown error, read|EIO: i/o error') {
       return "OneDrive isn't handing over files it needs. Make sure OneDrive is running, then try again."
     }
-    if ($text -match 'EADDRINUSE|is already in use') { return 'its port is already in use.' }
-    $last = Get-LastLine $text
+    if ($Text -match 'EADDRINUSE|is already in use') { return 'its port is already in use.' }
+    $last = Get-LastLine $Text
     $last ? "it stopped with: $last" : 'it stopped before answering.'
   }
 
+  # webMode is which web server `web` is: 'build' or 'dev'. A state file from
+  # before there were two kinds has none, which reads as "not what is wanted".
   function Save-StackState {
     $o = $sync.Owned
-    $json = [ordered]@{ pin = $o.pin; api = $o.api; web = $o.web; compose = [bool]$o.compose } | ConvertTo-Json -Depth 3
+    $json = [ordered]@{ pin = $o.pin; api = $o.api; web = $o.web; webMode = $o.webMode; compose = [bool]$o.compose } | ConvertTo-Json -Depth 3
     [IO.File]::WriteAllText($sync.StatePath, $json)
   }
 
   # What earlier launches left running — the state file is shared by every
   # launch (and by -Stop), so it is the truth rather than this process's memory.
   function Read-StackState {
-    $o = @{ pin = $null; api = $null; web = $null; compose = $false }
+    $o = @{ pin = $null; api = $null; web = $null; webMode = $null; compose = $false }
     try {
       $j = [IO.File]::ReadAllText($sync.StatePath) | ConvertFrom-Json -AsHashtable
       foreach ($k in 'pin', 'api', 'web') {
         if ($j[$k] -and $j[$k].Pid) { $o[$k] = @{ Pid = [int]$j[$k].Pid; Start = [int64]$j[$k].Start } }
       }
+      if ($j['webMode']) { $o.webMode = [string]$j['webMode'] }
       $o.compose = [bool]$j['compose']
     } catch { }
     $o
@@ -382,10 +402,72 @@ $Engine = {
         $r = Invoke-RestMethod -Uri "http://127.0.0.1:$($sync.ApiPort)/health" -TimeoutSec 10 -NoProxy -ErrorAction Stop
         return $r.service -eq 'prisms-api'
       }
-      # the first page load can take a while: Vite transforms on demand
+      # the dev server's first page load can take a while: Vite transforms on demand
       $r = Invoke-WebRequest -Uri "http://localhost:$($sync.WebPort)/" -TimeoutSec 60 -NoProxy -ErrorAction Stop
       return [bool]($r.Content -match '<title>Prisms</title>')
     } catch { return $false }
+  }
+
+  # A hash of everything the web bundle is made from. The CONTENT, not the
+  # timestamps: switching branches and back rewrites every file's time and none
+  # of its bytes, and should not cost a rebuild.
+  function Get-WebBuildFingerprint {
+    $repo = $sync.Repo
+    $files = [Collections.Generic.List[string]]::new()
+    foreach ($dir in 'apps\web\src', 'apps\web\public', 'packages\ui\src', 'packages\core\src') {
+      $full = Join-Path $repo $dir
+      if (Test-Path -LiteralPath $full) { $files.AddRange([IO.Directory]::GetFiles($full, '*', [IO.SearchOption]::AllDirectories)) }
+    }
+    # `.env*` in apps\web is where Vite reads build-time settings from
+    $single = @('apps\web\index.html', 'apps\web\vite.config.ts', 'apps\web\package.json', 'apps\web\tsconfig.json',
+      'apps\web\.env', 'apps\web\.env.local', 'apps\web\.env.production', 'apps\web\.env.production.local',
+      'packages\ui\package.json', 'packages\core\package.json', 'pnpm-lock.yaml')
+    foreach ($rel in $single) {
+      $full = Join-Path $repo $rel
+      if (Test-Path -LiteralPath $full) { $files.Add($full) }
+    }
+    $files.Sort([StringComparer]::Ordinal)
+    $utf8 = [Text.Encoding]::UTF8
+    $hash = [Security.Cryptography.IncrementalHash]::CreateHash([Security.Cryptography.HashAlgorithmName]::SHA256)
+    try {
+      # the PowerSync URL is compiled into the bundle, so it is part of what was built
+      $hash.AppendData($utf8.GetBytes("VITE_POWERSYNC_URL=$($sync.SyncUrl)`n"))
+      foreach ($f in $files) {
+        $hash.AppendData($utf8.GetBytes($f.Substring($repo.Length) + "`n"))
+        $hash.AppendData([IO.File]::ReadAllBytes($f))
+      }
+      [Convert]::ToHexString($hash.GetHashAndReset())
+    } finally { $hash.Dispose() }
+  }
+
+  # Build the bundle unless dist already holds one made from exactly what is on
+  # disk now. The fingerprint is kept INSIDE dist: any other build empties that
+  # folder and takes the stamp with it, so a bundle this launcher did not make
+  # (other settings, another branch) is never mistaken for a current one.
+  # Returns whether it built — a server already serving dist then starts over.
+  function Update-WebBuild {
+    $dist = Join-Path $sync.Repo 'apps\web\dist'
+    $stamp = Join-Path $dist '.prisms-build'
+    $want = ''
+    try { $want = Get-WebBuildFingerprint }
+    catch {
+      if ($_.Exception.Message -match 'cloud file provider|cloud operation') {
+        Stop-Step web "OneDrive isn't handing over the web app's files. Make sure OneDrive is running, then try again."
+      }
+      Stop-Step web "Couldn't read the web app's files: $($_.Exception.Message)"
+    }
+    $have = ''
+    try { $have = [IO.File]::ReadAllText($stamp).Trim() } catch { }
+    if ($have -eq $want -and (Test-Path -LiteralPath (Join-Path $dist 'index.html'))) { return $false }
+    Set-Row web busy 'building…'
+    $run = Get-PackageScript web 'apps\web' 'build'
+    $clock = [Diagnostics.Stopwatch]::StartNew()
+    # -Quiet: a good build's chunk listing is not news; a failed one is logged whole
+    $r = Invoke-Logged $run.Command 600 @{ PATH = $run.Path; VITE_POWERSYNC_URL = $sync.SyncUrl } $run.Dir -Quiet
+    if ($r.Code -ne 0) { Stop-Step web "The web app didn't build: $(Get-FailureText $r.Out)" }
+    [IO.File]::WriteAllText($stamp, $want)
+    Write-StackLog ('web      built in {0:n0} s' -f $clock.Elapsed.TotalSeconds)
+    $true
   }
 
   # The API and the web app: both are host processes this launcher owns only
@@ -394,10 +476,23 @@ $Engine = {
     $isApi = $Key -eq 'api'
     $name = $isApi ? 'The API server' : 'The web app'
     $port = $isApi ? $sync.ApiPort : $sync.WebPort
+    $up = (-not $isApi -and $sync.WebMode -eq 'dev') ? "up on :$port (dev server)" : "up on :$port"
     $mine = Test-Alive $sync.Owned[$Key]
+    # The web app: unless someone else's server holds the port (theirs to keep,
+    # whatever it serves), make the bundle current first, then start a server of
+    # ours over if it is the wrong kind or was serving the bundle just replaced.
+    if (-not $isApi -and ($mine -or -not (Test-Port $port))) {
+      $built = $sync.WebMode -eq 'build' -and (Update-WebBuild)
+      if ($mine -and ($built -or $sync.Owned.webMode -ne $sync.WebMode)) {
+        Set-Row $Key busy 'restarting…'
+        Stop-Tree $sync.Owned[$Key].Pid
+        [void](Wait-Until { -not (Test-Port $port) } 20 300)
+        $mine = $false
+      }
+    }
     if (Test-Port $port) {
       Set-Row $Key busy 'checking…'
-      if (Test-ServerReady $Key) { Set-Row $Key ok ($mine ? "up on :$port" : "already running on :$port"); return }
+      if (Test-ServerReady $Key) { Set-Row $Key ok ($mine ? $up : "already running on :$port"); return }
       Stop-Step $Key "Port $port is taken by $(Get-PortOwner $port), which isn't Prisms."
     }
     if ($mine) { Stop-Tree $sync.Owned[$Key].Pid }   # ours, but no longer listening: start it over
@@ -419,10 +514,13 @@ $Engine = {
       }
     } else {
       # Exactly :5173. Auth trusts that origin, so a server that drifted to
-      # :5174 would be a site nobody can sign in to.
-      $run = Get-PackageScript web 'apps\web' 'dev' "--port $port --strictPort"
+      # :5174 would be a site nobody can sign in to. `preview` serves the bundle
+      # Update-WebBuild made (above); `dev` is Vite's dev server.
+      $run = Get-PackageScript web 'apps\web' ($sync.WebMode -eq 'dev' ? 'dev' : 'preview') "--port $port --strictPort"
       # the same PowerSync port compose publishes, so the two cannot disagree
-      $environment = @{ PATH = $run.Path; VITE_POWERSYNC_URL = "http://localhost:$($sync.SyncPort)" }
+      # (the dev server reads it now; the bundle had it compiled in)
+      $environment = @{ PATH = $run.Path; VITE_POWERSYNC_URL = $sync.SyncUrl }
+      $sync.Owned.webMode = $sync.WebMode
     }
     $log = Join-Path $sync.LogDir "$Key.log"
     $proc = Start-Hidden $run.Command $log $environment $run.Dir
@@ -435,7 +533,7 @@ $Engine = {
       Save-StackState
       Stop-Step $Key "$name didn't start: $(Get-FailureReason $log)"
     }
-    Set-Row $Key ok "up on :$port"
+    Set-Row $Key ok $up
   }
 
   function Invoke-StackStart {
@@ -486,6 +584,7 @@ $Engine = {
       }
       $sync.Owned[$k] = $null
     }
+    $sync.Owned.webMode = $null
     Save-StackState
     if ($sync.Owned.compose) {
       Set-Row sync busy 'stopping…'
@@ -597,6 +696,10 @@ function New-StackSync {
   $s.ApiPort = 3001
   $s.WebPort = 5173
   $s.Url = 'http://localhost:5173'
+  # where the browser reaches PowerSync: read by the dev server, compiled into a build
+  $s.SyncUrl = "http://localhost:$($s.SyncPort)"
+  # 'build' = the bundle behind `vite preview` (fast loads); 'dev' = Vite's dev server
+  $s.WebMode = $Dev ? 'dev' : 'build'
   $s.Order = @('files', 'wsl', 'db', 'migrate', 'sync', 'api', 'web')
   $s.Labels = @{
     files = 'Project files'; wsl = 'Docker (WSL)'; db = 'Database'; migrate = 'Migrations'
@@ -611,7 +714,7 @@ function New-StackSync {
   $s.Cancel = $false
   $s.StartedAt = $null
   $s.UpAt = $null
-  $s.Owned = @{ pin = $null; api = $null; web = $null; compose = $false }
+  $s.Owned = @{ pin = $null; api = $null; web = $null; webMode = $null; compose = $false }
   $s
 }
 

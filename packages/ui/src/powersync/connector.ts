@@ -87,9 +87,25 @@ export interface CommandUploadOptions {
   fetch?: typeof fetch;
   /** Periodic retry for commands left pending by a network failure (default 15s). */
   retryMs?: number;
+  /**
+   * How long a confirmed write is held in the overlay before it is dropped
+   * (`OverlayStoreOptions.settleMs`; default `CONFIRM_SETTLE_MS`).
+   */
+  settleMs?: number;
   /** Injected for tests (defaults to the global timer). */
   setInterval?: (fn: () => void, ms: number) => ReturnType<typeof setInterval>;
+  /** Injected for tests (defaults to the global timer). */
+  setTimeout?: (fn: () => void, ms: number) => ReturnType<typeof setTimeout>;
 }
+
+/**
+ * The settle the upload driver gives a confirmed write before its overlay goes
+ * (see `OverlayStoreOptions.settleMs`). Generous on purpose: the replica query
+ * it waits for is throttled and then has to run, on a slow device, behind
+ * whatever else the worker is doing; holding an overlay over its own row longer
+ * changes nothing on screen.
+ */
+export const CONFIRM_SETTLE_MS = 500;
 
 /**
  * Drive the named-envelope upload from `client_commands`: an initial drain, a
@@ -99,7 +115,19 @@ export interface CommandUploadOptions {
  * by command id regardless). Returns a stop function.
  */
 export function startCommandUpload(db: WatchableDb, options: CommandUploadOptions): () => void {
-  const store = createSqlOverlayStore(db);
+  const settleMs = options.settleMs ?? CONFIRM_SETTLE_MS;
+  const store = createSqlOverlayStore(db, { settleMs });
+  // One pass to come back for writes that arrived but are still settling, so
+  // their overlay goes about `settleMs` later rather than on the 15s retry.
+  // number | Timeout: web and React Native type the timer handle differently.
+  let settleTimer: ReturnType<typeof setTimeout> | number | undefined;
+  const comeBack = (): void => {
+    if (settleTimer !== undefined) return;
+    settleTimer = (options.setTimeout ?? setTimeout)(() => {
+      settleTimer = undefined;
+      void drain();
+    }, settleMs + 50);
+  };
   let inFlight = false;
   // A persistent 4xx (malformed request) can never self-heal by retrying, so the
   // timer stops driving it — it would just spin. A fresh optimistic write (the
@@ -110,7 +138,8 @@ export function startCommandUpload(db: WatchableDb, options: CommandUploadOption
     if (inFlight || blockedByClientError) return;
     inFlight = true;
     try {
-      await uploadClientCommands({ store, apiBaseUrl: options.apiBaseUrl, deviceId: options.deviceId, onReject: options.onReject, fetch: options.fetch });
+      const summary = await uploadClientCommands({ store, apiBaseUrl: options.apiBaseUrl, deviceId: options.deviceId, onReject: options.onReject, fetch: options.fetch });
+      if ((summary.settling ?? 0) > 0) comeBack();
     } catch (error) {
       if (error instanceof UploadClientError) {
         // 4xx: surface loudly (a future diagnostics screen can read this) and stop
@@ -136,6 +165,7 @@ export function startCommandUpload(db: WatchableDb, options: CommandUploadOption
   const timer = (options.setInterval ?? setInterval)(() => void drain(), options.retryMs ?? 15_000);
   return () => {
     clearInterval(timer);
+    if (settleTimer !== undefined) clearTimeout(settleTimer);
     watchAbort.abort();
   };
 }

@@ -127,6 +127,60 @@ describe('mergeTable (§7.2)', () => {
     ]);
     expect(merged).toEqual([{ id: 'n2', title: 'new' }]);
   });
+
+  // The bug this pins: a clock-out (an UPDATE of `ended_at`) pending on a time
+  // entry whose row was not in hand — its table had not been read yet at boot —
+  // became a "row" of that one column. A time entry with no start threw in the
+  // status index and blanked the app on every reload.
+  it('does not turn an update with no row under it into a row', () => {
+    const clockOut = effect({ op: 'update', table: 'time_entries', row_id: 'e1', fields: { ended_at: '2026-06-13T10:00:00.000Z' } });
+    expect(mergeTable([], [clockOut])).toEqual([]);
+    // …and it is the same update that patches the row once the row is there
+    expect(mergeTable([{ id: 'e1', started_at: '2026-06-13T09:00:00.000Z', ended_at: null }], [clockOut])).toEqual([
+      { id: 'e1', started_at: '2026-06-13T09:00:00.000Z', ended_at: '2026-06-13T10:00:00.000Z' },
+    ]);
+  });
+
+  it('leaves the other rows alone when one update has nothing to patch', () => {
+    const merged = mergeTable(
+      [{ id: 'n1', title: 'A' }],
+      [effect({ op: 'update', row_id: 'gone', fields: { title: 'orphan' } }), effect({ op: 'update', row_id: 'n1', fields: { title: 'A*' } })],
+    );
+    expect(merged).toEqual([{ id: 'n1', title: 'A*' }]);
+  });
+
+  it('still seeds a row from a pending insert, with its later updates applied — in either array order', () => {
+    const insert = effect({ op: 'insert', hlc: hlc(1), row_id: 'e1', fields: { id: 'e1', started_at: 's' } });
+    const update = effect({ op: 'update', hlc: hlc(2), row_id: 'e1', fields: { ended_at: 'e' } });
+    expect(mergeTable([], [insert, update])).toEqual([{ id: 'e1', started_at: 's', ended_at: 'e' }]);
+    expect(mergeTable([], [update, insert])).toEqual([{ id: 'e1', started_at: 's', ended_at: 'e' }]);
+  });
+
+  it('still shows an update that carries the whole row — the D5 rewrite of an insert onto the server id', () => {
+    // A pending insert the server applied onto a DIFFERENT row (two devices made
+    // the same day's note) is rewritten in place to an update of the server's
+    // row, keeping every column. Until that row downloads, it IS the row.
+    const rewritten = effect({ op: 'update', table: 'journal_entries', row_id: 'idB', fields: { id: 'idB', entry_date: '2026-06-11', content: 'from A' } });
+    expect(mergeTable([], [rewritten])).toEqual([{ id: 'idB', entry_date: '2026-06-11', content: 'from A' }]);
+    // …while a patch that names some OTHER id is still only a patch
+    const stray = effect({ op: 'update', row_id: 'n9', fields: { id: 'other', title: 'x' } });
+    expect(mergeTable([], [stray])).toEqual([]);
+  });
+
+  it('upsert: the pending update IS the row until the canonical one arrives (user_settings)', () => {
+    // the server creates the settings row on the first settings.update, so on a
+    // device that has never synced one, the optimistic toggle has no row to patch
+    const toggle = effect({ op: 'update', table: 'user_settings', row_id: 'u1', fields: { journal_day_log: 0 } });
+    expect(mergeTable([], [toggle], { upsert: true })).toEqual([{ journal_day_log: 0 }]);
+    expect(mergeTable([{ id: 'u1', timezone: 'UTC', journal_day_log: 1 }], [toggle], { upsert: true })).toEqual([
+      { id: 'u1', timezone: 'UTC', journal_day_log: 0 },
+    ]);
+  });
+
+  it('keys rows by a custom identity column', () => {
+    const merged = mergeTable([{ key: 'a', v: 1 }], [effect({ op: 'update', row_id: 'a', fields: { v: 2 } })], { idKey: 'key' });
+    expect(merged).toEqual([{ key: 'a', v: 2 }]);
+  });
 });
 
 describe('buildRenameEffect / buildUpdateEffect (M0 slice)', () => {

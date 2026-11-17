@@ -92,9 +92,11 @@ export interface OverlayStore {
    * Drop the overlay of every `applied` command whose canonical rows have now
    * arrived (present + carrying `last_modified_by_command_id === id`, or gone/
    * tombstoned for a delete), and prune `rejected` command rows older than 30
-   * days (S7-F9). Returns the cleared command ids. Idempotent.
+   * days (S7-F9). Returns the cleared command ids, and — when the store settles
+   * (`OverlayStoreOptions.settleMs`) — how many have arrived but are still
+   * waiting out the settle, so the caller can come back for them. Idempotent.
    */
-  reconcileConfirmed(nowMs?: number): Promise<{ cleared: string[] }>;
+  reconcileConfirmed(nowMs?: number): Promise<{ cleared: string[]; settling?: number }>;
   /**
    * Rejected: drop the overlay (rollback) + mark the command. The durable review
    * item is SERVER-created (M5) and syncs down (§7.13) — the client writes none
@@ -165,8 +167,31 @@ const toReviewItem = (r: OverlayRow): ReviewItem => ({
   created_at: String(r['created_at'] ?? ''),
 });
 
+export interface OverlayStoreOptions {
+  /**
+   * How long a command's write must have been in the replica before its overlay
+   * is dropped (default 0: at once).
+   *
+   * Dropping it the instant the stamped row is in SQLite races every screen that
+   * reads the two separately — the replica through one watched query, the
+   * overlay through another. The row's arrival and the overlay's removal each
+   * re-run their own query, a throttle apart; when the overlay's lands first,
+   * that screen renders one frame with NEITHER: the old row and no pending
+   * write. A placed block vanished for a frame and its task came back into the
+   * to-do list, under the pointer of the next drag (CI, PR #27). Holding the
+   * overlay a little longer costs nothing — over its own stamped row it changes
+   * no value — and by then every replica query has caught up.
+   *
+   * The arrival time is kept in memory: a reload just starts the wait again.
+   */
+  settleMs?: number;
+}
+
 /** The production overlay store: real SQL over the local-only tables. */
-export function createSqlOverlayStore(sql: SqlExecutor): OverlayStore {
+export function createSqlOverlayStore(sql: SqlExecutor, options: OverlayStoreOptions = {}): OverlayStore {
+  const settleMs = options.settleMs ?? 0;
+  /** command id → when this store first found all of its writes in the replica. */
+  const arrivedAt = new Map<string, number>();
   return {
     async enqueue(command, effects, dependsOn = []) {
       // §8/§7.11: stamp the version axes at enqueue (the minting version) + the
@@ -247,7 +272,11 @@ export function createSqlOverlayStore(sql: SqlExecutor): OverlayStore {
     },
     async reconcileConfirmed(nowMs = Date.now()) {
       const cleared: string[] = [];
+      let settling = 0;
       const applied = await sql.getAll<{ id: string }>("SELECT id FROM client_commands WHERE status = 'applied'");
+      // forget arrival times of commands that are no longer waiting here at all
+      const stillApplied = new Set(applied.map((a) => a.id));
+      for (const id of arrivedAt.keys()) if (!stillApplied.has(id)) arrivedAt.delete(id);
       for (const { id: commandId } of applied) {
         const effects = await sql.getAll<{ table_name: string; row_id: string; op: string }>(
           'SELECT table_name, row_id, op FROM overlay_effects WHERE command_id = ?',
@@ -294,31 +323,41 @@ export function createSqlOverlayStore(sql: SqlExecutor): OverlayStore {
             if (stamp != null && String(stamp) !== commandId && !supersedes(String(stamp), commandId)) { allArrived = false; break; }
           }
         }
-        if (allArrived) {
-          // A confirmed DELETE supersedes every overlay still held for that row.
-          // Without this, writing a row and deleting it before the canonical row
-          // has synced down strands the earlier insert effect forever: its row
-          // can never "arrive" (it is gone server-side), so the insert/update
-          // branch above waits on it indefinitely and the merged read keeps
-          // resurrecting a note the user deleted. Clearing an insert on absence
-          // ALONE would be wrong — absence is also just "not downloaded yet",
-          // which is exactly the revert-flicker this design avoids (S7-F6) — so
-          // it is scoped to rows a CONFIRMED delete has settled.
-          const deleted = effects.filter((e) => e.op === 'delete');
-          await sql.writeTransaction(async (tx) => {
-            for (const e of deleted) {
-              await tx.execute('DELETE FROM overlay_effects WHERE table_name = ? AND row_id = ?', [e.table_name, e.row_id]);
-            }
-            await tx.execute('DELETE FROM overlay_effects WHERE command_id = ?', [commandId]);
-            await tx.execute('DELETE FROM client_commands WHERE id = ?', [commandId]);
-          });
-          cleared.push(commandId);
+        if (!allArrived) {
+          arrivedAt.delete(commandId);
+          continue;
         }
+        // Arrived — but give every reader of the replica time to see it first (settleMs).
+        const since = arrivedAt.get(commandId) ?? nowMs;
+        if (nowMs - since < settleMs) {
+          arrivedAt.set(commandId, since);
+          settling += 1;
+          continue;
+        }
+        arrivedAt.delete(commandId);
+        // A confirmed DELETE supersedes every overlay still held for that row.
+        // Without this, writing a row and deleting it before the canonical row
+        // has synced down strands the earlier insert effect forever: its row
+        // can never "arrive" (it is gone server-side), so the insert/update
+        // branch above waits on it indefinitely and the merged read keeps
+        // resurrecting a note the user deleted. Clearing an insert on absence
+        // ALONE would be wrong — absence is also just "not downloaded yet",
+        // which is exactly the revert-flicker this design avoids (S7-F6) — so
+        // it is scoped to rows a CONFIRMED delete has settled.
+        const deleted = effects.filter((e) => e.op === 'delete');
+        await sql.writeTransaction(async (tx) => {
+          for (const e of deleted) {
+            await tx.execute('DELETE FROM overlay_effects WHERE table_name = ? AND row_id = ?', [e.table_name, e.row_id]);
+          }
+          await tx.execute('DELETE FROM overlay_effects WHERE command_id = ?', [commandId]);
+          await tx.execute('DELETE FROM client_commands WHERE id = ?', [commandId]);
+        });
+        cleared.push(commandId);
       }
       // S7-F9: prune long-dead rejected rows (their effects were dropped on reject).
       const cutoff = new Date(nowMs - 30 * 86_400_000).toISOString();
       await sql.execute("DELETE FROM client_commands WHERE status = 'rejected' AND created_at < ?", [cutoff]);
-      return { cleared };
+      return settling > 0 ? { cleared, settling } : { cleared };
     },
     async rollbackRejected({ commandId, rejectCode, rejectReason }) {
       // only the local overlay tables — the server-owned review item syncs down.
