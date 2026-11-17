@@ -75,6 +75,7 @@ export function RoadmapViews({
   color,
   toolbar,
   flow,
+  embedded,
   onNavigate,
 }: {
   model: RoadmapModel;
@@ -84,18 +85,24 @@ export function RoadmapViews({
   toolbar?: ReactNode;
   /** The Flow builder (components/RoadmapFlow). When given it is the first view, and the default. */
   flow?: ReactNode;
+  /**
+   * Render ONE view's body only — no card, bar or strip — for the roadmap builder,
+   * which owns the view switch, the selection and the details panel.
+   */
+  embedded?: { view: Exclude<RoadmapView, 'flow'>; selectedId: string | null; onPick: (id: string) => void };
   onNavigate: (href: string) => void;
 }) {
   const views = flow ? [FLOW_VIEW, ...ROADMAP_VIEWS] : ROADMAP_VIEWS;
   const [stored, setViewState] = useState<RoadmapView>(() => readRoadmapView(!!flow));
-  const view: RoadmapView = stored === 'flow' && !flow ? 'order' : stored;
+  const view: RoadmapView = embedded ? embedded.view : stored === 'flow' && !flow ? 'order' : stored;
   const setView = (v: RoadmapView) => {
     setViewState(v);
     writeRoadmapView(v);
   };
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [ownSelectedId, setSelectedId] = useState<string | null>(null);
+  const selectedId = embedded ? embedded.selectedId : ownSelectedId;
   const selected = selectedId ? (model.byId.get(selectedId) ?? null) : null;
-  const pick = (id: string) => setSelectedId((s) => (s === id ? null : id));
+  const pick = embedded ? embedded.onPick : (id: string) => setSelectedId((s) => (s === id ? null : id));
 
   // Fill the window: the card runs from where it starts to the bottom.
   const [fill, setFill] = useState(0);
@@ -123,8 +130,66 @@ export function RoadmapViews({
     return next;
   };
 
-  const style = { '--px-rm-c': color, minHeight: fill || undefined } as CSSProperties;
+  const style = { '--px-rm-c': color, minHeight: embedded ? undefined : fill || undefined } as CSSProperties;
   const empty = model.projects.length === 0;
+
+  const foldButtons = view === 'map' && !empty && (
+    <>
+      <button
+        type="button"
+        className="px-btn px-btn--sm px-btn--ghost"
+        data-testid="rm-fold-all"
+        onClick={() => setFolded(new Set(model.projects.map((p) => p.node.id)))}
+      >
+        Fold all
+      </button>
+      <button
+        type="button"
+        className="px-btn px-btn--sm px-btn--ghost"
+        data-testid="rm-unfold-all"
+        onClick={() => {
+          setFolded(new Set());
+          setShowAll(new Set(model.projects.map((p) => p.node.id)));
+        }}
+      >
+        Unfold all
+      </button>
+    </>
+  );
+  const body =
+    view === 'flow' ? (
+      flow
+    ) : empty ? (
+      <p className="px-muted" data-testid="rm-no-projects" style={{ margin: 'auto', fontSize: 13, textAlign: 'center' }}>
+        This roadmap has no projects yet. Add one, and it appears here.
+      </p>
+    ) : view === 'order' ? (
+      <OrderView model={model} selectedId={selectedId} onPick={pick} minHeight={embedded ? 320 : bodyFill} />
+    ) : view === 'map' ? (
+      <MindMap
+        model={model}
+        selectedId={selectedId}
+        onPick={pick}
+        minHeight={embedded ? 360 : bodyFill - 30}
+        folded={folded}
+        showAll={showAll}
+        onFold={(id) => setFolded((s) => toggle(s, id))}
+        onShowAll={(id) => setShowAll((s) => toggle(s, id))}
+      />
+    ) : view === 'outline' ? (
+      <OutlineView model={model} selectedId={selectedId} onPick={pick} />
+    ) : (
+      <ListView model={model} selectedId={selectedId} onPick={pick} />
+    );
+
+  if (embedded) {
+    return (
+      <div className="px-rmv px-rmv--embed" data-testid="rm-embedded" data-view={view} ref={cardRef} style={style}>
+        {foldButtons && <div className="px-rmv-embed-bar">{foldButtons}</div>}
+        <div className="px-rmv-body">{body}</div>
+      </div>
+    );
+  }
 
   return (
     <div className="px-mgr-card px-rmv" data-testid="rm-views" data-view={view} ref={cardRef} style={style}>
@@ -145,59 +210,12 @@ export function RoadmapViews({
           ))}
         </div>
         <div className="px-head-actions">
-          {view === 'map' && !empty && (
-            <>
-              <button
-                type="button"
-                className="px-btn px-btn--sm px-btn--ghost"
-                data-testid="rm-fold-all"
-                onClick={() => setFolded(new Set(model.projects.map((p) => p.node.id)))}
-              >
-                Fold all
-              </button>
-              <button
-                type="button"
-                className="px-btn px-btn--sm px-btn--ghost"
-                data-testid="rm-unfold-all"
-                onClick={() => {
-                  setFolded(new Set());
-                  setShowAll(new Set(model.projects.map((p) => p.node.id)));
-                }}
-              >
-                Unfold all
-              </button>
-            </>
-          )}
+          {foldButtons}
           {toolbar}
         </div>
       </div>
 
-      <div className={`px-rmv-body${view === 'flow' ? ' px-rmv-body--flow' : ''}`}>
-        {view === 'flow' ? (
-          flow
-        ) : empty ? (
-          <p className="px-muted" data-testid="rm-no-projects" style={{ margin: 'auto', fontSize: 13, textAlign: 'center' }}>
-            This roadmap has no projects yet. Add one, and it appears here.
-          </p>
-        ) : view === 'order' ? (
-          <OrderView model={model} selectedId={selectedId} onPick={pick} minHeight={bodyFill} />
-        ) : view === 'map' ? (
-          <MindMap
-            model={model}
-            selectedId={selectedId}
-            onPick={pick}
-            minHeight={bodyFill - 30}
-            folded={folded}
-            showAll={showAll}
-            onFold={(id) => setFolded((s) => toggle(s, id))}
-            onShowAll={(id) => setShowAll((s) => toggle(s, id))}
-          />
-        ) : view === 'outline' ? (
-          <OutlineView model={model} selectedId={selectedId} onPick={pick} />
-        ) : (
-          <ListView model={model} selectedId={selectedId} onPick={pick} />
-        )}
-      </div>
+      <div className={`px-rmv-body${view === 'flow' ? ' px-rmv-body--flow' : ''}`}>{body}</div>
 
       {view !== 'flow' && <Strip model={model} selected={selected} onNavigate={onNavigate} />}
     </div>

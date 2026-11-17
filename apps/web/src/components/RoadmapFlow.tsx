@@ -12,14 +12,21 @@
  *               step, drag a dot to link (or onto empty space for a new step),
  *               drag a box to select several. "Tidy up" lines it all up again.
  *
- * The details panel on the right edits whatever is selected: a project (what it
- * delivers, done-when, size, its links), an outcome, a link, several projects,
- * or — with nothing selected — the roadmap's outcomes.
+ * It lays out the whole roadmap screen the way the builder mockup does: the
+ * picker (`top`), a header card (vision, name, "Realized when" outcome chips,
+ * steps / projects / done / in progress), the builder card (view switch,
+ * + Project, + Outcome, Longest chain, zoom; then Structured | Free flow; then
+ * the gaps and the board), and a details column down the right-hand side.
+ *
+ * The details column edits whatever is selected: a project (what it delivers,
+ * done-when, size, its links), an outcome, a link, several projects, or — with
+ * nothing selected — the roadmap's outcomes. The read-only views (Outline, List,
+ * Order, Mind map) render through `renderView` and pick into the same column.
  *
  * Presentational: everything it writes goes through `actions`, so it renders in
  * tests without a sync runtime (Roadmap.tsx wires the real commands).
  */
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 
 import type { Node } from '@prisms/core';
 import { Ic } from '@prisms/ui';
@@ -54,7 +61,17 @@ import {
   type Point,
   type ProjectSize,
 } from '../roadmap-flow';
-import { itemDone, type LinkKind, type RoadmapLink, type RoadmapModel } from '../roadmap-model';
+import { itemDone, readRoadmapView, writeRoadmapView, type LinkKind, type RoadmapLink, type RoadmapModel, type RoadmapView } from '../roadmap-model';
+
+export type OtherView = Exclude<RoadmapView, 'flow'>;
+/** The view switch, in the builder's order: the builder first, then the read-only views. */
+const VIEW_TABS: readonly { value: RoadmapView; label: string; icon: 'flow' | 'outline' | 'list' | 'order' | 'mindmap' }[] = [
+  { value: 'flow', label: 'Flow', icon: 'flow' },
+  { value: 'outline', label: 'Outline', icon: 'outline' },
+  { value: 'list', label: 'List', icon: 'list' },
+  { value: 'order', label: 'Order', icon: 'order' },
+  { value: 'map', label: 'Mind map', icon: 'mindmap' },
+];
 
 export interface SavedSpot {
   /** The diagram_layouts row id (for an in-place update). */
@@ -120,6 +137,11 @@ export function RoadmapFlow({
   layouts,
   actions,
   onNavigate,
+  top,
+  titleSlot,
+  menuSlot,
+  visionColor,
+  renderView,
 }: {
   model: RoadmapModel;
   roadmap: Node;
@@ -127,10 +149,22 @@ export function RoadmapFlow({
   layouts: ReadonlyMap<string, SavedSpot>;
   actions: FlowActions;
   onNavigate: (href: string) => void;
+  /** Above the header card, in the main column: the roadmap picker. */
+  top?: ReactNode;
+  /** The roadmap's name, editable in place (the screen owns renaming). */
+  titleSlot?: ReactNode;
+  /** The roadmap's ⋯ menu. */
+  menuSlot?: ReactNode;
+  /** The owning vision's colour: its name (for tests) and hex. */
+  visionColor?: { name: string; hex: string };
+  /** The other views' bodies (Outline, List, Order, Mind map). Without it, Flow is the only view. */
+  renderView?: (view: OtherView, ctx: { selectedId: string | null; onPick: (id: string) => void }) => ReactNode;
 }) {
   const outcomes = useMemo(() => readOutcomes(roadmap.attributes), [roadmap.attributes]);
   const flow = useMemo(() => buildFlow(model, outcomes), [model, outcomes]);
 
+  const [storedView, setViewState] = useState<RoadmapView>(() => readRoadmapView(true));
+  const view: RoadmapView = renderView ? storedView : 'flow';
   const [layout, setLayoutState] = useState<FlowLayout>(readFlowLayout);
   const [sel, setSel] = useState<Sel>({ kind: 'roadmap' });
   const [multi, setMulti] = useState<string[]>([]);
@@ -224,6 +258,22 @@ export function RoadmapFlow({
   const selO = sel.kind === 'outcome' ? outcomeById(sel.id) : undefined;
   const selL = sel.kind === 'link' ? flow.links.find((l) => linkKey(l) === sel.key) : undefined;
   const multiOn = multi.length > 1;
+  // A new project or outcome is named in the details panel: once its panel is up,
+  // its placeholder name is focused and selected, ready to type over.
+  const [focusReq, setFocusReq] = useState<{ id: string; el: 'rf-p-title' | 'rf-o-name' } | null>(null);
+  const shownId = selP?.id ?? selO?.id ?? null;
+  useEffect(() => {
+    if (!focusReq || focusReq.id !== shownId) return;
+    const el = document.getElementById(focusReq.el) as HTMLInputElement | null;
+    el?.focus();
+    el?.select();
+    setFocusReq(null);
+  }, [focusReq, shownId]);
+  const setView = (v: RoadmapView) => {
+    commitEdit();
+    setViewState(v);
+    writeRoadmapView(v);
+  };
   const pick = (id: string) => {
     setSel({ kind: 'project', id });
     setMulti([id]);
@@ -309,8 +359,8 @@ export function RoadmapFlow({
       await place(id, opts.at ?? spotIn(flow, free, outcomeId, null));
     }
     pick(id);
-    if (opts.inline && layout === 'free') startEdit({ id, kind: 'project', draft: '' });
-    else requestAnimationFrame(() => document.getElementById('rf-p-title')?.focus());
+    if (opts.inline && layout === 'free' && view === 'flow') startEdit({ id, kind: 'project', draft: '' });
+    else setFocusReq({ id, el: 'rf-p-title' });
   };
   const deleteProjects = async (ids: readonly string[]) => {
     if (ids.length === 0) return;
@@ -325,8 +375,8 @@ export function RoadmapFlow({
     for (const id of members) await setExtras(id, { outcomeId: o.id });
     setMulti([]);
     setSel({ kind: 'outcome', id: o.id });
-    if (layout === 'free' && members.length > 0) startEdit({ id: o.id, kind: 'outcome', draft: '' });
-    else requestAnimationFrame(() => document.getElementById('rf-o-name')?.focus());
+    if (layout === 'free' && view === 'flow' && members.length > 0) startEdit({ id: o.id, kind: 'outcome', draft: '' });
+    else setFocusReq({ id: o.id, el: 'rf-o-name' });
   };
   const patchOutcome = (id: string, patch: Partial<FlowOutcome>) => saveOutcomes(outcomesNow().map((o) => (o.id === id ? { ...o, ...patch } : o)));
   const moveOutcome = (id: string, dir: -1 | 1) => {
@@ -1209,110 +1259,213 @@ export function RoadmapFlow({
   };
   const firstOutcome = outcomes[0]?.id ?? null;
 
+  const doneCount = flow.cards.filter((c) => c.state === 'done').length;
+  const nowCount = flow.cards.filter((c) => c.state === 'now').length;
+  const zoomOut = () => setZoom((z) => Math.max(0.5, +(z - 0.1).toFixed(2)));
+  const zoomIn = () => setZoom((z) => Math.min(1.5, +(z + 0.1).toFixed(2)));
+
   return (
-    <div className="px-rf" data-testid="rf" data-layout={layout}>
-      <div className="px-rf-main">
-        <div className="px-rf-bar">
-          <div className="px-vd-units" role="radiogroup" aria-label="Flow layout">
-            {(
-              [
-                ['structured', 'Structured', 'flow'],
-                ['free', 'Free flow', 'freeflow'],
-              ] as const
-            ).map(([value, label, icon]) => (
-              <button
-                key={value}
-                type="button"
-                role="radio"
-                aria-checked={layout === value}
-                className={`px-vd-unit${layout === value ? ' px-vd-unit--on' : ''}`}
-                data-testid={`rf-layout-${value}`}
-                onClick={() => setLayout(value)}
-              >
-                <Ic name={icon} /> {label}
+    <div className="px-rb" data-testid="rf" data-layout={layout}>
+      <div className="px-rb-main">
+        {top}
+
+        {/* The roadmap: its vision, its name, what has to be true, and where it stands. */}
+        <section className="px-rb-hdr" aria-label="Roadmap">
+          <div className="px-rb-hdr-main">
+            <div className="px-rb-vision">
+              <span className="px-rf-eyebrow">Vision</span>
+              {visionColor && (
+                <span className="px-swatch px-swatch--sm" data-testid="rm-vision-swatch" data-color={visionColor.name} style={{ background: visionColor.hex }} />
+              )}
+              <button type="button" className="px-rb-vision-link" data-testid="rm-vision-name" onClick={clearSel}>
+                {vision ? vision.title : 'No vision'}
               </button>
-            ))}
+            </div>
+            {titleSlot ?? <h2 className="px-rb-title">{roadmap.title}</h2>}
+            {roadmap.description.trim() !== '' && (
+              <p className="px-rm-desc" data-testid="rm-description">
+                {roadmap.description}
+              </p>
+            )}
+            <div className="px-rb-realized" data-testid="rf-outcomes">
+              <span className="px-rb-realized-l">Realized when</span>
+              {flow.caps.map((c) => (
+                <button
+                  key={c.outcome.id}
+                  type="button"
+                  className={`px-rf-ochip${sel.kind === 'outcome' && sel.id === c.outcome.id ? ' px-rf-ochip--sel' : ''}${c.count ? '' : ' px-rf-ochip--warn'}`}
+                  data-testid={`rf-ochip-${c.outcome.id}`}
+                  onClick={() => {
+                    setSel({ kind: 'outcome', id: c.outcome.id });
+                    setMulti([]);
+                  }}
+                >
+                  <span>{c.outcome.statement || c.outcome.name || 'Untitled outcome'}</span>
+                  <span className="px-rf-ochip-n">{c.count ? `${c.done}/${c.count}` : 'gap'}</span>
+                </button>
+              ))}
+              {!hasOutcomes && <span className="px-rf-outcomes-hint">Name what has to be true for this roadmap to be done — each outcome becomes a row.</span>}
+              <button type="button" className="px-rf-ochip px-rf-ochip--add" data-testid="rf-add-outcome-chip" onClick={() => void addOutcome()}>
+                + Outcome
+              </button>
+            </div>
           </div>
-          <button
-            type="button"
-            className="px-btn px-btn--sm px-btn--primary"
-            data-testid="rf-add-project"
-            onClick={() => void addProject({ outcomeId: selP ? selP.outcomeId : selO ? selO.id : firstOutcome, ...(selP && layout === 'free' ? { after: selP.id, inline: true } : {}) })}
-          >
-            <Ic name="plus" /> Project
-          </button>
-          <button type="button" className="px-btn px-btn--sm" data-testid="rf-add-outcome" onClick={() => void addOutcome(multiOn ? multi : [])}>
-            <Ic name="plus" /> {multiOn ? 'Group as outcome' : 'Outcome'}
-          </button>
-          <button type="button" className="px-btn px-btn--sm px-rf-toggle" data-testid="rf-chain" aria-pressed={chain} onClick={() => setChain(!chain)}>
-            <span className="px-rf-sw" aria-hidden="true" /> Longest chain
-          </button>
-          {layout === 'free' && (
-            <button type="button" className="px-btn px-btn--sm" data-testid="rf-tidy" onClick={() => void tidyUp()}>
-              <Ic name="list" /> Tidy up
-            </button>
-          )}
-          <div className="px-rf-zoom">
-            <button type="button" className="px-btn px-btn--sm px-btn--ghost" aria-label="Zoom out" onClick={() => setZoom((z) => Math.max(0.5, +(z - 0.1).toFixed(2)))}>
-              −
-            </button>
-            <span className="px-rf-z">{Math.round(zoom * 100)}%</span>
-            <button type="button" className="px-btn px-btn--sm px-btn--ghost" aria-label="Zoom in" onClick={() => setZoom((z) => Math.min(1.5, +(z + 0.1).toFixed(2)))}>
-              +
-            </button>
-            <button type="button" className="px-btn px-btn--sm px-btn--ghost" onClick={fit}>
-              Fit
-            </button>
-          </div>
-        </div>
-        <div className="px-rf-outcomes" data-testid="rf-outcomes">
-          <span className="px-rf-outcomes-l">Realized when</span>
-          {flow.caps.map((c) => (
+          <dl className="px-rb-stats" data-testid="rm-stats">
+            <div className="px-rb-stat">
+              <dt>Steps to the vision</dt>
+              <dd data-testid="rm-step-count">{flow.maxStep}</dd>
+            </div>
+            <div className="px-rb-stat">
+              <dt>Projects</dt>
+              <dd data-testid="rm-project-count">{flow.cards.length}</dd>
+            </div>
+            <div className="px-rb-stat">
+              <dt>Done</dt>
+              <dd>{doneCount}</dd>
+            </div>
+            <div className="px-rb-stat">
+              <dt>In progress</dt>
+              <dd>{nowCount}</dd>
+            </div>
+          </dl>
+          {menuSlot}
+        </section>
+
+        {/* The builder: view switch and what you can add, then the layout switch, the gaps, the board. */}
+        <section
+          className="px-rb-builder"
+          aria-label="Roadmap builder"
+          data-testid="rm-views"
+          data-view={view}
+          style={visionColor ? ({ '--px-rm-c': visionColor.hex } as CSSProperties) : undefined}
+        >
+          <div className="px-rb-toolbar">
+            {renderView && (
+              <div className="px-rb-seg" role="radiogroup" aria-label="Roadmap view">
+                {VIEW_TABS.map((v) => (
+                  <button
+                    key={v.value}
+                    type="button"
+                    role="radio"
+                    aria-checked={view === v.value}
+                    className={view === v.value ? 'px-rb-seg--on' : undefined}
+                    data-testid={`rm-view-${v.value}`}
+                    onClick={() => setView(v.value)}
+                  >
+                    {v.label}
+                  </button>
+                ))}
+              </div>
+            )}
             <button
-              key={c.outcome.id}
               type="button"
-              className={`px-rf-ochip${sel.kind === 'outcome' && sel.id === c.outcome.id ? ' px-rf-ochip--sel' : ''}${c.count ? '' : ' px-rf-ochip--warn'}`}
-              data-testid={`rf-ochip-${c.outcome.id}`}
-              onClick={() => {
-                setSel({ kind: 'outcome', id: c.outcome.id });
-                setMulti([]);
-              }}
+              className="px-rb-btn px-rb-btn--primary"
+              data-testid="rf-add-project"
+              onClick={() =>
+                void addProject({
+                  outcomeId: selP ? selP.outcomeId : selO ? selO.id : firstOutcome,
+                  ...(selP && layout === 'free' && view === 'flow' ? { after: selP.id, inline: true } : {}),
+                })
+              }
             >
-              <span>{c.outcome.name || 'Outcome'}</span>
-              <span className="px-rf-ochip-n">{c.count ? `${c.done}/${c.count}` : 'gap'}</span>
+              <Ic name="plus" /> Project
             </button>
-          ))}
-          {!hasOutcomes && <span className="px-rf-outcomes-hint">Name what has to be true for this roadmap to be done — each outcome becomes a row.</span>}
-          <button type="button" className="px-rf-ochip px-rf-ochip--add" data-testid="rf-add-outcome-chip" onClick={() => void addOutcome()}>
-            + Outcome
-          </button>
-        </div>
-        {flow.gaps.length > 0 && (
-          <div className="px-rf-gaps" role="status" data-testid="rf-gaps">
-            <Warn size={14} />
-            <b>{plural(flow.gaps.length, 'gap')}</b> between this roadmap and its vision:
-            {flow.gaps.map((g) => (
-              <button
-                key={g.key}
-                type="button"
-                className="px-rf-gap"
-                onClick={() => (g.kind === 'outcome' ? void addProject({ outcomeId: g.id }) : pick(g.id))}
-              >
-                <span>{g.text}</span>
-                <span className="px-rf-gap-act">{g.kind === 'outcome' ? 'Add a project' : 'Assign'}</span>
+            <button type="button" className="px-rb-btn" data-testid="rf-add-outcome" onClick={() => void addOutcome(multiOn ? multi : [])}>
+              <Ic name="plus" /> {multiOn ? 'Group as outcome' : 'Outcome'}
+            </button>
+            {view === 'flow' && (
+              <button type="button" className="px-rb-btn px-rf-toggle" data-testid="rf-chain" aria-pressed={chain} onClick={() => setChain(!chain)}>
+                <span className="px-rf-sw" aria-hidden="true" /> Longest chain
               </button>
-            ))}
+            )}
+            {view === 'flow' && (
+              <div className="px-rf-zoom">
+                <button type="button" className="px-rb-icon" aria-label="Zoom out" onClick={zoomOut}>
+                  −
+                </button>
+                <span className="px-rf-z">{Math.round(zoom * 100)}%</span>
+                <button type="button" className="px-rb-icon" aria-label="Zoom in" onClick={zoomIn}>
+                  +
+                </button>
+                <button type="button" className="px-rb-btn px-rb-btn--quiet" onClick={fit}>
+                  Fit
+                </button>
+              </div>
+            )}
           </div>
-        )}
-        {flow.cards.length === 0 && (
-          <p className="px-rf-emptystate" data-testid="rm-no-projects">
-            This roadmap has no projects yet. Start with the outcomes it has to make true, then add the projects that deliver each one — or type a project into the field above.
-          </p>
-        )}
-        {layout === 'free' ? freeBoard() : structured()}
+
+          {view === 'flow' && (
+            <div className="px-rb-subbar">
+              <div className="px-rb-seg px-rb-seg--sm" role="radiogroup" aria-label="Flow layout">
+                {(
+                  [
+                    ['structured', 'Structured', 'flow'],
+                    ['free', 'Free flow', 'freeflow'],
+                  ] as const
+                ).map(([value, label, icon]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    role="radio"
+                    aria-checked={layout === value}
+                    className={layout === value ? 'px-rb-seg--on' : undefined}
+                    data-testid={`rf-layout-${value}`}
+                    onClick={() => setLayout(value)}
+                  >
+                    <Ic name={icon} /> {label}
+                  </button>
+                ))}
+              </div>
+              <span className="px-rb-hint">
+                <span className="px-rb-hint-dot" aria-hidden="true" />
+                {layout === 'structured'
+                  ? 'Rows are outcomes, columns are steps worked out from the links. Drag a card’s dot onto another card to say which comes first.'
+                  : 'Groups are outcomes. Move, group and relink anything; the step numbers still come from the links.'}
+              </span>
+              {layout === 'free' && (
+                <button type="button" className="px-rb-btn px-rb-btn--sm px-rb-tidy" data-testid="rf-tidy" onClick={() => void tidyUp()}>
+                  <Ic name="list" /> Tidy up
+                </button>
+              )}
+            </div>
+          )}
+
+          {flow.gaps.length > 0 && (
+            <div className="px-rf-gaps" role="status" data-testid="rf-gaps">
+              <Warn size={14} />
+              <b>{plural(flow.gaps.length, 'gap')}</b> between this roadmap and its vision:
+              {flow.gaps.map((g) => (
+                <button
+                  key={g.key}
+                  type="button"
+                  className="px-rf-gap"
+                  onClick={() => (g.kind === 'outcome' ? void addProject({ outcomeId: g.id }) : pick(g.id))}
+                >
+                  <span>{g.text}</span>
+                  <span className="px-rf-gap-act">{g.kind === 'outcome' ? 'Add a project' : 'Assign'}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          {flow.cards.length === 0 && (
+            <p className="px-rf-emptystate" data-testid="rm-no-projects">
+              This roadmap has no projects yet. Start with the outcomes it has to make true, then use “+ Project” to add what delivers each one.
+            </p>
+          )}
+          {view === 'flow' ? (
+            layout === 'free' ? (
+              freeBoard()
+            ) : (
+              structured()
+            )
+          ) : (
+            <div className="px-rb-other">{renderView?.(view, { selectedId: selP?.id ?? null, onPick: pick })}</div>
+          )}
+        </section>
       </div>
 
-      <aside className="px-rf-insp" aria-label="Details" data-testid="rf-inspector" data-kind={multiOn ? 'multi' : sel.kind}>
+      <aside className="px-rb-insp" aria-label="Details" data-testid="rf-inspector" data-kind={multiOn ? 'multi' : sel.kind}>
+       <div className="px-rb-insp-in">
         {multiOn ? (
           <MultiPanel
             key={multi.join()}
@@ -1383,6 +1536,7 @@ export function RoadmapFlow({
             onEditVision={() => onNavigate('/vision')}
           />
         )}
+       </div>
       </aside>
       {toast && (
         <div className="px-rf-toast" role="status" data-testid="rf-toast">

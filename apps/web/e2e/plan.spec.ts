@@ -195,9 +195,12 @@ test('Plan › Roadmap manages one roadmap at a time: create, fill, re-home unde
   await expect(page.getByTestId('rm-vision-name')).toHaveText('Work');
   await expect(page.getByTestId('rm-no-projects')).toBeVisible();
 
-  // --- a project added here lands under the roadmap, in the views ---
-  await page.getByTestId('rm-new-project-title').fill('Landing page');
-  await page.getByTestId('rm-add-project').click();
+  // --- "+ Project" adds one under the roadmap and hands its name to the details column ---
+  await page.getByTestId('rf-add-project').click();
+  const projectName = page.getByTestId('rf-p-title');
+  await expect(projectName).toBeFocused();
+  await projectName.fill('Landing page');
+  await projectName.press('Enter');
   await expect(page.getByTestId('rm-project-count')).toHaveText('1');
   await expect(page.getByTestId('rm-views').getByText('Landing page')).toBeVisible();
 
