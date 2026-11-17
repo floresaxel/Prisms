@@ -26,6 +26,7 @@ import {
 import { validateTaskJustification } from '../graph/justify';
 import { getNode, type TreeIndex } from '../graph/tree';
 import { validateAutomationRule, type RuleCandidate } from '../rules/validate';
+import { MAX_OPEN_TIMERS } from './timer-merge';
 
 const notFound = (kind: string, id: Uuid): Result<void> =>
   err(domainError('E_NOT_FOUND', `${kind} ${id} does not exist`));
@@ -229,17 +230,24 @@ export function checkCompletion(
 
 // --- time tracking ----------------------------------------------------------
 
+/**
+ * I5 (split focus): at most one open entry per TASK, and at most
+ * `MAX_OPEN_TIMERS` open per user. `openTaskIds` = the tasks with a running
+ * timer. The §7.4 merge resolves genuine offline races; on one device both are
+ * straight rejections.
+ */
 export function checkClockIn(
   task: Node | undefined,
   taskId: Uuid,
-  hasOpenEntry: boolean,
+  openTaskIds: readonly Uuid[],
 ): Result<void> {
   if (!task) return notFound('task', taskId);
   if (task.completed_at !== null) return doneImmutable(taskId); // I8
-  if (hasOpenEntry) {
-    // I5: at most one open entry per user (the §7.4 merge resolves genuine
-    // offline races; a same-device second clock-in is a straight rejection).
-    return err(domainError('E_TIMER_ALREADY_RUNNING', 'another timer is already running (I5)'));
+  if (openTaskIds.includes(taskId)) {
+    return err(domainError('E_TIMER_ALREADY_RUNNING', `a timer is already running on task ${taskId} (I5)`));
+  }
+  if (new Set(openTaskIds).size >= MAX_OPEN_TIMERS) {
+    return err(domainError('E_TIMER_LIMIT', `at most ${MAX_OPEN_TIMERS} timers can run at once (I5)`));
   }
   return ok(undefined);
 }

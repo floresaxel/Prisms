@@ -25,12 +25,17 @@ export interface MergeableEntry {
   readonly started_at: IsoDateTime;
   readonly ended_at: IsoDateTime | null;
   readonly focus_factor?: number | null;
+  /**
+   * Split focus: the fraction of this span credited to its task (1/N while N
+   * tasks' timers overlap — `splitConcurrent`). Absent = 1, the whole span.
+   */
+  readonly share?: number;
 }
 
 export interface TimeEntryUnion {
   /** Disjoint, ascending union of the closed intervals. */
   readonly segments: { readonly start: IsoDateTime; readonly end: IsoDateTime }[];
-  /** Total union minutes (overlaps counted once). */
+  /** Total union minutes (overlaps counted once), weighted by split-focus share. */
   readonly rawMinutes: number;
   /** Union minutes integrated against focus_factor (max focus per instant). */
   readonly effectiveMinutes: number;
@@ -44,6 +49,7 @@ interface Closed {
   startIso: IsoDateTime;
   endIso: IsoDateTime;
   focus: number;
+  share: number;
 }
 
 const MS_PER_MIN = 60_000;
@@ -60,7 +66,7 @@ export function mergeTimeEntries(entries: readonly MergeableEntry[]): TimeEntryU
     }
     const endMs = isoToEpochMillis(e.ended_at);
     if (endMs <= startMs) continue; // degenerate / invalid interval contributes nothing
-    closed.push({ startMs, endMs, startIso: e.started_at, endIso: e.ended_at, focus: e.focus_factor ?? 1.0 });
+    closed.push({ startMs, endMs, startIso: e.started_at, endIso: e.ended_at, focus: e.focus_factor ?? 1.0, share: e.share ?? 1 });
   }
 
   // --- disjoint union segments (interval merge) ---
@@ -83,23 +89,25 @@ export function mergeTimeEntries(entries: readonly MergeableEntry[]): TimeEntryU
   if (cur !== null) segments.push({ start: cur.startIso, end: cur.endIso });
 
   // --- raw + effective minutes via a boundary sweep (max focus per instant) ---
+  // Each instant counts ONCE (union), weighted by the largest split-focus share
+  // covering it (1 unless timers on other tasks overlapped — `splitConcurrent`).
   const boundaries = Array.from(new Set(closed.flatMap((c) => [c.startMs, c.endMs]))).sort((a, b) => a - b);
   let rawMs = 0;
   let effMs = 0;
   for (let i = 0; i + 1 < boundaries.length; i += 1) {
     const lo = boundaries[i]!;
     const hi = boundaries[i + 1]!;
-    let maxFocus = 0;
-    let covered = false;
+    let maxEff = 0;
+    let maxShare = 0;
     for (const c of closed) {
       if (c.startMs <= lo && c.endMs >= hi) {
-        covered = true;
-        if (c.focus > maxFocus) maxFocus = c.focus;
+        if (c.share > maxShare) maxShare = c.share;
+        if (c.focus * c.share > maxEff) maxEff = c.focus * c.share;
       }
     }
-    if (covered) {
-      rawMs += hi - lo;
-      effMs += (hi - lo) * maxFocus;
+    if (maxShare > 0) {
+      rawMs += (hi - lo) * maxShare;
+      effMs += (hi - lo) * maxEff;
     }
   }
 

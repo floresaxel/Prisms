@@ -37,6 +37,7 @@ import {
   isBlockedForAcceptance,
   isClientTooOld,
   isCommandName,
+  MAX_OPEN_TIMERS,
   renormalizedOrders,
   resolveOpenTimeEntries,
   runAutomations,
@@ -909,9 +910,14 @@ export function createDispatcher(
           return reject('E_BLOCKED_TASK', `task ${p.task_id} is blocked; clock in with force to override (§8)`);
         }
 
-        const openEntry = await one(
-          tx.select().from(time_entries).where(and(eq(time_entries.user_id, userId), isNull(time_entries.ended_at), isNull(time_entries.deleted_at))).limit(1),
-        );
+        // I5 under split focus: one open entry per task, ≤ MAX_OPEN_TIMERS per user.
+        // Normalize stored timestamps to ISO so they compare correctly with the
+        // ISO payload (Postgres returns "YYYY-MM-DD HH:MM:SS+00").
+        const openRows = await tx
+          .select({ id: time_entries.id, task_id: time_entries.task_id, started_at: time_entries.started_at, device_id: time_entries.device_id })
+          .from(time_entries)
+          .where(and(eq(time_entries.user_id, userId), isNull(time_entries.ended_at), isNull(time_entries.deleted_at)));
+        const open = openRows.map((r) => ({ ...r, started_at: new Date(r.started_at).toISOString() }));
         const insertEntry = async (endedAt: string | null): Promise<void> => {
           await tx.insert(time_entries).values({
             id: p.entry_id,
@@ -927,27 +933,34 @@ export function createDispatcher(
           rec('time_entries', p.entry_id, 'insert');
         };
 
-        if (!openEntry) {
+        // On the SAME device the rules are straight rejections: that device saw
+        // what was running when it clocked in.
+        const otherTasks = new Set(open.filter((o) => o.task_id !== p.task_id).map((o) => o.task_id));
+        if (open.some((o) => o.task_id === p.task_id && o.device_id === deviceId)) {
+          return reject('E_TIMER_ALREADY_RUNNING', `a timer is already running on task ${p.task_id} on this device (I5)`);
+        }
+        if (otherTasks.size >= MAX_OPEN_TIMERS && open.some((o) => o.task_id !== p.task_id && o.device_id === deviceId)) {
+          return reject('E_TIMER_LIMIT', `at most ${MAX_OPEN_TIMERS} timers can run at once (I5)`);
+        }
+        // §7.4: a cross-device offline race — the same task opened twice, or more
+        // than MAX_OPEN_TIMERS between devices — resolves deterministically.
+        const res = resolveOpenTimeEntries([...open, { id: p.entry_id, task_id: p.task_id, started_at: p.started_at }]);
+        if (!res) {
           await insertEntry(null);
           return applied();
         }
-        // I5: a second clock-in on the SAME device is a straight rejection.
-        if (openEntry.device_id === deviceId) {
-          return reject('E_TIMER_ALREADY_RUNNING', 'another timer is already running on this device (I5)');
+        // An exact started_at tie would close an entry at its own start, which I6
+        // (and the DB CHECK) forbid; refuse the clock-in rather than corrupt a row.
+        const startOf = new Map<string, string>([...open.map((o) => [o.id, o.started_at] as const), [p.entry_id, p.started_at]]);
+        if (res.closures.some((c) => c.ended_at <= startOf.get(c.id)!)) {
+          return reject(otherTasks.size >= MAX_OPEN_TIMERS ? 'E_TIMER_LIMIT' : 'E_TIMER_ALREADY_RUNNING', 'a timer started at the same instant on another device (I5)');
         }
-        // §7.4: cross-device offline race — latest started_at stays open.
-        // Normalize the stored timestamp to ISO so it compares correctly with
-        // the ISO payload (Postgres returns "YYYY-MM-DD HH:MM:SS+00").
-        const res = resolveOpenTimeEntries([
-          { id: openEntry.id, started_at: new Date(openEntry.started_at).toISOString() },
-          { id: p.entry_id, started_at: p.started_at },
-        ])!;
-        if (res.keepOpenId === p.entry_id) {
-          await tx.update(time_entries).set({ ended_at: res.closures[0]!.ended_at, completed_session: null, ...sys }).where(eq(time_entries.id, openEntry.id));
-          await insertEntry(null);
-        } else {
-          await insertEntry(res.closures.find((c) => c.id === p.entry_id)!.ended_at);
+        for (const c of res.closures) {
+          if (c.id === p.entry_id) continue;
+          await tx.update(time_entries).set({ ended_at: c.ended_at, completed_session: null, ...sys }).where(eq(time_entries.id, c.id));
+          rec('time_entries', c.id, 'update', ['ended_at', 'completed_session']);
         }
+        await insertEntry(res.closures.find((c) => c.id === p.entry_id)?.ended_at ?? null);
         return applied();
       }
       case 'timer.clock_out': {

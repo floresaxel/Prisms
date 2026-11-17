@@ -52,6 +52,7 @@ export * from './sync/manifest';
 export * from './merge/lww';
 export * from './merge/sort-order';
 export * from './merge/time-entries';
+export * from './merge/split-focus';
 export * from './merge/renormalize';
 export * from './commands/settings';
 export * from './commands/payloads';

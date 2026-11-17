@@ -10,7 +10,8 @@
  * - I2 max visions (MAX_VISIONS)   → E_MAX_VISIONS
  * - I3 justification xor           → E_JUSTIFICATION
  * - I4 DAG / same-type edges       → E_CYCLE, E_EDGE_TYPE_MISMATCH
- * - I5 one open time entry         → E_TIMER_ALREADY_RUNNING
+ * - I5 one open entry per task     → E_TIMER_ALREADY_RUNNING
+ *   … and ≤ MAX_OPEN_TIMERS per user → E_TIMER_LIMIT (split focus)
  * - I6 ends_at > starts_at         → E_INVALID_INTERVAL
  * - I7 anchored blocks immutable   → E_ANCHORED_IMMUTABLE
  * - I8 done tasks immutable        → E_DONE_IMMUTABLE
@@ -32,6 +33,7 @@ export const ERROR_CODES = [
   'E_CYCLE',
   'E_EDGE_TYPE_MISMATCH',
   'E_TIMER_ALREADY_RUNNING',
+  'E_TIMER_LIMIT', // split focus: a clock-in past MAX_OPEN_TIMERS running timers
   'E_TIMER_NOT_RUNNING',
   'E_INVALID_INTERVAL',
   'E_ANCHORED_IMMUTABLE',

@@ -9,7 +9,7 @@
  */
 import { randomUUID } from 'node:crypto';
 
-import { MAX_VISIONS } from '@prisms/core';
+import { MAX_OPEN_TIMERS, MAX_VISIONS } from '@prisms/core';
 import { loadRootEnv, runMigrations } from '@prisms/db';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
@@ -160,6 +160,23 @@ describe.skipIf(!adminUrl)('S11 command dispatcher (§8 pipeline, full catalog)'
     await results([cmd('timer.clock_out', { entry_id: e1, ended_at: '2026-06-13T11:00:00.000Z' })], ids.user);
     const [in3] = await results([cmd('timer.clock_in', { entry_id: randomUUID(), task_id: ids.task, started_at: '2026-06-13T12:00:00.000Z' })], ids.user);
     expect(in3!.result).toBe('applied');
+  });
+
+  it('I5 split focus: other tasks run alongside, up to MAX_OPEN_TIMERS; one more is E_TIMER_LIMIT', async () => {
+    const ids = await seedTree();
+    const tasks = [ids.task];
+    for (let i = 1; i <= MAX_OPEN_TIMERS; i += 1) {
+      const t = randomUUID();
+      await results([cmd('node.create', { id: t, node_type: 'task', title: `T${i}`, sort_order: `b${i}`, parent_id: ids.project })], ids.user);
+      tasks.push(t);
+    }
+    const ins = await results(
+      tasks.slice(0, MAX_OPEN_TIMERS).map((t, i) => cmd('timer.clock_in', { entry_id: randomUUID(), task_id: t, started_at: `2026-06-13T10:0${i}:00.000Z` })),
+      ids.user,
+    );
+    expect(ins.every((r) => r.result === 'applied')).toBe(true);
+    const [over] = await results([cmd('timer.clock_in', { entry_id: randomUUID(), task_id: tasks[MAX_OPEN_TIMERS]!, started_at: '2026-06-13T10:30:00.000Z' })], ids.user);
+    expect(over).toMatchObject({ result: 'rejected', reject_code: 'E_TIMER_LIMIT' });
   });
 
   it('I6 interval: a block ending before it starts is rejected', async () => {

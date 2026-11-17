@@ -19,7 +19,7 @@ import { Alert, BackHandler, FlatList, Pressable, StyleSheet, Text, View } from 
 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { asEpochMillis, type Instant } from '@prisms/core';
+import { asEpochMillis, MAX_OPEN_TIMERS, type Instant } from '@prisms/core';
 import {
   explainProvenance,
   formatWallTime,
@@ -30,7 +30,7 @@ import {
   useMyDayAvailable,
   useNodeTree,
   usePromoteTargets,
-  useRunningTimer,
+  useRunningTimers,
   useTimeBlocksForDay,
   useTodayItinerary,
   useUserSettings,
@@ -38,6 +38,7 @@ import {
   type CommandContext,
   type ItineraryRow,
   type MyDayItem,
+  type RunningTimer,
   type TimeBlockOption,
 } from '@prisms/ui';
 
@@ -67,7 +68,10 @@ export function Today({ ctx }: { ctx: CommandContext }) {
   }, []);
 
   const itinerary = useTodayItinerary(coarseNow);
-  const running = useRunningTimer(coarseNow);
+  // Split focus (I5): up to MAX_OPEN_TIMERS run at once, one per task.
+  const { timers } = useRunningTimers(coarseNow);
+  const canClockIn = timers.length < MAX_OPEN_TIMERS;
+  const startedAtFor = useCallback((taskId: string) => timers.find((t) => t.entry.task_id === taskId)?.entry.started_at, [timers]);
   const commands = useCommands(ctx);
   const settings = useUserSettings();
   const hydrated = useIsHydrated();
@@ -86,7 +90,11 @@ export function Today({ ctx }: { ctx: CommandContext }) {
     return () => sub.remove();
   }, [dayPanel]);
 
-  const [review, setReview] = useState<{ entryId: string; taskId: string; taskTitle: string } | null>(null);
+  // Every clock-out queues its focus review; they are answered one at a time.
+  const [reviews, setReviews] = useState<ReviewTarget[]>([]);
+  const review = reviews[0] ?? null;
+  // A clock-in while timers run asks first: switch, or split focus.
+  const [clockInAsk, setClockInAsk] = useState<{ taskId: string; title: string } | null>(null);
   // Local state is enough for the fold to survive a tab switch: the tab
   // navigator keeps a visited screen mounted.
   const [allTasksOpen, setAllTasksOpen] = useState(true);
@@ -156,15 +164,30 @@ export function Today({ ctx }: { ctx: CommandContext }) {
     [commands],
   );
 
-  const stopTimer = useCallback(
-    async (taskId: string, taskTitle: string) => {
-      const entry = running?.entry;
-      if (entry === undefined) return;
-      await commands.clockOut(entry.id);
-      // D9: clocking out always asks for the focus factor (I5 parity with web).
-      setReview({ entryId: entry.id, taskId, taskTitle });
+  const stopTimers = useCallback(
+    async (stopping: readonly RunningTimer[]) => {
+      const queued: ReviewTarget[] = [];
+      for (const t of stopping) {
+        await commands.clockOut(t.entry.id);
+        queued.push({ entryId: t.entry.id, taskId: t.entry.task_id, taskTitle: t.task?.title ?? 'task' });
+      }
+      // D9: clocking out always asks for the focus factor (parity with web).
+      if (queued.length > 0) setReviews((q) => [...q, ...queued]);
     },
-    [commands, running],
+    [commands],
+  );
+
+  const stopTimer = useCallback(
+    (taskId: string) => stopTimers(timers.filter((t) => t.entry.task_id === taskId)),
+    [stopTimers, timers],
+  );
+
+  const requestClockIn = useCallback(
+    (taskId: string, title: string) => {
+      if (timers.length === 0) void commands.clockIn(taskId).catch(() => undefined);
+      else setClockInAsk({ taskId, title });
+    },
+    [commands, timers.length],
   );
 
   const openMenu = useCallback(
@@ -178,10 +201,10 @@ export function Today({ ctx }: { ctx: CommandContext }) {
       setActionRequest(
         buildRowMenu({
           row,
-          // I5: only one timer runs at a time.
-          canClockIn: running === null,
-          onClockIn: () => void commands.clockIn(row.taskId),
-          onClockOut: () => void stopTimer(row.taskId, row.title),
+          // I5: up to MAX_OPEN_TIMERS run at once (split focus).
+          canClockIn,
+          onClockIn: () => requestClockIn(row.taskId, row.title),
+          onClockOut: () => void stopTimer(row.taskId),
           onShiftLater: () => shift(30),
           onShiftEarlier: () => shift(-30),
           onToggleAnchor: () => void commands.setBlockAnchor(row.blockId, row.anchored ? 'none' : 'start'),
@@ -191,7 +214,7 @@ export function Today({ ctx }: { ctx: CommandContext }) {
         }),
       );
     },
-    [commands, running, stopTimer],
+    [commands, canClockIn, requestClockIn, stopTimer],
   );
 
   // T7/D2: the two things Worklist could do to a task that is NOT on the
@@ -202,14 +225,14 @@ export function Today({ ctx }: { ctx: CommandContext }) {
       setActionRequest(
         buildTaskMenu({
           item,
-          canClockIn: running === null,
-          onClockIn: () => void commands.clockIn(item.task.id),
-          onClockOut: () => void stopTimer(item.task.id, item.task.title),
+          canClockIn,
+          onClockIn: () => requestClockIn(item.task.id, item.task.title),
+          onClockOut: () => void stopTimer(item.task.id),
           onDelete: () => void commands.softDelete(item.task.id),
         }),
       );
     },
-    [commands, running, stopTimer],
+    [commands, canClockIn, requestClockIn, stopTimer],
   );
 
   const header = useMemo(() => formatDayHeading(itinerary.today), [itinerary.today]);
@@ -222,6 +245,11 @@ export function Today({ ctx }: { ctx: CommandContext }) {
       >
         <Text style={s.h1}>Today</Text>
         <Text style={s.headerDate} testID="today-date">{header}</Text>
+        {timers.length > 1 && (
+          <Text style={s.splitNote} testID="today-split-note">
+            Split focus · {timers.length} timers running — each task logs 1/{timers.length} of the time
+          </Text>
+        )}
       </View>
 
       {/* The bar overlays the content column; `s.list` keeps its right padding
@@ -255,7 +283,7 @@ export function Today({ ctx }: { ctx: CommandContext }) {
               <ItineraryItem
                 row={item}
                 timezone={settings.timezone}
-                runningSince={item.state === 'live' ? running?.entry.started_at : undefined}
+                runningSince={item.state === 'live' ? startedAtFor(item.taskId) : undefined}
                 onToggleDone={toggleDone}
                 onOpenMenu={openMenu}
               />
@@ -293,7 +321,7 @@ export function Today({ ctx }: { ctx: CommandContext }) {
               renderItem={({ item }) => (
                 <AllTaskRow
                   item={item}
-                  runningSince={item.openEntryId === undefined ? undefined : running?.entry.started_at}
+                  runningSince={item.openEntryId === undefined ? undefined : startedAtFor(item.task.id)}
                   onCheckOff={checkOffUnscheduled}
                   onOpenMenu={openTaskMenu}
                 />
@@ -363,15 +391,127 @@ export function Today({ ctx }: { ctx: CommandContext }) {
 
       <ActionList request={actionRequest} onDismiss={() => setActionRequest(null)} />
 
+      <ClockInChoice
+        ask={clockInAsk}
+        timers={timers}
+        onCancel={() => setClockInAsk(null)}
+        onConfirm={async (stopping) => {
+          const ask = clockInAsk;
+          setClockInAsk(null);
+          if (ask === null) return;
+          await stopTimers(stopping);
+          await commands.clockIn(ask.taskId).catch(() => undefined);
+        }}
+      />
+
       <FocusReview
-        target={review}
-        onCancel={() => setReview(null)}
+        target={clockInAsk === null ? review : null}
+        remaining={reviews.length}
+        onCancel={() => setReviews((q) => q.slice(1))}
+        onSkipAll={() => setReviews([])}
         onSubmit={async (focusFactor, completedSession) => {
           if (review === null) return;
           await commands.review({ entryId: review.entryId, focusFactor, completedSession, taskId: review.taskId });
-          setReview(null);
+          setReviews((q) => q.slice(1));
         }}
       />
+    </View>
+  );
+}
+
+interface ReviewTarget {
+  entryId: string;
+  taskId: string;
+  taskTitle: string;
+}
+
+/**
+ * Clocking in while timers already run (split focus): tick the running tasks to
+ * stop and switch, or keep them all and split the logged time equally. At
+ * MAX_OPEN_TIMERS "run together" is off. A custom card rather than `Alert`,
+ * which silently drops buttons past three and can't hold a checklist.
+ */
+function ClockInChoice({
+  ask,
+  timers,
+  onCancel,
+  onConfirm,
+}: {
+  ask: { taskId: string; title: string } | null;
+  timers: readonly RunningTimer[];
+  onCancel: () => void;
+  onConfirm: (stopping: readonly RunningTimer[]) => Promise<void>;
+}) {
+  // Ticks are kept per question: everything starts ticked, and only the ones the
+  // user unticks are remembered, so a running-set change while it is up can't
+  // silently re-tick or drop anything.
+  const [unticked, setUnticked] = useState<ReadonlySet<string>>(new Set());
+  useEffect(() => {
+    if (ask !== null) setUnticked(new Set());
+  }, [ask]);
+  const stop = useMemo(() => new Set(timers.map((t) => t.entry.id).filter((id) => !unticked.has(id))), [timers, unticked]);
+
+  if (ask === null) return null;
+  const atLimit = timers.length >= MAX_OPEN_TIMERS;
+  const ticked = timers.filter((t) => stop.has(t.entry.id));
+
+  return (
+    <View style={s.reviewScrim} testID="today-clockin-choice" accessibilityViewIsModal>
+      <View style={s.reviewCard}>
+        <Text style={s.reviewTitle}>Clock in to “{ask.title}”</Text>
+        <Text style={s.reviewTask}>
+          {timers.length === 1 ? 'A timer is already running.' : `${timers.length} timers are already running.`} Stop the ticked
+          ones and switch, or keep them and split your focus — the logged time is shared equally.
+        </Text>
+        {timers.map((t) => {
+          const on = stop.has(t.entry.id);
+          return (
+            <Pressable
+              key={t.entry.id}
+              onPress={() =>
+                setUnticked((prev) => {
+                  const next = new Set(prev);
+                  if (on) next.add(t.entry.id);
+                  else next.delete(t.entry.id);
+                  return next;
+                })
+              }
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: on }}
+              testID={`today-clockin-stop-${t.entry.task_id}`}
+              style={[s.reviewChip, on && s.reviewChipOn]}
+            >
+              <Text style={[s.reviewChipText, on && s.reviewChipTextOn]} numberOfLines={1}>
+                {on ? '✓ ' : ''}Stop {t.task?.title ?? 'running task'}
+              </Text>
+            </Pressable>
+          );
+        })}
+        {atLimit && <Text style={s.reviewLabel}>{MAX_OPEN_TIMERS} timers are the most at once — stop at least one.</Text>}
+        <View style={s.reviewRow}>
+          <Pressable onPress={onCancel} testID="today-clockin-cancel" style={s.reviewChip}>
+            <Text style={s.reviewChipText}>Cancel</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => void onConfirm([])}
+            disabled={atLimit}
+            accessibilityState={{ disabled: atLimit }}
+            testID="today-clockin-split"
+            style={[s.reviewChip, atLimit && s.disabled]}
+          >
+            <Text style={s.reviewChipText}>Split {timers.length + 1} ways</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => void onConfirm(ticked)}
+            disabled={ticked.length === 0}
+            accessibilityState={{ disabled: ticked.length === 0 }}
+            testID="today-clockin-switch"
+            style={[s.reviewChip, s.reviewSave, ticked.length === 0 && s.disabled]}
+          >
+            <Text style={[s.reviewChipText, s.reviewSaveText]}>Stop {ticked.length} & switch</Text>
+          </Pressable>
+        </View>
+      </View>
     </View>
   );
 }
@@ -646,11 +786,16 @@ const FACTORS = [0.5, 0.75, 1.0];
 /** D9: the focus-factor sheet clock-out always opens, ported from Worklist. */
 function FocusReview({
   target,
+  remaining,
   onCancel,
+  onSkipAll,
   onSubmit,
 }: {
-  target: { entryId: string; taskId: string; taskTitle: string } | null;
+  target: ReviewTarget | null;
+  /** How many reviews are queued, this one included (several stop together under split focus). */
+  remaining: number;
   onCancel: () => void;
+  onSkipAll: () => void;
   onSubmit: (focusFactor: number, completedSession: boolean) => Promise<void>;
 }) {
   const [focus, setFocus] = useState(1.0);
@@ -671,7 +816,10 @@ function FocusReview({
     <View style={s.reviewScrim} testID="today-review" accessibilityViewIsModal>
       <View style={s.reviewCard}>
         <Text style={s.reviewTitle}>Session review</Text>
-        <Text style={s.reviewTask}>{target.taskTitle}</Text>
+        <Text style={s.reviewTask}>
+          {target.taskTitle}
+          {remaining > 1 ? ` · 1 of ${remaining}` : ''}
+        </Text>
 
         <Text style={s.reviewLabel}>How focused was it?</Text>
         <View style={s.reviewRow}>
@@ -702,6 +850,11 @@ function FocusReview({
         </Pressable>
 
         <View style={s.reviewRow}>
+          {remaining > 1 && (
+            <Pressable onPress={onSkipAll} testID="today-review-skip-all" style={s.reviewChip}>
+              <Text style={s.reviewChipText}>Skip all</Text>
+            </Pressable>
+          )}
           <Pressable onPress={onCancel} testID="today-review-skip" style={s.reviewChip}>
             <Text style={s.reviewChipText}>Skip</Text>
           </Pressable>
@@ -749,6 +902,8 @@ const s = StyleSheet.create({
   header: { paddingHorizontal: 20, paddingTop: 6, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: theme.border },
   h1: { color: theme.text, fontSize: 22, fontWeight: '800', letterSpacing: -0.5 },
   headerDate: { color: theme.dim, fontSize: 12.5, fontWeight: '600', marginTop: 2 },
+  splitNote: { color: theme.live, fontSize: 11.5, fontWeight: '600', marginTop: 4 },
+  disabled: { opacity: 0.45 },
   // 34 px on the right: the 14 px lane at right:9, plus breathing room.
   list: { paddingLeft: 16, paddingRight: 34, paddingTop: 8, paddingBottom: 20 },
   empty: { color: theme.faint, fontSize: 13, fontWeight: '600', paddingVertical: 24 },

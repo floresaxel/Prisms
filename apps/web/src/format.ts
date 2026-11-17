@@ -20,6 +20,8 @@ export function formatElapsed(ms: number): string {
 /** A machine-readable command rejection code → a human, actionable message (§7.13, M9). */
 export function rejectionMessage(code: string | undefined): string {
   switch (code) {
+    case 'E_TIMER_LIMIT':
+      return 'Five timers are already running — clock out of one before starting another.';
     case 'E_STALE_SUGGESTION':
       return 'That suggestion was superseded by a newer plan and could not be accepted.';
     case 'E_SUGGESTION_OVERLAPS_ANCHOR':

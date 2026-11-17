@@ -34,6 +34,7 @@ import {
   minutesLeftInTask,
   minutesUntilNextBlock,
   rankProjects,
+  resolveOpenTimeEntries,
   taskStatus,
   topologicalOrder,
   type AutomationRule,
@@ -572,26 +573,48 @@ export interface RunningTimer {
   elapsedMs: number;
 }
 
+export interface RunningTimers {
+  /** Every running timer, earliest clock-in first (≤ MAX_OPEN_TIMERS, I5). */
+  timers: RunningTimer[];
+  /** How many ways time is being split right now (1 = no split, 0 = none running). */
+  splitWays: number;
+}
+
 /**
- * The single global running timer (I5). When two open entries exist transiently
- * (offline double clock-in, §7.4), the latest-started one is the live timer —
- * the same winner the server's merge keeps — so the UI never shows two.
+ * Every running timer (split focus, I5: one per task, ≤ MAX_OPEN_TIMERS). A
+ * transiently inconsistent set (offline double clock-in, §7.4) is shown as the
+ * server's merge will leave it — `resolveOpenTimeEntries` — so the UI never
+ * shows a timer that is about to be closed.
  */
-export function useRunningTimer(now: Instant): RunningTimer | null {
+export function useRunningTimers(now: Instant): RunningTimers {
   const { rows, tree } = usePrismsData();
-  const openRows = useMemo(() => rows.time_entries.filter((r) => r['ended_at'] == null), [rows.time_entries]);
+  const openRows = useMemo(
+    () => rows.time_entries.filter((r) => r['ended_at'] == null && r['deleted_at'] == null),
+    [rows.time_entries],
+  );
   return useMemo(() => {
     const open = openRows.map(toTimeEntry);
-    if (open.length === 0) return null;
-    const winner = open.reduce((a, b) =>
-      b.started_at > a.started_at || (b.started_at === a.started_at && b.id > a.id) ? b : a,
-    );
-    return {
-      entry: winner,
-      task: tree.byId.get(winner.task_id),
-      elapsedMs: Math.max(0, now - isoToEpochMillis(winner.started_at)),
-    };
+    const res = resolveOpenTimeEntries(open);
+    const kept = res ? open.filter((e) => res.keepOpenIds.includes(e.id)) : open;
+    const timers = kept
+      .sort((a, b) => (a.started_at < b.started_at ? -1 : a.started_at > b.started_at ? 1 : a.id < b.id ? -1 : 1))
+      .map((entry) => ({
+        entry,
+        task: tree.byId.get(entry.task_id),
+        elapsedMs: Math.max(0, now - isoToEpochMillis(entry.started_at)),
+      }));
+    return { timers, splitWays: timers.length };
   }, [openRows, tree, now]);
+}
+
+/**
+ * The most recently started running timer — the one a single-timer surface
+ * (the topbar pill, the phone's run card) leads with. See `useRunningTimers`
+ * for all of them.
+ */
+export function useRunningTimer(now: Instant): RunningTimer | null {
+  const { timers } = useRunningTimers(now);
+  return timers.at(-1) ?? null;
 }
 
 /** Activity inbox (§1.2): parentless `activity` items awaiting promotion. */
