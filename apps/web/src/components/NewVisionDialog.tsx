@@ -103,7 +103,34 @@ export function NewVisionDialog({
     setUnit(h?.unit ?? 'years');
     setAmount(String(h?.amount ?? 1));
     setTouched(false);
+    edited.current = new Set();
   }, [open, editingId]);
+
+  // While EDITING, a field the user has not changed yet follows the stored
+  // vision. The dialog copies its values once, on open, and a just-written edit
+  // can briefly read back stale while its synced copy replaces the local one (or
+  // another device can change it) — this lets such a field settle on the stored
+  // value instead of keeping what it showed at open. A field the user has typed
+  // in is theirs, and is never overwritten.
+  const edited = useRef(new Set<'title' | 'description' | 'color' | 'horizon'>());
+  const liveTitle = editing?.title;
+  const liveDescription = editing?.description;
+  const liveColor = editing ? visionColorOf(editing) : null;
+  const liveHorizon = editing ? readVisionHorizon(editing.attributes) : null;
+  const liveHorizonKey = liveHorizon ? `${liveHorizon.unit}:${liveHorizon.amount}` : '';
+  useEffect(() => {
+    if (!open || editingId === null) return;
+    const e = edited.current;
+    if (!e.has('title') && liveTitle !== undefined) setTitle(liveTitle);
+    if (!e.has('description') && liveDescription !== undefined) setDescription(liveDescription);
+    if (!e.has('color') && liveColor) setColor(liveColor);
+    if (!e.has('horizon') && liveHorizon) {
+      setUnit(liveHorizon.unit);
+      setAmount(String(liveHorizon.amount));
+    }
+    // liveHorizonKey stands in for liveHorizon, a new object on every render
+  }, [open, editingId, liveTitle, liveDescription, liveColor, liveHorizonKey]);
+  const mark = (field: 'title' | 'description' | 'color' | 'horizon') => edited.current.add(field);
 
   const horizon: VisionHorizon | null = parseHorizon(unit, amount);
   const amountOk = horizon !== null;
@@ -164,7 +191,10 @@ export function NewVisionDialog({
           data-testid="vision-dialog-title"
           placeholder="e.g. Build a company"
           value={title}
-          onChange={(e) => setTitle(e.target.value)}
+          onChange={(e) => {
+            mark('title');
+            setTitle(e.target.value);
+          }}
         />
       </div>
 
@@ -176,7 +206,10 @@ export function NewVisionDialog({
           data-testid="vision-dialog-description"
           placeholder="What does this vision mean, and how will you know you are living it?"
           value={description}
-          onChange={(e) => setDescription(e.target.value)}
+          onChange={(e) => {
+            mark('description');
+            setDescription(e.target.value);
+          }}
         />
       </div>
 
@@ -187,6 +220,7 @@ export function NewVisionDialog({
           amount={amount}
           testPrefix="vision-dialog"
           onChange={(u, a) => {
+            mark('horizon');
             setUnit(u);
             setAmount(a);
           }}
@@ -202,7 +236,15 @@ export function NewVisionDialog({
         <span className="px-vd-lbl">
           Colour · <span className="px-swatch-name" data-testid="vision-dialog-color">{colorLabel(color)}</span>
         </span>
-        <ColorField value={color} taken={taken} onChange={setColor} testPrefix="vision-dialog" />
+        <ColorField
+          value={color}
+          taken={taken}
+          onChange={(c) => {
+            mark('color');
+            setColor(c);
+          }}
+          testPrefix="vision-dialog"
+        />
         <p className="px-vd-hint">
           {editingId
             ? 'Everything under this vision re-tints when you save. Struck-through swatches belong to another vision.'

@@ -526,12 +526,23 @@ function RoadmapDialog({
   // Re-arm on open only: the node takes a new identity on every sync tick.
   const ref = useRef(roadmap);
   ref.current = roadmap;
+  const edited = useRef(new Set<'title' | 'description' | 'vision'>());
   useEffect(() => {
     if (!open) return;
     setTitle(ref.current.title);
     setDescription(ref.current.description);
     setVisionId(ref.current.parent_id ?? '');
+    edited.current = new Set();
   }, [open]);
+  // A field the user has not changed yet follows the stored roadmap while the
+  // dialog is open: a just-written edit can read back stale for a moment as its
+  // synced copy replaces the local one. A field the user has typed in is theirs.
+  useEffect(() => {
+    if (!open) return;
+    if (!edited.current.has('title')) setTitle(roadmap.title);
+    if (!edited.current.has('description')) setDescription(roadmap.description);
+    if (!edited.current.has('vision')) setVisionId(roadmap.parent_id ?? '');
+  }, [open, roadmap.title, roadmap.description, roadmap.parent_id]);
   const ok = title.trim() !== '';
   const color = visionColorOf(visions.find((v) => v.id === visionId));
   return (
@@ -561,7 +572,7 @@ function RoadmapDialog({
         <label className="px-vd-lbl" htmlFor="rm-d-title">
           Name
         </label>
-        <input id="rm-d-title" className="px-vd-input" data-testid="rm-dialog-title" value={title} onChange={(e) => setTitle(e.target.value)} />
+        <input id="rm-d-title" className="px-vd-input" data-testid="rm-dialog-title" value={title} onChange={(e) => { edited.current.add('title'); setTitle(e.target.value); }} />
       </div>
       <div className="px-vd-field">
         <label className="px-vd-lbl" htmlFor="rm-d-desc">
@@ -573,7 +584,10 @@ function RoadmapDialog({
           data-testid="rm-dialog-description"
           placeholder="What does this roadmap deliver, and when is it done?"
           value={description}
-          onChange={(e) => setDescription(e.target.value)}
+          onChange={(e) => {
+            edited.current.add('description');
+            setDescription(e.target.value);
+          }}
         />
       </div>
       <div className="px-vd-field" style={{ marginBottom: 0 }}>
@@ -582,7 +596,15 @@ function RoadmapDialog({
         </label>
         <label className="px-scope">
           <span className="px-swatch px-swatch--sm" style={{ background: solid(color) }} />
-          <select id="rm-d-vision" data-testid="rm-dialog-vision" value={visionId} onChange={(e) => setVisionId(e.target.value)}>
+          <select
+            id="rm-d-vision"
+            data-testid="rm-dialog-vision"
+            value={visionId}
+            onChange={(e) => {
+              edited.current.add('vision');
+              setVisionId(e.target.value);
+            }}
+          >
             {/* an orphaned roadmap has to show SOMETHING selected until it is re-homed */}
             {!roadmap.parent_id && <option value="">No vision</option>}
             {visions.map((v) => (
