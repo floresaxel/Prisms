@@ -194,6 +194,21 @@ export interface SharedRows {
   user_settings: Row[];
 }
 
+/**
+ * The pending optimistic effects, as the provider's ONE `overlay_effects`
+ * subscription read them. Screen-local reads merge their table's slice from here
+ * rather than each opening an overlay watch of its own: a watch is a round-trip
+ * to the database worker, and eleven of them asking the same table the same
+ * question were a third of the queries a cold load made before its first row.
+ */
+export interface OverlayRead {
+  /** Pending effects by `table_name`; a table with none has no entry. */
+  byTable: ReadonlyMap<string, readonly OverlayEffect[]>;
+  /** No overlay result yet this session — a merged read may still be missing a pending write. */
+  isLoading: boolean;
+  isFetching: boolean;
+}
+
 export interface PrismsData {
   /** The session-scoped fact context (built once, memoized on the shared rows). */
   factContext: FactContext;
@@ -201,6 +216,8 @@ export interface PrismsData {
   tree: TreeIndex;
   /** The merged shared row sets. */
   rows: SharedRows;
+  /** The shared overlay read, for the screen-local merges in `hooks.ts`. */
+  overlay: OverlayRead;
   /** A shared subscription is refetching (any base table). */
   isFetching: boolean;
   /**
@@ -247,22 +264,49 @@ export function PrismsDataProvider({ children }: { children: ReactNode }) {
   // read), in ONE memo so the whole shared row-set is a single stable object that
   // only changes when a replica table or the overlay does.
   const rows = useMemo<SharedRows>(() => {
-    const mergeFor = (replica: Row[], table: string): Row[] => {
+    /**
+     * A table that has not been read yet is NOT an empty table, and nothing is
+     * merged onto it. The ten reads resolve one at a time, the overlay first, so
+     * for a few milliseconds at every boot the pending effects are in hand and
+     * the rows they patch are not. Merging in that gap turned a pending UPDATE
+     * into a row made only of its changed columns — a clocked-out time entry
+     * with no start — which threw in the fact index below and blanked the app.
+     * And because that happened at boot, the upload that would have cleared the
+     * pending command never ran: every reload hit it again.
+     */
+    const mergeFor = (q: { data?: Row[]; isLoading: boolean }, table: string, upsert = false): Row[] => {
+      const replica = q.data ?? [];
+      if (q.isLoading) return replica;
       const eff = overlayByTable.get(table);
-      return eff && eff.length ? (mergeTable(replica, eff) as Row[]) : replica;
+      return eff && eff.length ? (mergeTable(replica, eff, { upsert }) as Row[]) : replica;
     };
     return {
-      nodes: mergeFor(nodesQ.data ?? [], 'nodes'),
-      edges: mergeFor(edgesQ.data ?? [], 'edges'),
-      time_entries: mergeFor(entriesQ.data ?? [], 'time_entries'),
-      schedule_blocks: mergeFor(blocksQ.data ?? [], 'schedule_blocks'),
-      sprints: mergeFor(sprintsQ.data ?? [], 'sprints'),
-      sprint_memberships: mergeFor(membershipsQ.data ?? [], 'sprint_memberships'),
-      blocker_rules: mergeFor(blockersQ.data ?? [], 'blocker_rules'),
-      external_facts: mergeFor(factsQ.data ?? [], 'external_facts'),
-      user_settings: mergeFor(settingsQ.data ?? [], 'user_settings'),
+      nodes: mergeFor(nodesQ, 'nodes'),
+      edges: mergeFor(edgesQ, 'edges'),
+      time_entries: mergeFor(entriesQ, 'time_entries'),
+      schedule_blocks: mergeFor(blocksQ, 'schedule_blocks'),
+      sprints: mergeFor(sprintsQ, 'sprints'),
+      sprint_memberships: mergeFor(membershipsQ, 'sprint_memberships'),
+      blocker_rules: mergeFor(blockersQ, 'blocker_rules'),
+      external_facts: mergeFor(factsQ, 'external_facts'),
+      // the one table the server creates on first write: until it has, the
+      // pending `settings.update` IS the settings row
+      user_settings: mergeFor(settingsQ, 'user_settings', true),
     };
-  }, [nodesQ.data, edgesQ.data, entriesQ.data, blocksQ.data, sprintsQ.data, membershipsQ.data, blockersQ.data, factsQ.data, settingsQ.data, overlayByTable]);
+    // Each read is named by its `data` and `isLoading`, not by the query object,
+    // whose identity changes on every render.
+  }, [
+    nodesQ.data, nodesQ.isLoading,
+    edgesQ.data, edgesQ.isLoading,
+    entriesQ.data, entriesQ.isLoading,
+    blocksQ.data, blocksQ.isLoading,
+    sprintsQ.data, sprintsQ.isLoading,
+    membershipsQ.data, membershipsQ.isLoading,
+    blockersQ.data, blockersQ.isLoading,
+    factsQ.data, factsQ.isLoading,
+    settingsQ.data, settingsQ.isLoading,
+    overlayByTable,
+  ]);
 
   // The single fact/tree derivation — seeded ONCE, then incrementally maintained
   // (S8-F1). The engine persists across renders in a ref; the memo recomputes
@@ -298,9 +342,14 @@ export function PrismsDataProvider({ children }: { children: ReactNode }) {
     rows.blocker_rules.length > 0;
   const isHydrated = firstResult && (status.hasSynced === true || anyRow);
 
+  const overlay = useMemo<OverlayRead>(
+    () => ({ byTable: overlayByTable, isLoading: overlayQ.isLoading, isFetching: overlayQ.isFetching }),
+    [overlayByTable, overlayQ.isLoading, overlayQ.isFetching],
+  );
+
   const value = useMemo<PrismsData>(
-    () => ({ factContext, tree: factContext.tree, rows, isFetching, isHydrated }),
-    [factContext, rows, isFetching, isHydrated],
+    () => ({ factContext, tree: factContext.tree, rows, overlay, isFetching, isHydrated }),
+    [factContext, rows, overlay, isFetching, isHydrated],
   );
 
   return <PrismsDataContext.Provider value={value}>{children}</PrismsDataContext.Provider>;

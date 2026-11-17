@@ -29,7 +29,16 @@ const state = {
   nodes: [] as Row[],
   reviewLoading: true,
   reviewData: undefined as Row[] | undefined,
+  /**
+   * What a read hands back WHILE it is loading. The real `useQuery` returns an
+   * empty array; this mock used to model loading only as `undefined`, which is
+   * how a read that took the array for a result — "loaded, and empty" — went
+   * unnoticed. Every contract below runs against both shapes.
+   */
+  placeholder: undefined as Row[] | undefined,
 };
+/** One identity for the whole run, as the real hook's placeholder has. */
+const EMPTY_PLACEHOLDER: Row[] = [];
 
 const NODE: Row = {
   id: 'n1', user_id: 'u1', node_type: 'vision', title: 'V', sort_order: 'a0',
@@ -44,10 +53,10 @@ vi.mock('@powersync/react', () => ({
   useQuery: (sql: string) => {
     if (/overlay_effects/i.test(sql)) return { data: [], isLoading: false, isFetching: false };
     if (/from\s+sync_review_items/i.test(sql))
-      return { data: state.reviewLoading ? undefined : state.reviewData, isLoading: state.reviewLoading, isFetching: false };
+      return { data: state.reviewLoading ? state.placeholder : state.reviewData, isLoading: state.reviewLoading, isFetching: false };
     if (/from\s+nodes\b/i.test(sql))
-      return { data: state.baseLoading ? undefined : state.nodes, isLoading: state.baseLoading, isFetching: false };
-    return { data: state.baseLoading ? undefined : [], isLoading: state.baseLoading, isFetching: false };
+      return { data: state.baseLoading ? state.placeholder : state.nodes, isLoading: state.baseLoading, isFetching: false };
+    return { data: state.baseLoading ? state.placeholder : [], isLoading: state.baseLoading, isFetching: false };
   },
   useStatus: () => ({ hasSynced: state.hasSynced }),
   usePowerSync: () => ({}),
@@ -82,11 +91,29 @@ beforeEach(() => {
   state.nodes = [];
   state.reviewLoading = true;
   state.reviewData = undefined;
+  state.placeholder = undefined;
 });
 
 afterEach(() => cleanup());
 
-describe('§7.15 loading-aware SWR reads — skeleton gating + remount cache', () => {
+describe.each([
+  ['undefined', undefined],
+  ['an empty array, as useQuery really returns', EMPTY_PLACEHOLDER],
+])('§7.15 loading-aware SWR reads — skeleton gating + remount cache (a loading read hands back %s)', (_shape, placeholder) => {
+  beforeEach(() => {
+    state.placeholder = placeholder;
+  });
+
+  it('a screen-local read that is still loading is NOT hydrated, whatever the session is', () => {
+    // everything else is in: synced, base rows present — only this read is cold
+    state.hasSynced = true;
+    state.baseLoading = false;
+    state.nodes = [NODE];
+    render(createElement(Root, { show: true }));
+    // not "loaded and empty": the screen owes a skeleton, not its empty branch
+    expect(readProbe()).toEqual({ hydrated: 'false', count: '0' });
+  });
+
   it('fresh login (empty replica, sync in flight) is NOT hydrated → a screen shows a skeleton, not empty', () => {
     // nothing synced, every query still loading
     render(createElement(Root, { show: true }));

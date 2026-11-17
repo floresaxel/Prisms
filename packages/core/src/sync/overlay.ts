@@ -131,17 +131,57 @@ export function mergeRow(
   return current;
 }
 
+/** How `mergeTable` treats a table. The defaults suit every table but one. */
+export interface MergeTableOptions {
+  /** The row identity column (default `id`). */
+  idKey?: string;
+  /**
+   * Let a pending column patch stand in for a row that is not there.
+   *
+   * Off by default, because for an ordinary table it is never right. A patch —
+   * an `update` listing only the columns it changes — has nothing to patch when
+   * its row is missing (not downloaded yet, tombstoned from another device, or
+   * read before its table has been), and patching nothing yields a "row" made of
+   * those two or three columns and none of the others. That is not a slightly
+   * stale row: a time entry with an end and no start threw in the status index
+   * and blanked the whole app at boot, on every reload, before the upload that
+   * would have cleared it could run. (An effect that carries a WHOLE row still
+   * stands in for it either way — see `seedsRow`.)
+   *
+   * On only for a table the SERVER creates on first write — `user_settings`,
+   * whose `settings.update` is an upsert — where the pending patch really is the
+   * row until the canonical one arrives.
+   */
+  upsert?: boolean;
+}
+
+/**
+ * Can this effect stand in for its row while the canonical one is not there?
+ * Only when it carries the WHOLE row: an insert, or an effect whose fields name
+ * the row's own identity. The second is the D5 ack-rewrite — a pending insert
+ * the server applied onto a different row id, rewritten in place to an `update`
+ * of that row that still holds every column the insert did. A column patch
+ * never names its own id.
+ */
+function seedsRow(effect: OverlayEffect, rowId: string, idKey: string): boolean {
+  if (effect.op === 'insert') return true;
+  const own = effect.fields[idKey];
+  return effect.op === 'update' && own !== undefined && own !== null && String(own) === rowId;
+}
+
 /**
  * Merge a canonical replica table with the pending overlay effects for it
- * (1.3 §7.2). Replica rows are patched in place; overlay-only inserts (a row
- * not yet in the replica) are appended; deleted rows drop out. `idKey` is the
- * row identity column (default `id`).
+ * (1.3 §7.2). Replica rows are patched in place; overlay-only rows (a pending
+ * create whose canonical row has not synced yet) are appended; deleted rows drop
+ * out. A row that is missing and whose effects are only column patches is
+ * dropped, not invented (see `MergeTableOptions.upsert`).
  */
 export function mergeTable(
   replica: readonly OverlayRow[],
   effects: readonly OverlayEffect[],
-  idKey = 'id',
+  options: MergeTableOptions = {},
 ): OverlayRow[] {
+  const idKey = options.idKey ?? 'id';
   const byRow = new Map<string, OverlayEffect[]>();
   for (const effect of effects) {
     const list = byRow.get(effect.row_id);
@@ -157,9 +197,11 @@ export function mergeTable(
     const merged = mergeRow(row, byRow.get(rowId) ?? []);
     if (merged !== null) out.push(merged);
   }
-  // overlay-only inserts (a pending create whose canonical row has not synced yet)
+  // overlay-only rows (a pending create whose canonical row has not synced yet)
   for (const [rowId, rowEffects] of byRow) {
     if (seen.has(rowId)) continue;
+    // only column patches, and nothing under them: not a row (unless the table is an upsert)
+    if (!options.upsert && !rowEffects.some((e) => seedsRow(e, rowId, idKey))) continue;
     const merged = mergeRow(null, rowEffects);
     if (merged !== null) out.push(merged);
   }

@@ -11,7 +11,7 @@
 import { useEffect, useState } from 'react';
 
 import { asEpochMillis, type Instant } from '@prisms/core';
-import { Ic, Modal, useCommands, useRunningTimer, type CommandContext } from '@prisms/ui';
+import { Ic, Modal, ThresholdMark, useCommands, useRunningTimer, type CommandContext } from '@prisms/ui';
 
 import { formatElapsed } from '../format';
 
@@ -54,7 +54,7 @@ export function GlobalTimer({ ctx }: { ctx: CommandContext }) {
     <>
       {running && (
         <div className="px-timer-pill" data-testid="running-timer">
-          <span className="px-dot" />
+          <ThresholdMark size={14} tone="white" compact />
           <span className="px-timer-pill-task">{running.task?.title ?? 'Unknown task'}</span>
           <span className="px-timer-pill-elapsed" data-testid="timer-elapsed">{formatElapsed(running.elapsedMs)}</span>
           <button className="px-timer-stop" data-testid="timer-clock-out" onClick={() => void clockOut()}>

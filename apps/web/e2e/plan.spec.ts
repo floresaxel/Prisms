@@ -81,6 +81,9 @@ test('Plan › Vision manages one vision at a time: create, rename, edit, reorde
   // The list renders the STORED node; the dialog below opens on it, so wait for
   // the rename to land there rather than racing it.
   await expect(page.getByTestId(`vis-item-${ids.v}`)).toContainText('Build a studio');
+  // …and for the server to take it, so the dialog does not open across the
+  // handoff from the local copy to the synced one.
+  await expect(page.getByTestId('sync-state')).toHaveAttribute('data-sync', 'synced', { timeout: 30_000 });
 
   // --- everything else through the vision's ⋯ menu → Edit…, which opens on its values ---
   await page.getByTestId(`vis-menu-${ids.v}`).click();
@@ -203,6 +206,7 @@ test('Plan › Roadmap manages one roadmap at a time: create, fill, re-home unde
   await page.getByTestId('rm-title').fill('Ship v1.0');
   await page.getByTestId('rm-title').press('Enter');
   await expect(page.getByTestId(`rm-item-${await page.getByTestId('rm-detail').getAttribute('data-roadmap')}`)).toContainText('Ship v1.0');
+  await expect(page.getByTestId('sync-state')).toHaveAttribute('data-sync', 'synced', { timeout: 30_000 });
 
   // --- describe + re-home through the ⋯ menu: I1 keeps the parent a vision, and
   //     the roadmap re-tints because colour comes from whichever vision owns it ---

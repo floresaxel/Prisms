@@ -1,6 +1,16 @@
 /** PowerSync web SDK setup (wa-sqlite/OPFS, §12.3) — two-layer store (M8). */
 import { PowerSyncDatabase } from '@powersync/web';
-import { clearReadCaches, clientSchema, createConnector, getDeviceId, startCommandUpload, type CommandRejection, type WatchableDb } from '@prisms/ui';
+import {
+  clearReadCaches,
+  CLIENT_TABLE_NAMES,
+  clientSchema,
+  createConnector,
+  getDeviceId,
+  startCommandUpload,
+  watchTablesFromSql,
+  type CommandRejection,
+  type WatchableDb,
+} from '@prisms/ui';
 
 import { config } from './config';
 
@@ -9,7 +19,39 @@ export function createDb(userId: string): PowerSyncDatabase {
   // (client_commands / overlay_effects / sync_review_items) the two-layer store needs.
   // §13.2/S9-F1: the OPFS filename is PER ACCOUNT, so signing in as a different
   // user on a shared device never opens the previous account's replica/queue.
-  return new PowerSyncDatabase({ schema: clientSchema, database: { dbFilename: `prisms-${userId}.db` } });
+  const db = new PowerSyncDatabase({ schema: clientSchema, database: { dbFilename: `prisms-${userId}.db` } });
+  // Each watch names its table in its SQL; reading it there saves the two lookup
+  // round-trips PowerSync otherwise makes per watch before the query can run.
+  return watchTablesFromSql(db, CLIENT_TABLE_NAMES);
+}
+
+/**
+ * ONE open database per account for the page's lifetime.
+ *
+ * The boot opens the remembered account's database before React has rendered
+ * anything (`early-open.ts`), and the app must pick up that same instance
+ * rather than open the file a second time — as must React's StrictMode, whose
+ * double render used to construct two databases for one account in dev.
+ */
+const openDbs = new Map<string, PowerSyncDatabase>();
+
+export function dbFor(userId: string): PowerSyncDatabase {
+  let db = openDbs.get(userId);
+  if (!db) {
+    db = createDb(userId);
+    openDbs.set(userId, db);
+  }
+  return db;
+}
+
+/**
+ * Let the next `dbFor` for this account build a fresh instance: after sign-out
+ * (whose `disconnectAndClear` already ran on this one), or when the boot guessed
+ * the wrong account. The instance itself is left as it is, as sign-out always
+ * has: nothing queries it once its screens are gone.
+ */
+export function forgetDb(userId: string): void {
+  openDbs.delete(userId);
 }
 
 export async function connectDb(db: PowerSyncDatabase, onReject: (r: CommandRejection[]) => void): Promise<() => void> {

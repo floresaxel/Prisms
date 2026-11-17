@@ -1,7 +1,8 @@
 /**
- * App shell: gate on a Better Auth session, then open the PowerSync database,
- * connect it, and provide it to the reactive hooks. A global toast surfaces
- * server command rejections (the row itself rolls back via sync).
+ * App shell: render the remembered account from its local PowerSync database at
+ * once, confirm the Better Auth session in the background, and only then connect
+ * (sync + upload) — see `session-boot.ts`. A global toast surfaces server
+ * command rejections (the row itself rolls back via sync).
  *
  * Web redesign W1: consolidated routes with old→new redirects (D3) rendered
  * inside the Layout v2 shell (grouped nav + topbar); the running-timer pill and
@@ -14,6 +15,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import type { PowerSyncDatabase } from '@powersync/web';
 import { PowerSyncContext } from '@powersync/react';
 import {
+  clearReadCaches,
   getDeviceId,
   Layout,
   loadImportedHlcFloor,
@@ -27,40 +29,35 @@ import {
   type NavItemSpec,
 } from '@prisms/ui';
 
-import { getSession, signOut, type SessionUser } from './auth';
+import { checkSession, signOut, type SessionUser } from './auth';
 import { GlobalTimer } from './components/GlobalTimer';
 import { ReviewBanner } from './components/ReviewBanner';
 import { SyncChip } from './components/SyncChip';
 import { isDesktop, osNotify } from './desktop';
 import { rejectionMessage } from './format';
-import { clearLocalAccount, connectDb, createDb } from './powersync';
-import { Agenda } from './screens/Agenda';
-import { Automations } from './screens/Automations';
-import { Dashboard } from './screens/Dashboard';
-import { Habits } from './screens/Habits';
-import { Journal } from './screens/Journal';
+import { ScreenBoundary } from './components/ScreenBoundary';
+import { clearLocalAccount, connectDb, dbFor, forgetDb } from './powersync';
+import {
+  Agenda,
+  Automations,
+  Dashboard,
+  Habits,
+  Journal,
+  MyDay,
+  preloadAllScreens,
+  preloadScreen,
+  Projects,
+  Review,
+  Roadmap,
+  Settings,
+  Tasks,
+  Vision,
+  whenIdle,
+  type Route,
+} from './screens';
+// Not split: it is the first thing a signed-out browser sees, and small.
 import { Login } from './screens/Login';
-import { MyDay } from './screens/MyDay';
-import { Projects } from './screens/Projects';
-import { Review } from './screens/Review';
-import { Roadmap } from './screens/Roadmap';
-import { Settings } from './screens/Settings';
-import { Tasks } from './screens/Tasks';
-import { Vision } from './screens/Vision';
-
-type Route =
-  | '/'
-  | '/tasks'
-  | '/agenda'
-  | '/habits'
-  | '/journal'
-  | '/vision'
-  | '/roadmap'
-  | '/projects'
-  | '/dashboard'
-  | '/automations'
-  | '/review'
-  | '/settings';
+import { forgetCachedUser, readCachedUser, rememberUser, settleBootSession } from './session-boot';
 
 const ROUTES = new Set<Route>(['/', '/tasks', '/agenda', '/habits', '/journal', '/vision', '/roadmap', '/projects', '/dashboard', '/automations', '/review', '/settings']);
 
@@ -102,27 +99,44 @@ const CRUMBS: Record<Route, BreadcrumbSpec> = {
   '/settings': { section: 'Workspace', page: 'Settings' },
 };
 
-/** Boot route: apply an old→new redirect (replaceState) if the path is legacy. */
-function resolveBootRoute(): Route {
-  const path = window.location.pathname;
+/**
+ * Where a URL lands, and the address-bar rewrites that gets it there — pure, so
+ * the landing screen can be preloaded before anything is rewritten. First hop:
+ * an old→new redirect for a legacy path; second hop: a route whose HASH moved
+ * to a route of its own (`/projects#roadmap`). An unknown path lands on My Day
+ * and keeps its URL.
+ */
+function landingFor(path: string, hash: string): { route: Route; rewrites: string[] } {
+  const rewrites: string[] = [];
   const redirect = REDIRECTS[path];
+  let href: string;
   if (redirect) {
-    window.history.replaceState({}, '', redirect);
-    return resolveHash(redirect);
+    rewrites.push(redirect);
+    href = redirect;
+  } else if (ROUTES.has(path as Route)) {
+    href = path + hash;
+  } else {
+    return { route: '/', rewrites };
   }
-  return ROUTES.has(path as Route) ? resolveHash(path + window.location.hash) : '/';
+  const [hrefPath = '/', hrefHash] = href.split('#');
+  const moved = hrefHash ? HASH_REDIRECTS[hrefPath]?.[`#${hrefHash}`] : undefined;
+  if (moved) {
+    rewrites.push(moved);
+    return { route: moved as Route, rewrites };
+  }
+  return { route: hrefPath as Route, rewrites };
 }
 
-/** Second hop: a route whose HASH moved to a route of its own (`/projects#roadmap`). */
-function resolveHash(href: string): Route {
-  const [path = '/', hash] = href.split('#');
-  const moved = hash ? HASH_REDIRECTS[path]?.[`#${hash}`] : undefined;
-  if (moved) {
-    window.history.replaceState({}, '', moved);
-    return moved as Route;
-  }
-  return path as Route;
+/** Boot route: apply the old→new redirects (replaceState) if the path is legacy. */
+function resolveBootRoute(): Route {
+  const { route, rewrites } = landingFor(window.location.pathname, window.location.hash);
+  for (const href of rewrites) window.history.replaceState({}, '', href);
+  return route;
 }
+
+// Start fetching the screen this page opens on now, while the rest of the
+// startup chunk is still being evaluated (see `screens.ts`).
+preloadScreen(landingFor(window.location.pathname, window.location.hash).route);
 
 /** Shell composition — mounted inside PrismsDataProvider so it can read the
  *  inbox/review counts for the nav badges. Layout itself stays presentational. */
@@ -235,14 +249,25 @@ function Shell({
           {rejections.map((r) => rejectionMessage(r.reject_code)).join(' ')}
         </div>
       )}
-      {screen}
+      {/* keyed by route: a screen that failed to load does not take the next one down with it */}
+      <ScreenBoundary key={route}>{screen}</ScreenBoundary>
     </Layout>
   );
 }
 
-function AuthedApp({ user, onSignOut }: { user: SessionUser; onSignOut: () => void }) {
+function AuthedApp({
+  user,
+  sessionChecked,
+  onSignOut,
+}: {
+  user: SessionUser;
+  /** The server has said who is signed in (or cannot be asked). Sync waits for it; the screens do not. */
+  sessionChecked: boolean;
+  onSignOut: () => void;
+}) {
   const dbRef = useRef<PowerSyncDatabase | null>(null);
-  if (dbRef.current === null) dbRef.current = createDb(user.id);
+  // the instance `early-open.ts` started opening at load, when this is the remembered account
+  if (dbRef.current === null) dbRef.current = dbFor(user.id);
   const db = dbRef.current;
   const clearedRef = useRef(false);
 
@@ -284,6 +309,11 @@ function AuthedApp({ user, onSignOut }: { user: SessionUser; onSignOut: () => vo
   }
 
   useEffect(() => {
+    // Not before the server has said who is signed in. This device's queue
+    // belongs to `user`; connecting would upload it under whatever session the
+    // browser holds, and if that is someone else's, post `user`'s changes into
+    // their account. Local reads need no session, so the screens are already up.
+    if (!sessionChecked) return;
     let cancelled = false;
     let stopUpload: (() => void) | undefined;
     connectDb(db, (r) => setRejections(r))
@@ -299,12 +329,16 @@ function AuthedApp({ user, onSignOut }: { user: SessionUser; onSignOut: () => vo
       // sign-out already ran disconnectAndClear; don't double-disconnect.
       if (!clearedRef.current) void db.disconnect();
     };
-  }, [db]);
+  }, [db, sessionChecked]);
 
   const navigate = useCallback((href: string) => {
     window.history.pushState({}, '', href);
     setRoute((href.split('#')[0] || '/') as Route);
   }, []);
+
+  // Once the first screen is up and the browser has a quiet moment, fetch the
+  // others, so moving between screens never waits on a chunk.
+  useEffect(() => whenIdle(preloadAllScreens), []);
 
   const ctx: CommandContext = useMemo(() => ({ userId: user.id, deviceId: getDeviceId() }), [user.id]);
 
@@ -329,40 +363,80 @@ function AuthedApp({ user, onSignOut }: { user: SessionUser; onSignOut: () => vo
   );
 }
 
-const USER_CACHE = 'prisms.user';
-
 export function App() {
-  const [user, setUser] = useState<SessionUser | null>(null);
-  const [loading, setLoading] = useState(true);
+  // The account this browser was last signed in as. Its screens render NOW, from
+  // its local database (which `early-open.ts` is already opening), and the server
+  // is asked in the background whether that is still who is signed in.
+  const [remembered] = useState(readCachedUser);
+  const [user, setUser] = useState<SessionUser | null>(remembered);
+  // The server has answered (or could not be asked). Until then nothing syncs.
+  const [sessionChecked, setSessionChecked] = useState(false);
+  const userRef = useRef(user);
+  userRef.current = user;
+  // Bumped by every sign-in and sign-out, so a boot check that answers AFTER one
+  // does not overrule what the user just did.
+  const authEpoch = useRef(0);
 
   useEffect(() => {
-    getSession()
-      .then((u) => {
-        // online: server is the source of truth for the session.
-        if (u) localStorage.setItem(USER_CACHE, JSON.stringify(u));
-        else localStorage.removeItem(USER_CACHE);
-        setUser(u);
-      })
-      .catch(() => {
-        // offline: fall back to the last known session so local data still renders.
-        const cached = localStorage.getItem(USER_CACHE);
-        if (cached) setUser(JSON.parse(cached) as SessionUser);
-      })
-      .finally(() => setLoading(false));
-  }, []);
+    let live = true;
+    const epoch = authEpoch.current;
+    void checkSession().then((answer) => {
+      if (!live || authEpoch.current !== epoch) return;
+      const outcome = settleBootSession(remembered, answer);
+      // The remembered account's screens may already have filled the in-memory
+      // read cache; another account must never see a frame of them (S8-F2).
+      const dropRemembered = () => {
+        if (!remembered) return;
+        forgetDb(remembered.id);
+        clearReadCaches();
+      };
+      switch (outcome.action) {
+        case 'keep':
+          rememberUser(outcome.user);
+          setUser(outcome.user);
+          break;
+        case 'switch':
+          dropRemembered();
+          rememberUser(outcome.user);
+          setUser(outcome.user);
+          break;
+        case 'sign-in':
+          dropRemembered();
+          forgetCachedUser();
+          setUser(null);
+          break;
+        case 'offline':
+          // keep the remembered account on screen and sync when the network
+          // allows — what an offline load has always done
+          break;
+      }
+      setSessionChecked(true);
+    });
+    return () => {
+      live = false;
+    };
+  }, [remembered]);
 
   const handleAuthed = useCallback((u: SessionUser) => {
-    localStorage.setItem(USER_CACHE, JSON.stringify(u));
+    authEpoch.current += 1;
+    rememberUser(u);
     setUser(u);
+    setSessionChecked(true); // signing in IS the server's answer
   }, []);
 
   const handleSignOut = useCallback(async () => {
+    authEpoch.current += 1;
     await signOut();
-    localStorage.removeItem(USER_CACHE);
+    forgetCachedUser();
+    // its database was just cleared: the next sign-in gets a fresh instance
+    if (userRef.current) forgetDb(userRef.current.id);
     setUser(null);
+    setSessionChecked(true); // nobody is signed in: known, so the form shows (not "Loading…")
   }, []);
 
-  if (loading) return <div className="px-auth" data-testid="loading">Loading…</div>;
+  // Only a browser with nobody remembered waits for the server before it shows anything.
+  if (!user && !sessionChecked) return <div className="px-auth" data-testid="loading">Loading…</div>;
   if (!user) return <Login onAuthed={handleAuthed} />;
-  return <AuthedApp user={user} onSignOut={handleSignOut} />;
+  // keyed by account: a switch is a fresh app, not this one re-pointed
+  return <AuthedApp key={user.id} user={user} sessionChecked={sessionChecked} onSignOut={handleSignOut} />;
 }
