@@ -170,6 +170,17 @@ describe('the card', () => {
     expect(screen.getByTestId('rm-strip')).toBeTruthy();
   });
 
+  it('embedded in the builder, renders one view’s body and picks through the builder', () => {
+    const onPick = vi.fn();
+    render(createElement(RoadmapViews, { model, color: '#2563eb', onNavigate: vi.fn(), embedded: { view: 'list', selectedId: ids.p4.id, onPick } }));
+    expect(screen.getByTestId('rm-embedded').dataset.view).toBe('list');
+    expect(screen.queryByRole('radiogroup', { name: 'Roadmap view' })).toBeNull(); // the builder owns the switch…
+    expect(screen.queryByTestId('rm-strip')).toBeNull(); // …and the details
+    expect(screen.getByTestId(`rm-row-${ids.p4.id}`).className).toContain('--sel');
+    fireEvent.click(screen.getByTestId(`rm-row-${ids.p2.id}`));
+    expect(onPick).toHaveBeenCalledWith(ids.p2.id);
+  });
+
   it('falls back to Order when Flow was remembered but is not on offer', () => {
     localStorage.setItem('prisms.roadmap.view', 'flow');
     mount();

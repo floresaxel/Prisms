@@ -1427,31 +1427,26 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
 .px-rm-screen { --px-rm-amber: #b45309; }
 
 /* the picker strip */
-.px-rm-strip { display: flex; gap: 18px; overflow-x: auto; margin: 12px 0 14px; padding-bottom: 4px; }
-.px-rm-group { flex: none; }
-.px-rm-group-head { display: flex; align-items: center; gap: 7px; margin: 0 4px 6px; font-size: 11px; font-weight: 640; letter-spacing: 0.5px; text-transform: uppercase; color: var(--px-text-dim); white-space: nowrap; }
-.px-rm-group-h { text-transform: none; letter-spacing: 0; font-weight: 500; color: var(--px-faint); }
-.px-rm-group-row { display: flex; gap: 6px; align-items: center; }
-.px-rm-pick { display: block; width: 184px; margin: 0; padding: 8px 11px; font: inherit; text-align: left; border: 1px solid var(--px-border); border-radius: 10px; background: var(--px-surface); color: var(--px-text); cursor: pointer; box-shadow: var(--px-shadow); }
-.px-rm-pick:hover { border-color: color-mix(in srgb, var(--px-rm-pc) 45%, var(--px-border)); }
-.px-rm-pick--on { border-color: var(--px-rm-pc); box-shadow: 0 0 0 1px var(--px-rm-pc); }
-.px-rm-pick b { display: block; font-size: 13px; font-weight: 560; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.px-rm-pick > span { display: flex; align-items: center; gap: 8px; margin-top: 4px; font-size: 11.5px; color: var(--px-faint); font-variant-numeric: tabular-nums; }
-.px-rm-pick-bar { flex: 1; height: 3px; border-radius: 2px; background: var(--px-surface-2); overflow: hidden; }
-.px-rm-pick-bar i { display: block; height: 100%; background: var(--px-rm-pc); }
+.px-sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+/* every roadmap as a pill, in one row grouped by vision */
+.px-rm-strip { display: flex; align-items: center; gap: 8px 18px; overflow-x: auto; margin: 0; padding-bottom: 2px; }
+.px-rm-group { flex: none; display: flex; align-items: center; gap: 6px; }
+.px-rm-group-head { display: inline-flex; align-items: center; gap: 6px; margin-right: 2px; font-size: 11.5px; font-weight: 600; color: var(--px-text-dim); white-space: nowrap; }
+.px-rm-group-h { font-weight: 500; }
+.px-rm-pick { display: inline-flex; align-items: center; gap: 8px; height: 30px; margin: 0; padding: 0 12px; font: inherit; border: 1px solid var(--px-border); border-radius: 15px; background: var(--px-surface); color: var(--px-text); white-space: nowrap; cursor: pointer; }
+.px-rm-pick:hover { border-color: var(--px-border-2); }
+.px-rm-pick--on { border-color: var(--px-ink, var(--px-text)); box-shadow: inset 0 0 0 1px var(--px-ink, var(--px-text)); }
+.px-rm-pick b { max-width: 240px; overflow: hidden; text-overflow: ellipsis; font-size: 13px; font-weight: 500; }
+.px-rm-pick > span { font-size: 11px; color: var(--px-text-dim); font-variant-numeric: tabular-nums; }
+.px-rm-count { flex: none; margin-left: auto; font-size: 11.5px; color: var(--px-text-dim); white-space: nowrap; }
 /* the quiet "+" at the end of each vision's run: a new roadmap under that vision */
 .px-rm-add { flex: none; width: 30px; height: 30px; margin-left: 2px; display: grid; place-items: center; padding: 0; border: 1px dashed var(--px-border-2); border-radius: 50%; background: none; color: var(--px-faint); cursor: pointer; transition: color 150ms, border-color 150ms, background 150ms, transform 150ms; }
 .px-rm-add .px-ic { width: 14px; height: 14px; }
 .px-rm-add:hover, .px-rm-add:focus-visible { outline: none; border-style: solid; border-color: var(--px-rm-pc); color: var(--px-rm-pc); background: color-mix(in srgb, var(--px-rm-pc) 8%, var(--px-surface)); transform: rotate(90deg); }
 
-/* the roadmap's header card */
-.px-rm-detail { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
-.px-rm-head { display: flex; gap: 8px 24px; align-items: flex-end; flex-wrap: wrap; }
-.px-rm-head-main { flex: 1 1 360px; min-width: 0; }
-.px-rm-head-vision { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--px-text-dim); padding: 0 8px; }
-.px-rm-title { display: block; width: 100%; margin: 2px 0; font-size: 18px; }
-.px-rm-desc { margin: 0; padding: 0 8px; max-width: 72ch; font-size: 13px; line-height: 1.55; color: var(--px-text-dim); white-space: pre-wrap; overflow-wrap: anywhere; }
-.px-rm-head-side { display: flex; align-items: flex-end; gap: 14px; }
+/* the selected roadmap (laid out by the builder, .px-rb below) */
+.px-rm-detail { min-width: 0; }
+.px-rm-desc { margin: 0; max-width: 72ch; font-size: 13px; line-height: 1.55; color: var(--px-text-dim); white-space: pre-wrap; overflow-wrap: anywhere; }
 
 /* the views card */
 .px-rmv { display: flex; flex-direction: column; padding: 0; overflow: hidden; }
@@ -1460,9 +1455,6 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
 .px-rmv-bar .px-vd-unit { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; padding: 4px 11px; white-space: nowrap; }
 .px-rmv-bar .px-vd-unit .px-ic { width: 13px; height: 13px; }
 .px-btn--ghost { border-color: transparent; box-shadow: none; background: none; color: var(--px-text-dim); white-space: nowrap; }
-.px-rm-addproj { display: inline-flex; align-items: center; gap: 4px; }
-.px-rm-addproj .px-input { width: 170px; padding: 5px 9px; font-size: 12.5px; }
-.px-rm-addproj-btn { padding: 5px 7px; }
 .px-rmv-body { flex: 1; display: flex; flex-direction: column; min-height: 0; padding: 16px; overflow-x: auto; }
 .px-rmv-strip { display: flex; align-items: center; gap: 6px 12px; flex-wrap: wrap; min-height: 46px; padding: 10px 14px; border-top: 1px solid var(--px-border); background: var(--px-surface-2); font-size: 12.5px; }
 .px-rmv-kind { font-size: 10.5px; font-weight: 640; letter-spacing: 0.5px; text-transform: uppercase; color: var(--px-rm-c); }
@@ -1470,13 +1462,19 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
 .px-rmv-nums { color: var(--px-text-dim); }
 .px-rmv-open { margin-left: auto; }
 .px-rmv-body--flow { padding: 0; overflow: visible; }
+/* one view's body inside the builder card (no card, bar or strip of its own) */
+.px-rmv--embed { flex: 1; overflow: visible; }
+.px-rmv--embed .px-rmv-body { padding: 0; }
+.px-rmv-embed-bar { display: flex; justify-content: flex-end; gap: 6px; margin-bottom: 8px; }
 
-/* --- Plan › Roadmap › Flow (components/RoadmapFlow) -------------------------------------
-   The builder: outcomes as rows (Structured) or groups (Free flow), projects as cards,
-   links routed between them, a details panel on the right. Door glyphs carry status:
-   filled blue = in progress ("now"), green with a tick = done, outlined = ready,
-   dashed = waiting on something unfinished. */
-.px-rf {
+/* --- Plan › Roadmap, the builder (components/RoadmapFlow) -------------------------------
+   The screen as the builder mockup lays it out: a main column (roadmap picker, header
+   card, builder card) and a details column down the right that runs the full height.
+   On the board, outcomes are rows (Structured) or groups (Free flow), projects are
+   cards, links are routed between them. Door glyphs carry status: filled blue = in
+   progress ("now"), green with a tick = done, outlined = ready, dashed = waiting on
+   something unfinished. */
+.px-rb {
   --px-rf-ink: var(--px-ink, var(--px-text));
   --px-rf-door: var(--px-door, #2f6bff);
   --px-rf-link: #9aa4b2;
@@ -1487,12 +1485,59 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
   --px-rf-amber-brd: #f2d8a4;
   --px-rf-sel: var(--px-accent);
   --px-rf-sel-bg: color-mix(in srgb, var(--px-accent) 9%, var(--px-surface));
-  position: relative; display: flex; flex-wrap: wrap; align-items: stretch; min-height: 100%;
+  /* bleeds to the edges of .px-content (padding 20px 26px 40px) so the details column reaches them */
+  position: relative; display: flex; flex-wrap: wrap; align-items: stretch; margin: -20px -26px -40px; min-height: calc(100vh - 50px);
 }
-.px-rf-main { flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; }
-.px-rf-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding: 10px 14px; border-bottom: 1px solid var(--px-border); }
-.px-rf-bar .px-vd-unit { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; padding: 4px 11px; white-space: nowrap; }
-.px-rf-bar .px-vd-unit .px-ic { width: 13px; height: 13px; }
+.px-rb-main { flex: 999 1 600px; min-width: 0; box-sizing: border-box; display: flex; flex-direction: column; gap: 14px; padding: 16px 16px 28px 26px; }
+.px-rb-insp { flex: 1 1 320px; min-width: 0; max-width: 100%; box-sizing: border-box; border-left: 1px solid var(--px-border); background: var(--px-surface); }
+.px-rb-insp-in { box-sizing: border-box; display: flex; flex-direction: column; gap: 16px; padding: 18px 20px 28px; }
+@media (min-width: 1100px) {
+  .px-rb-insp { max-width: 380px; }
+  /* stays in view while the page scrolls under it */
+  .px-rb-insp-in { position: sticky; top: 0; max-height: calc(100vh - 50px); overflow-y: auto; }
+}
+
+/* the header card: vision, name, what it is realized by, where it stands */
+.px-rb-hdr { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 16px 28px; padding: 18px 20px; border: 1px solid var(--px-border); border-radius: 12px; background: var(--px-surface); box-shadow: var(--px-shadow); }
+.px-rb-hdr-main { flex: 1 1 460px; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.px-rb-vision { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.px-rb-vision-link { padding: 0; border: 0; background: none; font: inherit; font-size: 13.5px; color: var(--px-text); text-align: left; text-decoration: underline; text-decoration-color: var(--px-border-2); text-underline-offset: 3px; cursor: pointer; }
+.px-rb-vision-link:hover { text-decoration-color: currentColor; }
+.px-rb-title { display: block; width: 100%; box-sizing: border-box; margin: 0; padding: 0; border: 0; background: none; font: 600 28px/1.15 var(--px-font-display, var(--px-font)); letter-spacing: -0.01em; color: var(--px-text); }
+input.px-rb-title { margin-left: -7px; padding: 1px 6px; border: 1px solid transparent; border-radius: 8px; }
+input.px-rb-title:hover { border-color: var(--px-border); }
+input.px-rb-title:focus { outline: none; border-color: var(--px-accent); background: var(--px-surface); }
+.px-rb-realized { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 4px; }
+.px-rb-realized-l { margin-right: 4px; font-size: 12px; color: var(--px-text-dim); }
+.px-rb-stats { display: flex; flex-wrap: wrap; margin: 0; }
+.px-rb-stat { padding: 6px 14px; border-left: 1px solid var(--px-border); }
+.px-rb-stat:first-child { border-left: 0; }
+.px-rb-stat dt { margin-bottom: 2px; font-size: 11.5px; color: var(--px-text-dim); white-space: nowrap; }
+.px-rb-stat dd { margin: 0; font: 600 24px/1.1 var(--px-font-display, var(--px-font)); }
+
+/* the builder card: toolbar, layout bar, gaps, then the board (or another view) */
+.px-rb-builder { min-width: 0; display: flex; flex-direction: column; border: 1px solid var(--px-border); border-radius: 12px; background: var(--px-surface); box-shadow: var(--px-shadow); overflow: hidden; }
+.px-rb-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding: 10px 12px; border-bottom: 1px solid var(--px-border); }
+.px-rb-subbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 8px 12px; border-bottom: 1px solid var(--px-border); background: color-mix(in srgb, var(--px-surface-2) 45%, var(--px-surface)); }
+.px-rb-seg { max-width: 100%; display: flex; gap: 2px; padding: 2px; border-radius: 9px; background: var(--px-surface-2); overflow-x: auto; }
+.px-rb-seg button { flex: none; display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 11px; border: 0; border-radius: 7px; background: transparent; font: inherit; font-size: 13px; font-weight: 500; color: var(--px-text-dim); white-space: nowrap; cursor: pointer; }
+.px-rb-seg button.px-rb-seg--on { background: var(--px-surface); color: var(--px-text); box-shadow: 0 1px 2px rgba(16,24,40,.08); }
+.px-rb-seg--sm button { height: 26px; padding: 0 9px; font-size: 12.5px; }
+.px-rb-seg .px-ic { width: 13px; height: 13px; }
+.px-rb-btn { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border: 1px solid var(--px-border-2); border-radius: 8px; background: var(--px-surface); font: inherit; font-size: 13px; font-weight: 500; color: var(--px-text); white-space: nowrap; cursor: pointer; }
+.px-rb-btn:hover { border-color: var(--px-faint); }
+.px-rb-btn .px-ic { width: 14px; height: 14px; }
+.px-rb-btn--primary { border-color: var(--px-rf-ink); background: var(--px-rf-ink); color: #fff; }
+.px-rb-btn--primary:hover { border-color: var(--px-rf-ink); opacity: .88; }
+.px-rb-btn--quiet { border-color: transparent; color: var(--px-text-dim); }
+.px-rb-btn--quiet:hover { border-color: transparent; background: var(--px-surface-2); color: var(--px-text); }
+.px-rb-btn--sm { height: 28px; padding: 0 9px; font-size: 12.5px; }
+.px-rb-icon { width: 32px; height: 32px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 8px; background: transparent; font: inherit; font-size: 16px; color: var(--px-text-dim); cursor: pointer; }
+.px-rb-icon:hover { background: var(--px-surface-2); color: var(--px-text); }
+.px-rb-hint { flex: 1 1 260px; min-width: 0; display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--px-text-dim); }
+.px-rb-hint-dot { flex: none; width: 10px; height: 10px; box-sizing: border-box; border-radius: 50%; border: 2px solid var(--px-rf-sel); background: var(--px-surface); }
+.px-rb-tidy { margin-left: auto; }
+.px-rb-other { min-height: 320px; display: flex; flex-direction: column; padding: 16px; overflow-x: auto; }
 .px-rf-toggle { display: inline-flex; align-items: center; gap: 7px; }
 .px-rf-sw { position: relative; flex: none; width: 24px; height: 14px; border-radius: 7px; background: var(--px-border-2); transition: background 140ms; }
 .px-rf-sw::after { content: ''; position: absolute; left: 2px; top: 2px; width: 10px; height: 10px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.2); transition: left 140ms; }
@@ -1500,10 +1545,8 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
 .px-rf-toggle[aria-pressed='true'] .px-rf-sw::after { left: 12px; }
 .px-rf-zoom { display: inline-flex; align-items: center; gap: 2px; margin-left: auto; }
 .px-rf-z { min-width: 40px; text-align: center; font: 500 11.5px var(--px-font-mono, ui-monospace, monospace); color: var(--px-text-dim); }
-.px-rf-outcomes { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 9px 14px; border-bottom: 1px solid var(--px-border); background: var(--px-surface-2); }
-.px-rf-outcomes-l { font-size: 12px; color: var(--px-text-dim); margin-right: 4px; }
 .px-rf-outcomes-hint { font-size: 12px; color: var(--px-text-dim); }
-.px-rf-ochip { display: inline-flex; align-items: center; gap: 8px; height: 26px; padding: 0 9px; border: 1px solid var(--px-border); border-radius: 8px; background: var(--px-surface); font: inherit; font-size: 12.5px; color: var(--px-text); cursor: pointer; }
+.px-rf-ochip { display: inline-flex; align-items: center; gap: 8px; min-height: 28px; padding: 2px 9px; text-align: left; border: 1px solid var(--px-border); border-radius: 8px; background: var(--px-surface); font: inherit; font-size: 12.5px; color: var(--px-text); cursor: pointer; }
 .px-rf-ochip:hover { border-color: var(--px-border-2); }
 .px-rf-ochip--sel { border-color: var(--px-rf-sel); box-shadow: inset 0 0 0 1px var(--px-rf-sel); }
 .px-rf-ochip--warn { border-style: dashed; border-color: var(--px-rf-amber-line); background: var(--px-rf-amber-bg); }
@@ -1516,8 +1559,8 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
 .px-rf-emptystate { margin: 0; padding: 12px 14px; border-bottom: 1px solid var(--px-border); font-size: 13px; line-height: 1.5; color: var(--px-text-dim); }
 .px-rf-warn { flex: none; fill: none; stroke: #b45309; stroke-width: 2.2; stroke-linejoin: round; stroke-linecap: round; }
 
-.px-rf-scroll { flex: 1 1 auto; overflow: auto; max-height: max(440px, calc(100vh - 330px)); }
-.px-rf-wrap { position: relative; }
+.px-rf-scroll { flex: 1 1 auto; overflow: auto; max-height: 78vh; }
+.px-rf-wrap { position: relative; margin: 0 auto; }
 .px-rf-board { position: absolute; left: 0; top: 0; transform-origin: 0 0; user-select: none; -webkit-user-select: none; touch-action: none; }
 .px-rf-board--free { background-color: var(--px-surface); background-image: radial-gradient(color-mix(in srgb, var(--px-border-2) 80%, transparent) 1px, transparent 1px); background-size: 16px 16px; background-position: 8px 8px; }
 .px-rf-board--drag { cursor: grabbing; }
@@ -1636,8 +1679,6 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
 .px-rf-legend-head { fill: var(--px-rf-link); }
 
 /* the details panel */
-.px-rf-insp { flex: 1 1 300px; min-width: 0; max-width: 100%; box-sizing: border-box; display: flex; flex-direction: column; gap: 14px; padding: 16px 18px 22px; border-left: 1px solid var(--px-border); background: var(--px-surface); }
-@media (min-width: 1100px) { .px-rf-insp { max-width: 360px; } }
 .px-rf-insp-head { display: flex; align-items: center; gap: 8px; }
 .px-rf-eyebrow { font: 600 10.5px var(--px-font-mono, ui-monospace, monospace); letter-spacing: .08em; text-transform: uppercase; color: var(--px-text-dim); }
 .px-rf-chipstep { padding: 2px 6px; border-radius: 5px; background: var(--px-surface-2); font: 500 10.5px var(--px-font-mono, ui-monospace, monospace); }

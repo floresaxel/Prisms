@@ -25,7 +25,7 @@ const OUTCOMES = [
   { id: 'o-cover', name: 'Cover', statement: 'A cover people pick up', measure: '' },
 ];
 
-function setup() {
+function setup(extra: Partial<Parameters<typeof RoadmapFlow>[0]> = {}) {
   const fx = roadmapFixture();
   const { ids } = fx;
   const rows: Node[] = fx.rows.map((r) => {
@@ -55,9 +55,10 @@ function setup() {
       layouts: new Map(),
       actions,
       onNavigate,
+      ...extra,
     }),
   );
-  return { fx, ids, actions, onNavigate };
+  return { fx, ids, actions, onNavigate, model };
 }
 const body = (id: string) => within(screen.getByTestId(`rf-card-${id}`)).getAllByRole('button')[0]!;
 const panel = () => screen.getByTestId('rf-inspector');
@@ -65,6 +66,59 @@ const flush = () => act(async () => {});
 
 beforeEach(() => installMemoryStorage());
 afterEach(cleanup);
+
+describe('the screen layout', () => {
+  it('heads the roadmap with its vision, what it is realized by, and where it stands', () => {
+    setup({ visionColor: { name: 'blue', hex: '#2563eb' }, top: createElement('nav', { 'data-testid': 'the-picker' }) });
+    const root = screen.getByTestId('rf');
+    // picker, header card and builder card share the main column; details sit beside them
+    expect(root.querySelector('.px-rb-main [data-testid="the-picker"]')).toBeTruthy();
+    expect(root.querySelector('.px-rb-main .px-rb-hdr')).toBeTruthy();
+    expect(root.querySelector('.px-rb-main [data-testid="rm-views"]')).toBeTruthy();
+    expect(root.querySelector('.px-rb-main [data-testid="rf-inspector"]')).toBeNull();
+    expect(screen.getByTestId('rm-vision-name').textContent).toBe('Write a novel');
+    expect(screen.getByTestId('rm-vision-swatch').dataset.color).toBe('blue');
+    const chips = screen.getByTestId('rf-outcomes');
+    expect(chips.textContent).toContain('Realized when');
+    expect(chips.textContent).toContain('A full draft exists1/2'); // Research is done, Draft act two is not
+    expect(chips.textContent).toContain('A cover people pick upgap');
+    expect(screen.getByTestId('rm-stats').textContent).toBe('Steps to the vision4Projects7Done1In progress2');
+  });
+
+  it('adds a project from the toolbar and hands its name to the details column', async () => {
+    const { actions } = setup();
+    fireEvent.click(screen.getByTestId('rf-add-project'));
+    await flush();
+    expect(actions.createProject).toHaveBeenCalledWith({ title: 'New project', attributes: { outcome_id: 'o-draft' } });
+  });
+
+  it('offers the other views, which pick into the same details column', () => {
+    const renderView = vi.fn((view: string, ctx: { selectedId: string | null; onPick: (id: string) => void }) =>
+      createElement('button', { 'data-testid': 'other-view', 'data-view': view, 'data-selected': ctx.selectedId ?? '', onClick: () => ctx.onPick(ids.p4.id) }),
+    );
+    const { ids } = setup({ renderView });
+    const tabs = within(screen.getByRole('radiogroup', { name: 'Roadmap view' })).getAllByRole('radio');
+    expect(tabs.map((t) => t.textContent)).toEqual(['Flow', 'Outline', 'List', 'Order', 'Mind map']);
+    expect(screen.getByTestId('rm-views').dataset.view).toBe('flow');
+    fireEvent.click(screen.getByTestId('rm-view-list'));
+    expect(screen.getByTestId('rm-views').dataset.view).toBe('list');
+    expect(screen.queryByTestId('rf-board')).toBeNull();
+    expect(screen.queryByTestId('rf-layout-free')).toBeNull(); // the layout bar belongs to Flow
+    fireEvent.click(screen.getByTestId('other-view'));
+    expect((screen.getByTestId('rf-p-title') as HTMLInputElement).value).toBe('Beta readers');
+    expect(screen.getByTestId('other-view').dataset.selected).toBe(ids.p4.id);
+    // the choice is remembered, and Flow comes back with the selection intact
+    expect(localStorage.getItem('prisms.roadmap.view')).toBe('list');
+    fireEvent.click(screen.getByTestId('rm-view-flow'));
+    expect(screen.getByTestId(`rf-card-${ids.p4.id}`).className).toContain('px-rf-card--sel');
+  });
+
+  it('shows Flow alone when the screen passes no other views', () => {
+    setup();
+    expect(screen.queryByRole('radiogroup', { name: 'Roadmap view' })).toBeNull();
+    expect(screen.getByTestId('rf-board')).toBeTruthy();
+  });
+});
 
 describe('Structured (the default)', () => {
   it('lays the outcomes out as rows and the projects in the columns of their steps', () => {

@@ -80,8 +80,9 @@ test('Plan › Roadmap › Flow builds outcomes, order and a free layout that su
   await page.getByTestId(`rm-item-${id.r}`).click({ timeout: 30_000 });
   const views = page.getByTestId('rm-views');
   await expect(views).toHaveAttribute('data-view', 'flow');
-  const flow = views.getByTestId('rf');
-  const card = (pid: string) => flow.getByTestId(`rf-card-${pid}`);
+  // the builder is the whole screen: header card, builder card (rm-views) and the details column
+  const flow = page.getByTestId('rf');
+  const card =(pid: string) => flow.getByTestId(`rf-card-${pid}`);
   const pick = (pid: string) => card(pid).locator('.px-rf-body').click();
 
   // --- Structured is the default; steps come from the synced task edge ---
@@ -98,7 +99,8 @@ test('Plan › Roadmap › Flow builds outcomes, order and a free layout that su
   await nameField.press('Enter');
   await flow.getByTestId('rf-o-statement').fill('Studio open, safe and equipped');
   await flow.getByTestId('rf-o-statement').blur();
-  await expect(flow.getByTestId('rf-outcomes')).toContainText('Space');
+  // the header's "Realized when" chips show what has to be true
+  await expect(flow.getByTestId('rf-outcomes')).toContainText('Studio open, safe and equipped');
   await flow.getByTestId('rf-add-outcome-chip').click();
   await expect(nameField).toHaveValue('New outcome');
   await nameField.fill('Craft');
@@ -159,14 +161,15 @@ test('Plan › Roadmap › Flow builds outcomes, order and a free layout that su
   // --- everything came back from the synced rows ---
   const views2 = page.getByTestId('rm-views');
   await expect(views2).toHaveAttribute('data-view', 'flow', { timeout: 30_000 });
-  const flow2 = views2.getByTestId('rf');
+  const flow2 = page.getByTestId('rf');
   await expect(flow2).toHaveAttribute('data-layout', 'free'); // remembered on this device
   await expect(flow2.getByTestId(`rf-fcard-${id.p4}`)).toHaveAttribute('data-outcome', space, { timeout: 30_000 });
   await expect(flow2.getByTestId(`rf-group-${craft}`)).toContainText('Nothing delivers this yet');
   await flow2.getByTestId('rf-layout-structured').click();
   await expect(flow2.getByTestId(`rf-card-${id.p3}`)).toHaveAttribute('data-step', '2');
   await expect(flow2.getByTestId(`rf-card-${id.p3}`)).toHaveAttribute('data-lane', space);
-  await expect(flow2.getByTestId('rf-outcomes')).toContainText('Space');
+  await expect(flow2.getByTestId('rf-outcomes')).toContainText('Studio open, safe and equipped');
+  await expect(flow2.getByTestId('rf-lane-' + space)).toContainText('Space');
   await expect(flow2.getByTestId(`rf-cap-${space}`)).toContainText('Studio open, safe and equipped');
   await flow2.getByTestId(`rf-card-${id.p3}`).locator('.px-rf-body').click();
   await expect(flow2.getByTestId(`rf-dep-${id.p2}-${id.p3}`)).toContainText('start together');

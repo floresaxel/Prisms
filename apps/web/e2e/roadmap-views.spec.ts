@@ -102,10 +102,10 @@ test('Plan › Roadmap reads one roadmap four ways, by what blocks what', async 
   await expect(order(id.p4)).toContainText('blocked by Draft act two, Revise act one');
   await expect(order(id.p3)).toContainText('ready to start');
 
-  // --- picking a project puts it in the strip ---
+  // --- picking a project opens it in the details column ---
   await order(id.p4).click();
-  await expect(views.getByTestId('rm-strip')).toContainText('Beta readers');
-  await expect(views.getByTestId('rm-strip')).toContainText('blocked by Draft act two, Revise act one');
+  await expect(page.getByTestId('rf-p-title')).toHaveValue('Beta readers');
+  await expect(page.getByTestId('rf-p-state')).toContainText('Waiting on Draft act two and Revise act one');
 
   // --- List: can move now · blocked · finished ---
   await views.getByTestId('rm-view-list').click();
