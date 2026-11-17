@@ -35,6 +35,8 @@ import {
 
 import { WhyButton } from '../components/Why';
 import { formatElapsed, formatMinutes, projectTone } from '../format';
+import { listLayoutClass } from '../list-layout';
+import { useMeasuredWidth } from '../use-measured-width';
 
 function fmtClock(iso: string): string {
   return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -110,15 +112,19 @@ function AvailableRow({ item, running, todayDate, onCheck, onClockIn }: { item: 
         disabled={running}
         title={running ? 'A timer is already running — clock out from the topbar' : undefined}
         data-testid={`clock-in-${id}`}
+        aria-label="Clock in"
         onClick={onClockIn}
       >
-        <Ic name="play" /> Clock in
+        <Ic name="play" /> <span className="px-btn-lbl">Clock in</span>
       </button>
     </li>
   );
 }
 
 export function MyDay({ ctx, onNavigate }: { ctx: CommandContext; onNavigate?: (href: string) => void }) {
+  // The screen's own width (not the window's — the sidebar rail changes it too)
+  // decides whether the right rail sits beside the list or under it.
+  const [viewRef, viewWidth] = useMeasuredWidth();
   // Two clocks: `now` (1 s) drives the live run-banner elapsed; `nowMin` (60 s)
   // drives the heavier status/agenda/habit reads so they don't recompute per second.
   const [now, setNow] = useState<Instant>(asEpochMillis(Date.now()));
@@ -179,7 +185,7 @@ export function MyDay({ ctx, onNavigate }: { ctx: CommandContext; onNavigate?: (
   }
 
   return (
-    <section>
+    <section ref={viewRef} className={`px-list${listLayoutClass(viewWidth)}`}>
       <div className="px-page-head">
         <h1>My Day</h1>
         <span className="px-page-sub">{dateLabel}</span>
