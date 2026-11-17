@@ -1216,6 +1216,12 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
    --compact: each row's secondary parts (progress bar, promote picker) drop to a
    second line and buttons keep only their icon. */
 .px-promote select { min-width: 0; max-width: 260px; }
+/* The Inbox project picker takes a share of its card (not the width of its
+   longest option) and clips long project names with an ellipsis, so it grows
+   and shrinks with the card. The title keeps the rest of the row. */
+.px-trow--inbox > .px-promote { flex: 0 1 42%; min-width: 0; }
+.px-trow--inbox .px-promote select { flex: 1 1 0; width: 100%; max-width: none; min-width: 0; text-overflow: ellipsis; }
+.px-trow--inbox .px-promote .px-btn { flex: none; }
 .px-list--stack .px-day-cols { flex-direction: column; align-items: stretch; gap: 0; }
 .px-list--stack .px-day-left { flex: none; width: 100%; }
 .px-list--stack .px-day-rail { width: auto; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); align-items: start; margin-top: 18px; }
