@@ -59,6 +59,7 @@ import { fmtGridClock, pointerMinutes, snapMinutes, useSnapPref } from '../agend
 import { DayJournalPanel } from '../components/DayJournal';
 import { NoteSwap } from '../components/NoteSwap';
 import { WhyButton } from '../components/Why';
+import { useMeasuredWidth } from '../use-measured-width';
 
 const GRID_START_HOUR = 6;
 const GRID_END_HOUR = 22;
@@ -76,31 +77,6 @@ function rowTitle(t: AgendaTask): string {
   if (t.kind === 'activity') parts.push('Inbox item — not under a project yet, so a block on it has no vision');
   if (!t.estimated) parts.push(`no estimate, drops as a ${t.schedulable.estimateMinutes}-minute event`);
   return parts.join(' — ');
-}
-
-/**
- * The section's own width, observed — drives both the stacking and the day count.
- * Measured rather than read off the viewport because the sidebar's rail toggle
- * changes the room available without the window resizing at all.
- */
-function useMeasuredWidth(): [RefObject<HTMLElement | null>, number] {
-  const ref = useRef<HTMLElement | null>(null);
-  const [width, setWidth] = useState(0);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    setWidth(el.clientWidth);
-    // The one-shot measurement above is enough to render; only the LIVE reflow
-    // needs an observer, so an environment without one (jsdom) still works.
-    if (typeof ResizeObserver === 'undefined') return;
-    const ro = new ResizeObserver((entries) => {
-      const w = entries[0]?.contentRect.width;
-      if (w != null) setWidth(w);
-    });
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-  return [ref, width];
 }
 
 interface DragState {

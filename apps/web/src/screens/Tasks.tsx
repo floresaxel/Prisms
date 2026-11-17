@@ -30,8 +30,11 @@ import {
 } from '@prisms/ui';
 
 import { formatMinutes, projectTone } from '../format';
+import { listLayoutClass } from '../list-layout';
+import { useMeasuredWidth } from '../use-measured-width';
 
 export function Tasks({ ctx }: { ctx: CommandContext }) {
+  const [viewRef, viewWidth] = useMeasuredWidth();
   // Status here is minute-stable; a single mount snapshot is enough (the reads
   // still re-run reactively when rows change).
   const [now] = useState<Instant>(() => asEpochMillis(Date.now()));
@@ -59,7 +62,7 @@ export function Tasks({ ctx }: { ctx: CommandContext }) {
   }
 
   return (
-    <section>
+    <section ref={viewRef} className={`px-list${listLayoutClass(viewWidth)}`}>
       <div className="px-page-head">
         <h1>Tasks</h1>
         <span className="px-page-sub">every task in one list — captures wait in Inbox until promoted</span>
@@ -168,7 +171,7 @@ function InboxRow({ activity, targets, commands }: { activity: Node; targets: Pr
   const [parentId, setParentId] = useState('');
   const selected = parentId || targets[0]?.id || '';
   return (
-    <li className="px-trow">
+    <li className="px-trow px-trow--inbox">
       <div className="px-t-main"><div className="px-t-title">{activity.title}</div></div>
       <span className="px-promote">
         <select

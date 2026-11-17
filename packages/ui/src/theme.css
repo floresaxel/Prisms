@@ -1015,10 +1015,13 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
 .px-ckb--done .px-ic { opacity: 1; }
 .px-t-main { flex: 1; min-width: 0; }
 .px-t-title { font-size: 13px; font-weight: 530; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.px-t-meta { display: flex; align-items: center; gap: 10px; margin-top: 3px; font-size: 11.5px; color: var(--px-faint); }
+.px-t-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 2px 10px; margin-top: 3px; font-size: 11.5px; color: var(--px-faint); }
 .px-trow--done .px-t-title { color: var(--px-faint); text-decoration: line-through; }
 .px-proj { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--px-text-dim); }
-.px-pdot { width: 8px; height: 8px; border-radius: 3px; flex: none; }
+/* The project colour chip is a REGULAR pentagon (five equal sides), point up. The
+   box is 1.902 : 1.809 (width : height) — the exact bounding box of a regular
+   pentagon — and the clip points are its vertices. */
+.px-pdot { width: 10.5px; height: 10px; flex: none; clip-path: polygon(50% 0, 100% 38.2%, 80.9% 100%, 19.1% 100%, 0 38.2%); }
 .px-pdot--teal { background: var(--px-teal); }
 .px-pdot--blue { background: var(--px-blue); }
 .px-pdot--amber { background: var(--px-amber); }
@@ -1095,7 +1098,7 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
 
 /* ── Tasks view (W4/D6) — capture bar + substep checklist ── */
 .px-capture { display: flex; gap: 8px; margin: 12px 0; max-width: 900px; }
-.px-capture input { flex: 1; border: 1px solid var(--px-border); border-radius: 8px; padding: 8px 12px; background: var(--px-surface); color: var(--px-text); font: inherit; }
+.px-capture input { flex: 1; min-width: 0; border: 1px solid var(--px-border); border-radius: 8px; padding: 8px 12px; background: var(--px-surface); color: var(--px-text); font: inherit; }
 .px-capture input::placeholder { color: var(--px-faint); }
 .px-promote { display: inline-flex; align-items: center; gap: 6px; }
 .px-promote select { border: 1px solid var(--px-border); border-radius: 7px; padding: 4px 8px; font-size: 12px; background: var(--px-surface); color: var(--px-text-dim); }
@@ -1202,6 +1205,37 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
 .px-set-lbl b { display: block; font-size: 13px; font-weight: 600; margin-bottom: 3px; }
 .px-set-lbl span { font-size: 11.5px; color: var(--px-faint); line-height: 1.45; }
 .px-set-ctl { flex: 1; }
+
+/* ── Task-list screens (My Day, Tasks) reflowing with their own width ──
+   apps/web/src/list-layout.ts measures the screen (not the window — the sidebar
+   rail changes the room too) and adds --stack below 900px and --compact below
+   600px. Classes rather than @media or @container: a media query can't see the
+   sidebar, and a container on the screen would trap the position:fixed Modal.
+   --stack: the right rail goes UNDER the list, as a row of cards, instead of
+   squeezing the list column until its rows break.
+   --compact: each row's secondary parts (progress bar, promote picker) drop to a
+   second line and buttons keep only their icon. */
+.px-promote select { min-width: 0; max-width: 260px; }
+.px-list--stack .px-day-cols { flex-direction: column; align-items: stretch; gap: 0; }
+.px-list--stack .px-day-left { flex: none; width: 100%; }
+.px-list--stack .px-day-rail { width: auto; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); align-items: start; margin-top: 18px; }
+
+.px-list--compact .px-page-sub { flex-basis: 100%; }
+.px-list--compact .px-trow { flex-wrap: wrap; gap: 8px 10px; padding: 9px 12px; }
+.px-list--compact .px-trow > .px-pbar-sm { order: 9; flex: 1 1 100%; width: auto; margin-left: 27px; }
+.px-list--compact .px-trow--inbox > .px-promote { order: 9; flex: 1 1 100%; min-width: 0; }
+.px-list--compact .px-trow--inbox .px-promote select { flex: 1; max-width: none; }
+.px-list--compact .px-tag--red { max-width: 50%; }
+.px-list--compact .px-btn-lbl { display: none; }
+.px-list--compact .px-sec { flex-wrap: wrap; }
+.px-list--compact .px-sec .px-fchips { order: 9; flex-basis: 100%; margin-left: 0; }
+.px-list--compact .px-sort-note { display: none; }
+.px-list--compact .px-run-banner { flex-wrap: wrap; gap: 8px 12px; padding: 10px 12px; }
+.px-list--compact .px-run-banner > div { min-width: 0; }
+.px-list--compact .px-run-banner > .px-pbar-sm { order: 9; flex: 1 1 100%; width: auto; }
+.px-list--compact .px-run-clock { font-size: 17px; }
+.px-list--compact .px-substeps { margin: 0 10px 0 28px; padding-left: 10px; }
+.px-list--compact .px-rail-time { width: auto; }
 
 /* ── W8 polish — keyboard focus-visible, reduced motion ── */
 /* The shell used to be pinned at `min-width: 1024px`, so a narrow window scrolled
