@@ -151,6 +151,17 @@ const journal_entries = new Table({
   locked: column.integer,
   // user-editable heading (migration 0014); '' = untitled.
   title: column.text,
+  /**
+   * The command that last wrote this row (§7.8, server-stamped on every write and
+   * already streamed by the `SELECT *`). Declared so the overlay store can tell
+   * "the row has caught up with my write" from "the row is here": without it,
+   * `reconcileConfirmed` confirmed a journal edit on row PRESENCE, which a note
+   * that already synced always has — so a lock (or a rename) was dropped from the
+   * overlay the moment the server acked it, and the note flicked back to its old
+   * state until the locked row arrived. The e2e caught the toggle reading
+   * "unlocked" inside that window, with no unlock ever sent (CI, PR #27).
+   */
+  last_modified_by_command_id: column.text,
   created_at: column.text,
   updated_at: column.text,
   deleted_at: column.text,
