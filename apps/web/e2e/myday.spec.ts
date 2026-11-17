@@ -87,3 +87,40 @@ test('My Day: priority order, project filter, and the collapsed Done-today secti
   await page.getByTestId('sec-done').click();
   await expect(page.getByText('Finished Task')).toBeVisible();
 });
+
+test('My Day: the running task walks back to its vision, one door per layer', async ({ page }) => {
+  await register(page, 'trail');
+  const ids = { v: randomUUID(), r: randomUUID(), p: randomUUID(), m: randomUUID(), t: randomUUID() };
+  const seed = await page.request.post('/sync/upload', {
+    data: {
+      device_id: 'e2e-seed',
+      commands: [
+        cmd('node.create', { id: ids.v, node_type: 'vision', title: 'Trail Vision', sort_order: 'a0' }),
+        cmd('node.create', { id: ids.r, node_type: 'roadmap', title: 'Trail Roadmap', sort_order: 'a0', parent_id: ids.v }),
+        cmd('node.create', { id: ids.p, node_type: 'project', title: 'Trail Project', sort_order: 'a0', parent_id: ids.r }),
+        cmd('node.create', { id: ids.m, node_type: 'milestone', title: 'Trail Milestone', sort_order: 'a0', parent_id: ids.p }),
+        cmd('node.create', { id: ids.t, node_type: 'task', title: 'Trail Task', sort_order: 'a0', parent_id: ids.m, estimate_minutes: 30 }),
+      ],
+    },
+  });
+  expect(seed.ok()).toBeTruthy();
+
+  // nothing is running yet, so there is no chain to show
+  await expect(page.getByTestId(`myday-row-${ids.t}`)).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId('why-this-matters')).toHaveCount(0);
+
+  await page.getByTestId(`clock-in-${ids.t}`).click();
+  await expect(page.getByTestId('running-timer')).toContainText('Trail Task');
+
+  // vision first, the running task last — and only the running task is "now"
+  const rows = page.getByTestId('why-this-matters').locator('li');
+  await expect(rows).toHaveCount(5);
+  await expect(rows.nth(0)).toContainText('Trail Vision');
+  await expect(rows.nth(3)).toContainText('Trail Milestone');
+  await expect(rows.nth(4)).toContainText('Trail Task');
+  await expect(rows.nth(4)).toHaveAttribute('aria-current', 'step');
+  await expect(page.getByTestId('why-this-matters').locator('[aria-current]')).toHaveCount(1);
+
+  await page.getByTestId('timer-clock-out').click();
+  await expect(page.getByTestId('why-this-matters')).toHaveCount(0);
+});

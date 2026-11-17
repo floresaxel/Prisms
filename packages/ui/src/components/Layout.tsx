@@ -8,6 +8,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 
 import { Ic, IconSprite, type IconName } from './icons';
+import { ThresholdMark } from './Mark';
 
 export interface NavItemSpec {
   /** Stable semantic id — drives `data-testid="nav-<key>"` (e2e nav helper). */
@@ -312,7 +313,7 @@ export function Layout({ brand = 'Prisms', brandHref, groups, foot, active, onNa
               // expanding by hand is pinning: the rail only ever shows unpinned
               onClick={togglePin}
             >
-              <Ic name="prism" />
+              <ThresholdMark size={22} />
             </button>
           ) : home !== undefined ? (
             <a
@@ -330,10 +331,10 @@ export function Layout({ brand = 'Prisms', brandHref, groups, foot, active, onNa
                 }
               }}
             >
-              <Ic name="prism" />
+              <ThresholdMark size={22} />
             </a>
           ) : (
-            <span className="px-brand-logo"><Ic name="prism" /></span>
+            <span className="px-brand-logo"><ThresholdMark size={22} /></span>
           )}
           <span className="px-brand-lbl">{brand}</span>
           {/* The pin is the sidebar's only control, and it belongs to a sidebar

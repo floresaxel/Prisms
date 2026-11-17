@@ -731,9 +731,11 @@ function Start-StackWorker {
 # The web app's own icon, as a .ico for the shortcut and the window. An .ico
 # may carry PNG frames as they are, so each size is just the PNG re-drawn.
 function Get-StackIcon {
-  $ico = Join-Path $sync.StateDir 'prisms.ico'
+  # Named after the artwork it was cut from: the cache is reused while it exists,
+  # so a new mark needs a new name or the old icon lives on.
+  $ico = Join-Path $sync.StateDir 'prisms-threshold.ico'
   if (Test-Path -LiteralPath $ico) { return $ico }
-  $src = Join-Path $script:RepoRoot 'apps\web\public\icon-512.png'
+  $src = Join-Path $script:RepoRoot 'apps\web\public\icon-threshold-512.png'
   if (-not (Test-Path -LiteralPath $src)) { return $null }
   Add-Type -AssemblyName System.Drawing
   $img = [Drawing.Image]::FromFile($src)
@@ -858,7 +860,7 @@ function New-StackWindow {
   $head.AutoSize = $true
   $head.WrapContents = $false
   $head.Margin = Pad 0 0 0 0
-  $png = Join-Path $script:RepoRoot 'apps\web\public\icon-192.png'
+  $png = Join-Path $script:RepoRoot 'apps\web\public\icon-threshold-192.png'
   if (Test-Path -LiteralPath $png) {
     $logo = [Windows.Forms.PictureBox]::new()
     $logo.Image = [Drawing.Image]::FromFile($png)
