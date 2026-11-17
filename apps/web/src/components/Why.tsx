@@ -7,7 +7,47 @@
  */
 import { useState } from 'react';
 
-import { explainProvenance, type ProvenanceFields } from '@prisms/ui';
+import { explainProvenance, Ic, type ProvenanceFields } from '@prisms/ui';
+
+/**
+ * My Day's quieter variant: nothing at all for tasks you made yourself, and a
+ * bare lightning bolt for tasks an automation rule created. Hovering says
+ * "Automated task"; clicking opens the same explanation as {@link WhyButton}.
+ */
+export function AutomatedMark({ row, testId }: { row: ProvenanceFields; testId: string }) {
+  const [open, setOpen] = useState(false);
+  if (row.source_kind !== 'automation') return null;
+  const exp = explainProvenance(row);
+  return (
+    <span className="px-why">
+      <button
+        type="button"
+        className="px-why-bolt"
+        data-testid={testId}
+        aria-expanded={open}
+        aria-label="Automated task"
+        title="Automated task"
+        onMouseDown={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen((o) => !o);
+        }}
+      >
+        <Ic name="zap" size={13} />
+      </button>
+      {open && (
+        <div className="px-why-pop px-why-pop--start" role="status">
+          <strong data-testid={`${testId}-summary`}>{exp.summary}</strong>
+          {exp.detail.map((d, i) => (
+            <div key={i} className="px-muted">
+              {d}
+            </div>
+          ))}
+        </div>
+      )}
+    </span>
+  );
+}
 
 export function WhyButton({
   row,

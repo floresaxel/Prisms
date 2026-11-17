@@ -33,7 +33,7 @@ import {
   type MyDayItem,
 } from '@prisms/ui';
 
-import { WhyButton } from '../components/Why';
+import { AutomatedMark } from '../components/Why';
 import { formatElapsed, formatMinutes, projectTone } from '../format';
 import { listLayoutClass } from '../list-layout';
 import { useMeasuredWidth } from '../use-measured-width';
@@ -95,7 +95,7 @@ function AvailableRow({ item, running, todayDate, onCheck, onClockIn }: { item: 
       <div className="px-t-main">
         <div className="px-t-title">
           {item.task.title}
-          <WhyButton row={item.task} testId={`why-task-${id}`} />
+          <AutomatedMark row={item.task} testId={`why-task-${id}`} />
         </div>
         <div className="px-t-meta">
           {item.projectTitle && (
