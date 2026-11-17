@@ -25,6 +25,35 @@ export function createDb(userId: string): PowerSyncDatabase {
   return watchTablesFromSql(db, CLIENT_TABLE_NAMES);
 }
 
+/**
+ * ONE open database per account for the page's lifetime.
+ *
+ * The boot opens the remembered account's database before React has rendered
+ * anything (`early-open.ts`), and the app must pick up that same instance
+ * rather than open the file a second time — as must React's StrictMode, whose
+ * double render used to construct two databases for one account in dev.
+ */
+const openDbs = new Map<string, PowerSyncDatabase>();
+
+export function dbFor(userId: string): PowerSyncDatabase {
+  let db = openDbs.get(userId);
+  if (!db) {
+    db = createDb(userId);
+    openDbs.set(userId, db);
+  }
+  return db;
+}
+
+/**
+ * Let the next `dbFor` for this account build a fresh instance: after sign-out
+ * (whose `disconnectAndClear` already ran on this one), or when the boot guessed
+ * the wrong account. The instance itself is left as it is, as sign-out always
+ * has: nothing queries it once its screens are gone.
+ */
+export function forgetDb(userId: string): void {
+  openDbs.delete(userId);
+}
+
 export async function connectDb(db: PowerSyncDatabase, onReject: (r: CommandRejection[]) => void): Promise<() => void> {
   const deviceId = getDeviceId();
   const connector = createConnector({ apiBaseUrl: config.apiBaseUrl, powersyncUrl: config.powersyncUrl, deviceId });

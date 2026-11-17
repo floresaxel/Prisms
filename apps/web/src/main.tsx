@@ -1,3 +1,7 @@
+// FIRST, before anything else is evaluated: start opening the remembered
+// account's local database (see the module for why the order matters).
+import './early-open';
+
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 
