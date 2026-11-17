@@ -88,7 +88,10 @@ test('Plan › Roadmap reads one roadmap four ways, by what blocks what', async 
   const views = page.getByTestId('rm-views');
   const order = (pid: string) => views.getByTestId(`rm-order-${pid}`);
 
-  // --- Order is the default: steps from the synced edges, the rest any time ---
+  // --- Flow (the builder) is the default; Order is one click away: steps from
+  //     the synced edges, the rest any time (Flow has its own spec) ---
+  await expect(views).toHaveAttribute('data-view', 'flow');
+  await views.getByTestId('rm-view-order').click();
   await expect(views).toHaveAttribute('data-view', 'order');
   await expect(order(id.p4)).toHaveAttribute('data-step', '2', { timeout: 30_000 });
   await expect(order(id.p1)).toHaveAttribute('data-step', '0');

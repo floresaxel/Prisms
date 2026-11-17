@@ -13,7 +13,7 @@ export type IconName =
   | 'x' | 'chevd' | 'chevl' | 'chevr' | 'play' | 'stop' | 'down' | 'up' | 'info'
   | 'alert' | 'flame' | 'trash' | 'cols' | 'gantt' | 'net' | 'scale' | 'list' | 'pen'
   | 'dots' | 'route' | 'note' | 'tasklist' | 'eye' | 'lockbody' | 'lockshackle' | 'pin'
-  | 'order' | 'mindmap' | 'outline';
+  | 'order' | 'mindmap' | 'outline' | 'flow' | 'freeflow';
 
 /** Mount once, high in the tree (the app shell). Renders no visible output. */
 export function IconSprite() {
@@ -95,7 +95,10 @@ export function IconSprite() {
       <symbol id="i-order" viewBox="0 0 24 24"><rect x="2" y="9" width="6" height="6" rx="1.5" /><rect x="16" y="3" width="6" height="6" rx="1.5" /><rect x="16" y="15" width="6" height="6" rx="1.5" /><path d="M8 12h3a2 2 0 0 0 2-2V8a2 2 0 0 1 2-2h1M11 12a2 2 0 0 1 2 2v2a2 2 0 0 0 2 2h1" /></symbol>
       <symbol id="i-mindmap" viewBox="0 0 24 24"><circle cx="12" cy="12" r="2.6" /><circle cx="4" cy="6" r="1.8" /><circle cx="20" cy="6" r="1.8" /><circle cx="4" cy="18" r="1.8" /><circle cx="20" cy="18" r="1.8" /><path d="M5.6 7 9.8 10.5M18.4 7 14.2 10.5M5.6 17l4.2-3.5M18.4 17l-4.2-3.5" /></symbol>
       <symbol id="i-outline" viewBox="0 0 24 24"><path d="M4 5h16M9 12h11M14 19h6M4 5v7h5M9 12v7h5" /></symbol>
-    </svg>
+      {/* Plan › Roadmap › Flow: rows of steps running into a door (the vision);
+          free flow: two loose cards and the link between them. */}
+      <symbol id="i-flow" viewBox="0 0 24 24"><rect x="2" y="4" width="5" height="5" rx="1.2" /><rect x="9" y="4" width="5" height="5" rx="1.2" /><rect x="9" y="15" width="5" height="5" rx="1.2" /><path d="M7 6.5h2M14 17.5h2.5M18 20V8l2.5-2L23 8v12" /></symbol>
+      <symbol id="i-freeflow" viewBox="0 0 24 24"><rect x="3" y="4" width="7" height="5" rx="1.5" /><rect x="13" y="14" width="8" height="5" rx="1.5" /><path d="M10 6.5c4 0 3 10 3 10" /></symbol>    </svg>
   );
 }
 

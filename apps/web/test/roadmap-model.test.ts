@@ -103,6 +103,51 @@ describe('the order of work', () => {
     expect(chainOf(model, ids.p2.id).has(ids.p3.id)).toBe(false);
   });
 
+  it('lists every rolled-up link, with the project-to-project edge when there is one', () => {
+    const link = (from: string, to: string) => model.links.find((l) => l.from === from && l.to === to)!;
+    // Research → Draft, Research → Revise, Draft → Beta, Revise → Beta, Beta → Final
+    expect(model.links).toHaveLength(5);
+    expect(link(ids.p1.id, ids.p3.id).edge?.id).toBe(fx.edges[1]!.id); // drawn straight from project to project
+    expect(link(ids.p1.id, ids.p3.id).inner).toBe(false);
+    expect(link(ids.p1.id, ids.p2.id).edge).toBeNull(); // only through their tasks
+    expect(link(ids.p1.id, ids.p2.id).inner).toBe(true);
+    expect(model.links.every((l) => l.kind === 'FS')).toBe(true);
+  });
+
+  it('lets a start-together (SS) project edge share its predecessor’s step', () => {
+    const f = roadmapFixture();
+    const ss = { ...f.edge(f.ids.p6, f.ids.p7), edge_type: 'SS' as const };
+    const m = buildRoadmapModel(f.tree, [...f.edges, ss], f.ids.r.id)!;
+    const habit = m.byId.get(f.ids.p6.id)!;
+    const cover = m.byId.get(f.ids.p7.id)!;
+    expect(m.links.find((l) => l.to === cover.node.id)?.kind).toBe('SS');
+    expect(cover.step).toBe(habit.step); // same step, not the next
+    // Writing habit has a task but none done: not started, so Cover ideas waits on it
+    expect(cover.blockedBy).toEqual([habit.node.id]);
+  });
+
+  it('frees an SS successor once its predecessor has started', () => {
+    const f = roadmapFixture();
+    // Draft act two has a finished task (started) but open ones (not finished)
+    const ss = { ...f.edge(f.ids.p2, f.ids.p7), edge_type: 'SS' as const };
+    const fs = f.edge(f.ids.p2, f.ids.p6);
+    const m = buildRoadmapModel(f.tree, [...f.edges, ss, fs], f.ids.r.id)!;
+    expect(m.byId.get(f.ids.p7.id)!.blockedBy).toEqual([]); // SS: started is enough
+    expect(m.byId.get(f.ids.p6.id)!.blockedBy).toEqual([f.ids.p2.id]); // FS: must finish
+    expect(m.byId.get(f.ids.p7.id)!.step).toBe(m.byId.get(f.ids.p2.id)!.step);
+    expect(m.byId.get(f.ids.p6.id)!.step).toBe(m.byId.get(f.ids.p2.id)!.step! + 1);
+  });
+
+  it('treats a link as finish → start when any edge behind it is not project-to-project SS', () => {
+    const f = roadmapFixture();
+    const ss = { ...f.edge(f.ids.p1, f.ids.p2), edge_type: 'SS' as const }; // t1 → t2 (FS) also links them
+    const m = buildRoadmapModel(f.tree, [...f.edges, ss], f.ids.r.id)!;
+    const l = m.links.find((x) => x.from === f.ids.p1.id && x.to === f.ids.p2.id)!;
+    expect(l.kind).toBe('FS');
+    expect(l.edge?.edge_type).toBe('SS');
+    expect(l.inner).toBe(true);
+  });
+
   it('survives a rolled-up cycle, cutting it where it closes', () => {
     // Writing habit's task waits on Cover ideas' new task, and Cover ideas on Writing habit
     const f = roadmapFixture();

@@ -9,14 +9,15 @@
  * Under it, the selected roadmap: its vision, name (renamed in place), what it
  * is for, and its totals, with a ⋯ menu to Edit… (name, description, which
  * vision owns it — moving it re-tints everything below), go to Plan › Vision,
- * or Delete. Then the views card (components/RoadmapViews): Order (default),
- * Mind map, Outline and List, all laid out for you inside the card, and a field
- * to add a project.
+ * or Delete. Then the views card (components/RoadmapViews): Flow (default; the
+ * builder, components/RoadmapFlow), Order, Mind map, Outline and List, and a
+ * field to add a project.
  *
  * The roadmap's projects, and how they depend on each other, come from
  * roadmap-model: dependency edges anywhere inside two projects roll up to
- * "this project waits on that one". Milestones, tasks and the dependencies
- * themselves are still edited in Projects.
+ * "this project waits on that one". Flow edits the roadmap's outcomes, what each
+ * project delivers and the project-to-project links; milestones, tasks and the
+ * links between tasks are still edited in Projects.
  *
  * The selected roadmap rides in `location.hash`, so a roadmap is linkable —
  * that is how Plan › Vision hands one over.
@@ -28,10 +29,12 @@ import {
   formatHorizon,
   Ic,
   Modal,
+  newId,
   readVisionHorizon,
   Skeleton,
   useCommands,
   useDependencyEdges,
+  useFlowchart,
   useIsHydrated,
   useNodeTree,
   visionColorOf,
@@ -40,6 +43,7 @@ import {
   type VisionColor,
 } from '@prisms/ui';
 
+import { RoadmapFlow, type FlowActions, type SavedSpot } from '../components/RoadmapFlow';
 import { RoadmapViews } from '../components/RoadmapViews';
 import { buildRoadmapModel } from '../roadmap-model';
 import { shortMinutes } from '../vision-shape';
@@ -290,6 +294,35 @@ function RoadmapDetail({
   const color = visionColorOf(vision);
   const model = useMemo(() => buildRoadmapModel(tree, edges, roadmap.id), [tree, edges, roadmap.id]);
 
+  // Flow's free-flow spots: diagram_layouts rows with this roadmap as the diagram.
+  const chart = useFlowchart(roadmap.id);
+  const layouts = useMemo(() => {
+    const m = new Map<string, SavedSpot>();
+    for (const n of chart.nodes) if (n.layoutId) m.set(n.id, { id: n.layoutId, x: n.x, y: n.y });
+    return m;
+  }, [chart.nodes]);
+  // The tree moves on every write; the builder needs the latest when it mints a sort key.
+  const treeRef = useRef(tree);
+  treeRef.current = tree;
+  const flowActions = useMemo<FlowActions>(
+    () => ({
+      createProject: ({ title: t, attributes }) =>
+        commands.createProject({ roadmapId: roadmap.id, title: t, sortOrder: nextSortOrder(treeRef.current, roadmap.id), ...(attributes ? { attributes } : {}) }),
+      rename: (id, t) => commands.rename(id, t),
+      setAttributes: (id, attributes) => commands.setNodeAttributes(id, attributes),
+      createLink: async (from, to, kind) => {
+        await commands.createEdge({ predecessorId: from, successorId: to, edgeType: kind });
+      },
+      deleteLink: (id) => commands.deleteEdge(id),
+      setPosition: (id, spot, existingId) =>
+        commands.setLayoutPosition({ ...(existingId ? { existingId } : {}), diagramId: roadmap.id, nodeId: id, x: spot.x, y: spot.y }),
+      deleteProject: (id) => commands.softDelete(id),
+      newId,
+      confirm: (message) => window.confirm(message),
+    }),
+    [commands, roadmap.id],
+  );
+
   const [title, setTitle] = useState(roadmap.title);
   // A rename from the Edit dialog (or another device) lands here too, unless
   // the user is mid-rename in the field.
@@ -401,6 +434,7 @@ function RoadmapDetail({
         model={model}
         color={solid(color)}
         onNavigate={onNavigate}
+        flow={<RoadmapFlow model={model} roadmap={roadmap} vision={vision} layouts={layouts} actions={flowActions} onNavigate={onNavigate} />}
         toolbar={
           <span className="px-rm-addproj">
             <input

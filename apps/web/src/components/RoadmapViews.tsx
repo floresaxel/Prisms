@@ -1,17 +1,20 @@
 /**
- * The views card on Plan › Roadmap: one roadmap's projects four ways, all laid
- * out for you inside the card (no canvas to pan, zoom or drag).
+ * The views card on Plan › Roadmap: one roadmap's projects five ways.
  *
- *   Order     (default) what has to happen before what: projects in steps, by
- *             the dependencies between them; unlinked ones can happen any time.
+ *   Flow      (default, when the screen passes `flow`) the builder: outcomes,
+ *             projects and the order between them, edited in place — see
+ *             components/RoadmapFlow.
+ *   Order     what has to happen before what: projects in steps, by the
+ *             dependencies between them; unlinked ones can happen any time.
  *   Mind map  the roadmap in the middle, projects balanced on both sides, each
  *             with its milestones and tasks as twigs. Folding is the only moving.
  *   Outline   the same tree as an indented table.
  *   List      projects partitioned into: can move now, blocked, finished.
  *
- * Read-only: the numbers and links come from roadmap-model; edits happen on the
- * screens that own each level (the detail strip links to Projects). The chosen
- * view is remembered per device. The card runs to the bottom of the window.
+ * Order, Mind map, Outline and List are read-only, laid out for you inside the
+ * card: the numbers and links come from roadmap-model, and the detail strip
+ * links to Projects. The chosen view is remembered per device. The card runs to
+ * the bottom of the window.
  */
 import { useCallback, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 
@@ -19,6 +22,7 @@ import { Ic } from '@prisms/ui';
 
 import {
   chainOf,
+  FLOW_VIEW,
   itemDone,
   layoutMindMap,
   MAP,
@@ -70,6 +74,7 @@ export function RoadmapViews({
   model,
   color,
   toolbar,
+  flow,
   onNavigate,
 }: {
   model: RoadmapModel;
@@ -77,9 +82,13 @@ export function RoadmapViews({
   color: string;
   /** Controls at the bar's right edge (adding a project). */
   toolbar?: ReactNode;
+  /** The Flow builder (components/RoadmapFlow). When given it is the first view, and the default. */
+  flow?: ReactNode;
   onNavigate: (href: string) => void;
 }) {
-  const [view, setViewState] = useState<RoadmapView>(readRoadmapView);
+  const views = flow ? [FLOW_VIEW, ...ROADMAP_VIEWS] : ROADMAP_VIEWS;
+  const [stored, setViewState] = useState<RoadmapView>(() => readRoadmapView(!!flow));
+  const view: RoadmapView = stored === 'flow' && !flow ? 'order' : stored;
   const setView = (v: RoadmapView) => {
     setViewState(v);
     writeRoadmapView(v);
@@ -121,7 +130,7 @@ export function RoadmapViews({
     <div className="px-mgr-card px-rmv" data-testid="rm-views" data-view={view} ref={cardRef} style={style}>
       <div className="px-rmv-bar">
         <div className="px-vd-units" role="radiogroup" aria-label="Roadmap view">
-          {ROADMAP_VIEWS.map((v) => (
+          {views.map((v) => (
             <button
               key={v.value}
               type="button"
@@ -163,8 +172,10 @@ export function RoadmapViews({
         </div>
       </div>
 
-      <div className="px-rmv-body">
-        {empty ? (
+      <div className={`px-rmv-body${view === 'flow' ? ' px-rmv-body--flow' : ''}`}>
+        {view === 'flow' ? (
+          flow
+        ) : empty ? (
           <p className="px-muted" data-testid="rm-no-projects" style={{ margin: 'auto', fontSize: 13, textAlign: 'center' }}>
             This roadmap has no projects yet. Add one, and it appears here.
           </p>
@@ -188,7 +199,7 @@ export function RoadmapViews({
         )}
       </div>
 
-      <Strip model={model} selected={selected} onNavigate={onNavigate} />
+      {view !== 'flow' && <Strip model={model} selected={selected} onNavigate={onNavigate} />}
     </div>
   );
 }
