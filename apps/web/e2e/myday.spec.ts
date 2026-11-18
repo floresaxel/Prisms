@@ -124,3 +124,34 @@ test('My Day: the running task walks back to its vision, one door per layer', as
   await page.getByTestId('timer-clock-out').click();
   await expect(page.getByTestId('why-this-matters')).toHaveCount(0);
 });
+
+test('My Day: the running task has its own Clock out, which opens the session review', async ({ page }) => {
+  await register(page, 'runout');
+  const ids = { v: randomUUID(), r: randomUUID(), p: randomUUID(), t: randomUUID() };
+  const seed = await page.request.post('/sync/upload', {
+    data: {
+      device_id: 'e2e-seed',
+      commands: [
+        cmd('node.create', { id: ids.v, node_type: 'vision', title: 'Vision', sort_order: 'a0' }),
+        cmd('node.create', { id: ids.r, node_type: 'roadmap', title: 'Roadmap', sort_order: 'a0', parent_id: ids.v }),
+        cmd('node.create', { id: ids.p, node_type: 'project', title: 'Project', sort_order: 'a0', parent_id: ids.r }),
+        cmd('node.create', { id: ids.t, node_type: 'task', title: 'Own Clock Out Task', sort_order: 'a0', parent_id: ids.p, estimate_minutes: 30 }),
+      ],
+    },
+  });
+  expect(seed.ok()).toBeTruthy();
+
+  await expect(page.getByTestId(`myday-row-${ids.t}`)).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId('run-clock-out')).toHaveCount(0);
+
+  await page.getByTestId(`clock-in-${ids.t}`).click();
+  await expect(page.getByTestId('run-banner')).toContainText('Own Clock Out Task');
+
+  // the task's own banner stops the timer — no need to reach for the topbar pill
+  await page.getByTestId('run-clock-out').click();
+  await expect(page.getByTestId('review-save')).toBeVisible();
+  await page.getByTestId('review-save').click();
+  await expect(page.getByTestId('run-banner')).toHaveCount(0);
+  await expect(page.getByTestId('running-timer')).toHaveCount(0);
+  await expect(page.getByTestId(`clock-in-${ids.t}`)).toBeEnabled();
+});

@@ -33,6 +33,7 @@ import {
   type MyDayItem,
 } from '@prisms/ui';
 
+import { useClockOutFlow } from '../components/ClockOutFlow';
 import { AutomatedMark } from '../components/Why';
 import { formatElapsed, formatMinutes, projectTone } from '../format';
 import { listLayoutClass } from '../list-layout';
@@ -142,6 +143,7 @@ export function MyDay({ ctx, onNavigate }: { ctx: CommandContext; onNavigate?: (
   const commands = useCommands(ctx);
   const hydrated = useIsHydrated();
   const running = useRunningTimer(now);
+  const { clockOut, reviewModal } = useClockOutFlow(ctx, running);
 
   const allActionable = useMyDayAvailable(nowMin);
   const blocked = useBlockedTasks(nowMin);
@@ -219,6 +221,9 @@ export function MyDay({ ctx, onNavigate }: { ctx: CommandContext; onNavigate?: (
               </div>
               {runningItem && runningItem.progress.estimateMinutes !== null && <ProgressCell item={runningItem} />}
               <div className="px-run-clock">{formatElapsed(running.elapsedMs)}</div>
+              <button className="px-btn px-btn--sm" data-testid="run-clock-out" aria-label="Clock out" onClick={() => void clockOut()}>
+                <Ic name="stop" /> <span className="px-btn-lbl">Clock out</span>
+              </button>
             </div>
           )}
 
@@ -346,6 +351,7 @@ export function MyDay({ ctx, onNavigate }: { ctx: CommandContext; onNavigate?: (
         )}
         {checkOff?.scheduled && <p className="px-muted" data-testid="checkoff-autoblock">Logged to its scheduled block.</p>}
       </Modal>
+      {reviewModal}
     </section>
   );
 }
