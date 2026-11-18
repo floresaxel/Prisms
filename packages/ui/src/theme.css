@@ -1073,9 +1073,19 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
 .px-day-left { flex: 1; min-width: 0; }
 .px-day-rail { width: 292px; flex: none; display: flex; flex-direction: column; gap: 14px; }
 /* the running task's mark: a solid circle in its project's colour, breathing — "this is
-   live". It borrows .px-pdot's colour classes but not its pentagon clip. */
-.px-run-mark { width: 16px; height: 16px; clip-path: none; border-radius: 50%; animation: px-run-pulse 1.8s ease-in-out infinite; }
-@keyframes px-run-pulse { 50% { opacity: 0.4; transform: scale(0.82); } }
+   live". The core dips and swells; as it swells back two rings leave it, the second a
+   beat behind the first. The colour comes from the .px-pdot--<tone> classes (no clip). */
+.px-run-mark { position: relative; flex: none; width: 16px; height: 16px; }
+.px-run-core, .px-run-wave { position: absolute; inset: 0; border-radius: 50%; }
+.px-run-core { animation: px-run-pulse 1.8s ease-in-out infinite; }
+.px-run-wave { opacity: 0; animation: px-run-wave 1.8s ease-out infinite; }
+.px-run-wave--late { animation-delay: 0.22s; }
+@keyframes px-run-pulse { 50% { opacity: 0.55; transform: scale(0.8); } }
+@keyframes px-run-wave {
+  0%, 45% { opacity: 0; transform: scale(0.8); }
+  50% { opacity: 0.5; }
+  100% { opacity: 0; transform: scale(2.3); }
+}
 .px-card { background: var(--px-surface); border: 1px solid var(--px-border); border-radius: 10px; box-shadow: var(--px-shadow); }
 .px-card-h { display: flex; align-items: center; gap: 8px; padding: 11px 14px; border-bottom: 1px solid var(--px-border); font-weight: 600; font-size: 13px; }
 .px-card-h .px-hint { margin-left: auto; font-weight: 400; font-size: 11.5px; color: var(--px-faint); }
@@ -1270,7 +1280,8 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
 .px-steps-tg:focus-visible { outline-offset: 1px; border-radius: 6px; }
 /* the run-banner pulse joins the timer-pill/skeleton in respecting reduced motion. */
 @media (prefers-reduced-motion: reduce) {
-  .px-run-banner .px-dot, .px-run-mark { animation: none; }
+  .px-run-banner .px-dot, .px-run-core { animation: none; }
+  .px-run-wave { display: none; }
 }
 
 /* ── Journal hub (W6) — lazy month list + day editor ── */
