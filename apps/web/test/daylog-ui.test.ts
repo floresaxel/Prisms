@@ -121,7 +121,10 @@ describe('DayLogFooter — the full marker matrix', () => {
   it('renders scheduled (done/not done, times) and completed (unplanned, descoped)', () => {
     render(createElement(DayLogFooter, { entries: sampleLog(), timezone: NY }));
     const log = screen.getByTestId('daylog');
-    expect(screen.getByTestId('daylog-caption').textContent).toMatch(/Generated/);
+    // the heading stands alone: no "Generated · updates automatically" caption beside it
+    expect(screen.queryByTestId('daylog-caption')).toBeNull();
+    expect(log.textContent).not.toMatch(/Generated|updates automatically/);
+    expect(log.querySelector('.px-daylog-t')?.textContent).toBe('Day log');
 
     const sched = screen.getByTestId('daylog-scheduled');
     expect(sched.textContent).toContain('13:00–14:30'); // EDT, not UTC
