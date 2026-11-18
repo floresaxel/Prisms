@@ -142,7 +142,7 @@ test('suggestion: accepting a stale (superseded) one surfaces the rejection + a 
   }
 });
 
-test('provenance: "why does this exist?" explains user- vs automation-created tasks (§7.8)', async ({ page }) => {
+test('provenance: My Day marks only automation-created tasks with a bolt that explains them (§7.8)', async ({ page }) => {
   const sql = postgres(DB_URL);
   try {
     await register(page, 'm9-prov');
@@ -161,16 +161,18 @@ test('provenance: "why does this exist?" explains user- vs automation-created ta
       WHERE id = ${auto.ids.t}
     `;
 
-    await expect(page.getByTestId(`why-task-${mine.ids.t}`)).toBeVisible({ timeout: 30_000 });
+    // --- DoD: an automation-created task carries the bolt (once the provenance update syncs down) ---
+    const bolt = page.getByTestId(`why-task-${auto.ids.t}`);
+    await expect(bolt).toBeVisible({ timeout: 30_000 });
+    await expect(bolt).toHaveAttribute('title', 'Automated task');
 
-    // --- DoD: a user-created task explains itself as user-created ---
-    await page.getByTestId(`why-task-${mine.ids.t}`).click();
-    await expect(page.getByTestId(`why-task-${mine.ids.t}-summary`)).toHaveText('You created this.');
+    // --- DoD: a user-created task carries no marker at all ---
+    await expect(page.getByTestId(`myday-row-${mine.ids.t}`)).toBeVisible();
+    await expect(page.getByTestId(`why-task-${mine.ids.t}`)).toHaveCount(0);
 
-    // --- DoD: an automation-created task explains itself as automation ---
-    // open once; the summary re-derives reactively as the provenance update syncs down.
-    await page.getByTestId(`why-task-${auto.ids.t}`).click();
-    await expect(page.getByTestId(`why-task-${auto.ids.t}-summary`)).toHaveText('Created by an automation rule.', { timeout: 30_000 });
+    // --- DoD: clicking the bolt explains why the task exists ---
+    await bolt.click();
+    await expect(page.getByTestId(`why-task-${auto.ids.t}-summary`)).toHaveText('Created by an automation rule.');
   } finally {
     await sql.end({ timeout: 5 });
   }

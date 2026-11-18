@@ -73,20 +73,47 @@ export function SyncChip({ connected }: { connected: boolean }) {
   const [reserve, setReserve] = useState<number | null>(null);
 
   useLayoutEffect(() => {
-    const chip = chipRef.current;
-    const lab = labelRef.current;
-    if (!chip || !lab) return;
-    const font = getComputedStyle(lab).font;
-    const measured: Record<string, number> = {};
-    for (const l of Object.values(LABELS)) measured[l] = textWidth(l, font);
-    const widest = Math.max(0, ...Object.values(measured));
-    if (widest === 0) return; // no canvas (jsdom): leave everything at natural width
-    setWidths(measured);
-    // The slot has to reserve the chip's widest BORDER box, not just its text.
-    // Deriving the chrome by subtraction keeps padding/border/dot/gap out of this
-    // file — change them in the stylesheet and the reservation still follows.
-    const chrome = chip.getBoundingClientRect().width - lab.getBoundingClientRect().width;
-    setReserve(Math.ceil(widest + chrome));
+    const measure = () => {
+      const chip = chipRef.current;
+      const lab = labelRef.current;
+      if (!chip || !lab) return;
+      const cs = getComputedStyle(lab);
+      const font = cs.font;
+      // Canvas text ignores letter-spacing and rounds differently from layout, and
+      // the label clips (overflow: hidden) — so a hair of slack keeps the last
+      // glyph (the "d" of "synced") from being shaved off.
+      const slack = 2;
+      const measured: Record<string, number> = {};
+      for (const l of Object.values(LABELS)) {
+        const w = textWidth(l, font);
+        measured[l] = w === 0 ? 0 : w + slack;
+      }
+      const widest = Math.max(0, ...Object.values(measured));
+      if (widest === 0) return; // no canvas (jsdom): leave everything at natural width
+      setWidths(measured);
+      // The slot has to reserve the chip's widest BORDER box, not just its text.
+      // Deriving the chrome by subtraction keeps padding/border/dot/gap out of this
+      // file — change them in the stylesheet and the reservation still follows.
+      const chrome = chip.getBoundingClientRect().width - lab.getBoundingClientRect().width;
+      setReserve(Math.ceil(widest + chrome));
+    };
+    measure();
+    // The first measurement can run before the webfont has loaded, against a
+    // narrower fallback face. Measure again once the real font is in.
+    let cancelled = false;
+    const fonts = typeof document !== 'undefined' ? document.fonts : undefined;
+    if (fonts) {
+      void fonts.ready.then(() => {
+        if (!cancelled) measure();
+      });
+      const onDone = () => measure();
+      fonts.addEventListener?.('loadingdone', onDone);
+      return () => {
+        cancelled = true;
+        fonts.removeEventListener?.('loadingdone', onDone);
+      };
+    }
+    return undefined;
   }, []);
 
   /**
