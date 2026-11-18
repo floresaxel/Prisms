@@ -34,6 +34,7 @@ import {
   minutesLeftInDay,
   minutesLeftInTask,
   minutesUntilNextBlock,
+  parseLongSessionDetail,
   rankProjects,
   resolveOpenTimeEntries,
   taskStatus,
@@ -54,6 +55,7 @@ import {
   type Instant,
   type IsoDate,
   type JournalEntry,
+  type LongSessionDetail,
   type Node,
   type OverlayEffect,
   type PracticeValue,
@@ -1710,6 +1712,34 @@ export function useReviewInbox(): ReviewItemView[] {
         .sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : a.id < b.id ? 1 : -1)),
     [rows],
   );
+}
+
+/**
+ * A `long_session` review item joined to the LIVE time entry it is about (the
+ * item's own detail is a snapshot from when the server flagged it — the user
+ * may have clocked out or corrected the end since).
+ */
+export interface LongSessionView {
+  detail: LongSessionDetail;
+  /** The current entry, or null if it is gone (deleted / not synced yet). */
+  entry: TimeEntry | null;
+  taskTitle: string;
+}
+
+/** itemId → the long-session context for every open `long_session` item. */
+export function useLongSessions(items: readonly ReviewItemView[]): Map<string, LongSessionView> {
+  const { rows, tree } = usePrismsData();
+  return useMemo(() => {
+    const out = new Map<string, LongSessionView>();
+    for (const it of items) {
+      if (it.itemType !== 'long_session') continue;
+      const detail = parseLongSessionDetail(it.detail);
+      if (!detail) continue;
+      const row = rows.time_entries.find((r) => r['id'] === detail.entry_id && r['deleted_at'] == null);
+      out.set(it.id, { detail, entry: row ? toTimeEntry(row) : null, taskTitle: tree.byId.get(detail.task_id)?.title ?? 'task' });
+    }
+    return out;
+  }, [items, rows.time_entries, tree]);
 }
 
 // --- tags (confirmable event tags) ----------------------------------------

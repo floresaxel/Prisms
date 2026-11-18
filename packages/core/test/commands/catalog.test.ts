@@ -33,8 +33,9 @@ import { buildTreeIndex } from '../../src/graph/tree';
 import { idOf, makeEdge, makeEntry, makeNode } from '../helpers/fixtures';
 
 describe('catalog completeness + strictness (DoD schema test)', () => {
-  it('registers all 50 §8.1 verbs (incl. layout.renormalize_order) + 7 tag + 2 review + 5 journal + 5 step verbs and resolves names', () => {
-    expect(COMMAND_NAMES.length).toBe(70);
+  it('registers all 50 §8.1 verbs (incl. layout.renormalize_order) + 7 tag + 2 review + 5 journal + 5 step verbs + timer.adjust and resolves names', () => {
+    expect(COMMAND_NAMES.length).toBe(71);
+    expect(isCommandName('timer.adjust')).toBe(true); // long-session review: fix a closed session's end
     expect(isCommandName('node.create')).toBe(true);
     expect(isCommandName('node.set_attributes')).toBe(true); // vision colour + horizon, after creation
     expect(isCommandName('layout.renormalize_order')).toBe(true); // §7.10a, M1

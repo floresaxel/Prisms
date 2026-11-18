@@ -22,6 +22,7 @@ import {
   buildFactContext,
   buildTreeIndex,
   checkActivityPromote,
+  checkAdjustEntry,
   checkBlockCreate,
   checkBlockMove,
   checkClockOut,
@@ -174,6 +175,7 @@ const CONTEXT_WRITES: Partial<Record<CommandName, readonly ContextTable[]>> = {
   'timer.clock_in': ['time_entries'],
   'timer.clock_out': ['time_entries'],
   'timer.review': ['time_entries'],
+  'timer.adjust': ['time_entries'],
   'settings.update': ['user_settings'],
   // task_steps is NOT a context table (steps have no status/schedule/estimate,
   // D4) — a step command invalidates NO context, so an explicit empty set beats
@@ -972,6 +974,18 @@ export function createDispatcher(
         const own = ownershipReject('time entry', p.entry_id, entry, userId);
         if (own) return own;
         const bad = fromCheck(checkClockOut(entry, p.entry_id, p));
+        if (bad) return bad;
+        await tx.update(time_entries).set({ ended_at: p.ended_at, ...sys }).where(eq(time_entries.id, p.entry_id));
+        return applied();
+      }
+      case 'timer.adjust': {
+        // Long-session review: correct when a closed session really ended.
+        const p = payload as Payload<'timer.adjust'>;
+        const entry = await one(tx.select().from(time_entries).where(eq(time_entries.id, p.entry_id)).limit(1));
+        const own = ownershipReject('time entry', p.entry_id, entry, userId);
+        if (own) return own;
+        const norm = entry && { started_at: new Date(entry.started_at).toISOString(), ended_at: entry.ended_at === null ? null : new Date(entry.ended_at).toISOString() };
+        const bad = fromCheck(checkAdjustEntry(norm ?? undefined, p.entry_id, p, nowMs));
         if (bad) return bad;
         await tx.update(time_entries).set({ ended_at: p.ended_at, ...sys }).where(eq(time_entries.id, p.entry_id));
         return applied();

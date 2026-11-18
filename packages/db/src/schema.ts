@@ -598,7 +598,7 @@ export const sync_review_items = pgTable(
   (t) => [
     check(
       'review_items_type_check',
-      sql`${t.item_type} IN ('command_rejection','dependency_rejection','hlc_conflict','stale_suggestion','automation_backstop','automation_drift','schema_version_block','import_warning','sync_warning')`,
+      sql`${t.item_type} IN ('command_rejection','dependency_rejection','hlc_conflict','stale_suggestion','automation_backstop','automation_drift','schema_version_block','import_warning','sync_warning','long_session')`,
     ),
     check('review_items_severity_check', sql`${t.severity} IN ('info','warning','error')`),
     check('review_items_status_check', sql`${t.status} IN ('open','resolved','dismissed')`),

@@ -480,6 +480,7 @@ export const REVIEW_ITEM_TYPES = [
   'schema_version_block',
   'import_warning',
   'sync_warning',
+  'long_session', // a timer ran > 6 h (confirm it) or > 24 h (auto clocked out)
 ] as const;
 export const reviewItemTypeSchema = z.enum(REVIEW_ITEM_TYPES);
 export type ReviewItemType = z.infer<typeof reviewItemTypeSchema>;

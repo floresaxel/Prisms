@@ -189,6 +189,7 @@ export function buildOptimisticEffects(name: CommandName, payload: unknown, ctx:
         }),
       ];
     case 'timer.clock_out':
+    case 'timer.adjust':
       return [upd('time_entries', p['entry_id'], { ended_at: p['ended_at'] })];
     case 'timer.review':
       // the time-entry facts; a completing review also sets node.completed_at, but

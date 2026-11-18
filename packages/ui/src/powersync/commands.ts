@@ -159,8 +159,13 @@ export function createCommands(store: OverlayStore, ctx: CommandContext, deps: E
       await run('timer.clock_in', { entry_id: id, task_id: taskId, started_at: iso(ctx), ...(opts?.force ? { force: true } : {}) });
       return id;
     },
-    async clockOut(entryId: string): Promise<void> {
-      await run('timer.clock_out', { entry_id: entryId, ended_at: iso(ctx) });
+    /** Clock out now, or at a chosen past time (`endedAt`, long-session review). */
+    async clockOut(entryId: string, endedAt?: string): Promise<void> {
+      await run('timer.clock_out', { entry_id: entryId, ended_at: endedAt ?? iso(ctx) });
+    },
+    /** Correct when a CLOSED session ended (long-session review). */
+    async adjustEntryEnd(entryId: string, endedAt: string): Promise<void> {
+      await run('timer.adjust', { entry_id: entryId, ended_at: endedAt });
     },
     /**
      * Focus review at clock-out (§1.2, §8.1). A completing session ALSO checks the
