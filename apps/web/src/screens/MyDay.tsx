@@ -51,6 +51,7 @@ import {
 } from '@prisms/ui';
 
 import { RunMark } from '../components/RunMark';
+import { EditableTitle, useTaskDetail, type TaskDetailApi } from '../components/TaskDetail';
 import { useTimers } from '../components/Timers';
 import { UnfocusedTag } from '../components/UnfocusedTag';
 import { AutomatedMark } from '../components/Why';
@@ -135,15 +136,15 @@ function ClockInButton({ testId, disabled, title, danger, label = 'Clock in', on
 
 const LIMIT_TITLE = `${MAX_OPEN_TIMERS} timers are already running — clock out of one first`;
 
-function AvailableRow({ item, atLimit, todayDate, onCheck, onClockIn }: { item: MyDayItem; atLimit: boolean; todayDate: string; onCheck: () => void; onClockIn: () => void }) {
+function AvailableRow({ item, atLimit, todayDate, commands, detail, onCheck, onClockIn }: { item: MyDayItem; atLimit: boolean; todayDate: string; commands: PrismsCommands; detail: TaskDetailApi; onCheck: () => void; onClockIn: () => void }) {
   const id = item.task.id;
   const dueToday = item.task.due_date === todayDate;
   return (
-    <li className="px-trow" data-testid={`myday-row-${id}`} data-project={item.projectId ?? ''}>
+    <li className="px-trow" data-testid={`myday-row-${id}`} data-project={item.projectId ?? ''} {...detail.rowProps(id)}>
       <button className="px-ckb" data-testid={`check-${id}`} aria-label="check off" onClick={onCheck}><Ic name="check" /></button>
       <div className="px-t-main">
         <div className="px-t-title">
-          {item.task.title}
+          <EditableTitle node={item.task} commands={commands} />
           <AutomatedMark row={item.task} testId={`why-task-${id}`} />
         </div>
         <div className="px-t-meta">
@@ -180,6 +181,7 @@ export function MyDay({ ctx, onNavigate }: { ctx: CommandContext; onNavigate?: (
 
   const ctxFacts = useFactContext();
   const commands = useCommands(ctx);
+  const detail = useTaskDetail();
   const hydrated = useIsHydrated();
   // split focus: up to MAX_OPEN_TIMERS run at once; each gets its own card below
   const { timers: runningTimers, splitWays } = useRunningTimers(now);
@@ -335,6 +337,8 @@ export function MyDay({ ctx, onNavigate }: { ctx: CommandContext; onNavigate?: (
                 item={item}
                 atLimit={atLimit}
                 todayDate={todayDate}
+                commands={commands}
+                detail={detail}
                 onCheck={() => openCheckOff(item)}
                 onClockIn={() => timersApi.requestClockIn(item.task.id)}
               />
@@ -348,10 +352,10 @@ export function MyDay({ ctx, onNavigate }: { ctx: CommandContext; onNavigate?: (
               </button>
               <ul className={`px-rows px-rows--muted${blockedCollapsed ? ' px-hide' : ''}`} data-testid="blocked-list">
                 {blocked.map((b) => (
-                  <li className="px-trow" key={b.task.id}>
+                  <li className="px-trow" key={b.task.id} {...detail.rowProps(b.task.id)}>
                     <span className="px-ckb" style={{ opacity: 0.4 }}><Ic name="check" /></span>
                     <div className="px-t-main">
-                      <div className="px-t-title" style={{ color: 'var(--px-text-dim)' }}>{b.task.title}</div>
+                      <div className="px-t-title" style={{ color: 'var(--px-text-dim)' }}><EditableTitle node={b.task} commands={commands} /></div>
                       {b.blockedBy.length > 0 && <div className="px-t-meta" data-testid={`blocked-by-${b.task.id}`}>{b.blockedBy.join(', ')}</div>}
                     </div>
                     {b.blockedBy.length > 0 && <span className="px-tag px-tag--red"><Ic name="alert" />{b.blockedBy[0]}</span>}
@@ -387,7 +391,7 @@ export function MyDay({ ctx, onNavigate }: { ctx: CommandContext; onNavigate?: (
               </div>
               <ul className="px-rows" data-testid="myday-captured">
                 {capturedToday.map((a) => (
-                  <CapturedRow key={a.id} activity={a} targets={promoteTargets} commands={commands} />
+                  <CapturedRow key={a.id} activity={a} targets={promoteTargets} commands={commands} detail={detail} />
                 ))}
               </ul>
             </>
@@ -400,10 +404,10 @@ export function MyDay({ ctx, onNavigate }: { ctx: CommandContext; onNavigate?: (
               </button>
               <ul className={`px-rows px-rows--muted${doneCollapsed ? ' px-hide' : ''}`} data-testid="done-list">
                 {done.map((d) => (
-                  <li className="px-trow px-trow--done" key={d.task.id}>
+                  <li className="px-trow px-trow--done" key={d.task.id} {...detail.rowProps(d.task.id)}>
                     <span className="px-ckb px-ckb--done"><Ic name="check" /></span>
                     <div className="px-t-main">
-                      <div className="px-t-title">{d.task.title}</div>
+                      <div className="px-t-title"><EditableTitle node={d.task} commands={commands} /></div>
                       <div className="px-t-meta">{d.consumedMinutes > 0 ? `${formatMinutes(Math.round(d.consumedMinutes))} logged` : 'completed'}</div>
                     </div>
                     {d.unfocused && <UnfocusedTag />}
@@ -464,12 +468,12 @@ export function MyDay({ ctx, onNavigate }: { ctx: CommandContext; onNavigate?: (
  * into from here — promoting it (as on Tasks) makes it a real task, which keeps
  * its due date and moves up into Available now.
  */
-function CapturedRow({ activity, targets, commands }: { activity: Node; targets: PromoteTarget[]; commands: PrismsCommands }) {
+function CapturedRow({ activity, targets, commands, detail }: { activity: Node; targets: PromoteTarget[]; commands: PrismsCommands; detail: TaskDetailApi }) {
   const [parentId, setParentId] = useState('');
   const selected = parentId || targets[0]?.id || '';
   return (
-    <li className="px-trow px-trow--inbox" data-testid={`myday-captured-${activity.id}`}>
-      <div className="px-t-main"><div className="px-t-title">{activity.title}</div></div>
+    <li className="px-trow px-trow--inbox" data-testid={`myday-captured-${activity.id}`} {...detail.rowProps(activity.id)}>
+      <div className="px-t-main"><div className="px-t-title"><EditableTitle node={activity} commands={commands} /></div></div>
       <span className="px-due px-due--today">Today</span>
       <span className="px-promote">
         <select

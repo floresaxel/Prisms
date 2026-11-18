@@ -485,6 +485,23 @@ export function useTaskSteps(taskId: string): TaskStep[] {
   );
 }
 
+/**
+ * Time logged against one task vs. its estimate (the task-details hours budget),
+ * whatever the task's status — done and blocked tasks included, which the
+ * worklist's per-item progress leaves out. Reads the user's FULL entry list, as
+ * `canonicalProgress` requires (split-focus shares depend on what else ran).
+ * Null while the task is not in the local tree.
+ */
+export function useTaskProgress(taskId: string | null): ProgressValue | null {
+  const { factContext: ctx, rows } = usePrismsData();
+  const entryRows = rows.time_entries;
+  return useMemo(() => {
+    const task = taskId === null ? undefined : ctx.tree.byId.get(taskId);
+    if (!task) return null;
+    return canonicalProgress(task, entryRows.map(toTimeEntry));
+  }, [ctx, entryRows, taskId]);
+}
+
 export interface ProjectTasksGroup {
   project: Node;
   tasks: { task: Node; status: TaskStatus; blockedBy: string[] }[];

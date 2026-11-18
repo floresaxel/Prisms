@@ -17,9 +17,16 @@ export interface ModalProps {
   size?: 'panel' | 'card' | 'full';
   /** Optional lead-in under the title, inside the full-screen header. */
   subtitle?: ReactNode;
+  /**
+   * The dialog's accessible name when it draws its own header instead of
+   * `title` (an editable heading, say). Ignored when `title` is set.
+   */
+  label?: string;
+  /** Extra class on the dialog box, for a dialog with its own layout. */
+  className?: string;
 }
 
-export function Modal({ open, title, onClose, children, actions, size = 'panel', subtitle }: ModalProps) {
+export function Modal({ open, title, onClose, children, actions, size = 'panel', subtitle, label, className }: ModalProps) {
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -45,11 +52,11 @@ export function Modal({ open, title, onClose, children, actions, size = 'panel',
   return (
     <div className={`px-scrim${scrim}`} onClick={onClose} role="presentation">
       <div
-        className={`px-modal${full ? ' px-modal--full' : size === 'card' ? ' px-modal--card' : ''}`}
+        className={`px-modal${full ? ' px-modal--full' : size === 'card' ? ' px-modal--card' : ''}${className ? ` ${className}` : ''}`}
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
-        aria-label={title}
+        aria-label={title ?? label}
       >
         <div className={full ? 'px-modal-inner' : undefined}>
           {title != null && <h2 className="px-modal-title">{title}</h2>}
