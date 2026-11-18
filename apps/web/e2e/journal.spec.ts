@@ -371,6 +371,43 @@ test('standalone Journal screen: lists the current month, opens a note, lazily l
   expect(Object.keys(files)).toContain(`journal/${yearOf(journalToday)}/${journalToday}.md`);
 });
 
+test('Journal: a pinned Today row opens an empty today and brings you back from another day', async ({ page }) => {
+  await register(page, 'journal-today-row');
+  const past = daysAgo(3);
+  const seed = await page.request.post('/sync/upload', {
+    data: {
+      device_id: 'e2e-seed',
+      commands: [cmd('journal.write', { id: randomUUID(), entry_date: past, content: 'three days ago' })],
+    },
+  });
+  expect(seed.ok()).toBeTruthy();
+  await goto(page, 'journal');
+
+  // today has NO note (an empty day is never stored) — the row is there anyway,
+  // above every month header, and today's panel is the one open
+  const row = page.getByTestId('journal-today');
+  await expect(row).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId('journal-today-empty')).toHaveText('No note yet');
+  expect(await page.getByTestId('journal-months').locator('button').first().getAttribute('data-testid')).toBe('journal-today');
+  await expect(page.getByTestId(`journal-${journalToday}`)).toBeVisible();
+  await expect(page.getByTestId(`journal-day-${journalToday}`)).toHaveCount(0);
+
+  // wander to another day, then use the row to come back
+  const pastDay = page.getByTestId(`journal-day-${past}`);
+  if (past.slice(0, 7) !== journalToday.slice(0, 7)) await page.getByTestId(`journal-month-${past.slice(0, 7)}`).click();
+  await pastDay.click();
+  await expect(page.getByTestId(`journal-${past}`)).toBeVisible();
+  await expect(row).toHaveAttribute('aria-current', 'false');
+  await row.click();
+  await expect(page.getByTestId(`journal-${journalToday}`)).toBeVisible();
+  await expect(row).toHaveAttribute('aria-current', 'true');
+
+  // write something today: the row now shows it
+  await page.getByTestId(`journal-${journalToday}`).getByTestId('journal-rich').click();
+  await page.keyboard.type('shipped the Today row');
+  await expect(row).toContainText('shipped the Today row', { timeout: 30_000 });
+  await expect(page.getByTestId('journal-today-empty')).toHaveCount(0);
+});
 test('J7 WYSIWYG: toolbar task list + an interactive checkbox round-trip to markdown', async ({ page }) => {
   await register(page, 'journal-wysiwyg');
   await goto(page, 'agenda');

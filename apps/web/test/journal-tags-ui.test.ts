@@ -267,25 +267,64 @@ describe('Journal screen — sort by tag and filters', () => {
     expect(screen.queryByTestId('journal-tag-groups')).toBeNull();
   });
 
-  it('Today jumps back from another day, re-expands the current month, and is inert when already there', () => {
+  it('the Today row is the FIRST row of the list, even when today has no note', () => {
+    load(); // notes on the 17th-19th, none on today (the 20th)
+    mount();
+    const list = screen.getByTestId('journal-months');
+    const first = list.querySelector('button');
+    expect(first?.getAttribute('data-testid')).toBe('journal-today'); // above every month header
+    expect(screen.getByTestId('journal-today').textContent).toContain('Today');
+    expect(screen.getByTestId('journal-today').textContent).toContain('Sat 20');
+    expect(screen.getByTestId('journal-today-empty').textContent).toBe('No note yet');
+    expect(screen.queryByTestId('journal-day-2026-06-20')).toBeNull(); // there is no note row for it…
+    expect(screen.getByTestId('panel-2026-06-20')).toBeTruthy(); // …yet it is the open day
+    expect(screen.getByTestId('journal-today').getAttribute('aria-current')).toBe('true');
+  });
+
+  it('Today shows what is written once there is a note, and its tags', () => {
+    load();
+    state.months = [{ ...state.months[0]!, entry_date: '2026-06-20', content: '# Standup\nnotes', tags: ['work'] }, ...state.months];
+    mount();
+    const row = screen.getByTestId('journal-today');
+    expect(row.textContent).toContain('Standup');
+    expect(row.textContent).toContain('#work');
+    expect(screen.queryByTestId('journal-today-empty')).toBeNull();
+  });
+
+  it('clicking Today jumps back from another day and re-expands the current month', () => {
     load();
     mount();
-    const today = screen.getByTestId('journal-today') as HTMLButtonElement;
-    expect(today.disabled).toBe(true); // opens on today
-    expect(screen.getByTestId('panel-2026-06-20')).toBeTruthy();
-
     fireEvent.click(screen.getByTestId('journal-day-2026-06-18')); // wander to another day
     expect(screen.getByTestId('panel-2026-06-18')).toBeTruthy();
-    expect(today.disabled).toBe(false);
+    expect(screen.getByTestId('journal-today').getAttribute('aria-current')).toBe('false');
 
     fireEvent.click(screen.getByTestId('journal-month-2026-06')); // collapse the current month
     expect(screen.queryByTestId('journal-day-2026-06-18')).toBeNull();
-    fireEvent.click(today);
-    expect(screen.getByTestId('panel-2026-06-20')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('journal-today'));
+    expect(screen.getByTestId('panel-2026-06-20')).toBeTruthy(); // an empty day opens fine
     expect(screen.getByTestId('journal-day-2026-06-18')).toBeTruthy(); // month open again
-    expect(today.disabled).toBe(true);
+    expect(screen.getByTestId('journal-today').getAttribute('aria-current')).toBe('true');
   });
 
+  it('the Today row stays through By tag and through every filter', () => {
+    load();
+    mount();
+    fireEvent.click(screen.getByTestId('journal-view-tag'));
+    expect(screen.getByTestId('journal-months').querySelector('button')?.getAttribute('data-testid')).toBe('journal-today');
+    fireEvent.change(screen.getByTestId('journal-filter-tag'), { target: { value: 'health' } });
+    expect(screen.getByTestId('journal-today')).toBeTruthy(); // a way back, not a note: never filtered out
+    expect(screen.queryByTestId('journal-day-2026-06-18')).toBeNull(); // while the notes ARE
+    fireEvent.click(screen.getAllByTestId('journal-day-2026-06-19')[0]!); // listed under each of its tags
+    expect(screen.getByTestId('panel-2026-06-19')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('journal-today'));
+    expect(screen.getByTestId('panel-2026-06-20')).toBeTruthy();
+  });
+
+  it('there is no Today button in the page header any more', () => {
+    load();
+    mount();
+    expect(document.querySelector('.px-page-head [data-testid="journal-today"]')).toBeNull();
+  });
   it('By tag groups notes per tag, A–Z, a note under EACH of its tags, untagged last', () => {
     load();
     mount();
