@@ -1166,7 +1166,6 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
 .px-tag--grey { background: var(--px-surface-2); color: var(--px-text-dim); }
 .px-steps-tg { cursor: pointer; border: none; font: inherit; }
 .px-steps-tg:hover { background: #e7eaef; }
-.px-expl { font-size: 12px; color: var(--px-faint); margin: 12px 2px 0; line-height: 1.5; max-width: 860px; }
 
 .px-sub-wrap { border-bottom: 1px solid var(--px-border); background: var(--px-sb-bg); padding: 7px 0 9px; }
 .px-sub-wrap:last-child { border-bottom: none; }

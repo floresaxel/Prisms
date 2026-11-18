@@ -123,10 +123,6 @@ export function Tasks({ ctx }: { ctx: CommandContext }) {
               </ul>
             </div>
           ))}
-          <p className="px-expl">
-            Substeps are lightweight checklist children — add one with <b>Enter</b>, rename it with the pencil, check it off in
-            place. Groups mirror the tree; captures stay in <b>Inbox</b> until you assign them.
-          </p>
         </div>
       ) : (
         <div style={{ maxWidth: 900 }}>
