@@ -1077,6 +1077,8 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
    fades. The colour comes from the .px-pdot--<tone> classes (no clip). */
 .px-run-mark { position: relative; flex: none; width: 16px; height: 16px; }
 .px-run-core, .px-run-wave { position: absolute; inset: 0; border-radius: 50%; }
+/* on the topbar pill's blue the mark is white */
+.px-run-mark--white .px-run-core, .px-run-mark--white .px-run-wave { background: #fff; }
 .px-run-core { animation: px-run-pulse 1.8s ease-in-out infinite; }
 .px-run-wave { opacity: 0; animation: px-run-wave 1.8s ease-out infinite; }
 @keyframes px-run-pulse { 50% { opacity: 0.55; transform: scale(0.8); } }
