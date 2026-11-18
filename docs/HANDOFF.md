@@ -1,7 +1,7 @@
 # Handoff — state of the repo on 2026-11-18
 
 For the next LLM (or person) picking this up. Read this first, then `README.md`.
-Written at `main` = `80b532d` (PR #45). Everything below was verified that day.
+Written at `main` = `80b532d` (PR #45); updated for `fab34dc` (PR #43). Everything below was verified that day.
 
 ---
 
@@ -125,7 +125,8 @@ All merged with merge commits into `main`. File lists are `git diff <merge>^1 <m
 
 ### Other sessions' work that is also on `main` (not described here)
 #37/#40 journal tags + clocked-time timeline (migration 0016), #39 long-session review (>6 h item, 24 h auto clock-out,
-`timer.adjust`, migration 0017), #41 journal "Today" row. Their notes: memory files `prisms-journal-tags-clocked.md`,
+`timer.adjust`, migration 0017), #41 journal "Today" row, #43 web journal Day log loses its "Generated · updates
+automatically" caption (`DayLogFooter.tsx`, `theme.css`, `daylog-ui.test.ts`; mobile still shows it). Their notes: memory files `prisms-journal-tags-clocked.md`,
 `prisms-long-session-review.md`.
 
 ## 5. Unmerged work (nothing here is lost, nothing is pushed unless stated)
@@ -136,7 +137,7 @@ All merged with merge commits into `main`. File lists are `git diff <merge>^1 <m
 | `wip/onedrive-uncommitted-2026-11-18` (local) | Snapshot of the OneDrive tree's uncommitted work. Beyond the branch above it adds: **Agenda** today-column highlight + to-do list flowing with the page; **sidebar** scroll-fade (`useScrollFade` in `Layout.tsx`) | Does not apply cleanly to `main`. |
 | 39 recovered local-only branches (`docs/stepwise-plan`, `docs/wearables-plan`, `s01…s23`, `r01…r10`, `remediation`, `feat/confirmable-tags`, …) | Old build-session history recovered from the WSL clone | Local only. Push the ones that matter. |
 | `refs/old-onedrive/*` | Exact old branch tips from the OneDrive repo | Safety net; can be deleted later. |
-| `feat/journal-daylog-no-caption` (worktree `today-row`) | Another session's in-flight journal work | Not mine — leave it. |
+| `feat/journal-daylog-no-caption` (worktree `today-row`) | Another session's journal work | Merged as #43; the worktree can be removed. |
 
 Plans (not started): `Blueprints\STEPWISE_PLAN.md` (new Elixir/Phoenix app, separate repo), `Blueprints\WEARABLES_PLAN.md`.
 
@@ -154,7 +155,9 @@ Plans (not started): `Blueprints\STEPWISE_PLAN.md` (new Elixir/Phoenix app, sepa
 ## 7. Conventions the user has set
 
 - Light, clean UI; **no purple/pink gradients**; brand = the Threshold pentagon mark (door shapes).
-- Commit each finished piece to a branch; open PRs when asked; wait for CI to be green before merging; use merge
+- **Don't push a PR for every commit.** Commit each finished piece locally on a feature branch; push and open a PR
+  only after significant work or when the feature is complete (or when asked). Small follow-up tweaks go on the
+  current feature branch, not a fresh PR. Wait for CI to be green before merging; use merge
   commits (`gh pr merge --merge --match-head-commit <full sha>`). The repo has no required checks, so GitHub refuses
   auto-merge while CI runs — wait instead of merging early.
 - A migration that adds a table must also update the fresh-DB table list in `packages/db/test/integration.test.ts`;
