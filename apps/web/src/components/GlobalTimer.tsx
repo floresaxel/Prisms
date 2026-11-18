@@ -31,7 +31,7 @@ export function GlobalTimer({ ctx }: { ctx: CommandContext }) {
     <>
       {running && (
         <div className="px-timer-pill" data-testid="running-timer">
-          <RunMark tone="white" size={12} testId="timer-mark" />
+          <RunMark tone="white" size={12} wave={false} testId="timer-mark" />
           <span className="px-timer-pill-task">{running.task?.title ?? 'Unknown task'}</span>
           <span className="px-timer-pill-elapsed" data-testid="timer-elapsed">{formatElapsed(running.elapsedMs)}</span>
           <button className="px-timer-stop" data-testid="timer-clock-out" onClick={() => void clockOut()}>

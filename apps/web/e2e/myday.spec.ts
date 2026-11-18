@@ -150,9 +150,9 @@ test('My Day: the running task has its own Clock out, which opens the session re
   await expect(page.getByTestId('run-mark-core')).toHaveClass(/px-pdot--(teal|blue|amber|green)/);
   await expect(page.getByTestId('run-mark').locator('.px-run-wave')).toHaveCount(1); // the one trailing ring
   await expect(page.getByTestId('run-banner').locator('svg')).toHaveCount(1); // only the Clock out button's stop icon
-  // the topbar pill wears the same pulsing circle (white) instead of the Prisms mark
+  // the topbar pill wears the same pulsing circle (white), pulse only — no ring
   await expect(page.getByTestId('timer-mark')).toBeVisible();
-  await expect(page.getByTestId('timer-mark').locator('.px-run-wave')).toHaveCount(1);
+  await expect(page.getByTestId('timer-mark').locator('.px-run-wave')).toHaveCount(0);
   await expect(page.getByTestId('running-timer').locator('svg')).toHaveCount(1); // only the stop icon
 
   // the task's own banner stops the timer — no need to reach for the topbar pill
