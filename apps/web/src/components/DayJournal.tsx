@@ -111,7 +111,7 @@ export function DayJournalPanel({
   // Annex L: derived at render from the warm provider — null when the built-in
   // automation is off or the day holds nothing.
   const dayLog = useDayLog(date);
-  const { timezone } = useUserSettings();
+  const { timezone, dayResetHour } = useUserSettings();
   const [draft, setDraft] = useState(entry?.content ?? '');
   const [menuOpen, setMenuOpen] = useState(false);
   const dirty = useRef(false);
@@ -564,7 +564,7 @@ export function DayJournalPanel({
 
       {/* OUTSIDE the editor and the preview, in both modes — never part of the
           document the user types into. */}
-      {!isLoading && <DayLogSection entries={dayLog} timezone={timezone} />}
+      {!isLoading && <DayLogSection entries={dayLog} timezone={timezone} date={date} dayResetHour={dayResetHour} />}
     </div>
   );
 }

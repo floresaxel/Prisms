@@ -1990,3 +1990,55 @@ textarea.px-vd-input { min-height: 92px; resize: vertical; line-height: 1.55; }
 .px-daylog-dur { font-size: 11.5px; color: var(--px-text-dim); flex: none; }
 .px-daylog-mark--live { background: var(--px-blue-bg); color: var(--px-blue-deep); }
 .px-daylog-ctx { margin-left: auto; padding-left: 10px; font-size: 11px; color: var(--px-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 45%; flex: 0 1 auto; }
+/* --- day log: Clocked — task rows + day bar + "All logs" popup ----------------
+   The bar is the whole logical day (reset hour → reset hour), top to bottom; each
+   clocked session is a region in its task's colour. Sessions that overlap (split
+   focus) sit side by side. Hover / click single things out; everything else
+   greys — rows and regions together. */
+.px-ctone-blue { --ct: var(--px-blue); }
+.px-ctone-teal { --ct: var(--px-teal); }
+.px-ctone-amber { --ct: var(--px-amber); }
+.px-ctone-green { --ct: var(--px-green); }
+.px-ctone-sky { --ct: var(--px-sky); }
+.px-ctone-slate { --ct: var(--px-slate); }
+.px-clk-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.px-clk-all { padding: 2px 8px; font-size: 11.5px; font-weight: 560; }
+.px-clk-all .px-ic { width: 12px; height: 12px; }
+.px-clk-card { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; align-items: start; margin-top: 6px; }
+.px-cbar { --lab: 34px; --gap: 9px; position: relative; display: grid; grid-template-columns: var(--lab) 16px; gap: var(--gap); height: 168px; }
+.px-cbar--tall { --lab: 38px; grid-template-columns: var(--lab) 30px; height: min(420px, 60vh); }
+.px-cbar-ticks { position: relative; }
+.px-cbar-tick { position: absolute; right: 0; transform: translateY(-50%); font-size: 9.5px; line-height: 1; color: var(--px-faint); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.px-cbar-tick:first-child { transform: none; }
+.px-cbar-tick:last-child { transform: translateY(-100%); }
+.px-cbar-track { position: relative; background: var(--px-surface-2); border: 1px solid var(--px-border); border-radius: 6px; overflow: hidden; }
+.px-cbar-grid { position: absolute; left: 0; right: 0; height: 0; border-top: 1px dashed var(--px-border-2); pointer-events: none; }
+.px-cbar-seg { position: absolute; min-height: 3px; background: var(--ct); border-radius: 2px; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.55); cursor: pointer; transition: opacity 120ms, filter 120ms, box-shadow 120ms; }
+.px-cbar-seg--live { background: repeating-linear-gradient(135deg, var(--ct) 0 4px, color-mix(in srgb, var(--ct) 55%, #fff) 4px 8px); }
+.px-cbar-seg[data-state='on'] { z-index: 1; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.7), 0 0 0 2px color-mix(in srgb, var(--ct) 40%, transparent); }
+.px-cbar-seg[data-state='dim'] { opacity: 0.22; filter: grayscale(1); }
+.px-cbar-now { position: absolute; left: calc(var(--lab) + var(--gap) - 4px); right: -3px; height: 0; border-top: 2px solid var(--px-door); z-index: 2; pointer-events: none; }
+.px-cbar-now::before { content: ''; position: absolute; left: -2px; top: -5px; width: 8px; height: 8px; border-radius: 50%; background: var(--px-door); box-shadow: 0 0 0 2px var(--px-surface); }
+.px-clk-tasks, .px-clk-logs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.px-clk-task, .px-clk-log { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; font: inherit; font-size: 12.5px; color: var(--px-text); background: none; border: 1px solid transparent; border-radius: 7px; padding: 5px 8px; cursor: pointer; transition: opacity 120ms, filter 120ms, background 120ms, border-color 120ms; }
+.px-clk-task:hover, .px-clk-log:hover { background: var(--px-surface-2); }
+.px-clk-task:focus-visible, .px-clk-log:focus-visible { outline: 2px solid var(--px-accent); outline-offset: 1px; }
+.px-clk-task[aria-pressed='true'], .px-clk-log[aria-pressed='true'] { background: var(--px-surface-2); border-color: var(--px-border-2); }
+.px-clk-task[data-state='dim'], .px-clk-log[data-state='dim'] { opacity: 0.38; filter: grayscale(1); }
+.px-clk-sw { width: 10px; height: 10px; flex: none; border-radius: 3px; background: var(--ct); }
+.px-clk-main { display: flex; flex-direction: column; gap: 1px; flex: 1 1 auto; min-width: 0; }
+.px-clk-main .px-daylog-ctx { margin-left: 0; padding-left: 0; max-width: 100%; }
+.px-clk-meta { display: flex; align-items: center; gap: 6px; flex: none; }
+.px-clk-sessions { font-size: 11px; color: var(--px-faint); }
+.px-clk-total { font-weight: 600; color: var(--px-text); }
+.px-clk-hint { font-size: 12px; margin: 0 0 12px; }
+.px-clk-pop-body { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 14px; align-items: start; }
+.px-clk-logs { max-height: min(420px, 60vh); overflow-y: auto; }
+.px-clk-log .px-daylog-time { min-width: 84px; }
+@media (max-width: 520px) {
+  .px-clk-pop-body { grid-template-columns: 1fr; }
+  .px-cbar--tall { height: 220px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .px-cbar-seg, .px-clk-task, .px-clk-log { transition: none; }
+}
