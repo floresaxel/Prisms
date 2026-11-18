@@ -209,7 +209,11 @@ export function MyDay({ ctx, onNavigate }: { ctx: CommandContext; onNavigate?: (
         <div className="px-day-left">
           {running && (
             <div className="px-run-banner" data-testid="run-banner">
-              <ThresholdMark size={18} compact />
+              <span
+                className={`px-pdot px-pdot--${projectTone(runningItem?.projectId ?? null)} px-run-mark`}
+                data-testid="run-mark"
+                aria-hidden="true"
+              />
               <div>
                 <div className="px-run-title">{running.task?.title ?? 'Running task'}</div>
                 <div className="px-run-sub">

@@ -146,6 +146,9 @@ test('My Day: the running task has its own Clock out, which opens the session re
 
   await page.getByTestId(`clock-in-${ids.t}`).click();
   await expect(page.getByTestId('run-banner')).toContainText('Own Clock Out Task');
+  // the banner's mark is the project's pentagon (pulsing), not the Prisms logo
+  await expect(page.getByTestId('run-mark')).toHaveClass(/px-pdot--(teal|blue|amber|green)/);
+  await expect(page.getByTestId('run-banner').locator('svg')).toHaveCount(1); // only the Clock out button's stop icon
 
   // the task's own banner stops the timer — no need to reach for the topbar pill
   await page.getByTestId('run-clock-out').click();

@@ -1066,6 +1066,10 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
 .px-trail-row--now { background: var(--px-blue-bg); }
 .px-trail-txt { display: flex; flex-direction: column; min-width: 0; }
 .px-trail-lvl { font-size: 10.5px; font-weight: 640; letter-spacing: 0.6px; text-transform: uppercase; color: var(--px-text-dim); }
+/* the running task's mark: its project's pentagon, solid, breathing — "this is live".
+   Same box ratio as .px-pdot (1.902 : 1.809), just larger. */
+.px-run-mark { width: 21px; height: 20px; animation: px-run-pulse 1.8s ease-in-out infinite; }
+@keyframes px-run-pulse { 50% { opacity: 0.4; transform: scale(0.82); } }
 .px-trail-name { font-size: 13px; font-weight: 520; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* two-column day layout + right rail */
@@ -1266,7 +1270,7 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
 .px-steps-tg:focus-visible { outline-offset: 1px; border-radius: 6px; }
 /* the run-banner pulse joins the timer-pill/skeleton in respecting reduced motion. */
 @media (prefers-reduced-motion: reduce) {
-  .px-run-banner .px-dot { animation: none; }
+  .px-run-banner .px-dot, .px-run-mark { animation: none; }
 }
 
 /* ── Journal hub (W6) — lazy month list + day editor ── */
