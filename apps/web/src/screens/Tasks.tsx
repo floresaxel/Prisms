@@ -8,6 +8,8 @@
  * An Inbox row can be checked off without promoting it first: a dialog asks
  * whether to add it to a project and complete it, or complete it as an
  * unfocused task (no project behind it; Done today marks it so).
+ * The capture bar can preselect a project: captures then land straight in it as
+ * tasks (not in the Inbox), and the choice holds until you leave this screen.
  * Every row opens the task's details card when clicked (TaskDetail), and its
  * title renames in place when the title text itself is clicked.
  *
@@ -26,6 +28,7 @@ import {
   useDoneToday,
   useIsHydrated,
   useMyDayAvailable,
+  useNodeTree,
   usePromoteTargets,
   useTaskStepsByTask,
   useTasksByProject,
@@ -60,6 +63,7 @@ export function Tasks({ ctx }: { ctx: CommandContext }) {
     [activities],
   );
   const targets = usePromoteTargets();
+  const tree = useNodeTree();
   const groups = useTasksByProject(now);
   const stepsByTask = useTaskStepsByTask();
   const available = useMyDayAvailable(now);
@@ -68,13 +72,26 @@ export function Tasks({ ctx }: { ctx: CommandContext }) {
   // the Inbox capture whose "complete" dialog is open
   const [completing, setCompleting] = useState<Node | null>(null);
 
+  // The project captures go into. '' = the Inbox (no project yet). Lives in this
+  // screen's state, so it holds across the By project / By status tabs and resets
+  // when you leave Tasks. A project that has since gone away falls back to Inbox.
+  const [captureTo, setCaptureTo] = useState('');
+  const captureTarget = targets.find((t) => t.id === captureTo) ?? null;
+
   async function capture(e: FormEvent) {
     e.preventDefault();
     const t = title.trim();
     if (t === '') return;
-    const last = activities.at(-1)?.sort_order ?? null;
-    const sortOrder = last === null ? initialSortOrder() : sortOrderBetween(last, null);
-    await commands.createActivity({ title: t, sortOrder });
+    if (captureTarget) {
+      // straight into the chosen project, at the end of its list
+      const last = tree.childrenByParent.get(captureTarget.id)?.at(-1)?.sort_order ?? null;
+      const sortOrder = last === null ? initialSortOrder() : sortOrderBetween(last, null);
+      await commands.createTask({ parentId: captureTarget.id, title: t, sortOrder });
+    } else {
+      const last = activities.at(-1)?.sort_order ?? null;
+      const sortOrder = last === null ? initialSortOrder() : sortOrderBetween(last, null);
+      await commands.createActivity({ title: t, sortOrder });
+    }
     setTitle('');
   }
 
@@ -92,6 +109,19 @@ export function Tasks({ ctx }: { ctx: CommandContext }) {
           value={title}
           onChange={(e) => setTitle(e.target.value)}
         />
+        <select
+          className="px-capture-to"
+          data-testid="capture-project"
+          aria-label="Capture into"
+          title="Where new captures go — stays selected until you leave Tasks"
+          value={captureTarget?.id ?? ''}
+          onChange={(e) => setCaptureTo(e.target.value)}
+        >
+          <option value="">Inbox — assign later</option>
+          {targets.map((t) => (
+            <option key={t.id} value={t.id}>{t.title}{t.type === 'milestone' ? ' (milestone)' : ''}</option>
+          ))}
+        </select>
         <button className="px-btn px-btn--primary" type="submit" data-testid="activity-add">Capture</button>
       </form>
 

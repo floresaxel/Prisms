@@ -1160,6 +1160,9 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
 .px-capture--day { margin: 18px 0 0; max-width: none; }
 .px-capture input { flex: 1; min-width: 0; border: 1px solid var(--px-border); border-radius: 8px; padding: 8px 12px; background: var(--px-surface); color: var(--px-text); font: inherit; }
 .px-capture input::placeholder { color: var(--px-faint); }
+.px-capture-to { flex: 0 1 220px; min-width: 0; border: 1px solid var(--px-border); border-radius: 8px; padding: 8px 10px; background: var(--px-surface); color: var(--px-text-dim); font: inherit; font-size: 13px; }
+.px-capture-to:focus { outline: none; border-color: var(--px-blue); box-shadow: 0 0 0 3px var(--px-blue-bg); }
+@media (max-width: 560px) { .px-capture { flex-wrap: wrap; } .px-capture input { flex-basis: 100%; } .px-capture-to { flex: 1 1 0; } }
 .px-promote { display: inline-flex; align-items: center; gap: 6px; }
 .px-promote select { border: 1px solid var(--px-border); border-radius: 7px; padding: 4px 8px; font-size: 12px; background: var(--px-surface); color: var(--px-text-dim); }
 .px-tag--grey { background: var(--px-surface-2); color: var(--px-text-dim); }
