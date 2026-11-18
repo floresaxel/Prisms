@@ -9,7 +9,7 @@
  * Load-bearing testids preserved from the old Inbox: activity-title, activity-add,
  * inbox (with <li> rows), promote-target-*, promote-* (D8).
  */
-import { useState, type FormEvent } from 'react';
+import { useMemo, useState, type FormEvent } from 'react';
 
 import { asEpochMillis, initialSortOrder, sortOrderBetween, type Instant, type Node, type TaskStatus, type TaskStep } from '@prisms/core';
 import {
@@ -44,6 +44,12 @@ export function Tasks({ ctx }: { ctx: CommandContext }) {
   const [title, setTitle] = useState('');
 
   const activities = useActivityInbox();
+  // Shown newest-first. The hook's sort_order stays oldest-first because capture()
+  // appends after its tail, so the display order is derived here, from created_at.
+  const inboxNewestFirst = useMemo(
+    () => [...activities].sort((a, b) => (a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : a.id < b.id ? 1 : -1)),
+    [activities],
+  );
   const targets = usePromoteTargets();
   const groups = useTasksByProject(now);
   const stepsByTask = useTaskStepsByTask();
@@ -92,7 +98,7 @@ export function Tasks({ ctx }: { ctx: CommandContext }) {
           <div className="px-sec">Inbox <span className="px-sec-cnt">· {activities.length} — no parent yet</span><span className="px-sec-ln" /></div>
           <ul className="px-rows" data-testid="inbox">
             {activities.length === 0 && <li className="px-trow px-muted">{hydrated ? 'Inbox is empty.' : 'Loading…'}</li>}
-            {activities.map((a) => (
+            {inboxNewestFirst.map((a) => (
               <InboxRow key={a.id} activity={a} targets={targets} commands={commands} />
             ))}
           </ul>
@@ -143,7 +149,7 @@ export function Tasks({ ctx }: { ctx: CommandContext }) {
           <div className="px-sec">Inbox <span className="px-sec-cnt">· {activities.length}</span><span className="px-sec-ln" /></div>
           <ul className="px-rows" data-testid="status-inbox">
             {activities.length === 0 && <li className="px-trow px-muted">Inbox is empty.</li>}
-            {activities.map((a) => (
+            {inboxNewestFirst.map((a) => (
               <li className="px-trow" key={a.id}><div className="px-t-main"><div className="px-t-title">{a.title}</div></div></li>
             ))}
           </ul>
