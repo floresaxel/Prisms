@@ -67,6 +67,9 @@ export function TimezoneClock({ ctx }: { ctx: CommandContext }) {
   }
 
   const current = describeTimezone(tz, now);
+  const [hh = '', mm = ''] = clockInZone(tz, now).split(':');
+  // Start the cycle at the top of a wall-clock second (a negative delay rewinds it).
+  const blinkPhase = useMemo(() => -(Date.now() % 1000), []);
 
   return (
     <div className="px-menu" ref={wrap}>
@@ -82,7 +85,12 @@ export function TimezoneClock({ ctx }: { ctx: CommandContext }) {
           setError('');
         }}
       >
-        <span>{clockInZone(tz, now)}</span>
+        <span>
+          {hh}
+          {/* one-second blink, phased to the real second so it lines up with the digits changing */}
+          <span className="px-now-colon" data-testid="now-colon" style={{ animationDelay: `${blinkPhase}ms` }}>:</span>
+          {mm}
+        </span>
       </button>
       {open && (
         <div className="px-menu-pop px-tz-pop" role="dialog" aria-label="Timezone" data-testid="tz-popover">

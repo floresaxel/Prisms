@@ -322,6 +322,11 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
 .px-sync-chip { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--px-text-dim); border: 1px solid var(--px-border); border-radius: 8px; padding: 5px 10px; background: var(--px-surface); flex: none; }
 .px-sync-chip .px-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--px-green); flex: none; }
 /* The chip lives in a SLOT as wide as its longest status, and is left-aligned in
+/* The colon blinks on a cycle of exactly one second: lit for the first half, dark
+   for the second. Opacity (not display) so the digits never shift. */
+@keyframes px-colon-blink { 0% { opacity: 1; } 50% { opacity: 0.15; } }
+.px-now-colon { animation: px-colon-blink 1s steps(1, end) infinite; }
+@media (prefers-reduced-motion: reduce) { .px-now-colon { animation: none; } }
    it. The slot is what keeps the topbar still — nothing outside it moves — while
    the chip itself stays tight around its own words, opening rightwards into the
    reserved gap and closing again. The dot sits at the chip's fixed left edge, so

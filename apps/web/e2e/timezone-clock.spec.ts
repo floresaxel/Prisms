@@ -20,6 +20,20 @@ test('timezone clock: hover names the zone, click changes it, Settings agrees', 
   await expect(clock.locator('svg')).toHaveCount(0);
   await expect(clock).toHaveText(/^\d{2}:\d{2}$/);
 
+  // the colon blinks on a cycle of exactly one second, and the digits do not move
+  const colon = page.getByTestId('now-colon');
+  const style = await colon.evaluate((el) => {
+    const s = getComputedStyle(el);
+    return { name: s.animationName, duration: s.animationDuration, count: s.animationIterationCount };
+  });
+  expect(style).toEqual({ name: 'px-colon-blink', duration: '1s', count: 'infinite' });
+  const seen = new Set<string>();
+  for (let i = 0; i < 12; i++) {
+    seen.add(await colon.evaluate((el) => (Number(getComputedStyle(el).opacity) > 0.5 ? 'on' : 'off')));
+    await page.waitForTimeout(120);
+  }
+  expect([...seen].sort()).toEqual(['off', 'on']);
+
   // hover text says where the clock is set to (a fresh account defaults to New York)
   await expect(clock).toHaveAttribute('title', /New York, America.*\(America\/New_York\)/);
 
