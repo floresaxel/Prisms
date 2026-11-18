@@ -210,6 +210,15 @@ describe('representation round-trips through the row mappers (rows.ts)', () => {
     expect(entry.completed_session).toBe(true);
     expect(entry.focus_factor).toBe(0.8);
   });
+
+  it('timer.adjust moves a closed entry\'s end, keeping the rest of the row', () => {
+    const specs = buildOptimisticEffects('timer.adjust', { entry_id: 'e1', ended_at: '2026-06-28T12:30:00.000Z' }, ctx);
+    const replica = [{ id: 'e1', user_id: 'u1', task_id: 't1', started_at: '2026-06-28T10:00:00.000Z', ended_at: '2026-06-29T10:00:00.000Z', focus_factor: 0.9 }];
+    const entry = toTimeEntry(mergeTable(replica, stamp(specs))[0]!);
+    expect(entry.ended_at).toBe('2026-06-28T12:30:00.000Z');
+    expect(entry.started_at).toBe('2026-06-28T10:00:00.000Z');
+    expect(entry.focus_factor).toBe(0.9);
+  });
 });
 
 describe('full catalog coverage', () => {

@@ -20,6 +20,7 @@ const ITEM_TYPE_LABEL: Record<string, string> = {
   schema_version_block: 'Update required',
   import_warning: 'Import warning',
   sync_warning: 'Sync warning',
+  long_session: 'Long session',
 };
 
 function detailReason(detail: string): string | null {

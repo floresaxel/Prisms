@@ -164,6 +164,8 @@ export const timerClockInSchema = z.strictObject({
   force: z.boolean().optional(),
 });
 export const timerClockOutSchema = z.strictObject({ entry_id: uuidSchema, ended_at: isoDateTimeSchema });
+/** Correct when a CLOSED session ended (long-session review: "how long did you really work?"). */
+export const timerAdjustSchema = z.strictObject({ entry_id: uuidSchema, ended_at: isoDateTimeSchema });
 export const timerReviewSchema = z.strictObject({
   entry_id: uuidSchema,
   focus_factor: z.number().min(0.5).max(1.0),
@@ -443,6 +445,7 @@ export const COMMAND_SCHEMAS = {
   'timer.clock_in': timerClockInSchema,
   'timer.clock_out': timerClockOutSchema,
   'timer.review': timerReviewSchema,
+  'timer.adjust': timerAdjustSchema,
   'habit.create': habitCreateSchema,
   'habit.update': habitUpdateSchema,
   'habit.delete': habitDeleteSchema,

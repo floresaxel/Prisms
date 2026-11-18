@@ -9,7 +9,19 @@
  */
 import { useState } from 'react';
 
-import { Ic, ListSkeleton, useReviewInbox, useReviewInboxHydrated, useCommands, type CommandContext, type ReviewItemView } from '@prisms/ui';
+import {
+  Ic,
+  ListSkeleton,
+  useCommands,
+  useLongSessions,
+  useReviewInbox,
+  useReviewInboxHydrated,
+  useUserSettings,
+  type CommandContext,
+  type ReviewItemView,
+} from '@prisms/ui';
+
+import { LongSessionRow } from '../components/LongSessionRow';
 
 type SeverityFilter = 'all' | 'error' | 'warning' | 'info';
 
@@ -24,6 +36,7 @@ const ITEM_TYPE_LABEL: Record<string, string> = {
   schema_version_block: 'Update required',
   import_warning: 'Import warning',
   sync_warning: 'Sync warning',
+  long_session: 'Long session',
 };
 
 /** Pull a human reason out of the item's JSON `detail`, if any. */
@@ -69,6 +82,8 @@ export function Review({ ctx }: { ctx: CommandContext }) {
   const commands = useCommands(ctx);
   const hydrated = useReviewInboxHydrated();
   const [filter, setFilter] = useState<SeverityFilter>('all');
+  const longSessions = useLongSessions(items);
+  const { timezone } = useUserSettings();
 
   const counts = { error: 0, warning: 0, info: 0 };
   for (const it of items) if (it.severity in counts) counts[it.severity as keyof typeof counts] += 1;
@@ -103,14 +118,28 @@ export function Review({ ctx }: { ctx: CommandContext }) {
         )
       ) : (
         <ul className="px-rows" style={{ maxWidth: 920 }} aria-busy={!hydrated || undefined}>
-          {shown.map((item) => (
-            <ReviewRow
-              key={item.id}
-              item={item}
-              onResolve={() => void commands.resolveReviewItem(item.id)}
-              onDismiss={() => void commands.dismissReviewItem(item.id)}
-            />
-          ))}
+          {shown.map((item) => {
+            const session = longSessions.get(item.id);
+            return session ? (
+              <LongSessionRow
+                key={item.id}
+                item={item}
+                session={session}
+                timezone={timezone}
+                onResolve={() => void commands.resolveReviewItem(item.id)}
+                onDismiss={() => void commands.dismissReviewItem(item.id)}
+                onClockOut={(entryId, endedAt) => commands.clockOut(entryId, endedAt)}
+                onAdjust={(entryId, endedAt) => commands.adjustEntryEnd(entryId, endedAt)}
+              />
+            ) : (
+              <ReviewRow
+                key={item.id}
+                item={item}
+                onResolve={() => void commands.resolveReviewItem(item.id)}
+                onDismiss={() => void commands.dismissReviewItem(item.id)}
+              />
+            );
+          })}
         </ul>
       )}
     </section>

@@ -15,6 +15,7 @@ import { runAggregatesRecomputeAll } from './aggregates-recompute';
 import { runAutomationBackstop, type BackstopJob } from './automation-backstop';
 import { systemClock, type JobClock } from './clock';
 import { runLayoutPrecompute, type LayoutJob } from './layout-precompute';
+import { runLongSessionScanAll } from './long-session-scan';
 import { runNotifyDispatch, type NotifyJob } from './notify-dispatch';
 import { runPastdueScanAll } from './pastdue-scan';
 import { createPushAdapters, type PushAdapters } from './push';
@@ -33,6 +34,7 @@ export const QUEUES = {
   pastdueScan: 'pastdue.scan',
   layoutPrecompute: 'layout.precompute',
   notifyDispatch: 'notify.dispatch',
+  longSessionScan: 'timer.long_session_scan',
 } as const;
 
 /**
@@ -50,6 +52,7 @@ export const SCHEDULES: ReadonlyArray<{ queue: string; cron: string }> = [
   { queue: QUEUES.reviewExpire, cron: '0 4 * * 0' },
   { queue: QUEUES.scheduleOptimize, cron: '0 2 * * *' },
   { queue: QUEUES.pastdueScan, cron: '*/15 * * * *' },
+  { queue: QUEUES.longSessionScan, cron: '*/15 * * * *' },
 ];
 
 export interface JobsHandle {
@@ -98,6 +101,17 @@ export async function startJobs(connectionString: string, options: StartJobsOpti
   await boss.work(QUEUES.pastdueScan, async () => {
     await runPastdueScanAll(db, clock, (n) =>
       enqueueNotify({ userId: n.userId, notification: { title: 'Task overdue', body: `"${n.title}" is past due — tap to reschedule`, data: { taskId: n.taskId } } }),
+    );
+  });
+  await boss.work(QUEUES.longSessionScan, async () => {
+    await runLongSessionScanAll(db, clock, (n) =>
+      enqueueNotify({
+        userId: n.userId,
+        notification:
+          n.kind === 'auto_clock_out'
+            ? { title: 'Clocked out automatically', body: `"${n.title}" ran for 24 hours — check the time in Review`, data: { taskId: n.taskId } }
+            : { title: 'Still clocked in?', body: `"${n.title}" has been running for over 6 hours`, data: { taskId: n.taskId } },
+      }),
     );
   });
   await boss.work<LayoutJob>(QUEUES.layoutPrecompute, async (jobs: Job<LayoutJob>[]) => {
