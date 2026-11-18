@@ -365,7 +365,7 @@ export function MyDay({ ctx, onNavigate }: { ctx: CommandContext; onNavigate?: (
             <input
               data-testid="myday-capture-title"
               aria-label="Capture a task for today"
-              placeholder="Capture anything for today… Enter to add. No parent needed — it waits in Inbox."
+              placeholder="Capture task"
               value={captureTitle}
               onChange={(e) => setCaptureTitle(e.target.value)}
             />
@@ -374,7 +374,7 @@ export function MyDay({ ctx, onNavigate }: { ctx: CommandContext; onNavigate?: (
           {capturedToday.length > 0 && (
             <>
               <div className="px-sec">
-                Captured for today <span className="px-sec-cnt">· {capturedToday.length} — promote into a project to work on it</span>
+                Captured for today <span className="px-sec-cnt">· {capturedToday.length} — assign to a project to work on it</span>
                 <span className="px-sec-ln" />
               </div>
               <ul className="px-rows" data-testid="myday-captured">
@@ -466,12 +466,12 @@ function CapturedRow({ activity, targets, commands }: { activity: Node; targets:
       <span className="px-promote">
         <select
           data-testid={`myday-promote-target-${activity.id}`}
-          aria-label="Promote into"
+          aria-label="Assign to"
           value={selected}
           onChange={(e) => setParentId(e.target.value)}
           disabled={targets.length === 0}
         >
-          {targets.length === 0 && <option value="">No project to promote into</option>}
+          {targets.length === 0 && <option value="">No project to assign to</option>}
           {targets.map((t) => (
             <option key={t.id} value={t.id}>{t.title} ({t.type})</option>
           ))}
@@ -482,7 +482,7 @@ function CapturedRow({ activity, targets, commands }: { activity: Node; targets:
           disabled={selected === ''}
           onClick={() => void commands.promoteActivity(activity.id, { parentId: selected })}
         >
-          Promote
+          Assign
         </button>
       </span>
       <button className="px-btn px-btn--sm px-btn--danger" aria-label="delete" data-testid={`myday-captured-delete-${activity.id}`} onClick={() => void commands.softDelete(activity.id)}>×</button>

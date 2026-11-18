@@ -63,7 +63,7 @@ test('inbox → promote → clock in/out → review, offline then synced; double
   await expect(inboxRow).toBeVisible();
 
   // promote it into the seeded project (only target → default selection)
-  await inboxRow.getByRole('button', { name: 'Promote' }).click();
+  await inboxRow.getByRole('button', { name: 'Assign' }).click();
   await expect(page.getByTestId('inbox')).not.toContainText('Promoted Task');
 
   // --- worklist: the promoted task is now an available task --------------

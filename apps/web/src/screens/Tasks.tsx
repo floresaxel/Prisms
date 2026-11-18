@@ -78,13 +78,13 @@ export function Tasks({ ctx }: { ctx: CommandContext }) {
     <section ref={viewRef} className={`px-list${listLayoutClass(viewWidth)}`}>
       <div className="px-page-head">
         <h1>Tasks</h1>
-        <span className="px-page-sub">every task in one list — captures wait in Inbox until promoted</span>
+        <span className="px-page-sub">every task in one list — captures wait in Inbox until assigned</span>
       </div>
 
       <form className="px-capture" onSubmit={capture}>
         <input
           data-testid="activity-title"
-          placeholder="Capture anything… Enter to add. No parent needed — it waits in Inbox."
+          placeholder="Capture task"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
         />
@@ -125,7 +125,7 @@ export function Tasks({ ctx }: { ctx: CommandContext }) {
           ))}
           <p className="px-expl">
             Substeps are lightweight checklist children — add one with <b>Enter</b>, rename it with the pencil, check it off in
-            place. Groups mirror the tree; captures stay in <b>Inbox</b> until you promote them.
+            place. Groups mirror the tree; captures stay in <b>Inbox</b> until you assign them.
           </p>
         </div>
       ) : (
@@ -189,7 +189,7 @@ export function Tasks({ ctx }: { ctx: CommandContext }) {
 function InboxCheck({ activity, onComplete }: { activity: Node; onComplete: () => void }) {
   return (
     // The label leaves the title out: the row already names the item, and an
-    // item called e.g. "Promote…" would otherwise share a name with that button.
+    // item called e.g. "Assign…" would otherwise share a name with that button.
     <button className="px-ckb" data-testid={`inbox-check-${activity.id}`} aria-label="Complete this capture" title="Complete" onClick={onComplete}>
       <Ic name="check" />
     </button>
@@ -278,7 +278,7 @@ function InboxRow({ activity, targets, commands, onComplete }: { activity: Node;
           onChange={(e) => setParentId(e.target.value)}
           disabled={targets.length === 0}
         >
-          {targets.length === 0 && <option value="">No project to promote into</option>}
+          {targets.length === 0 && <option value="">No project to assign to</option>}
           {targets.map((t) => (
             <option key={t.id} value={t.id}>{t.title} ({t.type})</option>
           ))}
@@ -289,7 +289,7 @@ function InboxRow({ activity, targets, commands, onComplete }: { activity: Node;
           disabled={selected === ''}
           onClick={() => void commands.promoteActivity(activity.id, { parentId: selected })}
         >
-          Promote
+          Assign
         </button>
       </span>
       <button className="px-btn px-btn--sm px-btn--danger" aria-label="delete" onClick={() => void commands.softDelete(activity.id)}>×</button>

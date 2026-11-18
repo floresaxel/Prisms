@@ -109,7 +109,7 @@ test('capture → promote lands the task under its project group; the Inbox grou
 
   // wait for the seeded project to sync so it is a promote target, then promote
   await expect(inboxRow.locator('select')).toContainText('Launch', { timeout: 30_000 });
-  await inboxRow.getByRole('button', { name: 'Promote' }).click();
+  await inboxRow.getByRole('button', { name: 'Assign' }).click();
 
   // it leaves the Inbox group and now lives under the "Launch" project group
   await expect(page.getByTestId('inbox')).not.toContainText('Sharpen the gouges');
