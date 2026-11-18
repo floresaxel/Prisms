@@ -5,6 +5,9 @@
  *     project walking the tree, each task row carrying its checklist substeps
  *     (W3 task_steps: expand, add-on-Enter, toggle, inline rename).
  *   • By status — Available (priority order) / Blocked / Inbox / Done today.
+ * An Inbox row can be checked off without promoting it first: a dialog asks
+ * whether to add it to a project and complete it, or complete it as an
+ * unfocused task (no project behind it; Done today marks it so).
  *
  * Load-bearing testids preserved from the old Inbox: activity-title, activity-add,
  * inbox (with <li> rows), promote-target-*, promote-* (D8).
@@ -14,6 +17,7 @@ import { useMemo, useState, type FormEvent } from 'react';
 import { asEpochMillis, initialSortOrder, sortOrderBetween, type Instant, type Node, type TaskStatus, type TaskStep } from '@prisms/core';
 import {
   Ic,
+  Modal,
   useActivityInbox,
   useBlockedTasks,
   useCommands,
@@ -29,6 +33,7 @@ import {
   type PromoteTarget,
 } from '@prisms/ui';
 
+import { UnfocusedTag } from '../components/UnfocusedTag';
 import { formatMinutes, projectTone } from '../format';
 import { listLayoutClass } from '../list-layout';
 import { useMeasuredWidth } from '../use-measured-width';
@@ -56,6 +61,8 @@ export function Tasks({ ctx }: { ctx: CommandContext }) {
   const available = useMyDayAvailable(now);
   const blocked = useBlockedTasks(now);
   const doneToday = useDoneToday(now);
+  // the Inbox capture whose "complete" dialog is open
+  const [completing, setCompleting] = useState<Node | null>(null);
 
   async function capture(e: FormEvent) {
     e.preventDefault();
@@ -99,7 +106,7 @@ export function Tasks({ ctx }: { ctx: CommandContext }) {
           <ul className="px-rows" data-testid="inbox">
             {activities.length === 0 && <li className="px-trow px-muted">{hydrated ? 'Inbox is empty.' : 'Loading…'}</li>}
             {inboxNewestFirst.map((a) => (
-              <InboxRow key={a.id} activity={a} targets={targets} commands={commands} />
+              <InboxRow key={a.id} activity={a} targets={targets} commands={commands} onComplete={() => setCompleting(a)} />
             ))}
           </ul>
 
@@ -150,7 +157,10 @@ export function Tasks({ ctx }: { ctx: CommandContext }) {
           <ul className="px-rows" data-testid="status-inbox">
             {activities.length === 0 && <li className="px-trow px-muted">Inbox is empty.</li>}
             {inboxNewestFirst.map((a) => (
-              <li className="px-trow" key={a.id}><div className="px-t-main"><div className="px-t-title">{a.title}</div></div></li>
+              <li className="px-trow" key={a.id}>
+                <InboxCheck activity={a} onComplete={() => setCompleting(a)} />
+                <div className="px-t-main"><div className="px-t-title">{a.title}</div></div>
+              </li>
             ))}
           </ul>
 
@@ -159,9 +169,10 @@ export function Tasks({ ctx }: { ctx: CommandContext }) {
               <div className="px-sec" style={{ color: 'var(--px-green)' }}>Done today <span className="px-sec-cnt">· {doneToday.length}</span><span className="px-sec-ln" /></div>
               <ul className="px-rows px-rows--muted" data-testid="status-done">
                 {doneToday.map((d) => (
-                  <li className="px-trow px-trow--done" key={d.task.id}>
+                  <li className="px-trow px-trow--done" key={d.task.id} data-testid={`done-${d.task.id}`}>
                     <span className="px-ckb px-ckb--done"><Ic name="check" /></span>
                     <div className="px-t-main"><div className="px-t-title">{d.task.title}</div></div>
+                    {d.unfocused && <UnfocusedTag />}
                   </li>
                 ))}
               </ul>
@@ -169,15 +180,96 @@ export function Tasks({ ctx }: { ctx: CommandContext }) {
           )}
         </div>
       )}
+
+      <CompleteInboxDialog activity={completing} targets={targets} commands={commands} onClose={() => setCompleting(null)} />
     </section>
   );
 }
 
-function InboxRow({ activity, targets, commands }: { activity: Node; targets: PromoteTarget[]; commands: PrismsCommands }) {
+function InboxCheck({ activity, onComplete }: { activity: Node; onComplete: () => void }) {
+  return (
+    // The label leaves the title out: the row already names the item, and an
+    // item called e.g. "Promote…" would otherwise share a name with that button.
+    <button className="px-ckb" data-testid={`inbox-check-${activity.id}`} aria-label="Complete this capture" title="Complete" onClick={onComplete}>
+      <Ic name="check" />
+    </button>
+  );
+}
+
+/**
+ * Completing an Inbox capture asks first: it has no project, so either give it
+ * one (promote, then check off — it becomes an ordinary completed task) or
+ * complete it as it is, an unfocused task.
+ */
+function CompleteInboxDialog({ activity, targets, commands, onClose }: { activity: Node | null; targets: PromoteTarget[]; commands: PrismsCommands; onClose: () => void }) {
+  const [parentId, setParentId] = useState('');
+  const selected = parentId || targets[0]?.id || '';
+  const [busy, setBusy] = useState(false);
+
+  async function finish(withProject: boolean) {
+    if (!activity || busy) return;
+    setBusy(true);
+    try {
+      if (withProject) await commands.promoteActivity(activity.id, { parentId: selected });
+      await commands.checkOff(activity.id);
+      setParentId('');
+      onClose();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal
+      open={activity !== null}
+      title={`Complete “${activity?.title ?? ''}”`}
+      onClose={onClose}
+      actions={
+        <>
+          <button className="px-btn" onClick={onClose}>Cancel</button>
+          <button className="px-btn" data-testid="inbox-complete-unfocused" disabled={busy} onClick={() => void finish(false)}>
+            Complete as unfocused task
+          </button>
+        </>
+      }
+    >
+      <div data-testid="inbox-complete-dialog">
+        <p className="px-modal-sub">This capture isn't in a project yet. Add it to one so the work counts toward that project, or just complete it as an unfocused task.</p>
+        <label className="px-field">
+          Add to a project
+          <span className="px-promote">
+            <select
+              data-testid="inbox-complete-target"
+              value={selected}
+              onChange={(e) => setParentId(e.target.value)}
+              disabled={targets.length === 0}
+            >
+              {targets.length === 0 && <option value="">No project to add it to</option>}
+              {targets.map((t) => (
+                <option key={t.id} value={t.id}>{t.title} ({t.type})</option>
+              ))}
+            </select>
+            <button
+              className="px-btn px-btn--sm px-btn--primary"
+              data-testid="inbox-complete-promote"
+              disabled={selected === '' || busy}
+              onClick={() => void finish(true)}
+            >
+              Add &amp; complete
+            </button>
+          </span>
+        </label>
+      </div>
+    </Modal>
+  );
+}
+
+function InboxRow({ activity, targets, commands, onComplete }: { activity: Node; targets: PromoteTarget[]; commands: PrismsCommands; onComplete: () => void }) {
   const [parentId, setParentId] = useState('');
   const selected = parentId || targets[0]?.id || '';
   return (
     <li className="px-trow px-trow--inbox">
+      <InboxCheck activity={activity} onComplete={onComplete} />
       <div className="px-t-main"><div className="px-t-title">{activity.title}</div></div>
       <span className="px-promote">
         <select

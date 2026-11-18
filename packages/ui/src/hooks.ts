@@ -630,7 +630,9 @@ export function useActivityInbox(): Node[] {
         // Filter the shared (unfiltered) node set down to live activities: an
         // optimistic activity.promote flips node_type 'activity'→'task' in the
         // overlay, so re-apply the predicate on the MERGED row here.
-        .filter((n) => n.node_type === 'activity' && n.deleted_at === null)
+        // A completed capture (checked off as an unfocused task) has left the
+        // Inbox — it shows in Done today instead.
+        .filter((n) => n.node_type === 'activity' && n.deleted_at === null && n.completed_at === null)
         .sort((a, b) => (a.sort_order < b.sort_order ? -1 : a.sort_order > b.sort_order ? 1 : a.id < b.id ? -1 : 1)),
     [rows.nodes],
   );
@@ -1116,12 +1118,19 @@ export interface DoneTodayItem {
   task: Node;
   /** Minutes logged against the task from time entries (merged, §7.10b). */
   consumedMinutes: number;
+  /**
+   * An Inbox capture completed without ever joining a project: done, but with
+   * no vision behind it. Shown marked, so a day's "done" stays honest about
+   * what was focused work.
+   */
+  unfocused: boolean;
 }
 
 /**
  * Tasks completed since the day-reset (W2/D5 "Done today"), most-recent first,
  * each with the minutes logged against it. Done tasks are excluded from the
  * worklist, so this is a separate read; it also drives the "Done N" header chip.
+ * Inbox captures checked off as unfocused tasks count too (`unfocused`).
  */
 export function useDoneToday(now: Instant): DoneTodayItem[] {
   const { factContext: ctx, rows } = usePrismsData();
@@ -1131,9 +1140,9 @@ export function useDoneToday(now: Instant): DoneTodayItem[] {
     const today = ctx.today(now);
     const out: DoneTodayItem[] = [];
     for (const node of ctx.tree.byId.values()) {
-      if (node.node_type !== 'task' || node.completed_at === null) continue;
+      if ((node.node_type !== 'task' && node.node_type !== 'activity') || node.completed_at === null) continue;
       if (bucketDate(isoToEpochMillis(node.completed_at), ctx.dayResetHour, ctx.timezone) !== today) continue;
-      out.push({ task: node, consumedMinutes: canonicalProgress(node, entries).consumedMinutes });
+      out.push({ task: node, consumedMinutes: canonicalProgress(node, entries).consumedMinutes, unfocused: node.node_type === 'activity' });
     }
     return out.sort((a, b) => {
       const ca = a.task.completed_at ?? '';
