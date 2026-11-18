@@ -37,11 +37,13 @@ import {
   isBlockedForAcceptance,
   isClientTooOld,
   isCommandName,
-  normalizeJournalTags,
   renormalizedOrders,
   resolveOpenTimeEntries,
   runAutomations,
   softDeleteClosure,
+  // not in alphabetical place on purpose: split focus (#36) adds MAX_OPEN_TIMERS
+  // right after isCommandName, and two inserts on the same line merge as a conflict
+  normalizeJournalTags,
   stripTrustFields,
   uploadRequestSchema,
   ROW_SCHEMA_VERSION,

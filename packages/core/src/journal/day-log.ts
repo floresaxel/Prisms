@@ -93,7 +93,10 @@ export const dayLogEntriesSchema = z.strictObject({
   v: z.literal(DAY_LOG_VERSION),
   scheduled: z.array(dayLogScheduledEntrySchema),
   clocked: z.array(dayLogClockedEntrySchema),
-  /** Sum of the day's FINISHED clocked entries (a running one has no duration yet). */
+  /**
+   * Time clocked in over the day: the UNION of the finished entries, so time two
+   * overlapping timers share is counted once (a running one has no duration yet).
+   */
   clocked_minutes: z.number().int().nonnegative(),
   completed: z.array(dayLogCompletedEntrySchema),
   /** Present only when a list overflowed the cap; counts the DROPPED rows. */
@@ -371,10 +374,36 @@ function dispositionOf(value: unknown): CompletionDisposition {
   return value === 'obsolete' ? 'obsolete' : 'completed';
 }
 
-function sumMinutes(list: readonly { minutes: number | null }[]): number {
+/**
+ * Minutes clocked in over the day: the UNION of the finished entries' intervals,
+ * so time two timers share is counted once. Summing the lines would read 2h for
+ * one hour with two timers running (split focus allows overlap); this is the
+ * wall-clock time you were working, whatever it was split across. Running
+ * entries (no end) add nothing. Rounded once, at the end.
+ */
+function unionMinutes(list: readonly { started_at: string; ended_at: string | null }[]): number {
+  const spans: [number, number][] = [];
+  for (const e of list) {
+    if (e.ended_at === null) continue;
+    const s = epochOf(e.started_at);
+    const t = epochOf(e.ended_at);
+    if (s !== null && t !== null && t > s) spans.push([s, t]);
+  }
+  spans.sort((a, b) => a[0] - b[0]);
   let total = 0;
-  for (const e of list) total += e.minutes ?? 0;
-  return total;
+  let curS = Number.NaN;
+  let curT = Number.NaN;
+  for (const [s, t] of spans) {
+    if (Number.isNaN(curS) || s > curT) {
+      if (!Number.isNaN(curS)) total += curT - curS;
+      curS = s;
+      curT = t;
+    } else if (t > curT) {
+      curT = t;
+    }
+  }
+  if (!Number.isNaN(curS)) total += curT - curS;
+  return Math.round(total / 60_000);
 }
 
 function compareIds(a: string, b: string): number {
@@ -403,7 +432,7 @@ function finalize(source: Draft): DayLogEntries | null {
     scheduled: scheduled.slice(0, DAY_LOG_MAX_ENTRIES),
     clocked: clocked.slice(0, DAY_LOG_MAX_ENTRIES),
     // the TOTAL over every entry, so the cap never understates the hours worked
-    clocked_minutes: sumMinutes(clocked),
+    clocked_minutes: unionMinutes(clocked),
     completed: completed.slice(0, DAY_LOG_MAX_ENTRIES),
   };
   if (droppedScheduled > 0 || droppedClocked > 0 || droppedCompleted > 0) {
@@ -491,7 +520,7 @@ export function filterDayLog(
     v: DAY_LOG_VERSION,
     scheduled: entries.scheduled.filter((e) => matchesFilter(e, filter)),
     clocked,
-    clocked_minutes: sumMinutes(clocked),
+    clocked_minutes: unionMinutes(clocked),
     completed: entries.completed.filter((e) => matchesFilter(e, filter)),
   };
   return isDayLogEmpty(out) ? null : out;

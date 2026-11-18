@@ -560,6 +560,21 @@ describe('computeDayLog — clocked time + project/vision attribution', () => {
     expect(log.clocked[0]).toMatchObject({ project: null, vision: null });
   });
 
+  it('overlapping timers (split focus) count their shared time ONCE in the day total', () => {
+    // two tasks clocked 08:00–09:30 and 09:00–10:00 → 2h of wall time, not 2h30
+    const both = [
+      makeEntry({ id: idOf(520), task_id: idOf(4), started_at: runStart, ended_at: runEnd }),
+      makeEntry({ id: idOf(521), task_id: idOf(7), started_at: '2026-05-08T13:00:00.000Z', ended_at: '2026-05-08T14:00:00.000Z' }),
+      // and one nested entirely inside the first adds nothing
+      makeEntry({ id: idOf(522), task_id: idOf(7), started_at: '2026-05-08T12:15:00.000Z', ended_at: '2026-05-08T12:45:00.000Z' }),
+    ];
+    const log = computeDayLog({ date: day, nodes: tree, blocks: [], timeEntries: both, ...settings })!;
+    expect(log.clocked.map((c) => c.minutes)).toEqual([90, 30, 60]); // each line keeps its own duration
+    expect(log.clocked_minutes).toBe(120);
+    // a filter narrows to one task's lines and totals THOSE (still overlap-safe)
+    expect(filterDayLog(log, { project_id: idOf(6), vision_id: null })?.clocked_minutes).toBe(90);
+  });
+
   it('the day total counts every entry even when the list is capped', () => {
     const many = Array.from({ length: DAY_LOG_MAX_ENTRIES + 5 }, (_, i) =>
       makeEntry({
