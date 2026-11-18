@@ -50,6 +50,7 @@ import {
   type PromoteTarget,
 } from '@prisms/ui';
 
+import { InboxDelete } from '../components/InboxDelete';
 import { RunMark } from '../components/RunMark';
 import { EditableTitle, useTaskDetail, type TaskDetailApi } from '../components/TaskDetail';
 import { useTimers } from '../components/Timers';
@@ -497,7 +498,7 @@ function CapturedRow({ activity, targets, commands, detail }: { activity: Node; 
           Assign
         </button>
       </span>
-      <button className="px-btn px-btn--sm px-btn--danger" aria-label="delete" data-testid={`myday-captured-delete-${activity.id}`} onClick={() => void commands.softDelete(activity.id)}>×</button>
+      <InboxDelete title={activity.title} testId={`myday-captured-delete-${activity.id}`} onDelete={() => void commands.softDelete(activity.id)} />
     </li>
   );
 }

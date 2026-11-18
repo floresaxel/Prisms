@@ -1367,6 +1367,14 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
 /* The Inbox project picker takes a share of its card (not the width of its
    longest option) and clips long project names with an ellipsis, so it grows
    and shrinks with the card. The title keeps the rest of the row. */
+/* Inbox ×: bare grey glyph, and its "Delete?" popover just left of it */
+.px-xdel { position: relative; display: inline-flex; flex: none; }
+.px-xbtn { display: flex; padding: 4px; border: 0; border-radius: 4px; background: none; color: var(--px-faint); cursor: pointer; }
+.px-xbtn .px-ic { width: 14px; height: 14px; }
+.px-xbtn:hover, .px-xbtn[aria-expanded="true"] { color: var(--px-text-dim); }
+.px-xbtn:focus-visible { outline: 2px solid var(--px-blue); outline-offset: 1px; }
+.px-xpop { position: absolute; right: 100%; top: 50%; transform: translateY(-50%); margin-right: 4px; z-index: 5; display: flex; align-items: center; gap: 6px; white-space: nowrap; padding: 4px 6px 4px 10px; background: var(--px-surface); border: 1px solid var(--px-border); border-radius: 8px; box-shadow: var(--px-shadow-pop); }
+.px-xpop-q { font-size: 12px; color: var(--px-text-dim); }
 .px-trow--inbox > .px-promote { flex: 0 1 42%; min-width: 0; }
 .px-trow--inbox .px-promote select { flex: 1 1 0; width: 100%; max-width: none; min-width: 0; text-overflow: ellipsis; }
 .px-trow--inbox .px-promote .px-btn { flex: none; }

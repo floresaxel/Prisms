@@ -38,6 +38,7 @@ import {
   type PromoteTarget,
 } from '@prisms/ui';
 
+import { InboxDelete } from '../components/InboxDelete';
 import { EditableTitle, locationOf, useTaskDetail, type TaskDetailApi } from '../components/TaskDetail';
 import { UnfocusedTag } from '../components/UnfocusedTag';
 import { formatMinutes, projectTone } from '../format';
@@ -322,7 +323,7 @@ function InboxRow({ activity, targets, commands, detail, onComplete }: { activit
           Assign
         </button>
       </span>
-      <button className="px-btn px-btn--sm px-btn--danger" aria-label="delete" onClick={() => void commands.softDelete(activity.id)}>×</button>
+      <InboxDelete title={activity.title} onDelete={() => void commands.softDelete(activity.id)} />
     </li>
   );
 }

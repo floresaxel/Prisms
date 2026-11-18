@@ -133,6 +133,36 @@ test('the capture bar can preselect a project; it sticks until you leave Tasks',
   await expect(page.getByTestId('capture-project')).toHaveValue('');
 });
 
+test('the Inbox × asks before deleting — Keep and Escape leave the item, Delete removes it', async ({ page }) => {
+  await register(page, 'delete');
+  await goto(page, 'tasks');
+  for (const t of ['Keep me', 'Drop me']) {
+    await page.getByTestId('activity-title').fill(t);
+    await page.getByTestId('activity-add').click();
+    await expect(page.getByTestId('inbox')).toContainText(t);
+  }
+  const row = (t: string) => page.getByTestId('inbox').locator('li', { hasText: t });
+
+  // the question opens right beside the ×; nothing is deleted yet
+  await row('Drop me').getByRole('button', { name: 'delete' }).click();
+  await expect(page.getByTestId('inbox-delete-confirm')).toBeVisible();
+  await expect(page.getByTestId('inbox')).toContainText('Drop me');
+
+  // Escape and Keep both dismiss it
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('inbox-delete-confirm')).toHaveCount(0);
+  await row('Drop me').getByRole('button', { name: 'delete' }).click();
+  await page.getByTestId('inbox-delete-confirm').getByRole('button', { name: 'Keep' }).click();
+  await expect(page.getByTestId('inbox-delete-confirm')).toHaveCount(0);
+  await expect(page.getByTestId('inbox')).toContainText('Drop me');
+
+  // Delete removes only that item
+  await row('Drop me').getByRole('button', { name: 'delete' }).click();
+  await page.getByTestId('inbox-delete-yes').click();
+  await expect(page.getByTestId('inbox')).not.toContainText('Drop me');
+  await expect(page.getByTestId('inbox')).toContainText('Keep me');
+});
+
 test('capture → promote lands the task under its project group; the Inbox group clears', async ({ page }) => {
   await register(page, 'promote');
   const ids = { v: randomUUID(), r: randomUUID(), p: randomUUID() };
