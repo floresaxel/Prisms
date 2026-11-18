@@ -9,14 +9,25 @@
  * Load-bearing testids preserved from the old Worklist: worklist, clock-in-*,
  * check-*, progress-* + progress-pct-*, force-clock-in-*, checkoff-* (D8).
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 
-import { ancestorsOf, asEpochMillis, bucketDate, type Instant, type NodeType, type TreeIndex } from '@prisms/core';
+import {
+  ancestorsOf,
+  asEpochMillis,
+  bucketDate,
+  initialSortOrder,
+  sortOrderBetween,
+  type Instant,
+  type Node,
+  type NodeType,
+  type TreeIndex,
+} from '@prisms/core';
 import {
   DepthDoor,
   Modal,
   ThresholdMark,
   Skeleton,
+  useActivityInbox,
   useAgenda,
   useBlockedTasks,
   useCommands,
@@ -26,11 +37,14 @@ import {
   useHabits,
   useIsHydrated,
   useMyDayAvailable,
+  usePromoteTargets,
   useRunningTimer,
   useTimeBlocksForDay,
   Ic,
   type CommandContext,
   type MyDayItem,
+  type PrismsCommands,
+  type PromoteTarget,
 } from '@prisms/ui';
 
 import { WhyButton } from '../components/Why';
@@ -164,6 +178,26 @@ export function MyDay({ ctx, onNavigate }: { ctx: CommandContext; onNavigate?: (
   );
   const filtered = projectFilter ? available.filter((it) => it.projectId === projectFilter) : available;
 
+  // ── capture (same Inbox as Tasks, but dated today: it was captured FOR today) ──
+  // An Inbox item has no parent, so it is not in the worklist above; the ones due
+  // today are listed under the bar until they are promoted into a project, where
+  // they join Available now with their date intact.
+  const activities = useActivityInbox();
+  const promoteTargets = usePromoteTargets();
+  const todayDate = ctxFacts.today(nowMin);
+  const capturedToday = activities.filter((a) => a.due_date === todayDate);
+  const [captureTitle, setCaptureTitle] = useState('');
+  async function capture(e: FormEvent) {
+    e.preventDefault();
+    const t = captureTitle.trim();
+    if (t === '') return;
+    const last = activities.at(-1)?.sort_order ?? null;
+    const sortOrder = last === null ? initialSortOrder() : sortOrderBetween(last, null);
+    // read "today" at the moment of capture, not the minute clock — right at the day reset they differ.
+    await commands.createActivity({ title: t, sortOrder, dueDate: ctxFacts.today(asEpochMillis(Date.now())) });
+    setCaptureTitle('');
+  }
+
   const [blockedCollapsed, toggleBlocked] = useCollapsed('prisms.myday.blocked');
   const [doneCollapsed, toggleDone] = useCollapsed('prisms.myday.done');
 
@@ -249,7 +283,7 @@ export function MyDay({ ctx, onNavigate }: { ctx: CommandContext; onNavigate?: (
                 key={item.task.id}
                 item={item}
                 running={running !== null}
-                todayDate={ctxFacts.today(nowMin)}
+                todayDate={todayDate}
                 onCheck={() => openCheckOff(item)}
                 onClockIn={() => void commands.clockIn(item.task.id)}
               />
@@ -280,6 +314,30 @@ export function MyDay({ ctx, onNavigate }: { ctx: CommandContext; onNavigate?: (
                       Force clock in
                     </button>
                   </li>
+                ))}
+              </ul>
+            </>
+          )}
+
+          <form className="px-capture px-capture--day" onSubmit={capture}>
+            <input
+              data-testid="myday-capture-title"
+              aria-label="Capture a task for today"
+              placeholder="Capture anything for today… Enter to add. No parent needed — it waits in Inbox."
+              value={captureTitle}
+              onChange={(e) => setCaptureTitle(e.target.value)}
+            />
+            <button className="px-btn px-btn--primary" type="submit" data-testid="myday-capture-add">Capture</button>
+          </form>
+          {capturedToday.length > 0 && (
+            <>
+              <div className="px-sec">
+                Captured for today <span className="px-sec-cnt">· {capturedToday.length} — promote into a project to work on it</span>
+                <span className="px-sec-ln" />
+              </div>
+              <ul className="px-rows" data-testid="myday-captured">
+                {capturedToday.map((a) => (
+                  <CapturedRow key={a.id} activity={a} targets={promoteTargets} commands={commands} />
                 ))}
               </ul>
             </>
@@ -347,6 +405,45 @@ export function MyDay({ ctx, onNavigate }: { ctx: CommandContext; onNavigate?: (
         {checkOff?.scheduled && <p className="px-muted" data-testid="checkoff-autoblock">Logged to its scheduled block.</p>}
       </Modal>
     </section>
+  );
+}
+
+/**
+ * An Inbox item captured for today. It has no parent yet, so it cannot be clocked
+ * into from here — promoting it (as on Tasks) makes it a real task, which keeps
+ * its due date and moves up into Available now.
+ */
+function CapturedRow({ activity, targets, commands }: { activity: Node; targets: PromoteTarget[]; commands: PrismsCommands }) {
+  const [parentId, setParentId] = useState('');
+  const selected = parentId || targets[0]?.id || '';
+  return (
+    <li className="px-trow px-trow--inbox" data-testid={`myday-captured-${activity.id}`}>
+      <div className="px-t-main"><div className="px-t-title">{activity.title}</div></div>
+      <span className="px-due px-due--today">Today</span>
+      <span className="px-promote">
+        <select
+          data-testid={`myday-promote-target-${activity.id}`}
+          aria-label="Promote into"
+          value={selected}
+          onChange={(e) => setParentId(e.target.value)}
+          disabled={targets.length === 0}
+        >
+          {targets.length === 0 && <option value="">No project to promote into</option>}
+          {targets.map((t) => (
+            <option key={t.id} value={t.id}>{t.title} ({t.type})</option>
+          ))}
+        </select>
+        <button
+          className="px-btn px-btn--sm px-btn--primary"
+          data-testid={`myday-promote-${activity.id}`}
+          disabled={selected === ''}
+          onClick={() => void commands.promoteActivity(activity.id, { parentId: selected })}
+        >
+          Promote
+        </button>
+      </span>
+      <button className="px-btn px-btn--sm px-btn--danger" aria-label="delete" data-testid={`myday-captured-delete-${activity.id}`} onClick={() => void commands.softDelete(activity.id)}>×</button>
+    </li>
   );
 }
 

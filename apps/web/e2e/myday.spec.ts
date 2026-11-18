@@ -88,6 +88,47 @@ test('My Day: priority order, project filter, and the collapsed Done-today secti
   await expect(page.getByText('Finished Task')).toBeVisible();
 });
 
+test('My Day: a capture is due today, waits under the bar, and keeps its date when promoted', async ({ page }) => {
+  await register(page, 'capture');
+  const ids = { v: randomUUID(), r: randomUUID(), p: randomUUID() };
+  const seed = await page.request.post('/sync/upload', {
+    data: {
+      device_id: 'e2e-seed',
+      commands: [
+        cmd('node.create', { id: ids.v, node_type: 'vision', title: 'Capture Vision', sort_order: 'a0' }),
+        cmd('node.create', { id: ids.r, node_type: 'roadmap', title: 'Capture Roadmap', sort_order: 'a0', parent_id: ids.v }),
+        cmd('node.create', { id: ids.p, node_type: 'project', title: 'Capture Project', sort_order: 'a0', parent_id: ids.r }),
+      ],
+    },
+  });
+  expect(seed.ok()).toBeTruthy();
+
+  // ── capture: no parent needed; it lands under the bar, dated today ──
+  await page.getByTestId('myday-capture-title').fill('Call the plumber');
+  await page.getByTestId('myday-capture-add').click();
+  await expect(page.getByTestId('myday-capture-title')).toHaveValue('');
+  const captured = page.getByTestId('myday-captured').locator('li', { hasText: 'Call the plumber' });
+  await expect(captured).toBeVisible();
+  await expect(captured).toContainText('Today');
+
+  // ── the same item is in the Tasks Inbox (one Inbox, not a My Day copy) ──
+  await page.getByTestId('nav-tasks').click();
+  await expect(page.getByTestId('inbox')).toContainText('Call the plumber');
+  await page.getByTestId('nav-myday').click();
+
+  // ── promote into the project: it becomes a real task, due today, in Available now ──
+  const row = page.getByTestId('myday-captured').locator('li', { hasText: 'Call the plumber' });
+  const activityId = ((await row.getAttribute('data-testid')) ?? '').replace('myday-captured-', '');
+  expect(activityId).not.toBe('');
+  await expect(page.getByTestId(`myday-promote-target-${activityId}`).locator(`option[value="${ids.p}"]`)).toHaveCount(1, { timeout: 30_000 });
+  await page.getByTestId(`myday-promote-target-${activityId}`).selectOption(ids.p);
+  await page.getByTestId(`myday-promote-${activityId}`).click();
+  const promoted = page.getByTestId(`myday-row-${activityId}`);
+  await expect(promoted).toBeVisible({ timeout: 30_000 });
+  await expect(promoted.locator('.px-due--today')).toHaveText('Today');
+  await expect(page.getByTestId('myday-captured')).toHaveCount(0);
+});
+
 test('My Day: the running task walks back to its vision, one door per layer', async ({ page }) => {
   await register(page, 'trail');
   const ids = { v: randomUUID(), r: randomUUID(), p: randomUUID(), m: randomUUID(), t: randomUUID() };

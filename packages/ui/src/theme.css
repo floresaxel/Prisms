@@ -1098,6 +1098,9 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
 
 /* ── Tasks view (W4/D6) — capture bar + substep checklist ── */
 .px-capture { display: flex; gap: 8px; margin: 12px 0; max-width: 900px; }
+/* My Day's bar sits under the lists rather than under the page head, so it takes
+   the section spacing and the full column width. */
+.px-capture--day { margin: 18px 0 0; max-width: none; }
 .px-capture input { flex: 1; min-width: 0; border: 1px solid var(--px-border); border-radius: 8px; padding: 8px 12px; background: var(--px-surface); color: var(--px-text); font: inherit; }
 .px-capture input::placeholder { color: var(--px-faint); }
 .px-promote { display: inline-flex; align-items: center; gap: 6px; }
