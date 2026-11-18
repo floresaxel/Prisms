@@ -210,9 +210,8 @@ export function MyDay({ ctx, onNavigate }: { ctx: CommandContext; onNavigate?: (
           {running && (
             <div className="px-run-banner" data-testid="run-banner">
               <span className="px-run-mark" data-testid="run-mark" aria-hidden="true">
-                {/* core + two rings that trail it; all three wear the project's colour */}
+                {/* core + one ring that trails it; both wear the project's colour */}
                 <span className={`px-run-wave px-pdot--${projectTone(runningItem?.projectId ?? null)}`} />
-                <span className={`px-run-wave px-run-wave--late px-pdot--${projectTone(runningItem?.projectId ?? null)}`} />
                 <span className={`px-run-core px-pdot--${projectTone(runningItem?.projectId ?? null)}`} data-testid="run-mark-core" />
               </span>
               <div>
