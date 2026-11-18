@@ -236,9 +236,10 @@ export const time_entries = pgTable(
       'entries_interval_check',
       sql`${t.ended_at} IS NULL OR ${t.ended_at} > ${t.started_at}`,
     ),
-    // §6.7 I5 DB backstop: at most one open entry per user
+    // §6.7 I5 DB backstop: at most one open entry per (user, task). The
+    // five-per-user cap (split focus, migration 0015) is checked by the dispatcher.
     uniqueIndex('entries_open')
-      .on(t.user_id)
+      .on(t.user_id, t.task_id)
       .where(sql`${t.ended_at} IS NULL AND ${t.deleted_at} IS NULL`),
     index('entries_task')
       .on(t.user_id, t.task_id, t.started_at)

@@ -129,6 +129,59 @@ test('My Day: a capture is due today, waits under the bar, and keeps its date wh
   await expect(page.getByTestId('myday-captured')).toHaveCount(0);
 });
 
+test('My Day: split focus — run two timers together, clock out of one, then switch', async ({ page }) => {
+  await register(page, 'split');
+  const ids = { v: randomUUID(), r: randomUUID(), p: randomUUID(), a: randomUUID(), b: randomUUID() };
+  const seed = await page.request.post('/sync/upload', {
+    data: {
+      device_id: 'e2e-seed',
+      commands: [
+        cmd('node.create', { id: ids.v, node_type: 'vision', title: 'Split Vision', sort_order: 'a0' }),
+        cmd('node.create', { id: ids.r, node_type: 'roadmap', title: 'Split Roadmap', sort_order: 'a0', parent_id: ids.v }),
+        cmd('node.create', { id: ids.p, node_type: 'project', title: 'Split Project', sort_order: 'a0', parent_id: ids.r }),
+        cmd('node.create', { id: ids.a, node_type: 'task', title: 'Alpha Task', sort_order: 'a0', parent_id: ids.p, estimate_minutes: 30 }),
+        cmd('node.create', { id: ids.b, node_type: 'task', title: 'Beta Task', sort_order: 'a1', parent_id: ids.p, estimate_minutes: 30 }),
+      ],
+    },
+  });
+  expect(seed.ok()).toBeTruthy();
+  await expect(page.getByTestId(`myday-row-${ids.b}`)).toBeVisible({ timeout: 30_000 });
+
+  // ── first timer: no question asked ──
+  await page.getByTestId(`clock-in-${ids.a}`).click();
+  await expect(page.getByTestId('clockin-dialog')).toHaveCount(0);
+  await expect(page.getByTestId('run-banner')).toHaveCount(1);
+
+  // ── second: the pop-up offers switch or split; split keeps both running ──
+  await page.getByTestId(`clock-in-${ids.b}`).click();
+  await expect(page.getByTestId('clockin-dialog')).toBeVisible();
+  await expect(page.getByTestId(`clockin-stop-${ids.a}`)).toBeChecked();
+  await page.getByTestId('clockin-split').click();
+  await expect(page.getByTestId('run-banner')).toHaveCount(2);
+  await expect(page.getByTestId('split-note')).toContainText('2 timers');
+  await expect(page.getByTestId('timer-more')).toHaveText('+1');
+
+  // ── clock out of ONE from its own card: its review, the other keeps running ──
+  await page.getByTestId(`run-clock-out-${ids.a}`).click();
+  await expect(page.getByTestId('review-save')).toBeVisible();
+  await page.getByTestId('review-save').click();
+  await expect(page.getByTestId('run-banner')).toHaveCount(1);
+  await expect(page.getByTestId('run-banner')).toContainText('Beta Task');
+  await expect(page.getByTestId('split-note')).toHaveCount(0);
+
+  // ── switch: clock in to Alpha again, keep Beta ticked → Beta stops, Alpha runs ──
+  await page.getByTestId(`clock-in-${ids.a}`).click();
+  await expect(page.getByTestId(`clockin-stop-${ids.b}`)).toBeChecked();
+  await page.getByTestId('clockin-switch').click();
+  await expect(page.getByTestId('review-save')).toBeVisible(); // Beta's review
+  await page.getByTestId('review-save').click();
+  await expect(page.getByTestId('run-banner')).toHaveCount(1);
+  await expect(page.getByTestId('run-banner')).toContainText('Alpha Task');
+  await page.getByTestId('timer-clock-out').click();
+  await page.getByTestId('review-save').click();
+  await expect(page.getByTestId('running-timer')).toHaveCount(0);
+});
+
 test('My Day: the running task walks back to its vision, one door per layer', async ({ page }) => {
   await register(page, 'trail');
   const ids = { v: randomUUID(), r: randomUUID(), p: randomUUID(), m: randomUUID(), t: randomUUID() };

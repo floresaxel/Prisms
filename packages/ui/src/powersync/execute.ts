@@ -125,8 +125,9 @@ async function preflightError(name: CommandName, p: Record<string, unknown>, sto
       const taskId = String(p['task_id'] ?? '');
       const task = ctx.node(taskId);
       if (!task) return null; // task not in local state → defer to the server
-      const hasOpenEntry = entries.some((e) => e.ended_at === null && e.deleted_at === null); // I5 is user-wide
-      const chk = checkClockIn(task, taskId, hasOpenEntry); // task present ⇒ only I5/I8 fire
+      // I5 (split focus): one timer per task, ≤ MAX_OPEN_TIMERS user-wide
+      const openTaskIds = entries.filter((e) => e.ended_at === null && e.deleted_at === null).map((e) => e.task_id);
+      const chk = checkClockIn(task, taskId, openTaskIds); // task present ⇒ only I5/I8 fire
       if (!chk.ok) return chk.error;
       // Mirror R2: a weather-only-blocked task clocks in WITHOUT force locally too
       // (external facts must never gate acceptance); force skips the dependency gate.

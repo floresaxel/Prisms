@@ -9,6 +9,7 @@
 import type { Habit, Node, TimeEntry } from '../domain/entities';
 import type { Uuid } from '../domain/primitives';
 
+import { splitConcurrent } from '../merge/split-focus';
 import { mergeTimeEntries } from '../merge/time-entries';
 
 export interface PracticeValue {
@@ -46,9 +47,9 @@ export function canonicalPractice(
   entries: readonly TimeEntry[],
 ): PracticeValue {
   const tasks = habitTaskIds(habit, nodes);
+  // split focus: a practice task shares the time it overlapped other timers
   const byTask = new Map<Uuid, TimeEntry[]>();
-  for (const entry of entries) {
-    if (entry.deleted_at !== null) continue;
+  for (const entry of splitConcurrent(entries)) {
     if (!tasks.has(entry.task_id)) continue;
     const list = byTask.get(entry.task_id);
     if (list === undefined) byTask.set(entry.task_id, [entry]);

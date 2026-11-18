@@ -87,6 +87,7 @@ describe('domainError', () => {
       'E_CYCLE',
       'E_EDGE_TYPE_MISMATCH',
       'E_TIMER_ALREADY_RUNNING',
+      'E_TIMER_LIMIT',
       'E_INVALID_INTERVAL',
       'E_ANCHORED_IMMUTABLE',
       'E_DONE_IMMUTABLE',
