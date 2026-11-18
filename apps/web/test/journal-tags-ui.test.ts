@@ -267,6 +267,25 @@ describe('Journal screen — sort by tag and filters', () => {
     expect(screen.queryByTestId('journal-tag-groups')).toBeNull();
   });
 
+  it('Today jumps back from another day, re-expands the current month, and is inert when already there', () => {
+    load();
+    mount();
+    const today = screen.getByTestId('journal-today') as HTMLButtonElement;
+    expect(today.disabled).toBe(true); // opens on today
+    expect(screen.getByTestId('panel-2026-06-20')).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId('journal-day-2026-06-18')); // wander to another day
+    expect(screen.getByTestId('panel-2026-06-18')).toBeTruthy();
+    expect(today.disabled).toBe(false);
+
+    fireEvent.click(screen.getByTestId('journal-month-2026-06')); // collapse the current month
+    expect(screen.queryByTestId('journal-day-2026-06-18')).toBeNull();
+    fireEvent.click(today);
+    expect(screen.getByTestId('panel-2026-06-20')).toBeTruthy();
+    expect(screen.getByTestId('journal-day-2026-06-18')).toBeTruthy(); // month open again
+    expect(today.disabled).toBe(true);
+  });
+
   it('By tag groups notes per tag, A–Z, a note under EACH of its tags, untagged last', () => {
     load();
     mount();

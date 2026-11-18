@@ -192,6 +192,12 @@ export function Journal({ ctx }: { ctx: CommandContext }) {
     });
   }
 
+  /** Back to today: open its note and make sure its month is expanded in the list. */
+  function goToday() {
+    setSelectedDay(today);
+    setExpanded((prev) => (prev.has(curMonth) ? prev : new Set(prev).add(curMonth)));
+  }
+
   const filterOn = isJournalFilterActive(filter);
   const pickRef = (list: DayLogRef[], id: string): DayLogRef | null => list.find((r) => r.id === id) ?? null;
 
@@ -200,6 +206,17 @@ export function Journal({ ctx }: { ctx: CommandContext }) {
       <div className="px-page-head">
         <h1>Journal</h1>
         <span className="px-page-sub">one note per day · markdown</span>
+        <div className="px-head-actions">
+          <button
+            className="px-btn"
+            data-testid="journal-today"
+            disabled={selectedDay === today}
+            title={selectedDay === today ? 'Already on today' : `Go back to today (${today})`}
+            onClick={goToday}
+          >
+            <Ic name="cal" /> Today
+          </button>
+        </div>
       </div>
 
       <div className="px-jn-bar" data-testid="journal-bar" role="toolbar" aria-label="Journal view and filters">
