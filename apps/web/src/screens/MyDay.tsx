@@ -50,6 +50,7 @@ import {
   type PromoteTarget,
 } from '@prisms/ui';
 
+import { RunMark } from '../components/RunMark';
 import { useTimers } from '../components/Timers';
 import { UnfocusedTag } from '../components/UnfocusedTag';
 import { AutomatedMark } from '../components/Why';
@@ -87,7 +88,14 @@ function ProgressCell({ item }: { item: MyDayItem }) {
   const { progress } = item;
   const id = item.task.id;
   if (progress.estimateMinutes === null) {
-    return <div className="px-pbar-sm px-muted" style={{ fontSize: 11 }}>no estimate</div>;
+    // No estimate means no bar to fill — but the time already spent is still
+    // worth seeing, so the cell reports it on its own.
+    const spent = Math.round(progress.consumedMinutes);
+    return (
+      <div className="px-pbar-sm px-muted" style={{ fontSize: 11 }} data-testid={`logged-${id}`} title="No estimate set">
+        {spent > 0 ? `${formatMinutes(spent)} logged` : '0h 00m'}
+      </div>
+    );
   }
   const over = progress.ratio !== null && progress.ratio > 1;
   const pct = Math.round((progress.ratio ?? 0) * 100);
@@ -271,7 +279,7 @@ export function MyDay({ ctx, onNavigate }: { ctx: CommandContext; onNavigate?: (
             const item = allActionable.find((it) => it.openEntryId === t.entry.id) ?? null;
             return (
               <div className="px-run-banner" data-testid="run-banner" data-task={t.entry.task_id} key={t.entry.id}>
-                <ThresholdMark size={18} compact />
+                <RunMark tone={projectTone(item?.projectId ?? null)} testId="run-mark" />
                 <div className="px-run-main">
                   <div className="px-run-title">{t.task?.title ?? 'Running task'}</div>
                   <div className="px-run-sub">
@@ -285,7 +293,7 @@ export function MyDay({ ctx, onNavigate }: { ctx: CommandContext; onNavigate?: (
                     {splitWays > 1 && ` · logging 1/${splitWays}`}
                   </div>
                 </div>
-                {item && item.progress.estimateMinutes !== null && <ProgressCell item={item} />}
+                {item && <ProgressCell item={item} />}
                 <div className="px-run-clock">{formatElapsed(t.elapsedMs)}</div>
                 <button
                   className="px-btn px-btn--sm px-run-stop"

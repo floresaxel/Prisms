@@ -11,9 +11,10 @@
 import { useEffect, useState } from 'react';
 
 import { asEpochMillis, type Instant } from '@prisms/core';
-import { Ic, ThresholdMark, useRunningTimers } from '@prisms/ui';
+import { Ic, useRunningTimers } from '@prisms/ui';
 
 import { formatElapsed } from '../format';
+import { RunMark } from './RunMark';
 import { useTimers } from './Timers';
 
 export function GlobalTimer() {
@@ -31,7 +32,7 @@ export function GlobalTimer() {
 
   return (
     <div className="px-timer-pill" data-testid="running-timer" title={others > 0 ? `Split focus: ${timers.map((t) => t.task?.title ?? 'task').join(', ')}` : undefined}>
-      <ThresholdMark size={14} tone="white" compact />
+      <RunMark tone="white" size={12} wave={false} testId="timer-mark" />
       <span className="px-timer-pill-task">{lead.task?.title ?? 'Unknown task'}</span>
       {others > 0 && <span className="px-timer-pill-more" data-testid="timer-more">+{others}</span>}
       <span className="px-timer-pill-elapsed" data-testid="timer-elapsed">{formatElapsed(lead.elapsedMs)}</span>

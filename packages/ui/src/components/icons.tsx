@@ -59,8 +59,10 @@ export function IconSprite() {
       <symbol id="i-chevd" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6" /></symbol>
       <symbol id="i-chevl" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6" /></symbol>
       <symbol id="i-chevr" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6" /></symbol>
-      <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 5v14l12-7Z" /></symbol>
-      <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2" /></symbol>
+      {/* solid, not outlined: the one icon in the set that is filled (Clock in) */}
+      <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 5v14l12-7Z" fill="currentColor" /></symbol>
+      {/* solid, like play: the Clock out square */}
+      <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" /></symbol>
       <symbol id="i-down" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="m7 10 5 5 5-5" /><path d="M12 15V3" /></symbol>
       <symbol id="i-up" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="m17 8-5-5-5 5" /><path d="M12 3v12" /></symbol>
       <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /><path d="M12 8v.01M12 12v4" /></symbol>

@@ -20,6 +20,7 @@ import { formatAgendaRange, RANGE_FORMATS, setRangeFormatPref, useRangeFormatPre
 import { setSnapPref, SNAP_OPTIONS, useSnapPref } from '../agenda-snap';
 import { isDesktop } from '../desktop';
 import { downloadExport, downloadJournalArchive, dryRunImport, fetchExport, readImportFile, restoreImport } from '../portability';
+import { allTimezones, deviceTimezone, isValidTimezone, timezoneTitle } from '../timezones';
 
 export function Settings({ ctx }: { ctx: CommandContext }) {
   // §7.14: settings come from the warm shared read layer, not a screen-local
@@ -43,6 +44,8 @@ export function Settings({ ctx }: { ctx: CommandContext }) {
   }, [settings.timezone]);
   const [hour, setHour] = useState(String(settings.dayResetHour));
   const [tz, setTz] = useState(settings.timezone);
+  const [tzError, setTzError] = useState('');
+  const device = useMemo(() => deviceTimezone(), []);
   const [saved, setSaved] = useState(false);
   const [tab, setTab] = useState<'general' | 'data' | 'account'>('general');
 
@@ -55,6 +58,12 @@ export function Settings({ ctx }: { ctx: CommandContext }) {
   async function save() {
     const day_reset_hour = Math.min(23, Math.max(0, Number(hour) || 0));
     const timezone = tz.trim() || 'America/New_York';
+    // An unknown zone makes every Intl call throw — refuse it here, not later.
+    if (!isValidTimezone(timezone)) {
+      setTzError(`“${timezone}” is not a timezone this browser knows. Pick one from the list.`);
+      return;
+    }
+    setTzError('');
     if (hasRow) await commands.updateSettings({ day_reset_hour, timezone });
     else await commands.insertSettings({ day_reset_hour, timezone });
     setSaved(true);
@@ -89,8 +98,27 @@ export function Settings({ ctx }: { ctx: CommandContext }) {
             </div>
           </div>
           <div className="px-set-row">
-            <div className="px-set-lbl"><b>Timezone</b><span>IANA timezone name (e.g. America/New_York).</span></div>
-            <div className="px-set-ctl"><input className="px-input" data-testid="settings-tz" value={tz} onChange={(e) => setTz(e.target.value)} /></div>
+            <div className="px-set-lbl">
+              <b>Timezone</b>
+              <span>
+                IANA timezone name (e.g. America/New_York). The clock in the top bar shows this zone, and you can also change it by clicking the clock.
+              </span>
+            </div>
+            <div className="px-set-ctl">
+              <input className="px-input" data-testid="settings-tz" list="px-tz-options" value={tz} onChange={(e) => { setTz(e.target.value); setTzError(''); }} />
+              <datalist id="px-tz-options">
+                {allTimezones().map((z) => <option key={z} value={z} />)}
+              </datalist>
+              {isValidTimezone(tz.trim()) && (
+                <div className="px-muted" data-testid="settings-tz-place" style={{ marginTop: 6 }}>{timezoneTitle(tz.trim())}</div>
+              )}
+              {tzError && <div className="px-tz-err" data-testid="settings-tz-error" style={{ marginTop: 6 }}>{tzError}</div>}
+              {device && device !== tz.trim() && (
+                <button className="px-btn px-btn--sm" data-testid="settings-tz-device" style={{ marginTop: 8 }} onClick={() => { setTz(device); setTzError(''); }}>
+                  Use this device’s timezone ({device})
+                </button>
+              )}
+            </div>
           </div>
           <div className="px-set-row">
             <div className="px-set-lbl" />
