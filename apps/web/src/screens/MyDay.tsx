@@ -51,6 +51,7 @@ import {
 } from '@prisms/ui';
 
 import { useTimers } from '../components/Timers';
+import { UnfocusedTag } from '../components/UnfocusedTag';
 import { AutomatedMark } from '../components/Why';
 import { formatElapsed, formatMinutes, projectTone } from '../format';
 import { listLayoutClass } from '../list-layout';
@@ -397,6 +398,7 @@ export function MyDay({ ctx, onNavigate }: { ctx: CommandContext; onNavigate?: (
                       <div className="px-t-title">{d.task.title}</div>
                       <div className="px-t-meta">{d.consumedMinutes > 0 ? `${formatMinutes(Math.round(d.consumedMinutes))} logged` : 'completed'}</div>
                     </div>
+                    {d.unfocused && <UnfocusedTag />}
                   </li>
                 ))}
               </ul>

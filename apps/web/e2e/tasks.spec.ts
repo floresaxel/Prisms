@@ -32,6 +32,60 @@ async function register(page: Page, tag: string): Promise<void> {
   await expect(page.getByTestId('sync-state')).toBeVisible();
 }
 
+test('an Inbox capture completes from the Inbox — as an unfocused task, or added to a project first', async ({ page }) => {
+  await register(page, 'complete');
+  const ids = { v: randomUUID(), r: randomUUID(), p: randomUUID() };
+  const seed = await page.request.post('/sync/upload', {
+    data: {
+      device_id: 'e2e-seed',
+      commands: [
+        cmd('node.create', { id: ids.v, node_type: 'vision', title: 'Work', sort_order: 'a0' }),
+        cmd('node.create', { id: ids.r, node_type: 'roadmap', title: 'Roadmap', sort_order: 'a0', parent_id: ids.v }),
+        cmd('node.create', { id: ids.p, node_type: 'project', title: 'Launch', sort_order: 'a0', parent_id: ids.r }),
+      ],
+    },
+  });
+  expect(seed.ok()).toBeTruthy();
+
+  await goto(page, 'tasks');
+  for (const t of ['Water the plants', 'Draft the launch email']) {
+    await page.getByTestId('activity-title').fill(t);
+    await page.getByTestId('activity-add').click();
+    await expect(page.getByTestId('inbox')).toContainText(t);
+  }
+  const rowId = async (title: string) =>
+    ((await page.getByTestId('inbox').locator('li', { hasText: title }).getByRole('button', { name: 'Complete this capture' }).getAttribute('data-testid')) ?? '').replace('inbox-check-', '');
+
+  // ── complete as an unfocused task: no project needed ──
+  const plants = await rowId('Water the plants');
+  await page.getByTestId(`inbox-check-${plants}`).click();
+  await expect(page.getByTestId('inbox-complete-dialog')).toBeVisible();
+  await page.getByTestId('inbox-complete-unfocused').click();
+  await expect(page.getByTestId('inbox-complete-dialog')).toHaveCount(0);
+  await expect(page.getByTestId('inbox')).not.toContainText('Water the plants');
+
+  // ── add to a project and complete ──
+  const email = await rowId('Draft the launch email');
+  await page.getByTestId(`inbox-check-${email}`).click();
+  await expect(page.getByTestId('inbox-complete-target').locator(`option[value="${ids.p}"]`)).toHaveCount(1, { timeout: 30_000 });
+  await page.getByTestId('inbox-complete-target').selectOption(ids.p);
+  await page.getByTestId('inbox-complete-promote').click();
+  await expect(page.getByTestId('inbox')).not.toContainText('Draft the launch email');
+
+  // ── both are done today; only the one without a project is marked unfocused ──
+  await page.getByTestId('tasks-tab-bystatus').click();
+  await expect(page.getByTestId(`done-${plants}`)).toContainText('unfocused');
+  await expect(page.getByTestId(`done-${email}`)).toBeVisible();
+  await expect(page.getByTestId(`done-${email}`).getByTestId('unfocused-tag')).toHaveCount(0);
+
+  // …and the server kept both completions (survives a reload)
+  await page.reload();
+  await page.getByTestId('tasks-tab-bystatus').click();
+  await expect(page.getByTestId(`done-${plants}`)).toContainText('unfocused', { timeout: 30_000 });
+  await expect(page.getByTestId(`done-${email}`)).toBeVisible();
+  await expect(page.getByTestId('status-inbox')).not.toContainText('Water the plants');
+});
+
 test('capture → promote lands the task under its project group; the Inbox group clears', async ({ page }) => {
   await register(page, 'promote');
   const ids = { v: randomUUID(), r: randomUUID(), p: randomUUID() };
