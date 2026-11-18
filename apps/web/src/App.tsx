@@ -31,6 +31,7 @@ import {
 
 import { checkSession, signOut, type SessionUser } from './auth';
 import { GlobalTimer } from './components/GlobalTimer';
+import { TimersProvider } from './components/Timers';
 import { ReviewBanner } from './components/ReviewBanner';
 import { SyncChip } from './components/SyncChip';
 import { isDesktop, osNotify } from './desktop';
@@ -215,6 +216,7 @@ function Shell({
     )[route] ?? <MyDay ctx={ctx} onNavigate={navigate} />;
 
   return (
+    <TimersProvider ctx={ctx}>
     <Layout
       groups={groups}
       foot={foot}
@@ -223,7 +225,7 @@ function Shell({
       active={route}
       onNavigate={navigate}
       breadcrumb={CRUMBS[route]}
-      timer={<GlobalTimer ctx={ctx} />}
+      timer={<GlobalTimer />}
       user={{ name: user.name, email: user.email }}
       sync={<SyncChip connected={connected} />}
       footer={
@@ -252,6 +254,7 @@ function Shell({
       {/* keyed by route: a screen that failed to load does not take the next one down with it */}
       <ScreenBoundary key={route}>{screen}</ScreenBoundary>
     </Layout>
+    </TimersProvider>
   );
 }
 

@@ -24,6 +24,7 @@ import {
   checkStepParent,
   isCommandName,
   isoToEpochMillis,
+  MAX_OPEN_TIMERS,
   MAX_VISIONS,
   softDeleteClosure,
 } from '../../src/index';
@@ -169,11 +170,21 @@ describe('invariant rejections — one per §6.7 invariant', () => {
     if (!cycle.ok) expect(cycle.error.code).toBe('E_CYCLE');
   });
 
-  it('I5 one open timer: a second clock-in while one runs is rejected', () => {
+  it('I5 split focus: a second timer on the SAME task is rejected', () => {
     const { task } = world();
-    const r = checkClockIn(task, task.id, true);
+    const r = checkClockIn(task, task.id, [task.id]);
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error.code).toBe('E_TIMER_ALREADY_RUNNING');
+  });
+
+  it('I5 split focus: other tasks may run alongside, up to MAX_OPEN_TIMERS', () => {
+    const { task } = world();
+    const others = [idOf(81), idOf(82), idOf(83), idOf(84), idOf(85)];
+    expect(checkClockIn(task, task.id, []).ok).toBe(true);
+    expect(checkClockIn(task, task.id, others.slice(0, MAX_OPEN_TIMERS - 1)).ok).toBe(true);
+    const full = checkClockIn(task, task.id, others.slice(0, MAX_OPEN_TIMERS));
+    expect(full.ok).toBe(false);
+    if (!full.ok) expect(full.error.code).toBe('E_TIMER_LIMIT');
   });
 
   it('I6 interval: a block (and an entry) that ends before it starts', () => {
@@ -210,7 +221,7 @@ describe('invariant rejections — one per §6.7 invariant', () => {
     });
     expect(block.ok).toBe(false);
     if (!block.ok) expect(block.error.code).toBe('E_DONE_IMMUTABLE');
-    expect(checkClockIn(done, done.id, false).ok).toBe(false);
+    expect(checkClockIn(done, done.id, []).ok).toBe(false);
   });
 
   it('I10 cascade: soft-delete closure returns the root plus its live subtree', () => {

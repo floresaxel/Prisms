@@ -2,21 +2,35 @@
  * My Day (§1.2, web redesign W2/D5) — the re-skinned worklist. Three sections:
  * Available now (white cards, sorted by parent-project priority from the decision
  * board), Blocked and Done today (muted, collapsed by default, state per view in
- * localStorage). A running task lifts into an amber run banner (clock-out is the
- * global topbar pill, D7). A right rail shows today's plan (with suggestion accept/
+ * localStorage). Each running task (split focus: up to MAX_OPEN_TIMERS at once)
+ * lifts into its own run card with its own Clock out; clocking into another task
+ * while one runs asks whether to switch or split (TimersProvider). The topbar
+ * pill still clocks out from anywhere (D7). A right rail shows today's plan (with suggestion accept/
  * reject) and a habit summary. Client-side project filter chips scope the list.
  *
  * Load-bearing testids preserved from the old Worklist: worklist, clock-in-*,
  * check-*, progress-* + progress-pct-*, force-clock-in-*, checkoff-* (D8).
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 
-import { ancestorsOf, asEpochMillis, bucketDate, type Instant, type NodeType, type TreeIndex } from '@prisms/core';
+import {
+  ancestorsOf,
+  asEpochMillis,
+  bucketDate,
+  initialSortOrder,
+  MAX_OPEN_TIMERS,
+  sortOrderBetween,
+  type Instant,
+  type Node,
+  type NodeType,
+  type TreeIndex,
+} from '@prisms/core';
 import {
   DepthDoor,
   Modal,
   ThresholdMark,
   Skeleton,
+  useActivityInbox,
   useAgenda,
   useBlockedTasks,
   useCommands,
@@ -26,14 +40,18 @@ import {
   useHabits,
   useIsHydrated,
   useMyDayAvailable,
-  useRunningTimer,
+  usePromoteTargets,
+  useRunningTimers,
   useTimeBlocksForDay,
   Ic,
   type CommandContext,
   type MyDayItem,
+  type PrismsCommands,
+  type PromoteTarget,
 } from '@prisms/ui';
 
-import { WhyButton } from '../components/Why';
+import { useTimers } from '../components/Timers';
+import { AutomatedMark } from '../components/Why';
 import { formatElapsed, formatMinutes, projectTone } from '../format';
 import { listLayoutClass } from '../list-layout';
 import { useMeasuredWidth } from '../use-measured-width';
@@ -86,7 +104,29 @@ function ProgressCell({ item }: { item: MyDayItem }) {
   );
 }
 
-function AvailableRow({ item, running, todayDate, onCheck, onClockIn }: { item: MyDayItem; running: boolean; todayDate: string; onCheck: () => void; onClockIn: () => void }) {
+/**
+ * The Clock in button, as the My Day draft drew it: a plain bordered button with
+ * a SOLID play triangle (the shared icon is an outline) and the label. In compact
+ * rows the label hides and the triangle carries it (`aria-label` keeps the name).
+ */
+function ClockInButton({ testId, disabled, title, danger, label = 'Clock in', onClick }: { testId: string; disabled: boolean; title?: string; danger?: boolean; label?: string; onClick: () => void }) {
+  return (
+    <button
+      className={`px-btn px-btn--sm px-clockin-btn${danger ? ' px-btn--danger' : ''}`}
+      disabled={disabled}
+      title={title}
+      data-testid={testId}
+      aria-label={label}
+      onClick={onClick}
+    >
+      <Ic name="play" className="px-ic px-ic--solid" /> <span className="px-btn-lbl">{label}</span>
+    </button>
+  );
+}
+
+const LIMIT_TITLE = `${MAX_OPEN_TIMERS} timers are already running — clock out of one first`;
+
+function AvailableRow({ item, atLimit, todayDate, onCheck, onClockIn }: { item: MyDayItem; atLimit: boolean; todayDate: string; onCheck: () => void; onClockIn: () => void }) {
   const id = item.task.id;
   const dueToday = item.task.due_date === todayDate;
   return (
@@ -95,7 +135,7 @@ function AvailableRow({ item, running, todayDate, onCheck, onClockIn }: { item: 
       <div className="px-t-main">
         <div className="px-t-title">
           {item.task.title}
-          <WhyButton row={item.task} testId={`why-task-${id}`} />
+          <AutomatedMark row={item.task} testId={`why-task-${id}`} />
         </div>
         <div className="px-t-meta">
           {item.projectTitle && (
@@ -107,16 +147,7 @@ function AvailableRow({ item, running, todayDate, onCheck, onClockIn }: { item: 
       </div>
       <ProgressCell item={item} />
       {item.task.due_date && <span className={`px-due${dueToday ? ' px-due--today' : ''}`}>{dueToday ? 'Today' : item.task.due_date.slice(5)}</span>}
-      <button
-        className="px-btn px-btn--sm"
-        disabled={running}
-        title={running ? 'A timer is already running — clock out from the topbar' : undefined}
-        data-testid={`clock-in-${id}`}
-        aria-label="Clock in"
-        onClick={onClockIn}
-      >
-        <Ic name="play" /> <span className="px-btn-lbl">Clock in</span>
-      </button>
+      <ClockInButton testId={`clock-in-${id}`} disabled={atLimit} title={atLimit ? LIMIT_TITLE : undefined} onClick={onClockIn} />
     </li>
   );
 }
@@ -141,7 +172,11 @@ export function MyDay({ ctx, onNavigate }: { ctx: CommandContext; onNavigate?: (
   const ctxFacts = useFactContext();
   const commands = useCommands(ctx);
   const hydrated = useIsHydrated();
-  const running = useRunningTimer(now);
+  // split focus: up to MAX_OPEN_TIMERS run at once; each gets its own card below
+  const { timers: runningTimers, splitWays } = useRunningTimers(now);
+  const running = runningTimers.at(-1) ?? null; // the latest — "Why this matters" follows it
+  const timersApi = useTimers();
+  const atLimit = runningTimers.length >= MAX_OPEN_TIMERS;
 
   const allActionable = useMyDayAvailable(nowMin);
   const blocked = useBlockedTasks(nowMin);
@@ -151,8 +186,8 @@ export function MyDay({ ctx, onNavigate }: { ctx: CommandContext; onNavigate?: (
   const agenda = useAgenda(nowMin);
   const habits = useHabits(nowMin);
 
-  const runningItem = running ? allActionable.find((it) => it.openEntryId === running.entry.id) ?? null : null;
-  const available = allActionable.filter((it) => !(running && it.openEntryId === running.entry.id));
+  const runningEntryIds = new Set(runningTimers.map((t) => t.entry.id));
+  const available = allActionable.filter((it) => !(it.openEntryId !== undefined && runningEntryIds.has(it.openEntryId)));
 
   const [projectFilter, setProjectFilter] = useState<string | null>(null); // null = All
   // chip set = the projects present in the available list, in priority order.
@@ -163,6 +198,26 @@ export function MyDay({ ctx, onNavigate }: { ctx: CommandContext; onNavigate?: (
     }, new Map<string, string>()),
   );
   const filtered = projectFilter ? available.filter((it) => it.projectId === projectFilter) : available;
+
+  // ── capture (same Inbox as Tasks, but dated today: it was captured FOR today) ──
+  // An Inbox item has no parent, so it is not in the worklist above; the ones due
+  // today are listed under the bar until they are promoted into a project, where
+  // they join Available now with their date intact.
+  const activities = useActivityInbox();
+  const promoteTargets = usePromoteTargets();
+  const todayDate = ctxFacts.today(nowMin);
+  const capturedToday = activities.filter((a) => a.due_date === todayDate);
+  const [captureTitle, setCaptureTitle] = useState('');
+  async function capture(e: FormEvent) {
+    e.preventDefault();
+    const t = captureTitle.trim();
+    if (t === '') return;
+    const last = activities.at(-1)?.sort_order ?? null;
+    const sortOrder = last === null ? initialSortOrder() : sortOrderBetween(last, null);
+    // read "today" at the moment of capture, not the minute clock — right at the day reset they differ.
+    await commands.createActivity({ title: t, sortOrder, dueDate: ctxFacts.today(asEpochMillis(Date.now())) });
+    setCaptureTitle('');
+  }
 
   const [blockedCollapsed, toggleBlocked] = useCollapsed('prisms.myday.blocked');
   const [doneCollapsed, toggleDone] = useCollapsed('prisms.myday.done');
@@ -205,22 +260,43 @@ export function MyDay({ ctx, onNavigate }: { ctx: CommandContext; onNavigate?: (
 
       <div className="px-day-cols">
         <div className="px-day-left">
-          {running && (
-            <div className="px-run-banner" data-testid="run-banner">
-              <ThresholdMark size={18} compact />
-              <div>
-                <div className="px-run-title">{running.task?.title ?? 'Running task'}</div>
-                <div className="px-run-sub">
-                  {runningItem?.projectTitle && (
-                    <span className="px-proj"><span className={`px-pdot px-pdot--${projectTone(runningItem.projectId)}`} />{runningItem.projectTitle} · </span>
-                  )}
-                  clocked in {fmtClock(running.entry.started_at)} · one timer at a time
-                </div>
-              </div>
-              {runningItem && runningItem.progress.estimateMinutes !== null && <ProgressCell item={runningItem} />}
-              <div className="px-run-clock">{formatElapsed(running.elapsedMs)}</div>
+          {splitWays > 1 && (
+            <div className="px-split-note" data-testid="split-note">
+              <b>Split focus</b> · {splitWays} timers running — each task logs 1/{splitWays} of the time while they overlap
+              {atLimit && ` · ${MAX_OPEN_TIMERS} is the most at once`}
             </div>
           )}
+          {runningTimers.map((t) => {
+            const item = allActionable.find((it) => it.openEntryId === t.entry.id) ?? null;
+            return (
+              <div className="px-run-banner" data-testid="run-banner" data-task={t.entry.task_id} key={t.entry.id}>
+                <ThresholdMark size={18} compact />
+                <div className="px-run-main">
+                  <div className="px-run-title">{t.task?.title ?? 'Running task'}</div>
+                  <div className="px-run-sub">
+                    {item?.projectTitle && (
+                      <>
+                        <span className="px-proj"><span className={`px-pdot px-pdot--${projectTone(item.projectId)}`} />{item.projectTitle}</span>
+                        {' · '}
+                      </>
+                    )}
+                    clocked in {fmtClock(t.entry.started_at)}
+                    {splitWays > 1 && ` · logging 1/${splitWays}`}
+                  </div>
+                </div>
+                {item && item.progress.estimateMinutes !== null && <ProgressCell item={item} />}
+                <div className="px-run-clock">{formatElapsed(t.elapsedMs)}</div>
+                <button
+                  className="px-btn px-btn--sm px-run-stop"
+                  data-testid={`run-clock-out-${t.entry.task_id}`}
+                  aria-label={`Clock out of ${t.task?.title ?? 'this task'}`}
+                  onClick={() => void timersApi.clockOut([t])}
+                >
+                  <Ic name="stop" className="px-ic px-ic--solid" /> <span className="px-btn-lbl">Clock out</span>
+                </button>
+              </div>
+            );
+          })}
 
           <div className="px-sec">
             Available now <span className="px-sec-cnt">· {filtered.length}</span>
@@ -248,10 +324,10 @@ export function MyDay({ ctx, onNavigate }: { ctx: CommandContext; onNavigate?: (
               <AvailableRow
                 key={item.task.id}
                 item={item}
-                running={running !== null}
-                todayDate={ctxFacts.today(nowMin)}
+                atLimit={atLimit}
+                todayDate={todayDate}
                 onCheck={() => openCheckOff(item)}
-                onClockIn={() => void commands.clockIn(item.task.id)}
+                onClockIn={() => timersApi.requestClockIn(item.task.id)}
               />
             ))}
           </ul>
@@ -270,16 +346,39 @@ export function MyDay({ ctx, onNavigate }: { ctx: CommandContext; onNavigate?: (
                       {b.blockedBy.length > 0 && <div className="px-t-meta" data-testid={`blocked-by-${b.task.id}`}>{b.blockedBy.join(', ')}</div>}
                     </div>
                     {b.blockedBy.length > 0 && <span className="px-tag px-tag--red"><Ic name="alert" />{b.blockedBy[0]}</span>}
-                    <button
-                      className="px-btn px-btn--sm px-btn--danger"
-                      disabled={running !== null}
-                      title={running !== null ? 'A timer is already running' : 'Override the blocker and start the timer'}
-                      data-testid={`force-clock-in-${b.task.id}`}
-                      onClick={() => void commands.clockIn(b.task.id, { force: true })}
-                    >
-                      Force clock in
-                    </button>
+                    <ClockInButton
+                      testId={`force-clock-in-${b.task.id}`}
+                      danger
+                      label="Force clock in"
+                      disabled={atLimit}
+                      title={atLimit ? LIMIT_TITLE : 'Override the blocker and start the timer'}
+                      onClick={() => timersApi.requestClockIn(b.task.id, { force: true })}
+                    />
                   </li>
+                ))}
+              </ul>
+            </>
+          )}
+
+          <form className="px-capture px-capture--day" onSubmit={capture}>
+            <input
+              data-testid="myday-capture-title"
+              aria-label="Capture a task for today"
+              placeholder="Capture anything for today… Enter to add. No parent needed — it waits in Inbox."
+              value={captureTitle}
+              onChange={(e) => setCaptureTitle(e.target.value)}
+            />
+            <button className="px-btn px-btn--primary" type="submit" data-testid="myday-capture-add">Capture</button>
+          </form>
+          {capturedToday.length > 0 && (
+            <>
+              <div className="px-sec">
+                Captured for today <span className="px-sec-cnt">· {capturedToday.length} — promote into a project to work on it</span>
+                <span className="px-sec-ln" />
+              </div>
+              <ul className="px-rows" data-testid="myday-captured">
+                {capturedToday.map((a) => (
+                  <CapturedRow key={a.id} activity={a} targets={promoteTargets} commands={commands} />
                 ))}
               </ul>
             </>
@@ -347,6 +446,45 @@ export function MyDay({ ctx, onNavigate }: { ctx: CommandContext; onNavigate?: (
         {checkOff?.scheduled && <p className="px-muted" data-testid="checkoff-autoblock">Logged to its scheduled block.</p>}
       </Modal>
     </section>
+  );
+}
+
+/**
+ * An Inbox item captured for today. It has no parent yet, so it cannot be clocked
+ * into from here — promoting it (as on Tasks) makes it a real task, which keeps
+ * its due date and moves up into Available now.
+ */
+function CapturedRow({ activity, targets, commands }: { activity: Node; targets: PromoteTarget[]; commands: PrismsCommands }) {
+  const [parentId, setParentId] = useState('');
+  const selected = parentId || targets[0]?.id || '';
+  return (
+    <li className="px-trow px-trow--inbox" data-testid={`myday-captured-${activity.id}`}>
+      <div className="px-t-main"><div className="px-t-title">{activity.title}</div></div>
+      <span className="px-due px-due--today">Today</span>
+      <span className="px-promote">
+        <select
+          data-testid={`myday-promote-target-${activity.id}`}
+          aria-label="Promote into"
+          value={selected}
+          onChange={(e) => setParentId(e.target.value)}
+          disabled={targets.length === 0}
+        >
+          {targets.length === 0 && <option value="">No project to promote into</option>}
+          {targets.map((t) => (
+            <option key={t.id} value={t.id}>{t.title} ({t.type})</option>
+          ))}
+        </select>
+        <button
+          className="px-btn px-btn--sm px-btn--primary"
+          data-testid={`myday-promote-${activity.id}`}
+          disabled={selected === ''}
+          onClick={() => void commands.promoteActivity(activity.id, { parentId: selected })}
+        >
+          Promote
+        </button>
+      </span>
+      <button className="px-btn px-btn--sm px-btn--danger" aria-label="delete" data-testid={`myday-captured-delete-${activity.id}`} onClick={() => void commands.softDelete(activity.id)}>×</button>
+    </li>
   );
 }
 

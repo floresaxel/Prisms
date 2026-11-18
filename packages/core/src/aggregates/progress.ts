@@ -7,6 +7,7 @@
  */
 import type { Node, TimeEntry } from '../domain/entities';
 
+import { splitConcurrent } from '../merge/split-focus';
 import { mergeTimeEntries } from '../merge/time-entries';
 
 export interface ProgressValue {
@@ -31,7 +32,12 @@ function withDerived(consumedMinutes: number, estimateMinutes: number | null): P
   };
 }
 
+/**
+ * `entries` must be the user's FULL list, not just this task's: while timers on
+ * several tasks overlap each is credited only its split-focus share
+ * (`splitConcurrent`), which depends on what else was running.
+ */
 export function canonicalProgress(task: Node, entries: readonly TimeEntry[]): ProgressValue {
-  const own = entries.filter((e) => e.deleted_at === null && e.task_id === task.id);
+  const own = splitConcurrent(entries).filter((e) => e.task_id === task.id);
   return withDerived(mergeTimeEntries(own).rawMinutes, task.estimate_minutes);
 }

@@ -79,9 +79,15 @@ test('inbox → promote → clock in/out → review, offline then synced; double
   await expect(page.getByTestId('running-timer')).toContainText('Promoted Task');
   await expect(page.getByTestId('run-banner')).toContainText('Promoted Task');
 
-  // double-timer impossible: every other task's clock-in is disabled
+  // split focus: another task's Clock in ASKS (switch, or run together) — never a
+  // silent second timer. Cancelling leaves the one timer running.
   const existing = page.getByTestId('worklist').locator('li', { hasText: 'Existing Task' });
-  await expect(existing.getByRole('button', { name: 'Clock in' })).toBeDisabled();
+  await existing.getByRole('button', { name: 'Clock in' }).click();
+  await expect(page.getByTestId('clockin-dialog')).toBeVisible();
+  await expect(page.getByTestId('clockin-split')).toContainText('Split 2 ways');
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(page.getByTestId('clockin-dialog')).toHaveCount(0);
+  await expect(page.getByTestId('run-banner')).toHaveCount(1);
 
   // task progress bar shows its numeric % (estimate 60, nothing logged yet)
   await expect(existing.getByTestId(`progress-pct-${ids.existing}`)).toHaveText('0%');

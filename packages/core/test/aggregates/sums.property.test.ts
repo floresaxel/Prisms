@@ -120,7 +120,7 @@ describe('practice hours + levels (§7.2)', () => {
     expect(value.minutes).toBeCloseTo(90, 6);
   });
 
-  it('golden: unions are per task — concurrent entries on two tasks both count', () => {
+  it('golden: concurrent entries on two tasks SPLIT the time (split focus), 30 + 30', () => {
     const sameWallTime = (task: number, seq: number) =>
       makeEntry({
         id: idOf(3200 + seq),
@@ -128,8 +128,9 @@ describe('practice hours + levels (§7.2)', () => {
         started_at: '2026-06-12T09:00:00.000Z',
         ended_at: '2026-06-12T10:00:00.000Z',
       });
+    // one hour of wall time on two tasks at once is one hour of practice, not two
     const value = canonicalPractice(HABIT, nodes, [sameWallTime(0, 0), sameWallTime(1, 1)] as TimeEntry[]);
-    expect(value.minutes).toBe(120);
+    expect(value.minutes).toBe(60);
   });
 
   it('property: order-independent, duplication-idempotent, union ≤ naive sum', () => {
@@ -229,13 +230,15 @@ describe('habit today-minutes (§7.2 ring, §9.2)', () => {
       makeEntry({ id: idOf(4002), task_id: idOf(10), started_at: '2026-06-12T11:30:00.000Z', ended_at: null }),
       // yesterday's bucket — excluded
       makeEntry({ id: idOf(4003), task_id: idOf(10), started_at: '2026-06-11T10:00:00.000Z', ended_at: '2026-06-11T11:00:00.000Z' }),
-      // not this habit's task — excluded
+      // not this habit's task — excluded, BUT it ran alongside task 10 from 10:00
+      // to 11:00, so that hour is split (split focus): task 10 gets 30 of it
       makeEntry({ id: idOf(4004), task_id: idOf(99), started_at: '2026-06-12T10:00:00.000Z', ended_at: '2026-06-12T11:00:00.000Z' }),
       // deleted — excluded
       makeEntry({ id: idOf(4005), task_id: idOf(10), started_at: '2026-06-12T09:00:00.000Z', ended_at: '2026-06-12T09:30:00.000Z', deleted_at: '2026-06-30T00:00:00.000Z' }),
     ];
     const minutes = habitTodayMinutes(entries as TimeEntry[], taskIds, '2026-06-12', 0, 'UTC', NOW);
-    expect(minutes).toBeCloseTo(90 + 30, 6);
+    // 10:00–11:00 split with task 99 (30) + 11:00–11:30 alone (30) + 30 live
+    expect(minutes).toBeCloseTo(30 + 30 + 30, 6);
   });
 });
 
