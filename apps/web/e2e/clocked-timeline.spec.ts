@@ -118,8 +118,12 @@ test('Clocked collapses to tasks + a day bar; hover follows a task, click single
   await expect(page.getByTestId(`daylog-seg-${a2.entry}`)).toHaveAttribute('data-state', 'on');
   await expect(page.getByTestId(`daylog-seg-${b1.entry}`)).toHaveAttribute('data-state', 'dim');
   await expect(novelRow).toHaveAttribute('data-state', 'dim');
-  // greyed means greyed — not just an attribute
-  expect(Number(await novelRow.evaluate((el) => getComputedStyle(el).opacity))).toBeLessThan(0.5);
+  // greyed means greyed — not just an attribute. Polled: the dim FADES in over
+  // 120ms, and a single read taken the instant data-state flips still sees 1
+  // (CI's faster runner did exactly that).
+  await expect
+    .poll(() => novelRow.evaluate((el) => Number(getComputedStyle(el).opacity)))
+    .toBeLessThan(0.5);
   await shot(page, '2-hover-task');
   await page.mouse.move(5, 5);
   await expect(novelRow).toHaveAttribute('data-state', 'none');
