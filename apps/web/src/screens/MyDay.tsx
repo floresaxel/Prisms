@@ -70,7 +70,14 @@ function ProgressCell({ item }: { item: MyDayItem }) {
   const { progress } = item;
   const id = item.task.id;
   if (progress.estimateMinutes === null) {
-    return <div className="px-pbar-sm px-muted" style={{ fontSize: 11 }}>no estimate</div>;
+    // No estimate means no bar to fill — but the time already spent is still
+    // worth seeing, so the cell reports it on its own.
+    const spent = Math.round(progress.consumedMinutes);
+    return (
+      <div className="px-pbar-sm px-muted" style={{ fontSize: 11 }} data-testid={`logged-${id}`} title="No estimate set">
+        {spent > 0 ? `${formatMinutes(spent)} logged` : 'nothing logged'}
+      </div>
+    );
   }
   const over = progress.ratio !== null && progress.ratio > 1;
   const pct = Math.round((progress.ratio ?? 0) * 100);
@@ -220,7 +227,7 @@ export function MyDay({ ctx, onNavigate }: { ctx: CommandContext; onNavigate?: (
                   clocked in {fmtClock(running.entry.started_at)} · one timer at a time
                 </div>
               </div>
-              {runningItem && runningItem.progress.estimateMinutes !== null && <ProgressCell item={runningItem} />}
+              {runningItem && <ProgressCell item={runningItem} />}
               <div className="px-run-clock">{formatElapsed(running.elapsedMs)}</div>
               <button className="px-btn px-btn--sm" data-testid="run-clock-out" aria-label="Clock out" onClick={() => void clockOut()}>
                 <Ic name="stop" /> <span className="px-btn-lbl">Clock out</span>
