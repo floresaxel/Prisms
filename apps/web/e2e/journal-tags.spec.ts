@@ -99,10 +99,9 @@ test('tag a note, sort the journal by tag, and filter the day log by project and
   await expect(footer).toContainText('Long run');
   await expect(footer).toContainText('Health › Marathon');
   await expect(footer).toContainText('Craft › Novel');
-  // …and the footer is still INERT: the filter controls live outside it.
-  expect(
-    await footer.evaluate((el) => el.querySelectorAll('input,textarea,button,select,a,[contenteditable],[tabindex]').length),
-  ).toBe(0);
+  // …and nothing in the footer can be EDITED: the filter's selects live outside
+  // it, and the Clocked section's buttons only change what is in view.
+  expect(await footer.evaluate((el) => el.querySelectorAll('input,textarea,select,[contenteditable]').length)).toBe(0);
 
   // --- filter the log by project, then by vision (a view only) ---
   await page.getByTestId('daylog-filter-project').selectOption({ label: 'Novel' });

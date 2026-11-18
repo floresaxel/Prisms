@@ -189,28 +189,28 @@ describe('DayLogSection — project / vision filter', () => {
   });
   const mount = () => render(createElement(DayLogSection, { entries: log, timezone: 'UTC' }));
 
-  it('shows the clocked time, its duration, and the day total', () => {
+  it('shows the clocked time per task, rolled up, and the day total', () => {
     mount();
     expect(screen.getByTestId('daylog-clocked-total').textContent).toBe('2h 15m');
-    expect(screen.getByTestId('daylog-clock-e1').textContent).toContain('1h 30m');
-    expect(screen.getByTestId('daylog-clock-e1').textContent).toContain('Health › Marathon');
+    expect(screen.getByTestId('daylog-clock-task-t1').textContent).toContain('1h 30m');
+    expect(screen.getByTestId('daylog-clock-task-t1').textContent).toContain('Health › Marathon');
   });
 
   it('narrows to one project, recomputes the total, and clears', () => {
     mount();
     fireEvent.change(screen.getByTestId('daylog-filter-project'), { target: { value: 'p2' } });
-    expect(screen.queryByTestId('daylog-clock-e1')).toBeNull();
-    expect(screen.getByTestId('daylog-clock-e2')).toBeTruthy();
+    expect(screen.queryByTestId('daylog-seg-e1')).toBeNull();
+    expect(screen.getByTestId('daylog-seg-e2')).toBeTruthy();
     expect(screen.getByTestId('daylog-clocked-total').textContent).toBe('45m');
     fireEvent.click(screen.getByTestId('daylog-filter-clear'));
-    expect(screen.getByTestId('daylog-clock-e1')).toBeTruthy();
+    expect(screen.getByTestId('daylog-seg-e1')).toBeTruthy();
   });
 
   it('narrows by vision', () => {
     mount();
     fireEvent.change(screen.getByTestId('daylog-filter-vision'), { target: { value: 'v1' } });
-    expect(screen.getByTestId('daylog-clock-e1')).toBeTruthy();
-    expect(screen.queryByTestId('daylog-clock-e2')).toBeNull();
+    expect(screen.getByTestId('daylog-seg-e1')).toBeTruthy();
+    expect(screen.queryByTestId('daylog-seg-e2')).toBeNull();
   });
 
   it('a filter this day has nothing for says so instead of going blank, and can be cleared', () => {
@@ -230,7 +230,7 @@ describe('DayLogSection — project / vision filter', () => {
     // the chosen project stays selectable even though this day does not mention it
     expect((screen.getByTestId('daylog-filter-project') as HTMLSelectElement).value).toBe('p2');
     fireEvent.click(screen.getByTestId('daylog-filter-clear'));
-    expect(screen.getByTestId('daylog-clock-e1')).toBeTruthy();
+    expect(screen.getByTestId('daylog-seg-e1')).toBeTruthy();
   });
 
   it('renders nothing for an empty day with no filter (as the footer always did)', () => {

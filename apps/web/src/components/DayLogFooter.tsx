@@ -1,39 +1,47 @@
 /**
  * The generated "Day log" footer (Annex L) under a journal day.
  *
- * PURELY PRESENTATIONAL and deliberately INERT: it renders no input, textarea,
- * contenteditable, or button, and it is mounted OUTSIDE the editor — never inside
- * the TipTap document. That, plus the fact that nothing is stored (the entries are
- * computed from live facts at render), is the whole "the user cannot edit it"
- * story. The `.md` export renders the same entries through the same core module,
- * so the two textual forms cannot drift.
+ * NOT EDITABLE: it renders no input, textarea or contenteditable, and it is
+ * mounted OUTSIDE the editor — never inside the TipTap document. That, plus the
+ * fact that nothing is stored (the entries are computed from live facts at
+ * render), is the whole "the user cannot edit it" story. The `.md` export renders
+ * the same entries through the same core module, so the two textual forms cannot
+ * drift.
+ *
+ * It does hold VIEW controls now — the Clocked section's task rows, its day bar
+ * and "All logs" popup (`ClockedSection`) — which change only what is in view.
  *
  * The project / vision filter is NOT in here: its controls live in `DayLogSection`,
- * next to this component, and hand it already-narrowed entries. This stays a pure
- * picture of whatever it is given.
+ * next to this component, and hand it already-narrowed entries.
  */
 import {
-  formatDayLogDuration,
+  bucketDate,
+  DEFAULT_DAY_RESET_HOUR,
   formatDayLogTime,
   isDayLogEmpty,
   type DayLogEntries,
-  type DayLogRef,
 } from '@prisms/core';
 
-/** Where a line rolls up to — a quiet suffix, so a filter's effect is legible. */
-function Context({ project, vision }: { project: DayLogRef | null; vision: DayLogRef | null }) {
-  const label = [vision?.title, project?.title].filter((t): t is string => !!t && t.length > 0).join(' › ');
-  return label ? (
-    <span className="px-daylog-ctx" data-testid="daylog-ctx">
-      {label}
-    </span>
-  ) : null;
-}
+import { usableZone } from '../clocked-day';
+import { ClockedSection } from './ClockedTimeline';
+import { DayLogContext as Context } from './DayLogContext';
 
-export function DayLogFooter({ entries, timezone }: { entries: DayLogEntries | null; timezone: string }) {
-  if (!entries || isDayLogEmpty(entries)) return null;
+export function DayLogFooter({
+  entries,
+  timezone,
+  date,
+  dayResetHour = DEFAULT_DAY_RESET_HOUR,
+}: {
+  entries: DayLogEntries | null;
+  timezone: string;
+  /** The journal day shown — the Clocked bar spans it. Falls back to the first session's day. */
+  date?: string;
+  dayResetHour?: number;
+}) {  if (!entries || isDayLogEmpty(entries)) return null;
   const { scheduled, clocked, completed, truncated } = entries;
   const at = (ts: string) => formatDayLogTime(ts, timezone);
+  const resetHour = Number.isInteger(dayResetHour) && dayResetHour >= 0 && dayResetHour <= 23 ? dayResetHour : DEFAULT_DAY_RESET_HOUR;
+  const day = date ?? (clocked[0] ? bucketDate(clocked[0].started_at, resetHour, usableZone(timezone)) : '');
 
   return (
     <section className="px-daylog" data-testid="daylog" aria-label="Day log">
@@ -66,35 +74,15 @@ export function DayLogFooter({ entries, timezone }: { entries: DayLogEntries | n
       )}
 
       {clocked.length > 0 && (
-        <div className="px-daylog-sec" data-testid="daylog-clocked">
-          <div className="px-daylog-lbl">
-            Clocked{' '}
-            <span className="px-daylog-total px-num" data-testid="daylog-clocked-total">
-              {formatDayLogDuration(entries.clocked_minutes)}
-            </span>
-          </div>
-          <ul className="px-daylog-list">
-            {clocked.map((k) => (
-              <li key={k.entry_id} className="px-daylog-row" data-testid={`daylog-clock-${k.entry_id}`}>
-                <span className="px-daylog-time px-num">
-                  {at(k.started_at)}–{k.ended_at === null ? '' : at(k.ended_at)}
-                </span>
-                <span className="px-daylog-title">{k.title}</span>
-                {k.minutes === null ? (
-                  <span className="px-daylog-mark px-daylog-mark--live" data-testid="daylog-running">running</span>
-                ) : (
-                  <span className="px-daylog-dur px-num" data-testid="daylog-duration">{formatDayLogDuration(k.minutes)}</span>
-                )}
-                <Context project={k.project} vision={k.vision} />
-              </li>
-            ))}
-            {truncated && truncated.clocked > 0 && (
-              <li className="px-daylog-row px-daylog-more" data-testid="daylog-clock-more">+{truncated.clocked} more</li>
-            )}
-          </ul>
-        </div>
+        <ClockedSection
+          entries={clocked}
+          totalMinutes={entries.clocked_minutes}
+          truncated={truncated?.clocked ?? 0}
+          date={day}
+          dayResetHour={resetHour}
+          timezone={timezone}
+        />
       )}
-
       {completed.length > 0 && (
         <div className="px-daylog-sec" data-testid="daylog-completed">
           <div className="px-daylog-lbl">Completed</div>

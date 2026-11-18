@@ -23,7 +23,18 @@ function withCurrent(options: DayLogRef[], current: DayLogRef | null): DayLogRef
   return current && !options.some((o) => o.id === current.id) ? [...options, current] : options;
 }
 
-export function DayLogSection({ entries, timezone }: { entries: DayLogEntries | null; timezone: string }) {
+export function DayLogSection({
+  entries,
+  timezone,
+  date,
+  dayResetHour,
+}: {
+  entries: DayLogEntries | null;
+  timezone: string;
+  /** The journal day shown; the Clocked bar spans it. */
+  date?: string;
+  dayResetHour?: number;
+}) {
   const { filter, patch } = useJournalFilter();
   const { project_id, vision_id } = toDayLogFilter(filter);
   const active = project_id !== null || vision_id !== null;
@@ -83,7 +94,7 @@ export function DayLogSection({ entries, timezone }: { entries: DayLogEntries | 
         </div>
       )}
       {narrowed ? (
-        <DayLogFooter entries={narrowed} timezone={timezone} />
+        <DayLogFooter entries={narrowed} timezone={timezone} date={date} dayResetHour={dayResetHour} />
       ) : (
         // Filtered down to nothing (or the day holds nothing for this choice).
         active && (
