@@ -47,7 +47,6 @@ export function DayLogFooter({
     <section className="px-daylog" data-testid="daylog" aria-label="Day log">
       <div className="px-daylog-h">
         <span className="px-daylog-t">Day log</span>
-        <span className="px-daylog-cap" data-testid="daylog-caption">Generated · updates automatically</span>
       </div>
 
       {scheduled.length > 0 && (
