@@ -33,6 +33,7 @@ import { checkSession, signOut, type SessionUser } from './auth';
 import { GlobalTimer } from './components/GlobalTimer';
 import { ReviewBanner } from './components/ReviewBanner';
 import { SyncChip } from './components/SyncChip';
+import { TimezoneClock } from './components/TimezoneClock';
 import { isDesktop, osNotify } from './desktop';
 import { rejectionMessage } from './format';
 import { ScreenBoundary } from './components/ScreenBoundary';
@@ -223,6 +224,7 @@ function Shell({
       active={route}
       onNavigate={navigate}
       breadcrumb={CRUMBS[route]}
+      clock={<TimezoneClock ctx={ctx} />}
       timer={<GlobalTimer ctx={ctx} />}
       user={{ name: user.name, email: user.email }}
       sync={<SyncChip connected={connected} />}

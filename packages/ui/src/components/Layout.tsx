@@ -53,13 +53,16 @@ export interface LayoutProps {
   sync?: ReactNode;
   /** Global running-timer pill for the topbar (D7); absent when no timer runs. */
   timer?: ReactNode;
+  /** Replaces the plain HH:MM clock (e.g. one that shows a chosen timezone). */
+  clock?: ReactNode;
   user?: { name?: string; email: string };
   /** Extra sidebar-foot controls (sign-out, desktop-notify). */
   footer?: ReactNode;
   children: ReactNode;
 }
 
-/** Persistent HH:MM wall clock (1 s tick, tabular-nums) — D2. */
+/** Persistent HH:MM wall clock (1 s tick, tabular-nums) — D2. The app passes its
+ *  own `clock` (timezone-aware, clickable); this plain one is the fallback. */
 function NowClock() {
   const [label, setLabel] = useState(() => hhmm());
   useEffect(() => {
@@ -68,7 +71,6 @@ function NowClock() {
   }, []);
   return (
     <div className="px-now-clock" title="Current time">
-      <Ic name="clock" />
       <span>{label}</span>
     </div>
   );
@@ -389,7 +391,7 @@ export function Layout({ brand = 'Prisms', brandHref, groups, foot, active, onNa
             <b>{breadcrumb.page}</b>
           </div>
           <div className="px-topbar-right">
-            <NowClock />
+            {clock ?? <NowClock />}
             {timer}
             {sync}
             {user && (
