@@ -48,7 +48,7 @@ test('My Day: an unestimated task still shows what has been logged in it', async
 
   await expect(page.getByTestId(`myday-row-${ids.worked}`)).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId(`logged-${ids.worked}`)).toHaveText('45m logged');
-  await expect(page.getByTestId(`logged-${ids.fresh}`)).toHaveText('nothing logged');
+  await expect(page.getByTestId(`logged-${ids.fresh}`)).toHaveText('0h 00m');
   // a task WITH an estimate keeps its progress bar, not this cell
   await expect(page.getByTestId(`logged-${ids.est}`)).toHaveCount(0);
   await expect(page.getByTestId(`progress-${ids.est}`)).toBeAttached(); // 0% wide, so not "visible"

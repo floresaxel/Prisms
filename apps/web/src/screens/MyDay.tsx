@@ -75,7 +75,7 @@ function ProgressCell({ item }: { item: MyDayItem }) {
     const spent = Math.round(progress.consumedMinutes);
     return (
       <div className="px-pbar-sm px-muted" style={{ fontSize: 11 }} data-testid={`logged-${id}`} title="No estimate set">
-        {spent > 0 ? `${formatMinutes(spent)} logged` : 'nothing logged'}
+        {spent > 0 ? `${formatMinutes(spent)} logged` : '0h 00m'}
       </div>
     );
   }
