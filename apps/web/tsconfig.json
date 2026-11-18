@@ -6,5 +6,5 @@
     "types": ["vite/client", "vite-plugin-pwa/client"],
     "noEmit": true
   },
-  "include": ["src", "vite.config.ts"]
+  "include": ["src", "vite.config.ts", "retire-dev-sw.ts"]
 }

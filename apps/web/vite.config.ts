@@ -2,6 +2,8 @@ import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
+import { RETIRE_DEV_SW_FILE, retireDevServiceWorker } from './retire-dev-sw';
+
 /**
  * The wa-sqlite builds this app never loads (load plan, phase 4).
  *
@@ -28,6 +30,8 @@ export const UNUSED_SQLITE_ASSET =
 export default defineConfig({
   plugins: [
     react(),
+    // a browser that last saw `vite dev` here keeps its dev worker — retire it
+    retireDevServiceWorker(),
     VitePWA({
       registerType: 'autoUpdate',
       // Enable the service worker in dev too so the airplane-mode reload path
@@ -36,6 +40,8 @@ export default defineConfig({
       workbox: {
         // woff2: the bundled brand fonts, so an offline reload keeps its type
         globPatterns: ['**/*.{js,css,html,wasm,png,svg,woff2}'],
+        // the dev-worker retirement script is for the browser's update check only
+        globIgnores: [RETIRE_DEV_SW_FILE],
         maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
         // every screen chunk stays precached (offline navigation); only the
         // SQLite builds nothing loads are dropped — see UNUSED_SQLITE_ASSET
