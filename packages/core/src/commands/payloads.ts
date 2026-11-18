@@ -300,6 +300,18 @@ export const journalSetTitleSchema = z.strictObject({
   id: uuidSchema,
   title: titleSchema,
 });
+/**
+ * Replace a note's tag list. Like `journal.set_title` it acts on an existing row
+ * and never mints one (an empty note is not stored), and it is its own verb so
+ * tagging on one device never rolls back prose written on another. The list is
+ * ONE last-writer-wins field — two devices tagging the same note converge on one
+ * device's list rather than a union nobody typed. The server re-normalises it
+ * (`normalizeJournalTags`) so a hand-built payload cannot store non-canonical tags.
+ */
+export const journalSetTagsSchema = z.strictObject({
+  id: uuidSchema,
+  tags: z.array(z.string().max(200)).max(100),
+});
 
 // --- task steps (checklist on a task, W3/D4) --------------------------------
 // A client-minted row id + the parent task + the fractional order (same scheme
@@ -454,6 +466,7 @@ export const COMMAND_SCHEMAS = {
   'journal.delete': journalDeleteSchema,
   'journal.set_locked': journalSetLockedSchema,
   'journal.set_title': journalSetTitleSchema,
+  'journal.set_tags': journalSetTagsSchema,
   'step.add': stepAddSchema,
   'step.rename': stepRenameSchema,
   'step.toggle': stepToggleSchema,

@@ -23,7 +23,7 @@
  * (`layout.set_position`/`layout.set_collapsed`, keyed by diagram+node) return no
  * effect here — the live writer (commands.ts) supplies the resolved row id.
  */
-import { renormalizedOrders, type CommandName, type JsonObject, type JsonValue } from '@prisms/core';
+import { normalizeJournalTags, renormalizedOrders, type CommandName, type JsonObject, type JsonValue } from '@prisms/core';
 
 /** Context the server would assign; the overlay may predict it for display (§7.8). */
 export interface OptimisticEffectCtx {
@@ -276,6 +276,10 @@ export function buildOptimisticEffects(name: CommandName, payload: unknown, ctx:
     case 'journal.set_title':
       // patches an existing row (a title never mints one — see the payload doc).
       return [upd('journal_entries', id, { title: p['title'] })];
+    case 'journal.set_tags':
+      // patches an existing row; stored as JSON text like every other JSON column,
+      // in the same canonical form the server will re-derive.
+      return [upd('journal_entries', id, { tags: j(normalizeJournalTags(p['tags'])) })];
     case 'journal.delete':
       return [del('journal_entries', id)];
 

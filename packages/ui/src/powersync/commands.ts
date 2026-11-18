@@ -12,6 +12,8 @@
  * are untouched — only the storage path moved from replica `db.execute` to the
  * overlay.
  */
+import { normalizeJournalTags } from '@prisms/core';
+
 import type { VisionColor, VisionHorizon } from '../format';
 import { newId } from './client-runtime';
 import { buildAcceptSuggestionEffects, type AcceptSuggestionBlock, type EffectSpec } from './effects';
@@ -347,6 +349,14 @@ export function createCommands(store: OverlayStore, ctx: CommandContext, deps: E
      */
     async setJournalTitle(id: string, title: string): Promise<void> {
       await run('journal.set_title', { id, title });
+    },
+    /**
+     * Replace a note's tags (`[]` clears them). Requires the row to exist, like a
+     * title. Normalised here too, so what the overlay shows is what the server
+     * will store.
+     */
+    async setJournalTags(id: string, tags: readonly string[]): Promise<void> {
+      await run('journal.set_tags', { id, tags: normalizeJournalTags(tags) });
     },
 
     // --- task steps (checklist on a task, W3/D4) ----------------------------

@@ -154,6 +154,7 @@ export {
   useJournalMonths,
   useJournalDay,
   useDayLog,
+  useDayLogsByDate,
   useTimeBlocksForDay,
   useTaskSteps,
   useTaskStepsByTask,

@@ -34,7 +34,8 @@ import {
 
 import { readJournalLocked, writeJournalLocked } from '../journal-lock-cache';
 
-import { DayLogFooter } from './DayLogFooter';
+import { DayLogSection } from './DayLogSection';
+import { NoteTags } from './NoteTags';
 import { RichJournalEditor } from './RichJournalEditor';
 
 /**
@@ -531,6 +532,15 @@ export function DayJournalPanel({
           )}
         </div>
         <span className="px-jn-date" data-testid="journal-date">{date}</span>
+        {/* Tags belong to a note that exists (an empty day has no row to tag), and
+            go read-only with the lock like everything else about the note. */}
+        {hasNote && (
+          <NoteTags
+            tags={entry?.tags ?? []}
+            readOnly={preview}
+            onChange={(next) => (existingId ? commands.setJournalTags(existingId, next) : undefined)}
+          />
+        )}
       </div>
 
       {/* One body in both states, rather than swapping the editor out for the
@@ -554,7 +564,7 @@ export function DayJournalPanel({
 
       {/* OUTSIDE the editor and the preview, in both modes — never part of the
           document the user types into. */}
-      {!isLoading && <DayLogFooter entries={dayLog} timezone={timezone} />}
+      {!isLoading && <DayLogSection entries={dayLog} timezone={timezone} />}
     </div>
   );
 }

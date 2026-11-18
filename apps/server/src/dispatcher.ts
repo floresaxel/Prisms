@@ -42,6 +42,9 @@ import {
   resolveOpenTimeEntries,
   runAutomations,
   softDeleteClosure,
+  // not in alphabetical place on purpose: split focus (#36) adds MAX_OPEN_TIMERS
+  // right after isCommandName, and two inserts on the same line merge as a conflict
+  normalizeJournalTags,
   stripTrustFields,
   uploadRequestSchema,
   ROW_SCHEMA_VERSION,
@@ -1326,6 +1329,23 @@ export function createDispatcher(
         if (Object.keys(winTitle).length > 0) {
           await tx.update(journal_entries).set({ ...winTitle, ...sys }).where(eq(journal_entries.id, p.id));
           rec('journal_entries', p.id, 'update', Object.keys(winTitle));
+        } else {
+          rec('journal_entries', p.id, 'update', []);
+        }
+        return applied();
+      }
+      case 'journal.set_tags': {
+        const p = payload as Payload<'journal.set_tags'>;
+        // Like a title, tags belong to a note that exists — never mints a row.
+        const row = await one(tx.select().from(journal_entries).where(eq(journal_entries.id, p.id)).limit(1));
+        const ownTags = ownershipReject('journal entry', p.id, row, userId);
+        if (ownTags) return ownTags;
+        // Re-normalised here so a hand-built payload cannot store non-canonical
+        // tags; the list is one LWW field, so two devices converge on one list.
+        const winTags = await lwwFields(tx, hlc, userId, 'journal_entries', p.id, { tags: normalizeJournalTags(p.tags) });
+        if (Object.keys(winTags).length > 0) {
+          await tx.update(journal_entries).set({ ...winTags, ...sys }).where(eq(journal_entries.id, p.id));
+          rec('journal_entries', p.id, 'update', Object.keys(winTags));
         } else {
           rec('journal_entries', p.id, 'update', []);
         }

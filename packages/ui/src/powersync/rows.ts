@@ -5,6 +5,7 @@
  */
 import {
   LEGACY_HLC,
+  normalizeJournalTags,
   type AutomationRule,
   type BlockerRule,
   type ComputedAggregate,
@@ -306,6 +307,8 @@ export const toJournalEntry = (r: Row): JournalEntry => ({
   content: String(r['content'] ?? ''),
   locked: bool(r['locked']),
   title: String(r['title'] ?? ''),
+  // JSON text; a dirty or absent value reads as untagged rather than throwing.
+  tags: normalizeJournalTags(json<unknown>(r['tags'], [])),
   created_at: String(r['created_at'] ?? ''),
   updated_at: String(r['updated_at'] ?? ''),
   deleted_at: str(r['deleted_at']),

@@ -201,6 +201,31 @@ describe('DayJournalPanel — editor', () => {
     expect(command('deleteJournal')).toHaveBeenCalledWith('j1');
   });
 
+  it('tags: offered only for a note that exists, written through setJournalTags, read-only when locked', () => {
+    // a day with nothing written has no row to tag
+    render(createElement(DayJournalPanel, { date: '2026-06-11', ctx: CTX }));
+    expect(screen.queryByTestId('journal-tags')).toBeNull();
+    cleanup();
+
+    state.entry = { id: 'j1', content: 'x', deleted_at: null, tags: ['work'] } as never;
+    const editable = render(createElement(DayJournalPanel, { date: '2026-06-11', ctx: CTX }));
+    expect(screen.getByTestId('journal-tag-work')).toBeTruthy();
+    fireEvent.change(screen.getByTestId('journal-tag-input'), { target: { value: 'Health' } });
+    fireEvent.keyDown(screen.getByTestId('journal-tag-input'), { key: 'Enter' });
+    expect(command('setJournalTags')).toHaveBeenCalledWith('j1', ['work', 'health']);
+    fireEvent.click(screen.getByTestId('journal-tag-remove-work'));
+    // composes on what was just asked for (work, health), not the lagging row
+    expect(command('setJournalTags')).toHaveBeenLastCalledWith('j1', ['health']);
+    editable.unmount();
+
+    // locked: the chips stay (it still shows how the note is filed), the controls go
+    state.entry = { id: 'j1', content: 'x', deleted_at: null, locked: true, tags: ['work'] } as never;
+    render(createElement(DayJournalPanel, { date: '2026-06-11', ctx: CTX }));
+    expect(screen.getByTestId('journal-tag-work')).toBeTruthy();
+    expect(screen.queryByTestId('journal-tag-input')).toBeNull();
+    expect(screen.queryByTestId('journal-tag-remove-work')).toBeNull();
+  });
+
   it('the note actions are ONLY reachable through the corner menu', () => {
     state.entry = { id: 'j1', content: 'x', deleted_at: null };
     render(createElement(DayJournalPanel, { date: '2026-06-11', ctx: CTX }));

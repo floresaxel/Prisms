@@ -537,6 +537,12 @@ export const journalEntrySchema = z.strictObject({
    * literal and the date stays the note's identity regardless of the title.
    */
   title: z.string().max(MAX_TITLE_LENGTH),
+  /**
+   * Free-text labels for grouping and filtering notes (migration 0016), in the
+   * canonical form `normalizeJournalTags` produces. [] = untagged, which is what
+   * every note is until tagged.
+   */
+  tags: z.array(z.string().min(1).max(40)).max(20),
 });
 export type JournalEntry = z.infer<typeof journalEntrySchema>;
 

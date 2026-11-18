@@ -231,9 +231,42 @@ describe.skipIf(!adminUrl)('V2 journal day log — settings + export', () => {
 
     const capped = days.get(flood)!.day_log!;
     expect(capped.completed).toHaveLength(100);
-    expect(capped.truncated).toEqual({ scheduled: 0, completed: 1 });
+    expect(capped.truncated).toEqual({ scheduled: 0, clocked: 0, completed: 1 });
   });
 
+  it('exports CLOCKED time with its duration and the project/vision it rolls up to', async () => {
+    const user = randomUUID();
+    await utcSettings(user);
+    const node = async (type: string, title: string, parent: string | null) => {
+      const id = randomUUID();
+      await sql`
+        INSERT INTO nodes (id, user_id, node_type, title, parent_id, sort_order, updated_at)
+        VALUES (${id}, ${user}, ${type}, ${title}, ${parent}, ${`a${id.slice(0, 4)}`}, now())`;
+      return id;
+    };
+    const vision = await node('vision', 'Health', null);
+    const roadmap = await node('roadmap', 'Plan', vision);
+    const project = await node('project', 'Marathon', roadmap);
+    const run = await node('task', 'Long run', project);
+    const gone = await node('task', 'Deleted later', project);
+    const clock = (taskId: string, start: string, end: string | null, deleted: string | null = null) => sql`
+      INSERT INTO time_entries (id, user_id, task_id, started_at, ended_at, planned, device_id, updated_at, deleted_at)
+      VALUES (${randomUUID()}, ${user}, ${taskId}, ${start}, ${end}, true, 'deva', now(), ${deleted})`;
+    await clock(run, '2026-05-10T08:00:00.000Z', '2026-05-10T09:30:00.000Z');
+    await clock(run, '2026-05-10T14:00:00.000Z', '2026-05-10T14:45:00.000Z');
+    await clock(gone, '2026-05-10T16:00:00.000Z', '2026-05-10T17:00:00.000Z', '2026-05-10T18:00:00.000Z'); // soft-deleted → absent
+
+    const day = byDate(await runJournalExport(db, user)).get('2026-05-10');
+    const log = day?.day_log;
+    expect(log?.clocked.map((c) => c.minutes)).toEqual([90, 45]);
+    expect(log?.clocked_minutes).toBe(135);
+    expect(log?.clocked[0]).toMatchObject({
+      title: 'Long run',
+      project: { title: 'Marathon' },
+      vision: { title: 'Health' },
+    });
+    expect(day?.content).toBe(''); // a clock-only day joins the archive as a log-only day
+  });
   it('is owner-scoped: another user\'s facts never leak into a log', async () => {
     const mine = randomUUID();
     const theirs = randomUUID();

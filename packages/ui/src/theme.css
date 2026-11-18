@@ -910,6 +910,10 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
 .px-md-toolbar { display: flex; flex-wrap: wrap; gap: 4px; }
 .px-md-toolbar .px-btn { padding: 4px 8px; font-size: 12px; min-width: 30px; }
 .px-md { background: var(--px-surface); border: 1px solid var(--px-border); border-radius: var(--px-radius); padding: 2px 14px; margin-top: 8px; }
+/* A locked note is read, not edited, so it drops the field's bubble: no outline, no
+   fill. Colour only — the box, its padding and its border WIDTH stay, so the text
+   sits exactly where it did while editable and nothing shifts when the lock flips. */
+.px-journal-rich-wrap--locked .px-md { background: transparent; border-color: transparent; }
 /* Note-body type. It used to inherit the browser defaults — 16px, 1.5, and 1em
    paragraph margins — which made the note the largest and loosest text in an app
    whose chrome sits at 12.5–13px. Applies to the editor and its read-only render
@@ -1961,3 +1965,28 @@ textarea.px-vd-input { min-height: 92px; resize: vertical; line-height: 1.55; }
 /* inline create-a-roadmap / create-a-vision forms */
 .px-rm-form { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 14px; padding: 12px 14px; background: var(--px-surface); border: 1px solid var(--px-border); border-radius: 10px; box-shadow: var(--px-shadow); }
 .px-rm-form .px-input { min-width: 200px; }
+
+/* --- journal: tags, filter bar, clocked time ---------------------------------- */
+.px-jn-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin-top: 6px; }
+.px-jn-tag { display: inline-flex; align-items: center; gap: 2px; font-size: 11.5px; font-weight: 560; color: var(--px-blue-deep); background: var(--px-blue-bg); border-radius: 999px; padding: 2px 4px 2px 8px; }
+.px-jn-tag-x { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; padding: 0; border: none; border-radius: 50%; background: none; color: inherit; cursor: pointer; opacity: 0.6; }
+.px-jn-tag-x:hover { opacity: 1; background: rgba(0, 0, 0, 0.08); }
+.px-jn-tag-x .px-ic, .px-jn-tag-x svg { width: 10px; height: 10px; }
+.px-jn-tag-input { font: inherit; font-size: 12px; color: var(--px-text); background: none; border: 1px dashed var(--px-border-2); border-radius: 999px; padding: 2px 9px; width: 96px; min-width: 0; outline: none; }
+.px-jn-tag-input:focus { border-style: solid; border-color: var(--px-blue); width: 130px; }
+.px-jn-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 10px 0 14px; }
+.px-jn-sel { padding: 5px 9px; font-size: 12.5px; max-width: 200px; }
+.px-jn-mh--static { cursor: default; }
+.px-jn-mh--static:hover { color: var(--px-text); }
+.px-jn-d-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
+.px-jn-d-tag { font-size: 10.5px; color: var(--px-text-dim); background: var(--px-surface-2); border-radius: 999px; padding: 0 6px; }
+.px-jn-d--sel .px-jn-d-tag { background: rgba(255, 255, 255, 0.55); color: var(--px-blue-deep); }
+.px-daylog-filter { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 14px; }
+.px-daylog-filter-lbl { font-size: 11.5px; font-weight: 600; color: var(--px-faint); }
+.px-daylog-sel { padding: 3px 8px; font-size: 12px; max-width: 180px; }
+.px-daylog-clear { padding: 3px 9px; font-size: 12px; }
+.px-daylog-none { font-size: 12.5px; margin: 8px 0 0; }
+.px-daylog-total { font-weight: 640; color: var(--px-text-dim); margin-left: 4px; }
+.px-daylog-dur { font-size: 11.5px; color: var(--px-text-dim); flex: none; }
+.px-daylog-mark--live { background: var(--px-blue-bg); color: var(--px-blue-deep); }
+.px-daylog-ctx { margin-left: auto; padding-left: 10px; font-size: 11px; color: var(--px-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 45%; flex: 0 1 auto; }
