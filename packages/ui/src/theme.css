@@ -2042,3 +2042,12 @@ textarea.px-vd-input { min-height: 92px; resize: vertical; line-height: 1.55; }
 @media (prefers-reduced-motion: reduce) {
   .px-cbar-seg, .px-clk-task, .px-clk-log { transition: none; }
 }
+/* --- journal list: the pinned Today row --------------------------------------
+   First row of the list in both views, sticky so it is one click away however far
+   the list has been scrolled. Its own wrapper paints the surface, so rows scrolling
+   under it do not show through. */
+.px-jn-today-wrap { position: sticky; top: 0; z-index: 2; background: var(--px-surface); padding-bottom: 6px; margin-bottom: 4px; border-bottom: 1px solid var(--px-border); }
+.px-jn-today { border: 1px solid var(--px-border); }
+.px-jn-today .px-jn-d-date { color: var(--px-accent); font-weight: 640; }
+/* not italic: an italic's last glyph overhangs its box and the title clips overflow */
+.px-jn-today-empty { color: var(--px-faint); }

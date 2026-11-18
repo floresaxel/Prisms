@@ -100,6 +100,50 @@ function DayRow({ entry, selected, onSelect }: { entry: JournalEntry; selected: 
   );
 }
 
+/**
+ * "Today" — the first row of the list. Opens today's note, which may not exist
+ * yet: an empty day has no row in the database (an empty note is never stored),
+ * so this row cannot be derived from the notes and must not depend on one.
+ */
+function TodayRow({
+  date,
+  entry,
+  selected,
+  onSelect,
+}: {
+  date: string;
+  entry: JournalEntry | null;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  const preview = entry ? entry.title.trim() || noteTitle(entry.content) || journalTitleOf(entry.title, date) : null;
+  return (
+    <div className="px-jn-today-wrap">
+      <button
+        className={`px-jn-d px-jn-today${selected ? ' px-jn-d--sel' : ''}`}
+        data-testid="journal-today"
+        aria-current={selected}
+        title={`Open today (${date})`}
+        onClick={onSelect}
+      >
+        <span className="px-jn-d-date">Today · {dayLabel(date)}</span>
+        {preview !== null ? (
+          <span className="px-jn-d-title">{preview}</span>
+        ) : (
+          <span className="px-jn-d-title px-jn-today-empty" data-testid="journal-today-empty">No note yet</span>
+        )}
+        {entry && entry.tags.length > 0 && (
+          <span className="px-jn-d-tags">
+            {entry.tags.map((t) => (
+              <span key={t} className="px-jn-d-tag">#{t}</span>
+            ))}
+          </span>
+        )}
+      </button>
+    </div>
+  );
+}
+
 export function Journal({ ctx }: { ctx: CommandContext }) {
   const [now] = useState<Instant>(() => asEpochMillis(Date.now()));
   const fc = useFactContext();
@@ -112,9 +156,18 @@ export function Journal({ ctx }: { ctx: CommandContext }) {
   const [view, setView] = useState<View>('date');
   const { filter, patch, clear } = useJournalFilter();
 
-  // By date holds only the expanded months (lazy); by tag needs them all.
-  const heldMonths = useMemo(() => (view === 'tag' ? monthList : [...expanded]), [view, monthList, expanded]);
+  // By date holds only the expanded months (lazy); by tag needs them all. The
+  // current month is always held, so the Today row can show today's note even
+  // while that month is collapsed (it is the month the app is already syncing).
+  const heldMonths = useMemo(
+    () => (view === 'tag' ? monthList : [...new Set([...expanded, curMonth])]),
+    [view, monthList, expanded, curMonth],
+  );
   const { entries } = useJournalMonths(heldMonths);
+  const todayNote = useMemo(
+    () => entries.find((e) => e.entry_date === today && !isJournalContentEmpty(e.content)) ?? null,
+    [entries, today],
+  );
 
   // Every day's generated log, for the project / vision filter and its options.
   const dayLogs = useDayLogsByDate();
@@ -206,17 +259,6 @@ export function Journal({ ctx }: { ctx: CommandContext }) {
       <div className="px-page-head">
         <h1>Journal</h1>
         <span className="px-page-sub">one note per day · markdown</span>
-        <div className="px-head-actions">
-          <button
-            className="px-btn"
-            data-testid="journal-today"
-            disabled={selectedDay === today}
-            title={selectedDay === today ? 'Already on today' : `Go back to today (${today})`}
-            onClick={goToday}
-          >
-            <Ic name="cal" /> Today
-          </button>
-        </div>
       </div>
 
       <div className="px-jn-bar" data-testid="journal-bar" role="toolbar" aria-label="Journal view and filters">
@@ -283,6 +325,10 @@ export function Journal({ ctx }: { ctx: CommandContext }) {
 
       <div className="px-jn-cols">
         <div className="px-jn-months" data-testid="journal-months">
+          {/* Pinned to the top of the list in both views, and independent of the
+              filters: it is a way BACK, not a note, so it stays even when today has
+              nothing written and no note row exists. */}
+          <TodayRow date={today} entry={todayNote} selected={selectedDay === today} onSelect={goToday} />
           {view === 'tag' ? (
             <div data-testid="journal-tag-groups">
               <p className="px-muted px-jn-empty">Notes from the last {MONTHS_SHOWN} months.</p>
