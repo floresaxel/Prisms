@@ -1083,7 +1083,7 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
 @keyframes px-run-wave {
   0%, 45% { opacity: 0; transform: scale(0.8); }
   50% { opacity: 0.5; }
-  100% { opacity: 0; transform: scale(2.3); }
+  100% { opacity: 0; transform: scale(1.6); }
 }
 .px-card { background: var(--px-surface); border: 1px solid var(--px-border); border-radius: 10px; box-shadow: var(--px-shadow); }
 .px-card-h { display: flex; align-items: center; gap: 8px; padding: 11px 14px; border-bottom: 1px solid var(--px-border); font-weight: 600; font-size: 13px; }
