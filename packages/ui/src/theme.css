@@ -766,6 +766,15 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
   .px-modal--full .px-modal-inner { animation: px-rise 160ms ease-out; }
 }
 @keyframes px-rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+/* Closing (Modal.tsx keeps the dialog mounted for MODAL_EXIT_MS = 180 ms): the
+   dialog blurs out as it fades, and the page behind eases back into focus as
+   the scrim's own blur and veil drain away — no snap from blurred to sharp. */
+@keyframes px-scrim-out {
+  to { background-color: transparent; backdrop-filter: blur(0) saturate(100%); -webkit-backdrop-filter: blur(0) saturate(100%); }
+}
+@keyframes px-modal-out { to { opacity: 0; filter: blur(4px); transform: scale(0.985); } }
+.px-scrim--out { pointer-events: none; animation: px-scrim-out 180ms ease-out forwards; }
+.px-scrim--out > .px-modal { animation: px-modal-out 140ms ease-in forwards; }
 /* card dialog: a wider centered card over the same blurred page as the compact
    panel (the base `.px-scrim`); it only adds breathing room around the card. */
 .px-scrim--soft { padding: 24px 16px; }
