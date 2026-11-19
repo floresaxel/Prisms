@@ -1135,6 +1135,11 @@ export interface DoneTodayItem {
   task: Node;
   /** Minutes logged against the task from time entries (merged, §7.10b). */
   consumedMinutes: number;
+  /** Logged vs. estimate — the same value an Available-now row's progress cell shows. */
+  progress: ProgressValue;
+  /** The task's parent project, or null (an Inbox capture has none). */
+  projectId: string | null;
+  projectTitle: string | null;
   /**
    * An Inbox capture completed without ever joining a project: done, but with
    * no vision behind it. Shown marked, so a day's "done" stays honest about
@@ -1159,7 +1164,16 @@ export function useDoneToday(now: Instant): DoneTodayItem[] {
     for (const node of ctx.tree.byId.values()) {
       if ((node.node_type !== 'task' && node.node_type !== 'activity') || node.completed_at === null) continue;
       if (bucketDate(isoToEpochMillis(node.completed_at), ctx.dayResetHour, ctx.timezone) !== today) continue;
-      out.push({ task: node, consumedMinutes: canonicalProgress(node, entries).consumedMinutes, unfocused: node.node_type === 'activity' });
+      const progress = canonicalProgress(node, entries);
+      const project = ancestorsOf(ctx.tree, node.id).find((a) => a.node_type === 'project') ?? null;
+      out.push({
+        task: node,
+        consumedMinutes: progress.consumedMinutes,
+        progress,
+        projectId: project?.id ?? null,
+        projectTitle: project?.title ?? null,
+        unfocused: node.node_type === 'activity',
+      });
     }
     return out.sort((a, b) => {
       const ca = a.task.completed_at ?? '';

@@ -1,8 +1,8 @@
 /**
  * My Day (§1.2, web redesign W2/D5) — the re-skinned worklist. Three sections:
  * Available now (white cards, sorted by parent-project priority from the decision
- * board), Blocked and Done today (muted, collapsed by default, state per view in
- * localStorage). Each running task (split focus: up to MAX_OPEN_TIMERS at once)
+ * board), Blocked (muted) and Done today (the same white rows as Available now,
+ * struck through) — both collapsed by default, state per view in localStorage. Each running task (split focus: up to MAX_OPEN_TIMERS at once)
  * lifts into its own run card with its own Clock out; clocking into another task
  * while one runs asks whether to switch or split (TimersProvider). The topbar
  * pill still clocks out from anywhere (D7). A right rail shows today's plan (with suggestion accept/
@@ -23,6 +23,7 @@ import {
   type Instant,
   type Node,
   type NodeType,
+  type ProgressValue,
   type TreeIndex,
 } from '@prisms/core';
 import {
@@ -45,6 +46,7 @@ import {
   useTimeBlocksForDay,
   Ic,
   type CommandContext,
+  type DoneTodayItem,
   type MyDayItem,
   type PrismsCommands,
   type PromoteTarget,
@@ -86,22 +88,24 @@ function useCollapsed(key: string): [boolean, () => void] {
   return [collapsed, toggle];
 }
 
-function ProgressCell({ item }: { item: MyDayItem }) {
-  const { progress } = item;
-  const id = item.task.id;
+/**
+ * Logged time against the estimate. `finished` is for a task already checked off:
+ * with nothing logged it says so, rather than calling a finished task "not started".
+ */
+function ProgressCell({ id, progress, finished = false }: { id: string; progress: ProgressValue; finished?: boolean }) {
   if (progress.estimateMinutes === null) {
     // No estimate means no bar to fill — but the time already spent is still
     // worth seeing, so the cell reports it on its own.
     const spent = Math.round(progress.consumedMinutes);
     return (
       <div className="px-pbar-sm px-muted" style={{ fontSize: 11 }} data-testid={`logged-${id}`} title="No estimate set">
-        {spent > 0 ? `${formatMinutes(spent)} logged` : '0h 00m'}
+        {spent > 0 ? `${formatMinutes(spent)} logged` : finished ? 'no time logged' : '0h 00m'}
       </div>
     );
   }
   const over = progress.ratio !== null && progress.ratio > 1;
   const pct = Math.round((progress.ratio ?? 0) * 100);
-  const label = progress.consumedMinutes <= 0 ? 'not started' : `${formatMinutes(progress.consumedMinutes)} logged`;
+  const label = progress.consumedMinutes <= 0 ? (finished ? 'no time logged' : 'not started') : `${formatMinutes(progress.consumedMinutes)} logged`;
   return (
     <div className="px-pbar-sm">
       <div className="px-pbar-lbl">
@@ -156,14 +160,39 @@ function AvailableRow({ item, atLimit, todayDate, commands, detail, onCheck, onC
           {item.priority !== null && <span className="px-prio" title="Parent-project priority — Projects › Decisions">prio {item.priority.toFixed(1)}</span>}
         </div>
       </div>
-      <ProgressCell item={item} />
-      {item.task.due_date && <span className={`px-due${dueToday ? ' px-due--today' : ''}`}>{dueToday ? 'Today' : item.task.due_date.slice(5)}</span>}
+      <ProgressCell id={id} progress={item.progress} />
+      {item.task.due_date &&<span className={`px-due${dueToday ? ' px-due--today' : ''}`}>{dueToday ? 'Today' : item.task.due_date.slice(5)}</span>}
       <ClockInButton testId={`clock-in-${id}`} disabled={atLimit} title={atLimit ? LIMIT_TITLE : undefined} onClick={onClockIn} />
     </li>
   );
 }
 
-export function MyDay({ ctx, onNavigate }: { ctx: CommandContext; onNavigate?: (href: string) => void }) {
+/**
+ * A task finished today, laid out like an Available-now row (same card, same
+ * project / estimate line, same logged-vs-estimate cell) so the two lists read
+ * as one: the filled green tick and the struck-through title are what say "done".
+ */
+function DoneRow({ item, commands, detail }: { item: DoneTodayItem; commands: PrismsCommands; detail: TaskDetailApi }) {
+  const id = item.task.id;
+  return (
+    <li className="px-trow px-trow--done" data-testid={`myday-done-${id}`} data-project={item.projectId ?? ''} {...detail.rowProps(id)}>
+      <span className="px-ckb px-ckb--done"><Ic name="check" /></span>
+      <div className="px-t-main">
+        <div className="px-t-title"><EditableTitle node={item.task} commands={commands} /></div>
+        <div className="px-t-meta">
+          {item.projectTitle && (
+            <span className="px-proj"><span className={`px-pdot px-pdot--${projectTone(item.projectId)}`} />{item.projectTitle}</span>
+          )}
+          {item.progress.estimateMinutes !== null && <span>est {formatMinutes(item.progress.estimateMinutes)}</span>}
+        </div>
+      </div>
+      <ProgressCell id={id} progress={item.progress} finished />
+      {item.unfocused && <UnfocusedTag />}
+    </li>
+  );
+}
+
+export function MyDay({ ctx, onNavigate }:{ ctx: CommandContext; onNavigate?: (href: string) => void }) {
   // The screen's own width (not the window's — the sidebar rail changes it too)
   // decides whether the right rail sits beside the list or under it.
   const [viewRef, viewWidth] = useMeasuredWidth();
@@ -296,7 +325,7 @@ export function MyDay({ ctx, onNavigate }: { ctx: CommandContext; onNavigate?: (
                     {splitWays > 1 && ` · logging 1/${splitWays}`}
                   </div>
                 </div>
-                {item && <ProgressCell item={item} />}
+                {item && <ProgressCell id={item.task.id} progress={item.progress} />}
                 <div className="px-run-clock">{formatElapsed(t.elapsedMs)}</div>
                 <button
                   className="px-btn px-btn--sm px-run-stop"
@@ -400,19 +429,12 @@ export function MyDay({ ctx, onNavigate }: { ctx: CommandContext; onNavigate?: (
 
           {done.length > 0 && (
             <>
-              <button className="px-sec px-sec--clps" data-testid="sec-done" aria-expanded={!doneCollapsed} onClick={toggleDone} style={{ color: 'var(--px-green)' }}>
+              <button className="px-sec px-sec--clps" data-testid="sec-done" aria-expanded={!doneCollapsed} onClick={toggleDone}>
                 <Ic name="chevd" className="px-ic px-sec-cv" /> Done today <span className="px-sec-cnt">· {done.length}</span><span className="px-sec-ln" />
               </button>
-              <ul className={`px-rows px-rows--muted${doneCollapsed ? ' px-hide' : ''}`} data-testid="done-list">
+              <ul className={`px-rows${doneCollapsed ? ' px-hide' : ''}`} data-testid="done-list">
                 {done.map((d) => (
-                  <li className="px-trow px-trow--done" key={d.task.id} {...detail.rowProps(d.task.id)}>
-                    <span className="px-ckb px-ckb--done"><Ic name="check" /></span>
-                    <div className="px-t-main">
-                      <div className="px-t-title"><EditableTitle node={d.task} commands={commands} /></div>
-                      <div className="px-t-meta">{d.consumedMinutes > 0 ? `${formatMinutes(Math.round(d.consumedMinutes))} logged` : 'completed'}</div>
-                    </div>
-                    {d.unfocused && <UnfocusedTag />}
-                  </li>
+                  <DoneRow key={d.task.id} item={d} commands={commands} detail={detail} />
                 ))}
               </ul>
             </>
