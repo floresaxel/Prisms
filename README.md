@@ -248,12 +248,25 @@ Then double-click **Prisms** on the desktop. Closing the window asks whether
 to stop the stack or leave it running; `-Stop` stops it from a terminal, and
 `-NoGui` reports in the console instead of a window.
 
+The site shows **every active branch**, not just what the checkout has checked
+out. The launcher runs the stack from a worktree of its own beside the repo
+(`prisms-preview`): `origin/main` with each local branch that has unmerged work
+and a commit in the last 3 days (`-ActiveDays`) merged on top. `wip/*` branches
+are skipped, and a branch that conflicts is left out and named in the window's
+**Code** row (hover it for the full list). While the window is open, a new
+commit on any branch, in any worktree, is picked up within a few seconds: the
+tree is merged again, migrations run, and the web app and API are rebuilt or
+restarted only if their code changed. No checkout you work in is touched. The
+Update button only fetches the latest `main`. The desktop shortcut starts the
+launcher's own copy in that tree, so the launcher follows main + branches too.
+Pass `-CheckoutOnly` to serve the script's own checkout as it is.
+
 The launcher serves the web app **built** (`vite build`, then `vite preview`),
 so a page load is a few cached files rather than the dev server's ~200 modules
 compiled on demand. It rebuilds only when the app's source has changed (about
 25 seconds), and a page left open reloads itself once the new build is in. While
-working on the app, pass `-Dev` to get the Vite dev server and hot reload
-instead:
+working on the app, pass `-Dev` to get the Vite dev server and hot reload of
+the checkout you run it from instead:
 
 ```powershell
 pwsh scripts/prisms-stack.ps1 -Dev
