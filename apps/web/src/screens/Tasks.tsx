@@ -8,6 +8,10 @@
  * An Inbox row can be checked off without promoting it first: a dialog asks
  * whether to add it to a project and complete it, or complete it as an
  * unfocused task (no project behind it; Done today marks it so).
+ * The capture bar can preselect a project: captures then land straight in it as
+ * tasks (not in the Inbox), and the choice holds until you leave this screen.
+ * Every row opens the task's details card when clicked (TaskDetail), and its
+ * title renames in place when the title text itself is clicked.
  *
  * Load-bearing testids preserved from the old Inbox: activity-title, activity-add,
  * inbox (with <li> rows), promote-target-*, promote-* (D8).
@@ -24,6 +28,7 @@ import {
   useDoneToday,
   useIsHydrated,
   useMyDayAvailable,
+  useNodeTree,
   usePromoteTargets,
   useTaskStepsByTask,
   useTasksByProject,
@@ -33,6 +38,8 @@ import {
   type PromoteTarget,
 } from '@prisms/ui';
 
+import { InboxDelete } from '../components/InboxDelete';
+import { EditableTitle, locationOf, useTaskDetail, type TaskDetailApi } from '../components/TaskDetail';
 import { UnfocusedTag } from '../components/UnfocusedTag';
 import { formatMinutes, projectTone } from '../format';
 import { listLayoutClass } from '../list-layout';
@@ -44,6 +51,7 @@ export function Tasks({ ctx }: { ctx: CommandContext }) {
   // still re-run reactively when rows change).
   const [now] = useState<Instant>(() => asEpochMillis(Date.now()));
   const commands = useCommands(ctx);
+  const detail = useTaskDetail();
   const hydrated = useIsHydrated();
   const [tab, setTab] = useState<'byproject' | 'bystatus'>('byproject');
   const [title, setTitle] = useState('');
@@ -56,6 +64,7 @@ export function Tasks({ ctx }: { ctx: CommandContext }) {
     [activities],
   );
   const targets = usePromoteTargets();
+  const tree = useNodeTree();
   const groups = useTasksByProject(now);
   const stepsByTask = useTaskStepsByTask();
   const available = useMyDayAvailable(now);
@@ -64,13 +73,26 @@ export function Tasks({ ctx }: { ctx: CommandContext }) {
   // the Inbox capture whose "complete" dialog is open
   const [completing, setCompleting] = useState<Node | null>(null);
 
+  // The project captures go into. '' = the Inbox (no project yet). Lives in this
+  // screen's state, so it holds across the By project / By status tabs and resets
+  // when you leave Tasks. A project that has since gone away falls back to Inbox.
+  const [captureTo, setCaptureTo] = useState('');
+  const captureTarget = targets.find((t) => t.id === captureTo) ?? null;
+
   async function capture(e: FormEvent) {
     e.preventDefault();
     const t = title.trim();
     if (t === '') return;
-    const last = activities.at(-1)?.sort_order ?? null;
-    const sortOrder = last === null ? initialSortOrder() : sortOrderBetween(last, null);
-    await commands.createActivity({ title: t, sortOrder });
+    if (captureTarget) {
+      // straight into the chosen project, at the end of its list
+      const last = tree.childrenByParent.get(captureTarget.id)?.at(-1)?.sort_order ?? null;
+      const sortOrder = last === null ? initialSortOrder() : sortOrderBetween(last, null);
+      await commands.createTask({ parentId: captureTarget.id, title: t, sortOrder });
+    } else {
+      const last = activities.at(-1)?.sort_order ?? null;
+      const sortOrder = last === null ? initialSortOrder() : sortOrderBetween(last, null);
+      await commands.createActivity({ title: t, sortOrder });
+    }
     setTitle('');
   }
 
@@ -88,6 +110,19 @@ export function Tasks({ ctx }: { ctx: CommandContext }) {
           value={title}
           onChange={(e) => setTitle(e.target.value)}
         />
+        <select
+          className="px-capture-to"
+          data-testid="capture-project"
+          aria-label="Capture into"
+          title="Where new captures go — stays selected until you leave Tasks"
+          value={captureTarget?.id ?? ''}
+          onChange={(e) => setCaptureTo(e.target.value)}
+        >
+          <option value="">Inbox — assign later</option>
+          {targets.map((t) => (
+            <option key={t.id} value={t.id}>{t.title}{t.type === 'milestone' ? ' (milestone)' : ''}</option>
+          ))}
+        </select>
         <button className="px-btn px-btn--primary" type="submit" data-testid="activity-add">Capture</button>
       </form>
 
@@ -106,7 +141,7 @@ export function Tasks({ ctx }: { ctx: CommandContext }) {
           <ul className="px-rows" data-testid="inbox">
             {activities.length === 0 && <li className="px-trow px-muted">{hydrated ? 'Inbox is empty.' : 'Loading…'}</li>}
             {inboxNewestFirst.map((a) => (
-              <InboxRow key={a.id} activity={a} targets={targets} commands={commands} onComplete={() => setCompleting(a)} />
+              <InboxRow key={a.id} activity={a} targets={targets} commands={commands} detail={detail} onComplete={() => setCompleting(a)} />
             ))}
           </ul>
 
@@ -118,7 +153,7 @@ export function Tasks({ ctx }: { ctx: CommandContext }) {
               </div>
               <ul className="px-rows" data-testid={`project-group-${g.project.id}`}>
                 {g.tasks.map((t) => (
-                  <TaskRow key={t.task.id} task={t.task} status={t.status} blockedBy={t.blockedBy} steps={stepsByTask.get(t.task.id) ?? []} commands={commands} />
+                  <TaskRow key={t.task.id} task={t.task} status={t.status} blockedBy={t.blockedBy} steps={stepsByTask.get(t.task.id) ?? []} commands={commands} detail={detail} />
                 ))}
               </ul>
             </div>
@@ -130,7 +165,7 @@ export function Tasks({ ctx }: { ctx: CommandContext }) {
           <ul className="px-rows" data-testid="status-available">
             {available.length === 0 && <li className="px-trow px-muted">Nothing available.</li>}
             {available.map((it) => (
-              <AvailableStatusRow key={it.task.id} item={it} onCheck={() => void commands.checkOff(it.task.id)} />
+              <AvailableStatusRow key={it.task.id} item={it} commands={commands} detail={detail} onCheck={() => void commands.checkOff(it.task.id)} />
             ))}
           </ul>
 
@@ -139,9 +174,9 @@ export function Tasks({ ctx }: { ctx: CommandContext }) {
               <div className="px-sec" style={{ color: 'var(--px-red)' }}>Blocked <span className="px-sec-cnt">· {blocked.length}</span><span className="px-sec-ln" /></div>
               <ul className="px-rows px-rows--muted" data-testid="status-blocked">
                 {blocked.map((b) => (
-                  <li className="px-trow" key={b.task.id}>
+                  <li className="px-trow" key={b.task.id} {...detail.rowProps(b.task.id)}>
                     <span className="px-ckb" style={{ opacity: 0.4 }}><Ic name="check" /></span>
-                    <div className="px-t-main"><div className="px-t-title" style={{ color: 'var(--px-text-dim)' }}>{b.task.title}</div></div>
+                    <div className="px-t-main"><div className="px-t-title" style={{ color: 'var(--px-text-dim)' }}><EditableTitle node={b.task} commands={commands} /></div></div>
                     <span className="px-tag px-tag--red"><Ic name="alert" />{b.blockedBy[0] ?? 'blocked'}</span>
                   </li>
                 ))}
@@ -153,9 +188,9 @@ export function Tasks({ ctx }: { ctx: CommandContext }) {
           <ul className="px-rows" data-testid="status-inbox">
             {activities.length === 0 && <li className="px-trow px-muted">Inbox is empty.</li>}
             {inboxNewestFirst.map((a) => (
-              <li className="px-trow" key={a.id}>
+              <li className="px-trow" key={a.id} {...detail.rowProps(a.id)}>
                 <InboxCheck activity={a} onComplete={() => setCompleting(a)} />
-                <div className="px-t-main"><div className="px-t-title">{a.title}</div></div>
+                <div className="px-t-main"><div className="px-t-title"><EditableTitle node={a} commands={commands} /></div></div>
               </li>
             ))}
           </ul>
@@ -165,9 +200,9 @@ export function Tasks({ ctx }: { ctx: CommandContext }) {
               <div className="px-sec" style={{ color: 'var(--px-green)' }}>Done today <span className="px-sec-cnt">· {doneToday.length}</span><span className="px-sec-ln" /></div>
               <ul className="px-rows px-rows--muted" data-testid="status-done">
                 {doneToday.map((d) => (
-                  <li className="px-trow px-trow--done" key={d.task.id} data-testid={`done-${d.task.id}`}>
+                  <li className="px-trow px-trow--done" key={d.task.id} data-testid={`done-${d.task.id}`} {...detail.rowProps(d.task.id)}>
                     <span className="px-ckb px-ckb--done"><Ic name="check" /></span>
-                    <div className="px-t-main"><div className="px-t-title">{d.task.title}</div></div>
+                    <div className="px-t-main"><div className="px-t-title"><EditableTitle node={d.task} commands={commands} /></div></div>
                     {d.unfocused && <UnfocusedTag />}
                   </li>
                 ))}
@@ -260,13 +295,13 @@ function CompleteInboxDialog({ activity, targets, commands, onClose }: { activit
   );
 }
 
-function InboxRow({ activity, targets, commands, onComplete }: { activity: Node; targets: PromoteTarget[]; commands: PrismsCommands; onComplete: () => void }) {
+function InboxRow({ activity, targets, commands, detail, onComplete }: { activity: Node; targets: PromoteTarget[]; commands: PrismsCommands; detail: TaskDetailApi; onComplete: () => void }) {
   const [parentId, setParentId] = useState('');
   const selected = parentId || targets[0]?.id || '';
   return (
-    <li className="px-trow px-trow--inbox">
+    <li className="px-trow px-trow--inbox" {...detail.rowProps(activity.id)}>
       <InboxCheck activity={activity} onComplete={onComplete} />
-      <div className="px-t-main"><div className="px-t-title">{activity.title}</div></div>
+      <div className="px-t-main"><div className="px-t-title"><EditableTitle node={activity} commands={commands} /></div></div>
       <span className="px-promote">
         <select
           data-testid={`promote-target-${activity.id}`}
@@ -288,17 +323,17 @@ function InboxRow({ activity, targets, commands, onComplete }: { activity: Node;
           Assign
         </button>
       </span>
-      <button className="px-btn px-btn--sm px-btn--danger" aria-label="delete" onClick={() => void commands.softDelete(activity.id)}>×</button>
+      <InboxDelete title={activity.title} onDelete={() => void commands.softDelete(activity.id)} />
     </li>
   );
 }
 
-function AvailableStatusRow({ item, onCheck }: { item: MyDayItem; onCheck: () => void }) {
+function AvailableStatusRow({ item, commands, detail, onCheck }: { item: MyDayItem; commands: PrismsCommands; detail: TaskDetailApi; onCheck: () => void }) {
   return (
-    <li className="px-trow">
+    <li className="px-trow" {...detail.rowProps(item.task.id)}>
       <button className="px-ckb" data-testid={`task-check-${item.task.id}`} aria-label="check off" onClick={onCheck}><Ic name="check" /></button>
       <div className="px-t-main">
-        <div className="px-t-title">{item.task.title}</div>
+        <div className="px-t-title"><EditableTitle node={item.task} commands={commands} /></div>
         <div className="px-t-meta">
           {item.projectTitle && <span className="px-proj"><span className={`px-pdot px-pdot--${projectTone(item.projectId)}`} />{item.projectTitle}</span>}
           {item.priority !== null && <span className="px-prio">prio {item.priority.toFixed(1)}</span>}
@@ -308,20 +343,22 @@ function AvailableStatusRow({ item, onCheck }: { item: MyDayItem; onCheck: () =>
   );
 }
 
-function TaskRow({ task, status, blockedBy, steps, commands }: { task: Node; status: TaskStatus; blockedBy: string[]; steps: TaskStep[]; commands: PrismsCommands }) {
+function TaskRow({ task, status, blockedBy, steps, commands, detail }: { task: Node; status: TaskStatus; blockedBy: string[]; steps: TaskStep[]; commands: PrismsCommands; detail: TaskDetailApi }) {
   const [open, setOpen] = useState(false);
   const isBlocked = status === 'blocked';
   const doneCount = steps.filter((s) => s.done).length;
   const stepsLabel = steps.length === 0 ? '+ steps' : doneCount > 0 ? `${doneCount}/${steps.length} steps` : `${steps.length} steps`;
+  const location = locationOf(task);
   return (
     <>
-      <li className="px-trow" data-testid={`task-row-${task.id}`}>
+      <li className="px-trow" data-testid={`task-row-${task.id}`} {...detail.rowProps(task.id)}>
         <button className="px-ckb" data-testid={`task-check-${task.id}`} aria-label="check off" disabled={isBlocked} onClick={() => void commands.checkOff(task.id)}><Ic name="check" /></button>
         <div className="px-t-main">
-          <div className="px-t-title" style={isBlocked ? { color: 'var(--px-text-dim)' } : undefined}>{task.title}</div>
+          <div className="px-t-title" style={isBlocked ? { color: 'var(--px-text-dim)' } : undefined}><EditableTitle node={task} commands={commands} /></div>
           <div className="px-t-meta">
             {task.estimate_minutes != null && <span>est {formatMinutes(task.estimate_minutes)}</span>}
             {task.due_date && <span>due {task.due_date.slice(5)}</span>}
+            {location !== '' && <span className="px-t-loc" title={location}><Ic name="pin" />{location}</span>}
           </div>
         </div>
         {isBlocked ? (

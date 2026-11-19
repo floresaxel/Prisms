@@ -86,6 +86,83 @@ test('an Inbox capture completes from the Inbox — as an unfocused task, or add
   await expect(page.getByTestId('status-inbox')).not.toContainText('Water the plants');
 });
 
+test('the capture bar can preselect a project; it sticks until you leave Tasks', async ({ page }) => {
+  await register(page, 'preselect');
+  const ids = { v: randomUUID(), r: randomUUID(), p: randomUUID() };
+  const seed = await page.request.post('/sync/upload', {
+    data: {
+      device_id: 'e2e-seed',
+      commands: [
+        cmd('node.create', { id: ids.v, node_type: 'vision', title: 'Work', sort_order: 'a0' }),
+        cmd('node.create', { id: ids.r, node_type: 'roadmap', title: 'Roadmap', sort_order: 'a0', parent_id: ids.v }),
+        cmd('node.create', { id: ids.p, node_type: 'project', title: 'Launch', sort_order: 'a0', parent_id: ids.r }),
+      ],
+    },
+  });
+  expect(seed.ok()).toBeTruthy();
+
+  await goto(page, 'tasks');
+  const pick = page.getByTestId('capture-project');
+  await expect(pick.locator(`option[value="${ids.p}"]`)).toHaveCount(1, { timeout: 30_000 });
+  await expect(pick).toHaveValue(''); // Inbox by default
+  await pick.selectOption(ids.p);
+
+  // two captures in a row: both go into the project, and the choice is still there
+  for (const t of ['Book the venue', 'Order the banners']) {
+    await page.getByTestId('activity-title').fill(t);
+    await page.getByTestId('activity-add').click();
+    await expect(page.getByTestId(`project-group-${ids.p}`)).toContainText(t);
+  }
+  await expect(pick).toHaveValue(ids.p);
+  await expect(page.getByTestId('inbox')).not.toContainText('Book the venue');
+
+  // other Tasks tabs keep it
+  await page.getByTestId('tasks-tab-bystatus').click();
+  await expect(pick).toHaveValue(ids.p);
+
+  // back to Inbox: captures wait there again
+  await pick.selectOption('');
+  await page.getByTestId('activity-title').fill('Stray thought');
+  await page.getByTestId('activity-add').click();
+  await expect(page.getByTestId('status-inbox')).toContainText('Stray thought');
+
+  // leave Tasks and return: reset to Inbox
+  await pick.selectOption(ids.p);
+  await goto(page, 'myday');
+  await goto(page, 'tasks');
+  await expect(page.getByTestId('capture-project')).toHaveValue('');
+});
+
+test('the Inbox × asks before deleting — Keep and Escape leave the item, Delete removes it', async ({ page }) => {
+  await register(page, 'delete');
+  await goto(page, 'tasks');
+  for (const t of ['Keep me', 'Drop me']) {
+    await page.getByTestId('activity-title').fill(t);
+    await page.getByTestId('activity-add').click();
+    await expect(page.getByTestId('inbox')).toContainText(t);
+  }
+  const row = (t: string) => page.getByTestId('inbox').locator('li', { hasText: t });
+
+  // the question opens right beside the ×; nothing is deleted yet
+  await row('Drop me').getByRole('button', { name: 'delete' }).click();
+  await expect(page.getByTestId('inbox-delete-confirm')).toBeVisible();
+  await expect(page.getByTestId('inbox')).toContainText('Drop me');
+
+  // Escape and Keep both dismiss it
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('inbox-delete-confirm')).toHaveCount(0);
+  await row('Drop me').getByRole('button', { name: 'delete' }).click();
+  await page.getByTestId('inbox-delete-confirm').getByRole('button', { name: 'Keep' }).click();
+  await expect(page.getByTestId('inbox-delete-confirm')).toHaveCount(0);
+  await expect(page.getByTestId('inbox')).toContainText('Drop me');
+
+  // Delete removes only that item
+  await row('Drop me').getByRole('button', { name: 'delete' }).click();
+  await page.getByTestId('inbox-delete-yes').click();
+  await expect(page.getByTestId('inbox')).not.toContainText('Drop me');
+  await expect(page.getByTestId('inbox')).toContainText('Keep me');
+});
+
 test('capture → promote lands the task under its project group; the Inbox group clears', async ({ page }) => {
   await register(page, 'promote');
   const ids = { v: randomUUID(), r: randomUUID(), p: randomUUID() };

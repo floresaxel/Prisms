@@ -159,6 +159,7 @@ export {
   useTimeBlocksForDay,
   useTaskSteps,
   useTaskStepsByTask,
+  useTaskProgress,
   useTasksByProject,
   useGroupedWorklist,
   useMyDayAvailable,

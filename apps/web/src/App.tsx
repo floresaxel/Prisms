@@ -31,6 +31,7 @@ import {
 
 import { checkSession, signOut, type SessionUser } from './auth';
 import { GlobalTimer } from './components/GlobalTimer';
+import { TaskDetailProvider } from './components/TaskDetail';
 import { TimersProvider } from './components/Timers';
 import { ReviewBanner } from './components/ReviewBanner';
 import { SyncChip } from './components/SyncChip';
@@ -218,6 +219,7 @@ function Shell({
 
   return (
     <TimersProvider ctx={ctx}>
+    <TaskDetailProvider ctx={ctx}>
     <Layout
       groups={groups}
       foot={foot}
@@ -256,6 +258,7 @@ function Shell({
       {/* keyed by route: a screen that failed to load does not take the next one down with it */}
       <ScreenBoundary key={route}>{screen}</ScreenBoundary>
     </Layout>
+    </TaskDetailProvider>
     </TimersProvider>
   );
 }
