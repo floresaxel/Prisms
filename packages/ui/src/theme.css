@@ -1451,6 +1451,20 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
 .px-trow--inbox > .px-promote { flex: 0 1 42%; min-width: 0; }
 .px-trow--inbox .px-promote select { flex: 1 1 0; width: 100%; max-width: none; min-width: 0; text-overflow: ellipsis; }
 .px-trow--inbox .px-promote .px-btn { flex: none; }
+/* Inbox project picker: projects are bubbles styled like the Journal tags (blue pill, no #) */
+.px-ppick { display: inline-flex; align-items: center; gap: 6px; flex: 1 1 0; min-width: 0; padding: 0; border: 0; background: none; color: var(--px-faint); cursor: pointer; font: inherit; text-align: left; }
+.px-ppick:focus-visible, .px-ppick-opt:focus-visible { outline: 2px solid var(--px-blue); outline-offset: 2px; border-radius: 999px; }
+.px-ppick:disabled { cursor: default; opacity: .7; }
+.px-ppick .px-ic { width: 12px; height: 12px; flex: none; }
+.px-ppick-tag, .px-ppick-opt { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; min-width: 0; font-size: 11.5px; font-weight: 560; color: var(--px-blue-deep); background: var(--px-blue-bg); border-radius: 999px; padding: 2px 9px; }
+.px-ppick-empty { padding: 2px 0; font-size: 12px; color: var(--px-faint); }
+.px-ppick-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.px-ppick-kind { font-weight: 500; opacity: .7; }
+.px-ppick-pop { position: fixed; z-index: 60; display: flex; flex-wrap: wrap; gap: 5px; max-height: 260px; overflow-y: auto; padding: 8px; background: var(--px-surface); border: 1px solid var(--px-border); border-radius: 10px; box-shadow: var(--px-shadow-pop); }
+.px-ppick-opt { border: 0; cursor: pointer; font-family: inherit; opacity: .75; }
+.px-ppick-opt:hover { opacity: 1; }
+.px-ppick-opt--on { opacity: 1; box-shadow: inset 0 0 0 1.5px var(--px-blue); }
+.px-list--compact .px-trow--inbox .px-ppick { flex: 1; }
 .px-list--stack .px-day-cols { flex-direction: column; align-items: stretch; gap: 0; }
 .px-list--stack .px-day-left { flex: none; width: 100%; }
 .px-list--stack .px-day-rail { width: auto; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); align-items: start; margin-top: 18px; }

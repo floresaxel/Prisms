@@ -39,6 +39,7 @@ import {
 } from '@prisms/ui';
 
 import { InboxDelete } from '../components/InboxDelete';
+import { ProjectPicker } from '../components/ProjectPicker';
 import { EditableTitle, locationOf, useTaskDetail, type TaskDetailApi } from '../components/TaskDetail';
 import { useTabSwap } from '../components/tabSwap';
 import { UnfocusedTag } from '../components/UnfocusedTag';
@@ -301,24 +302,16 @@ function CompleteInboxDialog({ activity, targets, commands, onClose }: { activit
 }
 
 function InboxRow({ activity, targets, commands, detail, onComplete }: { activity: Node; targets: PromoteTarget[]; commands: PrismsCommands; detail: TaskDetailApi; onComplete: () => void }) {
+  // Nothing preselected: the picker reads "Assign project" until one is chosen,
+  // and Assign stays off. A choice whose project has since gone counts as none.
   const [parentId, setParentId] = useState('');
-  const selected = parentId || targets[0]?.id || '';
+  const selected = targets.some((t) => t.id === parentId) ? parentId : '';
   return (
     <li className="px-trow px-trow--inbox" {...detail.rowProps(activity.id)}>
       <InboxCheck activity={activity} onComplete={onComplete} />
       <div className="px-t-main"><div className="px-t-title"><EditableTitle node={activity} commands={commands} /></div></div>
       <span className="px-promote">
-        <select
-          data-testid={`promote-target-${activity.id}`}
-          value={selected}
-          onChange={(e) => setParentId(e.target.value)}
-          disabled={targets.length === 0}
-        >
-          {targets.length === 0 && <option value="">No project to assign to</option>}
-          {targets.map((t) => (
-            <option key={t.id} value={t.id}>{t.title} ({t.type})</option>
-          ))}
-        </select>
+        <ProjectPicker targets={targets} value={selected} onChange={setParentId} testId={`promote-target-${activity.id}`} />
         <button
           className="px-btn px-btn--sm px-btn--primary"
           data-testid={`promote-${activity.id}`}
