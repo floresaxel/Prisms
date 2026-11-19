@@ -401,6 +401,20 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
 .px-tab:hover { color: var(--px-text); }
 .px-tab--on { color: var(--px-blue-deep); border-bottom-color: var(--px-blue); font-weight: 600; }
 
+/* Tab switch: a very quick blur out / blur in on the panel being replaced
+   (apps/web/src/components/tabSwap.ts). `.px-vt-tab` sits on <html> only while
+   a tab swap runs, so these never touch any other view transition. The root's
+   default crossfade is off — the tab bar and the rest of the page change at
+   once — and the panel's group does not morph between the two heights, which
+   would stretch the snapshots; the outgoing one just overflows while it fades. */
+@keyframes px-tab-out { to { opacity: 0; filter: blur(6px); } }
+@keyframes px-tab-in { from { opacity: 0; filter: blur(6px); } }
+.px-vt-tab::view-transition-old(root),
+.px-vt-tab::view-transition-new(root) { animation: none; }
+.px-vt-tab::view-transition-group(px-tabpanel) { animation: none; }
+.px-vt-tab::view-transition-old(px-tabpanel) { animation: px-tab-out 90ms ease-in both; }
+.px-vt-tab::view-transition-new(px-tabpanel) { animation: px-tab-in 140ms ease-out 40ms both; }
+
 /* shared icon primitive (W0): 16px default, non-shrinking, inherits currentColor */
 .px-ic { width: 16px; height: 16px; flex: none; }
 

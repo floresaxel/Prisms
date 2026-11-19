@@ -4,9 +4,11 @@
  * linkable and survives reload; selecting one syncs the hash without pushing a
  * history entry. Old paths redirect into these hashes on boot (App.tsx).
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type RefObject } from 'react';
 
 import { Ic, type IconName } from '@prisms/ui';
+
+import { useTabSwap } from './tabSwap';
 
 export interface TabSpec {
   key: string;
@@ -19,8 +21,15 @@ function resolveHashTab(validKeys: string, fallback: string): string {
   return validKeys.split(',').includes(h) ? h : fallback;
 }
 
-/** [activeTabKey, select] — active derived from the URL hash, select syncs it. */
-export function useHashTab(tabs: readonly TabSpec[], fallback: string): [string, (key: string) => void] {
+/**
+ * [activeTabKey, select, panelRef] — active derived from the URL hash, select
+ * syncs it. Put `panelRef` on the element wrapping the tab content and `select`
+ * blurs the old content out and the new one in (tabSwap.ts).
+ */
+export function useHashTab(
+  tabs: readonly TabSpec[],
+  fallback: string,
+): [string, (key: string) => void, RefObject<HTMLDivElement | null>] {
   const validKeys = tabs.map((t) => t.key).join(',');
   const [tab, setTab] = useState(() => resolveHashTab(validKeys, fallback));
   useEffect(() => {
@@ -28,13 +37,15 @@ export function useHashTab(tabs: readonly TabSpec[], fallback: string): [string,
     window.addEventListener('hashchange', onHash);
     return () => window.removeEventListener('hashchange', onHash);
   }, [validKeys, fallback]);
+  const [panelRef, swap] = useTabSwap();
   function select(key: string) {
     if (window.location.hash !== `#${key}`) {
       window.history.replaceState({}, '', window.location.pathname + `#${key}`);
     }
-    setTab(key);
+    if (key === tab) return;
+    swap(() => setTab(key));
   }
-  return [tab, select];
+  return [tab, select, panelRef];
 }
 
 export function TabBar({ tabs, active, onSelect }: { tabs: readonly TabSpec[]; active: string; onSelect: (key: string) => void }) {
