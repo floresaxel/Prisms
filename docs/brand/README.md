@@ -115,7 +115,7 @@ pnpm --filter @prisms/desktop tauri icon ../../docs/brand/app-icon-1024.png
 | `docs/brand/mark-full.svg` | Four-door master, ink + Blue 500 |
 | `docs/brand/mark-simple.svg` | Three-door master |
 | `docs/brand/mark-compact.svg` | Two-door master (favicon geometry) |
-| `docs/brand/app-icon.svg` | App icon: ink rounded tile, simple mark reversed |
+| `docs/brand/app-icon.svg` | App icon: ink rounded tile, simple mark reversed, the pentagon about 76 % of the tile's width |
 | `docs/brand/app-icon-maskable.svg` | Full-bleed variant, mark inside the 80 % safe circle |
 | `docs/brand/app-icon-1024.png` | The app icon at 1024, source of the desktop icon set |
 | `docs/brand/lockups/lockup-{horizontal,stacked}-{ink,reversed,on-blue}.{svg,png}` | Lockups; the SVGs embed Space Grotesk, so they render the same anywhere |
