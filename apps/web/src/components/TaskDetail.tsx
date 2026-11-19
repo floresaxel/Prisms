@@ -150,13 +150,37 @@ export function TaskDetailProvider({ ctx, children }: { ctx: CommandContext; chi
 // --- click-to-rename title --------------------------------------------------------
 
 /**
- * A row's title. Clicking the text turns it into an input right there: Enter or
- * clicking away saves, Escape leaves the title as it was. The row's other
- * clicks still open the details card.
+ * The character offset under a click inside `el`'s single text node — where the
+ * caret should land when the text turns into an input — or null when the browser
+ * can't say (then the caret goes to the end).
+ */
+function textOffsetAt(el: HTMLElement, x: number, y: number): number | null {
+  const doc = document as Document & {
+    caretPositionFromPoint?: (x: number, y: number) => { offsetNode: unknown; offset: number } | null;
+    caretRangeFromPoint?: (x: number, y: number) => Range | null;
+  };
+  let hit: { node: unknown; offset: number } | null = null;
+  const pos = doc.caretPositionFromPoint?.(x, y);
+  if (pos) hit = { node: pos.offsetNode, offset: pos.offset };
+  else {
+    const range = doc.caretRangeFromPoint?.(x, y);
+    if (range) hit = { node: range.startContainer, offset: range.startOffset };
+  }
+  // (`Node` here is the task-tree type, so the DOM check goes by `Text`)
+  return hit !== null && hit.node instanceof Text && el.contains(hit.node) ? hit.offset : null;
+}
+
+/**
+ * A row's title. Clicking the text turns it into an input right there, with the
+ * caret where the click landed (nothing selected): Enter or clicking away saves,
+ * Escape leaves the title as it was. The row's other clicks still open the
+ * details card.
  */
 export function EditableTitle({ node, commands }: { node: Node; commands: PrismsCommands }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(node.title);
+  /** Where the click that started the edit landed in the title text. */
+  const caretAt = useRef<number | null>(null);
 
   function commit() {
     setEditing(false);
@@ -173,7 +197,12 @@ export function EditableTitle({ node, commands }: { node: Node; commands: Prisms
         value={draft}
         maxLength={MAX_TITLE_LENGTH}
         autoFocus
-        onFocus={(e) => e.currentTarget.select()}
+        onFocus={(e) => {
+          // a bare caret, never a selection: at the click, else at the end
+          const at = Math.min(caretAt.current ?? e.currentTarget.value.length, e.currentTarget.value.length);
+          caretAt.current = null;
+          e.currentTarget.setSelectionRange(at, at);
+        }}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={commit}
         onKeyDown={(e) => {
@@ -195,8 +224,8 @@ export function EditableTitle({ node, commands }: { node: Node; commands: Prisms
       type="button"
       className="px-title-btn"
       data-testid={`title-${node.id}`}
-      title="Click to rename"
-      onClick={() => {
+      onClick={(e) => {
+        caretAt.current = textOffsetAt(e.currentTarget, e.clientX, e.clientY);
         setDraft(node.title);
         setEditing(true);
       }}
@@ -746,7 +775,6 @@ function StepRow({ step, frozen, first, last, commands, run, onUp, onDown }: { s
         <button
           type="button"
           className="px-title-btn px-sstep-txt"
-          title="Click to rename"
           onClick={() => {
             setDraft(step.title);
             setEditing(true);

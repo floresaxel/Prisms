@@ -58,6 +58,8 @@ test('rename a task in place, then edit every detail in its card — all of it s
   await page.getByTestId(`title-${ids.task}`).click();
   const inline = page.getByTestId(`title-input-${ids.task}`);
   await expect(inline).toBeFocused();
+  // …with a bare caret, not the whole title selected
+  expect(await inline.evaluate((el: HTMLInputElement) => el.selectionStart === el.selectionEnd)).toBe(true);
   await inline.fill('Write the launch note');
   await inline.press('Enter');
   await expect(page.getByTestId(`title-${ids.task}`)).toHaveText('Write the launch note');
