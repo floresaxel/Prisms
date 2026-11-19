@@ -326,13 +326,6 @@ describe('the snap grid', () => {
     mount();
     dragTodoOver(FREE_COL, 150);
     expect(preview(FREE_COL)!.dataset.startMin).toBe('210');
-    expect(screen.getByTestId('drag-hint').textContent).toContain('snap to 15 minutes');
-  });
-
-  it('says which grid is in force', () => {
-    storage.setItem(SNAP_KEY, '60');
-    mount();
-    expect(screen.getByTestId('drag-hint').textContent).toContain('snap to 1 hour');
   });
 });
 

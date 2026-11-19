@@ -587,12 +587,14 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
             return (
             <div
               key={date}
-              className={`px-cal-col${selectedDay === date ? ' px-cal-col--sel' : ''}`}
+              className={`px-cal-col${selectedDay === date ? ' px-cal-col--sel' : ''}${date === todayDate ? ' px-cal-col--today' : ''}`}
               data-testid={`day-${col}`}
               data-selected={selectedDay === date ? 'true' : undefined}
+              data-today={date === todayDate ? 'true' : undefined}
             >
               <div
-                className={`px-cal-col-head${selectedDay === date ? ' px-cal-col-head--sel' : ''}`}
+                className={`px-cal-col-head${selectedDay === date ? ' px-cal-col-head--sel' : ''}${date === todayDate ? ' px-cal-col-head--today' : ''}`}
+                aria-current={date === todayDate ? 'date' : undefined}
                 data-testid={`day-head-${col}`}
                 role="button"
                 tabIndex={0}
@@ -602,6 +604,7 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
                   setSelectedBlockId(null);
                 }}
               >
+                {date === todayDate && <span className="px-cal-today-dot" data-testid="today-dot" aria-label="today" role="img" />}
                 {DAY_LABEL[new Date(`${date}T00:00:00Z`).getUTCDay()]} {date.slice(8)}
                 {/* testid keeps the `note-dot-` name the specs already address it by. */}
                 {noteByDate.has(date) && (
@@ -810,11 +813,11 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
             ))}
           </div>
 
-          {/* Everything still open, scheduled ones included — bounded scroller so
-              the panel never outgrows the week grid. */}
+          {/* Everything still open, scheduled ones included — flows with the page
+              (no inner scroller) so it moves in lockstep with the rest. */}
           <div className="px-ag-all">
             <h2>All tasks <span className="px-muted">{agenda.allTasks.length}</span></h2>
-            <div className="px-ag-scroll px-todo-list" data-testid="all-tasks-list">
+            <div className="px-todo-list" data-testid="all-tasks-list">
               {agenda.allTasks.length === 0 &&
                 (hydrated ? <div className="px-list-empty">No open tasks.</div> : <Skeleton testId="all-tasks-skeleton" rows={4} />)}
               {agenda.allTasks.map((t: AgendaTask) => (
@@ -841,11 +844,6 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
               ))}
             </div>
           </div>
-          <p className="px-muted px-drag-hint" data-testid="drag-hint">
-            Drops snap to {snap === 60 ? '1 hour' : `${snap} minutes`} — change that in Settings. Anchored blocks refuse
-            the drag (🔒); everywhere else takes a drop, and one that overlaps or falls outside your hours keeps a
-            caution ⚠ until you move it.
-          </p>
         </div>
       </div>
 

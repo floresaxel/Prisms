@@ -433,9 +433,7 @@ export function Layout({ brand = 'Prisms', brandHref, groups, foot, active, onNa
             {clock ?? <NowClock />}
             {timer}
             {sync}
-            {user && (
-              <span className="px-avatar" title={user.email}>{initial}</span>
-            )}
+            {/* no avatar here: the account lives in the sidebar's foot, once */}
           </div>
         </header>
         <main className="px-content">{children}</main>

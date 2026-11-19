@@ -361,7 +361,6 @@ test('agenda: the drop preview snaps to the interval chosen in Settings', async 
   }
 
   // default: a quarter-hour grid rounds 9:09 up to 9:15
-  await expect(page.getByTestId('drag-hint')).toContainText('snap to 15 minutes');
   expect(await previewStartMin()).toBe('195');
 
   await goto(page, 'settings');
@@ -370,7 +369,6 @@ test('agenda: the drop preview snaps to the interval chosen in Settings', async 
 
   // hourly: the same pixel now means 9:00
   await goto(page, 'agenda');
-  await expect(page.getByTestId('drag-hint')).toContainText('snap to 1 hour');
   expect(await previewStartMin()).toBe('180');
 
   // and a 5-minute grid keeps the minute the pointer is actually on
