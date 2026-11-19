@@ -7,8 +7,24 @@ import { describe, expect, it } from 'vitest';
 
 import { buildOptimisticEffects } from '../src/powersync/effects';
 import { toJournalEntry } from '../src/powersync/rows';
+import { appSchema } from '../src/powersync/schema';
 
 const ctx = { userId: 'u1', deviceId: 'web-1', now: '2026-06-27T00:00:00.000Z' };
+
+const columnsOf = (name: string) =>
+  appSchema.tables.find((t) => t.name === name)?.columns.map((c) => c.name) ?? [];
+
+describe('replica schema — tags', () => {
+  // Regression: the column sat on decision_boards, so the replica view of a note
+  // dropped its tags and a tag showed only while the note's own write was still
+  // in the overlay.
+  it('declares tags on journal_entries, where the server stores them', () => {
+    expect(columnsOf('journal_entries')).toContain('tags');
+  });
+  it('does not declare tags on decision_boards, which has no such column', () => {
+    expect(columnsOf('decision_boards')).not.toContain('tags');
+  });
+});
 
 describe('journal.set_tags — optimistic effect', () => {
   it('patches the existing row with the CANONICAL list, as JSON text', () => {

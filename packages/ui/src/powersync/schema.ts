@@ -152,6 +152,16 @@ const journal_entries = new Table({
   // user-editable heading (migration 0014); '' = untitled.
   title: column.text,
   /**
+   * Free-text note tags (migration 0016); a JSON array, shipped as text.
+   *
+   * It sat on `decision_boards` by mistake from #37 until 2026-11-19, so the
+   * replica's view of a note never had it: a tag showed only while the note's
+   * own write was still held in the overlay, and vanished once the synced row
+   * took over. The data was streamed all along (`SELECT *`), so declaring it here
+   * is the whole fix — PowerSync rebuilds the view, no resync needed.
+   */
+  tags: column.text,
+  /**
    * The command that last wrote this row (§7.8, server-stamped on every write and
    * already streamed by the `SELECT *`). Declared so the overlay store can tell
    * "the row has caught up with my write" from "the row is here": without it,
@@ -183,8 +193,6 @@ const task_steps = new Table({
 const decision_boards = new Table({
   user_id: column.text,
   title: column.text,
-  // free-text note tags (migration 0016); a JSON array, shipped as text.
-  tags: column.text,
   created_at: column.text,
   updated_at: column.text,
   deleted_at: column.text,
