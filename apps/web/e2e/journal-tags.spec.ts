@@ -76,7 +76,9 @@ test('tag a note, sort the journal by tag, and filter the day log by project and
   const craft = branch('Craft', 'Novel', 'Draft chapter');
   const noteId = randomUUID();
   const otherNote = randomUUID();
+  const remoteNote = randomUUID();
   const otherDay = new Date(Date.parse(`${today}T12:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
+  const remoteDay = new Date(Date.parse(`${today}T12:00:00Z`) - 2 * 86_400_000).toISOString().slice(0, 10);
   await upload(page, [
     ...health.commands,
     ...craft.commands,
@@ -86,6 +88,11 @@ test('tag a note, sort the journal by tag, and filter the day log by project and
     cmd('journal.write', { id: noteId, entry_date: today, content: '# Today\nfelt good' }),
     // a second, untagged note on another day
     cmd('journal.write', { id: otherNote, entry_date: otherDay, content: 'an untagged day' }),
+    // a note tagged on ANOTHER device: its tags reach this one only through the
+    // synced row, never the local overlay (they once never arrived at all — the
+    // replica schema declared the column on the wrong table)
+    cmd('journal.write', { id: remoteNote, entry_date: remoteDay, content: 'tagged elsewhere' }),
+    cmd('journal.set_tags', { id: remoteNote, tags: ['travel'] }),
   ]);
 
   await goto(page, 'journal');
@@ -143,6 +150,7 @@ test('tag a note, sort the journal by tag, and filter the day log by project and
   await expect(groups.getByTestId('journal-group-health').getByTestId(`journal-day-${today}`)).toBeVisible();
   await expect(groups.getByTestId('journal-group-untagged').getByTestId(`journal-day-${otherDay}`)).toBeVisible();
   await expect(groups.getByTestId('journal-group-untagged').getByTestId(`journal-day-${today}`)).toHaveCount(0);
+  await expect(groups.getByTestId('journal-group-travel').getByTestId(`journal-day-${remoteDay}`)).toBeVisible();
 
   // --- filter the list by tag ---
   await page.getByTestId('journal-filter-tag').selectOption('work');
