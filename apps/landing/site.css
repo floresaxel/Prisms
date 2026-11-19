@@ -62,8 +62,9 @@ code { font-family: Consolas, 'SF Mono', Menlo, monospace; font-size: .92em; bac
    the app (the four-door mark is for 32 px and up: the hero). The #m-simple
    symbol reads --mk-w (line, in the mark's 200-unit box; 280 / size × 1.1),
    --mk-line and --mk-door, so one symbol serves every size. */
-.lp-brand { display: flex; align-items: center; gap: 10px; font-family: var(--px-font-display); font-weight: 400; font-size: 19px; letter-spacing: .02em; color: var(--px-ink); text-decoration: none; }
-.lp-brand-logo { width: 28px; height: 28px; flex: none; --mk-w: 11; }
+.lp-brand { display: flex; align-items: center; gap: 9px; font-family: var(--px-font-display); font-weight: 400; font-size: 19px; letter-spacing: .02em; color: var(--px-ink); text-decoration: none; }
+.lp-brand-logo { width: 24px; height: 24px; flex: none; --mk-w: 12.8; }
+/* the lockup rule (docs/brand): word 0.8x the mark's box, gap 0.36x. Nav and footer: 24 / 19 / 9. */
 .lp-nav-links { display: flex; gap: 22px; margin-left: 8px; }
 .lp-nav-links a { font-size: 13.5px; font-weight: 500; color: var(--px-text-dim); text-decoration: none; }
 .lp-nav-links a:hover { color: var(--px-text); }
@@ -193,7 +194,7 @@ code { font-family: Consolas, 'SF Mono', Menlo, monospace; font-size: .92em; bac
 .m-app { display: flex; font-size: 12.5px; min-height: 400px; text-align: left; }
 .m-sb { width: 178px; flex: none; padding: 12px 10px; background: var(--px-sb-bg); border-right: 1px solid var(--px-border); }
 /* the app's own logo: the simple, three-door mark (as in the real sidebar) */
-.m-brand { display: flex; align-items: center; gap: 8px; padding: 0 8px 10px; font-family: var(--px-font-display); font-weight: 400; font-size: 14px; letter-spacing: .02em; color: var(--px-ink); }
+.m-brand { display: flex; align-items: center; gap: 7px; padding: 0 8px 10px; font-family: var(--px-font-display); font-weight: 400; font-size: 16px; letter-spacing: .02em; color: var(--px-ink); }
 .m-logo { width: 20px; height: 20px; flex: none; --mk-w: 15; }
 .m-group { margin: 12px 8px 4px; font-size: 9.5px; font-weight: 650; letter-spacing: .7px; color: var(--px-faint); text-transform: uppercase; }
 .m-nav { display: flex; align-items: center; gap: 8px; padding: 5px 8px; margin: 1px 0; border-radius: 7px; color: var(--px-text-dim); font-size: 12px; }
@@ -450,7 +451,6 @@ code { font-family: Consolas, 'SF Mono', Menlo, monospace; font-size: .92em; bac
 /* ── footer (site-wide, columns) ─────────────────────────────────────── */
 .lp-foot { border-top: 1px solid var(--px-border); background: var(--px-surface); }
 .lp-foot-inner { max-width: 1120px; margin: 0 auto; padding: 42px 24px 32px; display: grid; grid-template-columns: 1.7fr 1fr 1fr; gap: 30px; }
-.lp-foot-brand .lp-brand { font-size: 17px; }
 .lp-foot-brand p { margin: 12px 0 0; font-size: 12.5px; line-height: 1.65; color: var(--px-faint); }
 .lp-foot-col { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
 .lp-foot-col b { font-size: 11px; font-weight: 660; text-transform: uppercase; letter-spacing: .07em; color: var(--px-faint); margin-bottom: 4px; }

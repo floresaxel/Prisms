@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-import { LAYER_DOORS, ThresholdMark } from '@prisms/ui';
+import { LAYER_DOORS, ThresholdLockup, ThresholdMark } from '@prisms/ui';
 
 import { signIn, signUp, type SessionUser } from '../auth';
 import { config } from '../config';
@@ -67,10 +67,7 @@ export function Login({ onAuthed }: { onAuthed: (user: SessionUser) => void }) {
   return (
     <div className="px-auth-split">
       <aside className="px-auth-brand">
-        <div className="px-auth-logo">
-          <ThresholdMark size={30} tone="reversed" />
-          <span>Prisms</span>
-        </div>
+        <ThresholdLockup size={30} tone="reversed" className="px-auth-logo" />
         <Corridor />
         <div className="px-auth-pitch">
           <p className="px-auth-pitch-h">Your plan lives on your server.</p>

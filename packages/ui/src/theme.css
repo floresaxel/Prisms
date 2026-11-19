@@ -264,8 +264,19 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
    the rail's arithmetic below is unchanged. */
 .px-brand-logo { width: 22px; height: 22px; border-radius: 6px; background: transparent; display: flex; align-items: center; justify-content: center; flex: none; }
 .px-brand-logo svg { display: block; }
-/* The wordmark: Space Grotesk at its regular weight, opened up slightly. */
+/* The wordmark: Space Grotesk at its regular weight, opened up slightly. The
+   sidebar is the horizontal lockup split in two (the mark is a control, the
+   word folds away on the rail), so it keeps LOCKUP's numbers by hand: 22px
+   mark, 18px word (0.8x), 8px gap (0.36x, on .px-brand). */
 .px-brand-lbl { font-family: var(--px-font-display); font-weight: 400; font-size: 18px; letter-spacing: 0.02em; color: var(--px-ink); }
+/* ThresholdLockup: mark + wordmark; the component sets the word size and gap
+   from the mark (LOCKUP in Mark.tsx), so only the type and colour live here. */
+.px-lockup { display: inline-flex; align-items: center; flex: none; }
+.px-lockup--stacked { flex-direction: column; }
+.px-lockup > svg { display: block; flex: none; }
+.px-lockup-word { font-family: var(--px-font-display); font-weight: 400; letter-spacing: 0.02em; line-height: 1; white-space: nowrap; color: var(--px-ink); }
+.px-lockup--reversed .px-lockup-word,
+.px-lockup--on-blue .px-lockup-word { color: #fff; }
 /* The mark as a control (expand the rail, or go home). It keeps the mark's
    exact size — only the cursor and a soft hover ground say it presses, so the
    sidebar's corner does not turn into another button to read past. */
@@ -739,8 +750,7 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
   flex: 1 1 480px; background: var(--px-ink); color: #fff;
   padding: 40px 48px; display: flex; flex-direction: column; justify-content: space-between; gap: 32px; overflow: hidden;
 }
-.px-auth-logo { display: flex; align-items: center; gap: 12px; }
-.px-auth-logo span { font-family: var(--px-font-display); font-size: 24px; letter-spacing: 0.02em; }
+.px-auth-logo { align-self: flex-start; }
 .px-auth-corridor { width: 100%; max-width: 440px; align-self: center; }
 .px-auth-pitch { max-width: 440px; }
 .px-auth-pitch-h { margin: 0 0 10px; font-family: var(--px-font-display); font-weight: 500; font-size: 30px; line-height: 1.15; letter-spacing: -0.02em; }

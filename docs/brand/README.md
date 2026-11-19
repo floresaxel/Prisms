@@ -42,6 +42,29 @@ compact form under 20 px (or with `compact`).
 | Ink | White | `#4D82FF` |
 | Brand blue | White | Ink |
 
+## Lockups
+
+The mark with the wordmark ("Prisms", Space Grotesk Regular, +2 % tracking),
+sized from the mark's box:
+
+| Layout | Mark | Wordmark | Gap | Use |
+|---|---|---|---|---|
+| **Horizontal** | Simple | 0.8 × the box | 0.36 × | The everyday logo: sidebar, sign-in, the landing nav and footer |
+| **Stacked** | Full | 0.37 × the box | 0.15 × | Covers, splash moments, anything large and centred |
+
+In code: `<ThresholdLockup size={30} tone="reversed" />` (`layout="stacked"`,
+`variant` to override the mark); the ratios are `LOCKUP` in `Mark.tsx`. The
+sidebar is the horizontal lockup split in two (the mark is a control, the word
+folds away on the rail), so `theme.css` keeps the same numbers by hand: 22 px
+mark, 18 px word, 8 px gap. The landing page uses 24 / 19 / 9.
+
+| Where | Size (mark / word / gap) |
+|---|---|
+| Web sidebar | 22 / 18 / 8 |
+| Web sign-in panel (reversed) | 30 / 24 / 10.8 |
+| Landing nav and footer | 24 / 19 / 9 |
+| Mobile sign-in (`lockup.png`) | 32 dp, drawn as a picture: the app ships no Space Grotesk |
+
 ## Colour
 
 | Name | Hex | Token | Role |
@@ -79,6 +102,14 @@ All drawn by `apps/web/scripts/render-brand.mjs` from the same geometry as
 pnpm --filter @prisms/web brand:icons
 ```
 
+The desktop (Tauri) icon set is cut from the 1024 master by Tauri's own tool;
+it also writes Android and iOS folders, which the desktop shell does not use
+(the phone app is Expo), so delete those:
+
+```powershell
+pnpm --filter @prisms/desktop tauri icon ../../docs/brand/app-icon-1024.png
+```
+
 | File | What |
 |---|---|
 | `docs/brand/mark-full.svg` | Four-door master, ink + Blue 500 |
@@ -86,8 +117,18 @@ pnpm --filter @prisms/web brand:icons
 | `docs/brand/mark-compact.svg` | Two-door master (favicon geometry) |
 | `docs/brand/app-icon.svg` | App icon: ink rounded tile, simple mark reversed |
 | `docs/brand/app-icon-maskable.svg` | Full-bleed variant, mark inside the 80 % safe circle |
+| `docs/brand/app-icon-1024.png` | The app icon at 1024, source of the desktop icon set |
+| `docs/brand/lockups/lockup-{horizontal,stacked}-{ink,reversed,on-blue}.{svg,png}` | Lockups; the SVGs embed Space Grotesk, so they render the same anywhere |
 | `apps/web/public/favicon.svg`, `apps/landing/favicon.svg` | Compact mark; the frame turns white in dark mode |
 | `apps/web/public/icon-mark-{192,512,maskable-512}.png` | PWA, home-screen and desktop-launcher icons |
+| `apps/desktop/src-tauri/icons/*` | Desktop app (Windows `.ico`, macOS `.icns`, PNG sizes, Store logos) |
+| `apps/mobile/assets/brand/icon.png` | Expo icon (opaque, iOS rounds it) |
+| `apps/mobile/assets/brand/adaptive-{foreground,monochrome}.png` | Android adaptive icon over ink `#0E1726`; monochrome for themed icons |
+| `apps/mobile/assets/brand/splash-icon.png` | Splash: the simple mark, reversed, on ink |
+| `apps/mobile/assets/brand/lockup{,@2x,@3x}.png` | The mobile sign-in's lockup |
+
+The phone apps pick up icon and splash changes on their next native build
+(`expo prebuild`); a Metro reload is not enough.
 
 The launcher (`scripts/prisms-stack.ps1`) caches its `.ico` as `prisms-mark.ico`
 and the desktop shortcut points at it. After a new mark, give the cache a new

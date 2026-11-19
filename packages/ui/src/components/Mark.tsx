@@ -149,6 +149,53 @@ export function ThresholdMark({
   );
 }
 
+/**
+ * The lockup: the mark with the wordmark, in proportion to the mark's box
+ * (docs/brand, "Lockups"). Horizontal is the everyday logo (the sidebar keeps
+ * the same numbers in theme.css: 22 px mark, 18 px word, 8 px gap); stacked is
+ * for covers and splash moments, usually with the full mark.
+ */
+export const LOCKUP = {
+  horizontal: { word: 0.8, gap: 0.36 },
+  stacked: { word: 0.37, gap: 0.15 },
+} as const;
+
+export type LockupLayout = keyof typeof LOCKUP;
+
+export interface ThresholdLockupProps {
+  /** The mark's box in px; the wordmark and the gap follow from it. */
+  size?: number;
+  layout?: LockupLayout;
+  /** The ground it sits on. `white` is a glyph tone, not a logo one. */
+  tone?: Exclude<MarkTone, 'white'>;
+  variant?: MarkVariant;
+  className?: string;
+  style?: CSSProperties;
+}
+
+/** Mark + wordmark. The word is real text, so it is what assistive tech reads. */
+export function ThresholdLockup({
+  size = 30,
+  layout = 'horizontal',
+  tone = 'ink',
+  variant = 'simple',
+  className,
+  style,
+}: ThresholdLockupProps) {
+  const { word, gap } = LOCKUP[layout];
+  const cls = `px-lockup px-lockup--${layout} px-lockup--${tone}${className ? ` ${className}` : ''}`;
+  return (
+    <span className={cls} style={{ gap: round1(size * gap), ...style }}>
+      <ThresholdMark size={size} tone={tone} variant={variant} />
+      <span className="px-lockup-word" style={{ fontSize: round1(size * word) }}>
+        Prisms
+      </span>
+    </span>
+  );
+}
+
+const round1 = (n: number) => Math.round(n * 10) / 10;
+
 export interface DepthDoorProps {
   /** 0 = vision … 5 = schedule block. Clamped into range. */
   depth: number;

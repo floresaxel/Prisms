@@ -1,8 +1,11 @@
 import { useState } from 'react';
-import { View } from 'react-native';
+import { Image, View } from 'react-native';
 
+// The brand's horizontal lockup (docs/brand), drawn by apps/web/scripts/render-brand.mjs:
+// the app ships no Space Grotesk, so the wordmark comes as part of the picture.
+import lockup from '../../assets/brand/lockup.png';
 import { signIn, signUp, type SessionUser } from '../auth';
-import { Btn, Field, H1, Muted, Screen } from '../ui';
+import { Btn, Field, Muted, Screen } from '../ui';
 
 export function Login({ onAuthed }: { onAuthed: (user: SessionUser) => void }) {
   const [mode, setMode] = useState<'in' | 'up'>('in');
@@ -27,7 +30,7 @@ export function Login({ onAuthed }: { onAuthed: (user: SessionUser) => void }) {
 
   return (
     <Screen testID="login">
-      <H1>Prisms</H1>
+      <Image source={lockup} accessibilityRole="header" accessibilityLabel="Prisms" testID="brand-lockup" style={{ marginTop: 8 }} />
       <View style={{ gap: 10, marginTop: 12 }}>
         {mode === 'up' && <Field value={name} onChangeText={setName} placeholder="Name" testID="name" />}
         <Field value={email} onChangeText={setEmail} placeholder="Email" keyboardType="email-address" testID="email" />
