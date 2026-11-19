@@ -497,7 +497,9 @@ $Engine = {
       # with nothing cached, that ran past ten minutes and failed. The policy
       # already applied when each branch resolved its dependencies; this install
       # only links what the lockfile says.
-      $r = Invoke-Logged "npx.cmd --yes $pm install --frozen-lockfile --prefer-offline --config.minimum-release-age=0 --filter @prisms/web... --filter @prisms/server... --filter @prisms/db..." 1800 @{ CI = 'true' } $tree
+      # (Set through the environment: pnpm 11 takes settings as pnpm_config_*,
+      # and ignores a --config.minimum-release-age flag.)
+      $r = Invoke-Logged "npx.cmd --yes $pm install --frozen-lockfile --prefer-offline --filter @prisms/web... --filter @prisms/server... --filter @prisms/db..." 1800 @{ CI = 'true'; pnpm_config_minimum_release_age = '0' } $tree
       if ($r.Code -ne 0) { Stop-Step code "Installing the build tree's packages failed: $(Get-FailureText $r.Out)" }
       try { [IO.File]::WriteAllText($stamp, $want) } catch { }
     }
