@@ -33,6 +33,10 @@ The traps it handles (the Android script, apps/mobile/scripts/dev-android.ps1,
 found most of them first):
   * WSL idles out and takes Docker with it, so the distro is pinned for as long
     as the stack runs.
+  * After the PC sleeps, WSL's VM can be left wedged: every `wsl` call hangs,
+    then fails with HCS_E_CONNECTION_TIMEOUT. A command is asked of the distro
+    first; if it doesn't answer, WSL is shut down once and asked again, and
+    only then is the start given up on, saying so.
   * Windows can reach a container's port a beat after `docker ps` calls it
     healthy, so readiness is judged from the Windows side.
   * The API is a HOST process on :3001 (compose's `api` is a stub on :3002). It
@@ -329,12 +333,36 @@ $Engine = {
     Set-Row files ok $ready
   }
 
+  # Can WSL boot the distro and run a command in it? After the PC wakes from
+  # standby its VM can be left wedged: every `wsl` call then hangs until Windows
+  # gives up with HCS_E_CONNECTION_TIMEOUT. Nothing downstream can tell that
+  # from "Docker isn't up yet", so it is asked directly.
+  function Test-WslResponds([int]$TimeoutSec) {
+    $r = Invoke-Logged (Get-WslCommand 'true') $TimeoutSec -Quiet
+    $r.Code -eq 0
+  }
+
+  # A wedged VM only comes back by being shut down. That ends every distro, but
+  # a WSL that doesn't answer isn't running anyone's work. It is done at most
+  # once per start, and BEFORE the pin below, which a shutdown would kill.
+  function Confirm-WslResponds {
+    if (Test-WslResponds 60) { return }
+    Set-Row wsl busy "WSL isn't answering (it can hang after the PC sleeps), restarting it…"
+    $null = Invoke-Logged 'wsl.exe --shutdown' 120
+    if (Test-WslResponds 90) { return }
+    Stop-Step wsl "WSL won't start, even after being restarted. Restart the PC (or run `"wsl --shutdown`" in a terminal), then try again."
+  }
+
   function Step-Docker {
     $d = $sync.Distro
     Set-Row wsl busy "starting $d…"
     if (-not (Get-Command wsl.exe -ErrorAction SilentlyContinue)) { Stop-Step wsl 'WSL is not installed.' }
-    $running = @((& wsl.exe -l --running -q 2>$null) -replace "`0", '' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+    # Asked FIRST and with a time limit: this call is what hangs on a wedged
+    # WSL. An answer that never comes reads as "not running", i.e. as a cold boot.
+    $listing = Invoke-Logged 'wsl.exe -l --running -q' 60 -Quiet
+    $running = @(($listing.Code -eq 0 ? $listing.Out : '') -split "`r?`n" | ForEach-Object { $_.Trim() } | Where-Object { $_ })
     $sync.WslWasRunning = $running -contains $d
+    Confirm-WslResponds
     if (-not (Test-Alive $sync.Owned.pin)) {
       # Something long-lived inside the distro is what stops WSL (and Docker
       # with it) idling out from under the stack.
