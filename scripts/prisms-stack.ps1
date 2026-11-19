@@ -24,9 +24,10 @@ server and its hot reload while working on the app.
 The site shows EVERY active branch, not just what this checkout has checked
 out. The servers run from a tree of their own beside the repo (prisms-preview):
 origin/main with each local branch that has unmerged work and a commit in the
-last few days (-ActiveDays, default 3) merged on top, oldest first. wip/*
-branches are snapshots and are left out, and so is a branch that conflicts
-with the rest (the Code row names it). While the window is open it watches for
+last few days (-ActiveDays, default 3) merged on top, newest first. wip/*
+branches are snapshots and are left out. When two branches conflict, the one
+committed to last goes in and the other is left out (the Code row names it);
+a conflict only in tests or docs, which the site never runs, keeps neither out. While the window is open it watches for
 commits: a few seconds after one lands, on any branch, in any worktree, the
 tree is merged again and whatever changed is rebuilt and restarted. No checkout
 anyone works in is ever touched. -CheckoutOnly (or -Dev) serves this checkout
@@ -383,7 +384,8 @@ $Engine = {
     if (-not $base) { $baseName = 'main'; $base = & git.exe -C $repo rev-parse --verify --quiet refs/heads/main 2>$null }
     if (-not $base) { return $null }
     $cut = [DateTimeOffset]::UtcNow.AddDays(-$sync.ActiveDays).ToUnixTimeSeconds()
-    $branches = @(& git.exe -C $repo for-each-ref "--no-merged=$base" --sort=committerdate '--format=%(committerdate:unix) %(refname:short) %(objectname)' refs/heads 2>$null |
+    # newest first: when two branches conflict, the one committed to last wins
+    $branches = @(& git.exe -C $repo for-each-ref "--no-merged=$base" --sort=-committerdate '--format=%(committerdate:unix) %(refname:short) %(objectname)' refs/heads 2>$null |
         ForEach-Object {
           $when, $name, $sha = $_ -split ' '
           if ([int64]$when -ge $cut -and $name -notmatch '^wip/') { @{ Name = $name; Sha = $sha } }
@@ -477,7 +479,22 @@ $Engine = {
         Assert-Running
         $r = Invoke-TreeGit merge --no-ff --no-edit -m "preview: $($b.Name)" $b.Sha
         if ($r.Code -eq 0) { $merged += $b.Name; continue }
-        # a branch that conflicts with main or an older branch is left out, whole
+        # Conflicts only in what the site never runs (tests, docs)? Then the tree
+        # keeps its side of those files and the branch goes in anyway.
+        $conflicts = @((Invoke-TreeGit diff --name-only --diff-filter=U).Out -split "`r?`n" | Where-Object { $_ })
+        if ($conflicts.Count -and -not @($conflicts | Where-Object { $_ -notmatch $sync.InertPaths }).Count) {
+          foreach ($p in $conflicts) {
+            # its side, or gone when the tree deleted it
+            if ((Invoke-TreeGit checkout --ours -- $p).Code -ne 0) { $null = Invoke-TreeGit rm -q -- $p }
+            $null = Invoke-TreeGit add -- $p
+          }
+          if ((Invoke-TreeGit commit --no-edit -q).Code -eq 0) {
+            $merged += $b.Name
+            Write-StackLog "code     $($b.Name): kept the tree's side of $($conflicts -join ', ') (not served)"
+            continue
+          }
+        }
+        # a branch that conflicts with main or a newer branch is left out, whole
         $null = Invoke-TreeGit merge --abort
         $skipped += $b.Name
         Write-StackLog "code     left out $($b.Name): $(Get-LastLine $r.Out)"
@@ -1158,6 +1175,8 @@ function New-StackSync {
   $s.CodeKey = $null
   $s.PendingKey = $null
   $s.CodeNote = ''
+  # files the servers never load: a merge conflict confined to these doesn't keep a branch off the site
+  $s.InertPaths = '(^|/)(e2e|__tests__|tests?|docs|Blueprints)/|\.(test|spec)\.[cm]?[jt]sx?$|\.md$'
   $s.ServerBins = @('apps\server\node_modules\.bin\tsx.cmd', 'apps\web\node_modules\.bin\vite.cmd', 'packages\db\node_modules\.bin\tsx.cmd')
   $s.Order = @('files', 'code', 'wsl', 'db', 'migrate', 'sync', 'api', 'web')
   $s.Labels = @{
