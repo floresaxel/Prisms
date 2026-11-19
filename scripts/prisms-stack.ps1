@@ -21,6 +21,18 @@ instead of the dev server's ~200 modules compiled on demand out of OneDrive
 redone only when what it is made from has changed. Pass -Dev for the Vite dev
 server and its hot reload while working on the app.
 
+The site shows EVERY active branch, not just what this checkout has checked
+out. The servers run from a tree of their own beside the repo (prisms-preview):
+origin/main with each local branch that has unmerged work and a commit in the
+last few days (-ActiveDays, default 3) merged on top, oldest first. wip/*
+branches are snapshots and are left out, and so is a branch that conflicts
+with the rest (the Code row names it). While the window is open it watches for
+commits: a few seconds after one lands, on any branch, in any worktree, the
+tree is merged again and whatever changed is rebuilt and restarted. No checkout
+anyone works in is ever touched. -CheckoutOnly (or -Dev) serves this checkout
+as it is instead. Two things still come from this checkout, not the tree: the
+compose files and PowerSync's sync rules, since the containers belong to it.
+
 Closing the window asks whether to stop the stack or leave it running. Only
 what a launch of THIS script started is ever stopped: an API or web server
 that some terminal already had running shows as "already running" and is left
@@ -86,11 +98,27 @@ param(
   [switch]$Dev,
   # update to the newest main on GitHub first (what the window's Update button does)
   [switch]$Update,
+  # serve this checkout as it is, instead of main + every active branch
+  [switch]$CheckoutOnly,
+  # a branch counts as active while its last commit is at most this many days old
+  [int]$ActiveDays = 3,
   [string]$Distro = 'Ubuntu'
 )
 
 $script:ScriptPath = $PSCommandPath
-$script:RepoRoot = Split-Path -Parent $PSScriptRoot
+# The checkout this copy of the script sits in: the main one, a worktree, or the
+# build tree. -CheckoutOnly and -Dev serve it.
+$script:Checkout = Split-Path -Parent $PSScriptRoot
+# The repo's MAIN checkout, wherever this copy runs from. The containers, the
+# .env, the git commands and the build tree all hang off that one place, so a
+# launcher started from a worktree or from the build tree runs the same stack.
+$script:RepoRoot = $script:Checkout
+try {
+  $common = & git.exe -C $PSScriptRoot rev-parse --path-format=absolute --git-common-dir 2>$null
+  if ($LASTEXITCODE -eq 0 -and $common -and (Split-Path -Leaf $common) -eq '.git') {
+    $script:RepoRoot = [IO.Path]::GetFullPath((Split-Path -Parent $common))
+  }
+} catch { }
 $script:WindowTitle = 'Prisms · dev stack'
 
 # ── the engine ────────────────────────────────────────────────────────────────
@@ -208,15 +236,16 @@ $Engine = {
   # global pnpm needed, which matters here: a packaged app (Claude Desktop is
   # one) keeps a private copy of AppData, so a pnpm installed from inside one
   # is invisible to everything launched from the desktop.
+  # From $sync.Src: the build tree, or this checkout under -CheckoutOnly / -Dev.
   function Get-PackageScript([string]$Key, [string]$Dir, [string]$Name, [string]$ExtraArgs = '') {
-    $pkgDir = Join-Path $sync.Repo $Dir
+    $pkgDir = Join-Path $sync.Src $Dir
     $script = $null
     try { $script = ([IO.File]::ReadAllText((Join-Path $pkgDir 'package.json')) | ConvertFrom-Json).scripts.$Name } catch { }
     if (-not $script) { Stop-Step $Key "$Dir\package.json has no `"$Name`" script." }
     @{
       Command = $ExtraArgs ? "$script $ExtraArgs" : $script
       Dir     = $pkgDir
-      Path    = (Join-Path $pkgDir 'node_modules\.bin') + ';' + (Join-Path $sync.Repo 'node_modules\.bin') + ';' + $env:Path
+      Path    = (Join-Path $pkgDir 'node_modules\.bin') + ';' + (Join-Path $sync.Src 'node_modules\.bin') + ';' + $env:Path
     }
   }
 
@@ -276,20 +305,21 @@ $Engine = {
   # before there were two kinds has none, which reads as "not what is wanted".
   function Save-StackState {
     $o = $sync.Owned
-    $json = [ordered]@{ pin = $o.pin; api = $o.api; web = $o.web; webMode = $o.webMode; compose = [bool]$o.compose } | ConvertTo-Json -Depth 3
+    $json = [ordered]@{ pin = $o.pin; api = $o.api; web = $o.web; webMode = $o.webMode; webSrc = $o.webSrc; apiCode = $o.apiCode; compose = [bool]$o.compose } | ConvertTo-Json -Depth 3
     [IO.File]::WriteAllText($sync.StatePath, $json)
   }
 
   # What earlier launches left running — the state file is shared by every
   # launch (and by -Stop), so it is the truth rather than this process's memory.
   function Read-StackState {
-    $o = @{ pin = $null; api = $null; web = $null; webMode = $null; compose = $false }
+    $o = @{ pin = $null; api = $null; web = $null; webMode = $null; webSrc = $null; apiCode = $null; compose = $false }
     try {
       $j = [IO.File]::ReadAllText($sync.StatePath) | ConvertFrom-Json -AsHashtable
       foreach ($k in 'pin', 'api', 'web') {
         if ($j[$k] -and $j[$k].Pid) { $o[$k] = @{ Pid = [int]$j[$k].Pid; Start = [int64]$j[$k].Start } }
       }
-      if ($j['webMode']) { $o.webMode = [string]$j['webMode'] }
+      # what the running servers were started from, so new code restarts them
+      foreach ($k in 'webMode', 'webSrc', 'apiCode') { if ($j[$k]) { $o[$k] = [string]$j[$k] } }
       $o.compose = [bool]$j['compose']
     } catch { }
     $o
@@ -322,15 +352,162 @@ $Engine = {
     foreach ($rel in 'docker-compose.yml', 'apps/server/package.json', 'apps/web/package.json', 'packages/db/package.json') {
       if (-not (Test-Path -LiteralPath (Join-Path $repo $rel))) { Stop-Step files "$rel is missing." }
     }
-    foreach ($rel in 'apps\server\node_modules\.bin\tsx.cmd', 'apps\web\node_modules\.bin\vite.cmd', 'packages\db\node_modules\.bin\tsx.cmd') {
-      if (-not (Test-Path -LiteralPath (Join-Path $repo $rel))) {
-        Stop-Step files 'Dependencies are not installed. Run "pnpm install" once while online.'
+    # the build tree installs its own (Step-Code); this checkout's matter only when served
+    if (-not $sync.Integrate) {
+      foreach ($rel in $sync.ServerBins) {
+        if (-not (Test-Path -LiteralPath (Join-Path $sync.Checkout $rel))) {
+          Stop-Step files 'Dependencies are not installed. Run "pnpm install" once while online.'
+        }
       }
     }
     $ready = $fetch.Count ? "ready (fetched $($fetch.Count) from OneDrive)" : 'ready'
     # what the Update button just did, said once
     if ($sync.UpdateNote) { $ready += " · $($sync.UpdateNote)"; $sync.UpdateNote = $null }
     Set-Row files ok $ready
+  }
+
+  # ── code: what the site is built from ─────────────────────────────────────
+  # Unless -CheckoutOnly or -Dev, the servers run from a tree of their own beside
+  # the repo: origin/main with every active local branch merged on top. A commit
+  # on any branch, in any worktree, then reaches the site without its PR being
+  # merged first, and no checkout anyone works in is touched.
+
+  # Which commits the site should show, and a key that changes whenever any of
+  # them does. Read-only and quick (two git calls): the watcher runs it every
+  # few seconds. Active = has work origin/main doesn't, and a commit in the last
+  # $ActiveDays days. wip/* branches are snapshots, not work to show.
+  function Get-CodeSelection {
+    $repo = $sync.Repo
+    $baseName = 'origin/main'
+    $base = & git.exe -C $repo rev-parse --verify --quiet refs/remotes/origin/main 2>$null
+    if (-not $base) { $baseName = 'main'; $base = & git.exe -C $repo rev-parse --verify --quiet refs/heads/main 2>$null }
+    if (-not $base) { return $null }
+    $cut = [DateTimeOffset]::UtcNow.AddDays(-$sync.ActiveDays).ToUnixTimeSeconds()
+    $branches = @(& git.exe -C $repo for-each-ref "--no-merged=$base" --sort=committerdate '--format=%(committerdate:unix) %(refname:short) %(objectname)' refs/heads 2>$null |
+        ForEach-Object {
+          $when, $name, $sha = $_ -split ' '
+          if ([int64]$when -ge $cut -and $name -notmatch '^wip/') { @{ Name = $name; Sha = $sha } }
+        })
+    $key = (@("$baseName=$base") + @($branches | ForEach-Object { "$($_.Name)=$($_.Sha)" })) -join ';'
+    @{ Base = $base; BaseName = $baseName; Branches = $branches; Key = $key }
+  }
+
+  # git in the build tree, as a merge bot: its own name on the merge commits
+  # (they never leave the tree) and none of the repo's hooks.
+  function Invoke-TreeGit {
+    $ErrorActionPreference = 'Continue'
+    $out = & git.exe -C $sync.TreeDir -c 'user.name=Prisms preview' -c 'user.email=preview@prisms.invalid' -c "core.hooksPath=$($sync.NoHooksDir)" @args 2>&1 | Out-String
+    @{ Code = $LASTEXITCODE; Out = $out.Trim() }
+  }
+
+  # What the API runs, so a running one is started over once its code changed.
+  function Get-ApiCode {
+    $ids = & git.exe -C $sync.Src rev-parse HEAD:apps/server HEAD:packages/db HEAD:packages/core HEAD:pnpm-lock.yaml 2>$null
+    "$($sync.Src)|$($ids -join ',')"
+  }
+
+  function Step-Code {
+    if (-not $sync.Integrate) {
+      $sync.Src = $sync.Checkout
+      # a worktree has no .env of its own; one it does have is left as it is
+      foreach ($rel in '.env', 'apps\web\.env.local') {
+        $from = Join-Path $sync.Repo $rel
+        $to = Join-Path $sync.Src $rel
+        if ((Test-Path -LiteralPath $from) -and -not (Test-Path -LiteralPath $to)) { Copy-Item -LiteralPath $from -Destination $to }
+      }
+      $sync.CodeNote = ''
+      Set-Row code ok ($sync.WebMode -eq 'dev' ? 'this checkout, live (dev server)' : 'this checkout as it is')
+      return
+    }
+    Set-Row code busy 'looking for commits…'
+    $sel = Get-CodeSelection
+    if (-not $sel) { Stop-Step code "This repository has no main branch to build on." }
+    # what this start is building; the watcher compares against it
+    $sync.CodeKey = $sel.Key
+    $tree = $sync.TreeDir
+    if (-not (Test-Path -LiteralPath (Join-Path $tree '.git'))) {
+      Set-Row code busy 'setting up the build tree…'
+      # a leftover folder that is no longer a worktree; rmdir won't follow pnpm's links out of it
+      if (Test-Path -LiteralPath $tree) { $null = Invoke-Logged ('rmdir /s /q "' + $tree + '"') 300 }
+      $null = Invoke-Logged ('git.exe -C "' + $sync.Repo + '" worktree prune') 60 -Quiet
+      $r = Invoke-Logged ('git.exe -C "' + $sync.Repo + '" worktree add --detach "' + $tree + '" ' + $sel.Base) 300
+      if ($r.Code -ne 0) { Stop-Step code "Couldn't set up the build tree: $(Get-LastLine $r.Out)" }
+    }
+
+    # Merged already, for exactly these commits? Then the tree is reused as it is.
+    $last = $null
+    try { $last = [IO.File]::ReadAllText($sync.CodePath) | ConvertFrom-Json -AsHashtable } catch { }
+    $head = (Invoke-TreeGit rev-parse HEAD).Out
+    $clean = -not (Invoke-TreeGit status --porcelain --untracked-files=no).Out
+    if ($last -and $last.Key -eq $sel.Key -and $last.Head -eq $head -and $clean) {
+      $merged = @($last.Merged | Where-Object { $_ })
+      $skipped = @($last.Skipped | Where-Object { $_ })
+    } else {
+      $n = $sel.Branches.Count
+      Set-Row code busy "merging $n branch$($n -eq 1 ? '' : 'es') onto $($sel.BaseName)…"
+      # a merge cut off halfway (a cancelled start) is thrown away with the rest
+      $null = Invoke-TreeGit merge --abort
+      $r = Invoke-TreeGit checkout -q --detach --force $sel.Base
+      if ($r.Code -ne 0) { Stop-Step code "Couldn't reset the build tree: $(Get-LastLine $r.Out)" }
+      # untracked files only: node_modules, dist and .env are ignored, so they stay
+      $null = Invoke-TreeGit clean -fdq
+      $merged = @()
+      $skipped = @()
+      foreach ($b in $sel.Branches) {
+        Assert-Running
+        $r = Invoke-TreeGit merge --no-ff --no-edit -m "preview: $($b.Name)" $b.Sha
+        if ($r.Code -eq 0) { $merged += $b.Name; continue }
+        # a branch that conflicts with main or an older branch is left out, whole
+        $null = Invoke-TreeGit merge --abort
+        $skipped += $b.Name
+        Write-StackLog "code     left out $($b.Name): $(Get-LastLine $r.Out)"
+      }
+      $head = (Invoke-TreeGit rev-parse HEAD).Out
+      [IO.File]::WriteAllText($sync.CodePath, (@{ Key = $sel.Key; Head = $head; Merged = $merged; Skipped = $skipped } | ConvertTo-Json))
+      Write-StackLog ('code     {0} ({1}) + [{2}]{3}' -f $sel.BaseName, $sel.Base.Substring(0, 7), ($merged -join ', '),
+          ($skipped.Count ? " · left out [$($skipped -join ', ')]" : ''))
+    }
+
+    # The gitignored settings the servers read (the port overrides above all:
+    # without them the database URL falls back to :5432, another Postgres here).
+    foreach ($rel in '.env', 'apps\web\.env.local') {
+      $from = Join-Path $sync.Repo $rel
+      if (Test-Path -LiteralPath $from) { Copy-Item -LiteralPath $from -Destination (Join-Path $tree $rel) -Force }
+    }
+
+    # Its own packages: workspace links are relative, so this checkout's
+    # node_modules can't be borrowed. Installed again only when a manifest or the
+    # lockfile changed; the store is shared, so that is mostly linking.
+    $manifests = @((Invoke-TreeGit ls-tree -r HEAD).Out -split "`r?`n" |
+        Where-Object { $_ -match '\t(pnpm-lock\.yaml|pnpm-workspace\.yaml|(.+/)?package\.json)$' })
+    $want = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($manifests -join "`n")))
+    $stamp = Join-Path $tree 'node_modules\.prisms-install'
+    $have = ''
+    try { $have = [IO.File]::ReadAllText($stamp).Trim() } catch { }
+    $missing = @($sync.ServerBins | Where-Object { -not (Test-Path -LiteralPath (Join-Path $tree $_)) })
+    if ($have -ne $want -or $missing.Count) {
+      Set-Row code busy 'installing packages (the first time takes a few minutes)…'
+      $pm = 'pnpm'
+      try { $pm = ([IO.File]::ReadAllText((Join-Path $tree 'package.json')) | ConvertFrom-Json).packageManager } catch { }
+      # what the stack runs, not the mobile app; CI=true: no one to answer pnpm's questions
+      $r = Invoke-Logged "npx.cmd --yes $pm install --frozen-lockfile --prefer-offline --filter @prisms/web... --filter @prisms/server... --filter @prisms/db..." 1800 @{ CI = 'true' } $tree
+      if ($r.Code -ne 0) { Stop-Step code "Installing the build tree's packages failed: $(Get-FailureText $r.Out)" }
+      try { [IO.File]::WriteAllText($stamp, $want) } catch { }
+    }
+
+    $sync.Src = $tree
+    $nl = [Environment]::NewLine
+    $note = "Built from $($sel.BaseName) ($($sel.Base.Substring(0, 7)))"
+    if ($merged.Count) { $note += "${nl}with: $($merged -join ', ')" }
+    if ($skipped.Count) { $note += "${nl}left out (they conflict): $($skipped -join ', ')" }
+    $sync.CodeNote = $note
+    $detail = "main + $($merged.Count) branch$($merged.Count -eq 1 ? '' : 'es')"
+    if ($skipped.Count) {
+      $detail += " · left out: $($skipped -join ', ')"
+      Set-Row code warn $detail
+    } else {
+      Set-Row code ok $detail
+    }
   }
 
   # Can WSL boot the distro and run a command in it? After the PC wakes from
@@ -452,7 +629,7 @@ $Engine = {
   # timestamps: switching branches and back rewrites every file's time and none
   # of its bytes, and should not cost a rebuild.
   function Get-WebBuildFingerprint {
-    $repo = $sync.Repo
+    $repo = $sync.Src
     $files = [Collections.Generic.List[string]]::new()
     foreach ($dir in 'apps\web\src', 'apps\web\public', 'packages\ui\src', 'packages\core\src') {
       $full = Join-Path $repo $dir
@@ -486,7 +663,7 @@ $Engine = {
   # (other settings, another branch) is never mistaken for a current one.
   # Returns whether it built — a server already serving dist then starts over.
   function Update-WebBuild {
-    $dist = Join-Path $sync.Repo 'apps\web\dist'
+    $dist = Join-Path $sync.Src 'apps\web\dist'
     $stamp = Join-Path $dist '.prisms-build'
     $want = ''
     try { $want = Get-WebBuildFingerprint }
@@ -518,12 +695,21 @@ $Engine = {
     $port = $isApi ? $sync.ApiPort : $sync.WebPort
     $up = (-not $isApi -and $sync.WebMode -eq 'dev') ? "up on :$port (dev server)" : "up on :$port"
     $mine = Test-Alive $sync.Owned[$Key]
+    # An API of ours started from other code (new commits, or another tree) is
+    # started over; one that someone else runs is still theirs to keep.
+    if ($isApi -and $mine -and $sync.Owned.apiCode -ne (Get-ApiCode)) {
+      Set-Row $Key busy 'restarting for the new code…'
+      Stop-Tree $sync.Owned[$Key].Pid
+      [void](Wait-Until { -not (Test-Port $port) } 20 300)
+      $mine = $false
+    }
     # The web app: unless someone else's server holds the port (theirs to keep,
     # whatever it serves), make the bundle current first, then start a server of
-    # ours over if it is the wrong kind or was serving the bundle just replaced.
+    # ours over if it is the wrong kind, serves another tree, or was serving the
+    # bundle just replaced.
     if (-not $isApi -and ($mine -or -not (Test-Port $port))) {
       $built = $sync.WebMode -eq 'build' -and (Update-WebBuild)
-      if ($mine -and ($built -or $sync.Owned.webMode -ne $sync.WebMode)) {
+      if ($mine -and ($built -or $sync.Owned.webMode -ne $sync.WebMode -or $sync.Owned.webSrc -ne $sync.Src)) {
         Set-Row $Key busy 'restarting…'
         Stop-Tree $sync.Owned[$Key].Pid
         [void](Wait-Until { -not (Test-Port $port) } 20 300)
@@ -552,6 +738,7 @@ $Engine = {
         BETTER_AUTH_TRUSTED_ORIGINS = $sync.Url
         PRISMS_JOBS_ENABLED         = 'true'
       }
+      $sync.Owned.apiCode = Get-ApiCode
     } else {
       # Exactly :5173. Auth trusts that origin, so a server that drifted to
       # :5174 would be a site nobody can sign in to. `preview` serves the bundle
@@ -561,6 +748,7 @@ $Engine = {
       # (the dev server reads it now; the bundle had it compiled in)
       $environment = @{ PATH = $run.Path; VITE_POWERSYNC_URL = $sync.SyncUrl }
       $sync.Owned.webMode = $sync.WebMode
+      $sync.Owned.webSrc = $sync.Src
     }
     $log = Join-Path $sync.LogDir "$Key.log"
     $proc = Start-Hidden $run.Command $log $environment $run.Dir
@@ -663,12 +851,41 @@ $Engine = {
     Save-StackState
   }
 
+  # With the build tree, the site doesn't depend on what this checkout has
+  # checked out, so Update only gets main from GitHub: the start that follows
+  # merges every active branch onto it again. No checkout is touched (the local
+  # main ref is moved forward only where git can do that without one).
+  function Get-NewerMain {
+    $before = Get-GitLine 'rev-parse --verify --quiet refs/remotes/origin/main'
+    $fetch = Invoke-Git 'fetch origin main' 180
+    if ($fetch.Code -ne 0) { throw [InvalidOperationException]::new("Couldn't reach GitHub: $(Get-LastLine $fetch.Out)") }
+    # refused while main is checked out somewhere, or if it has its own commits: both fine
+    $null = Invoke-Git 'fetch origin main:main'
+    $after = Get-GitLine 'rev-parse refs/remotes/origin/main'
+    $sha = $after.Substring(0, 7)
+    $before -eq $after ? "main is already the latest ($sha)" : "got the latest main ($sha)"
+  }
+
   function Invoke-StackUpdate {
     $sync.Cancel = $false
     $before = @{ Phase = $sync.Phase; Message = $sync.Message; Files = $sync.Rows['files'] }
     $sync.StartedAt = Get-Date
     Set-Phase updating 'Checking GitHub for a newer version…'
     Set-Row files busy 'checking GitHub…'
+    if ($sync.Integrate) {
+      try { $sync.UpdateNote = Get-NewerMain; Write-StackLog "update   $($sync.UpdateNote)" }
+      catch {
+        $sync.Rows['files'] = $before.Files
+        $sync.Phase = $before.Phase
+        $sync.Message = $before.Message
+        $sync.Notice = "Prisms wasn't updated. $($_.Exception.Message)"
+        $sync.Version++
+        Write-StackLog "update   declined  $($_.Exception.Message)"
+        return
+      }
+      Invoke-StackStart
+      return
+    }
     try { $plan = Get-UpdatePlan }
     catch {
       # declined: nothing was touched, so the window goes back to how it was
@@ -705,15 +922,18 @@ $Engine = {
     Invoke-StackStart
   }
 
-  function Invoke-StackStart {
+  # A refresh (new commits) is the same walk: each step is quick when its part
+  # is already up, and only what the new code changed is rebuilt or restarted.
+  function Invoke-StackStart([string]$Phase = 'starting', [string]$Message = 'Starting Prisms…') {
     $sync.Cancel = $false
     $sync.Owned = Read-StackState
     $sync.StartedAt = Get-Date
     $sync.UpAt = $null
     foreach ($k in $sync.Order) { Set-Row $k pending }
-    Set-Phase starting 'Starting Prisms…'
+    Set-Phase $Phase $Message
     try {
       Step-Files
+      Step-Code
       Step-Docker
       Step-Database
       Step-Migrate
@@ -801,8 +1021,24 @@ $Engine = {
     }
   }
 
+  # New commits, on any branch: once the set has held still for one more look
+  # (a run of commits is picked up once, not once each), the site is rebuilt.
+  # A start that failed is retried too, so the commit that fixes a broken build
+  # brings the site back on its own. A start that never got to look at the
+  # code (CodeKey unset) is not: that failure is elsewhere.
+  function Watch-Code {
+    if (-not $sync.CodeKey) { return }
+    $sel = Get-CodeSelection
+    if (-not $sel -or $sel.Key -eq $sync.CodeKey) { $sync.PendingKey = $null; return }
+    if ($sel.Key -ne $sync.PendingKey) { $sync.PendingKey = $sel.Key; return }
+    $sync.PendingKey = $null
+    Write-StackLog 'code     new commits'
+    $sync.Queue.Enqueue('refresh')
+  }
+
   function Invoke-EngineLoop {
     $next = [datetime]::MinValue
+    $nextCode = [datetime]::MinValue
     while ($true) {
       while ($sync.Queue.Count) {
         $cmd = $sync.Queue.Dequeue()
@@ -810,6 +1046,7 @@ $Engine = {
         try {
           switch ($cmd) {
             'start' { Invoke-StackStart }
+            'refresh' { Invoke-StackStart 'refreshing' 'Picking up new commits…' }
             'stop' { Invoke-StackStop }
             'restart' { Invoke-StackStop; Invoke-StackStart }
             'update' { Invoke-StackUpdate }
@@ -822,6 +1059,10 @@ $Engine = {
       if (($sync.Phase -in @('up', 'degraded', 'down')) -and ((Get-Date) -ge $next)) {
         try { Invoke-StackMonitor } catch { Write-StackLog "monitor: $($_.Exception.Message)" }
         $next = (Get-Date).AddSeconds(3)
+      }
+      if ($sync.Integrate -and ($sync.Phase -in @('up', 'degraded', 'down', 'failed')) -and ((Get-Date) -ge $nextCode)) {
+        try { Watch-Code } catch { Write-StackLog "watch: $($_.Exception.Message)" }
+        $nextCode = (Get-Date).AddSeconds(4)
       }
       Start-Sleep -Milliseconds 200
     }
@@ -870,9 +1111,25 @@ function New-StackSync {
   $s.SyncUrl = "http://localhost:$($s.SyncPort)"
   # 'build' = the bundle behind `vite preview` (fast loads); 'dev' = Vite's dev server
   $s.WebMode = $Dev ? 'dev' : 'build'
-  $s.Order = @('files', 'wsl', 'db', 'migrate', 'sync', 'api', 'web')
+  # main + every active branch, built in a tree of its own (Step-Code), unless
+  # this checkout is wanted as it is. The dev server's hot reload is for editing
+  # a checkout, so -Dev means that checkout too.
+  $s.Integrate = -not ($Dev -or $CheckoutOnly)
+  $s.Checkout = $script:Checkout
+  $s.TreeDir = Join-Path (Split-Path -Parent $script:RepoRoot) 'prisms-preview'
+  # what the servers run from: the tree, or the checkout (set by Step-Code)
+  $s.Src = $script:Checkout
+  $s.ActiveDays = $ActiveDays
+  $s.CodePath = Join-Path $stateDir 'code.json'
+  $s.NoHooksDir = Join-Path $stateDir 'no-hooks'
+  [void](New-Item -ItemType Directory -Force -Path $s.NoHooksDir)
+  $s.CodeKey = $null
+  $s.PendingKey = $null
+  $s.CodeNote = ''
+  $s.ServerBins = @('apps\server\node_modules\.bin\tsx.cmd', 'apps\web\node_modules\.bin\vite.cmd', 'packages\db\node_modules\.bin\tsx.cmd')
+  $s.Order = @('files', 'code', 'wsl', 'db', 'migrate', 'sync', 'api', 'web')
   $s.Labels = @{
-    files = 'Project files'; wsl = 'Docker (WSL)'; db = 'Database'; migrate = 'Migrations'
+    files = 'Project files'; code = 'Code'; wsl = 'Docker (WSL)'; db = 'Database'; migrate = 'Migrations'
     sync = 'PowerSync'; api = 'API server'; web = 'Web app'
   }
   $s.Rows = [hashtable]::Synchronized(@{})
@@ -884,7 +1141,7 @@ function New-StackSync {
   $s.Cancel = $false
   $s.StartedAt = $null
   $s.UpAt = $null
-  $s.Owned = @{ pin = $null; api = $null; web = $null; webMode = $null; compose = $false }
+  $s.Owned = @{ pin = $null; api = $null; web = $null; webMode = $null; webSrc = $null; apiCode = $null; compose = $false }
   # the Update button: what it did (shown on the next "ready"), or why it didn't
   $s.UpdateNote = $null
   $s.Notice = $null
@@ -948,23 +1205,48 @@ function Get-StackIcon {
   $ico
 }
 
-# The desktop shortcut that starts THIS script keeps showing the icon it was made
-# with. When the artwork changes, point it at the new one (an icon path it has
-# never shown, so Explorer cannot serve the old picture from its cache).
+# conhost --headless: no console window at all, so the status window is the
+# whole UI. Started plainly, Windows Terminal would open an empty tab beside it.
+function Get-ShortcutArguments([string]$PwshExe, [string]$Script) {
+  '--headless "{0}" -NoProfile -STA -ExecutionPolicy Bypass -File "{1}"' -f $PwshExe, $Script
+}
+
+# The launcher the desktop shortcut should start. The build tree's own copy, once
+# it has one that builds the tree: the launcher is then main + every active
+# branch like the site, instead of whatever branch the main checkout happens to
+# have checked out (an older one would quietly serve just that checkout).
+function Get-ShortcutScript {
+  $tree = Join-Path $sync.TreeDir 'scripts\prisms-stack.ps1'
+  try { if ($sync.Integrate -and [IO.File]::ReadAllText($tree).Contains('function Step-Code')) { return $tree } } catch { }
+  $script:ScriptPath
+}
+
+# Keeps the desktop shortcut current: it starts the launcher Get-ShortcutScript
+# names, and shows the icon of the current artwork (a new icon path when that
+# changes, so Explorer cannot serve the old picture from its cache).
 function Update-StackShortcut {
   try {
     $lnk = Join-Path ([Environment]::GetFolderPath('Desktop')) 'Prisms.lnk'
     if (-not (Test-Path -LiteralPath $lnk)) { return }
-    $ico = Get-StackIcon
-    if (-not $ico) { return }
     $s = (New-Object -ComObject WScript.Shell).CreateShortcut($lnk)
-    # only a shortcut that starts this very script: never one that is someone else's
-    if ($s.Arguments -notlike "*$($script:ScriptPath)*") { return }
-    if ($s.IconLocation -eq "$ico,0") { return }
-    $s.IconLocation = "$ico,0"
+    # only a shortcut that starts this launcher: never one that is someone else's
+    $ours = @($script:ScriptPath, (Join-Path $script:RepoRoot 'scripts\prisms-stack.ps1'), (Join-Path $sync.TreeDir 'scripts\prisms-stack.ps1'))
+    if (-not ($ours | Where-Object { $s.Arguments -like "*`"$_`"*" })) { return }
+    $changed = @()
+    $want = Get-ShortcutScript
+    # Only ever moved TO the build tree's launcher, never to whichever copy runs
+    # now (a worktree's, say); -CheckoutOnly / -Dev leave the target alone.
+    $tree = Join-Path $sync.TreeDir 'scripts\prisms-stack.ps1'
+    if ($want -eq $tree -and $s.Arguments -notlike "*`"$want`"*" -and $s.Arguments -match '--headless "([^"]+)"') {
+      $s.Arguments = Get-ShortcutArguments $Matches[1] $want
+      $changed += "now starts $want"
+    }
+    $ico = Get-StackIcon
+    if ($ico -and $s.IconLocation -ne "$ico,0") { $s.IconLocation = "$ico,0"; $changed += 'icon updated' }
+    if (-not $changed.Count) { return }
     $s.Save()
     [IO.File]::AppendAllText((Join-Path $sync.LogDir 'launcher.log'),
-      ('{0:yyyy-MM-dd HH:mm:ss}  shortcut  icon updated{1}' -f (Get-Date), [Environment]::NewLine))
+      ('{0:yyyy-MM-dd HH:mm:ss}  shortcut  {1}{2}' -f (Get-Date), ($changed -join ', '), [Environment]::NewLine))
   } catch { }
 }
 
@@ -974,10 +1256,8 @@ function Install-StackShortcut {
   $ico = Get-StackIcon
   $shell = New-Object -ComObject WScript.Shell
   $s = $shell.CreateShortcut($lnk)
-  # conhost --headless: no console window at all, so the status window is the
-  # whole UI. Started plainly, Windows Terminal would open an empty tab beside it.
   $s.TargetPath = Join-Path $env:SystemRoot 'System32\conhost.exe'
-  $s.Arguments = '--headless "{0}" -NoProfile -STA -ExecutionPolicy Bypass -File "{1}"' -f $pwshExe, $script:ScriptPath
+  $s.Arguments = Get-ShortcutArguments $pwshExe (Get-ShortcutScript)
   $s.WorkingDirectory = $script:RepoRoot
   $s.Description = 'Start the Prisms dev stack (works offline)'
   if ($ico) { $s.IconLocation = "$ico,0" }
@@ -1139,10 +1419,11 @@ function New-StackWindow {
   $bar.Controls.AddRange(@($open, $toggle, $update, $logs))
   $root.Controls.Add($bar)
   $tips = [Windows.Forms.ToolTip]::new()
-  $tips.SetToolTip($update, 'Get the newest version from GitHub, rebuild and restart')
+  $tips.AutoPopDelay = 20000
+  $tips.SetToolTip($update, ($sync.Integrate ? 'Get the newest main from GitHub, then rebuild with every active branch on top' : 'Get the newest version from GitHub, rebuild and restart'))
 
   @{ Form = $form; Rows = $rows; Glyph = $glyph; Banner = $banner; Sub = $sub; Link = $link
-    Open = $open; Toggle = $toggle; Update = $update; Logs = $logs; Colors = $C; Tips = $tips }
+    Open = $open; Toggle = $toggle; Update = $update; Logs = $logs; Colors = $C; Tips = $tips; CodeNote = $null }
 }
 
 function Update-StackWindow($Ui) {
@@ -1156,11 +1437,20 @@ function Update-StackWindow($Ui) {
     $row.Detail.Text = $r.Detail
     $row.Detail.ForeColor = $r.State -eq 'fail' ? $C.Red : $C.Dim
   }
+  # which branches the site is built from, on hover
+  if ($Ui.CodeNote -ne $sync.CodeNote) {
+    $Ui.CodeNote = $sync.CodeNote
+    $Ui.Tips.SetToolTip($Ui.Rows['code'].Detail, $sync.CodeNote)
+  }
   $phase = $sync.Phase
   $glyph, $text, $color, $sub = switch ($phase) {
     'starting' {
       $s = [int]((Get-Date) - $sync.StartedAt).TotalSeconds
       '', 'Starting Prisms…', $C.Ink, ('Started {0:HH:mm} · {1} s so far' -f $sync.StartedAt, $s)
+    }
+    'refreshing' {
+      $s = [int]((Get-Date) - $sync.StartedAt).TotalSeconds
+      '', 'Picking up new commits…', $C.Ink, ('Rebuilding what they changed · {0} s so far' -f $s)
     }
     'updating' {
       $s = [int]((Get-Date) - $sync.StartedAt).TotalSeconds
@@ -1189,14 +1479,14 @@ function Update-StackWindow($Ui) {
   $Ui.Open.BackColor = $live ? $C.Blue : $C.Soft
   $Ui.Open.ForeColor = $live ? $C.White : $C.Grey
   $Ui.Toggle.Text = switch ($phase) {
-    { $_ -in 'starting', 'up', 'stopping' } { 'Stop' }
+    { $_ -in 'starting', 'refreshing', 'up', 'stopping' } { 'Stop' }
     'degraded' { 'Restart' }
     { $_ -in 'failed', 'down' } { 'Start again' }
     default { 'Start' }
   }
   $Ui.Toggle.Enabled = $phase -notin 'stopping', 'updating'
   # an update restarts the stack itself, so not while it is already moving
-  $busy = $phase -in 'starting', 'stopping', 'updating'
+  $busy = $phase -in 'starting', 'refreshing', 'stopping', 'updating'
   $Ui.Update.Enabled = -not $busy
   $Ui.Update.ForeColor = $busy ? $C.Grey : $C.Ink
 }
@@ -1217,15 +1507,19 @@ function Show-StackWindow {
   $script:Ui.Open.Add_Click({ Start-Process $sync.Url })
   $script:Ui.Logs.Add_Click({ Start-Process explorer.exe $sync.LogDir })
   $script:Ui.Update.Add_Click({
-      if ($sync.Phase -in 'starting', 'stopping', 'updating') { return }
-      $answer = [Windows.Forms.MessageBox]::Show($script:Ui.Form,
-        "Update Prisms to the newest version on GitHub?`n`nThis gets the latest main, reinstalls packages if they changed, rebuilds the app and restarts it. The site is down for a minute or two.`n`nUncommitted changes, or a branch that isn't merged yet, are left alone: the update says so and does nothing.",
-        'Update Prisms', 'OKCancel', 'Question')
+      if ($sync.Phase -in 'starting', 'refreshing', 'stopping', 'updating') { return }
+      if ($sync.Integrate) {
+        $text = "Get the newest main from GitHub?`n`nThe site is then rebuilt from it with every active local branch on top, as usual. No checkout is touched: branches you are working on stay where they are."
+      } else {
+        $text = "Update Prisms to the newest version on GitHub?`n`nThis gets the latest main, reinstalls packages if they changed, rebuilds the app and restarts it. The site is down for a minute or two.`n`nUncommitted changes, or a branch that isn't merged yet, are left alone: the update says so and does nothing."
+      }
+      $answer = [Windows.Forms.MessageBox]::Show($script:Ui.Form, $text, 'Update Prisms', 'OKCancel', 'Question')
       if ($answer -eq 'OK') { $sync.Queue.Enqueue('update') }
     })
   $script:Ui.Toggle.Add_Click({
       switch ($sync.Phase) {
         'starting' { $sync.Cancel = $true; $sync.Queue.Enqueue('stop') }
+        'refreshing' { $sync.Cancel = $true; $sync.Queue.Enqueue('stop') }
         'up' { $sync.Queue.Enqueue('stop') }
         'degraded' { $sync.Queue.Enqueue('restart') }
         'stopping' { }
@@ -1252,7 +1546,7 @@ function Show-StackWindow {
       if ($answer -eq 'Yes') {
         $e.Cancel = $true
         $script:CloseAfterStop = $true
-        if ($sync.Phase -eq 'starting') { $sync.Cancel = $true }
+        if ($sync.Phase -in 'starting', 'refreshing') { $sync.Cancel = $true }
         $sync.Queue.Enqueue('stop')
       } elseif ($answer -eq 'Cancel') {
         $e.Cancel = $true
@@ -1264,11 +1558,16 @@ function Show-StackWindow {
   $timer.Add_Tick({
       $phase = $sync.Phase
       # while starting, the elapsed seconds tick even when nothing else moved
-      if ($sync.Version -ne $script:ShownVersion -or $phase -eq 'starting') {
+      if ($sync.Version -ne $script:ShownVersion -or $phase -in 'starting', 'refreshing') {
         $script:ShownVersion = $sync.Version
         Update-StackWindow $script:Ui
-        # behind another window, this flashes the taskbar button instead
-        if ($phase -eq 'up' -and $script:LastPhase -ne 'up') { $script:Ui.Form.Activate() }
+        if ($phase -eq 'up' -and $script:LastPhase -ne 'up') {
+          # behind another window, this flashes the taskbar button instead; not
+          # after a refresh, which would be every commit
+          if ($script:LastPhase -ne 'refreshing') { $script:Ui.Form.Activate() }
+          # the build tree may only now hold the launcher the shortcut should start
+          Update-StackShortcut
+        }
         $script:LastPhase = $phase
       }
       if ($script:CloseAfterStop -and $phase -eq 'stopped') {
