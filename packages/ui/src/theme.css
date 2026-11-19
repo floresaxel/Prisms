@@ -521,7 +521,6 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
   .px-agenda-journal .px-journal--ready,
   .px-jn-editor .px-journal--ready { animation: none; }
 }
-.px-drag-hint { font-size: 11px; margin: 10px 0 0; }
 /* Both task lists read as ONE list rather than a stack of cards: rows sit flush
    against each other with a hairline between them, and the list bleeds out to
    the panel's own padding so the rule — and the hover — spans the full width.
@@ -530,11 +529,13 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
 .px-todo-item { display: flex; align-items: center; gap: 8px; padding: 4px 14px; font-size: 12.5px; line-height: 1.55; cursor: grab; user-select: none; }
 .px-todo-item + .px-todo-item { border-top: 1px solid var(--px-border); }
 .px-todo-item:hover { background: var(--px-surface-2); }
-/* "All tasks" — every live task, scheduled ones included, in a bounded scroller
-   so the panel never outgrows the week grid beside it. Bled like the rows, so
-   the section rule and the row rules line up on the same edges. */
+/* "All tasks" — every live task, scheduled ones included. Bled like the rows, so
+   the section rule and the row rules line up on the same edges.
+   Deliberately NOT its own scroller: a nested overflow box swallows the wheel
+   while the pointer is over it, so the rows moved on their own schedule and the
+   page seemed to lag behind them. The list just grows, and the whole panel —
+   like the note card and the calendar — scrolls with the page, in `.px-content`. */
 .px-ag-all { margin: 16px -14px 0; border-top: 1px solid var(--px-border); padding: 10px 14px 0; }
-.px-ag-scroll { max-height: 268px; overflow-y: auto; }
 /* Already on the week: dimmed, not shaded — a per-row background in a list this
    dense reads as accidental zebra striping. The row's own "scheduled ·" says it. */
 .px-todo-item--placed { color: var(--px-text-dim); }
@@ -880,6 +881,12 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
 .px-cal-col:has(+ .px-cal-col--sel), .px-cal-gutter:has(+ .px-cal-col--sel) { border-right-color: var(--px-blue); }
 /* the last column has no right border (the grid's own edge stands in), so draw it */
 .px-cal-col--sel:last-child { box-shadow: inset -1px 0 0 var(--px-blue); }
+/* Today: a small dot + bolder label in the header and a barely-there tint down the
+   column. Deliberately quieter than the selected day (which owns the underline and
+   side rules), so the two read apart when they land on the same column. */
+.px-cal-col-head--today { color: var(--px-text); font-weight: 620; }
+.px-cal-today-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--px-blue); flex: none; }
+.px-cal-col--today .px-cal-col-body { background: color-mix(in srgb, var(--px-blue) 5%, transparent); }
 /* "this day has a note" marker in a day header */
 .px-note-ic { display: inline-flex; align-items: center; color: var(--px-accent); flex: none; }
 .px-note-ic .px-ic { width: 11px; height: 11px; }
