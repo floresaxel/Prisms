@@ -65,6 +65,14 @@ test('rename a task in place, then edit every detail in its card — all of it s
   await expect(page.getByTestId(`title-${ids.task}`)).toHaveText('Write the launch note');
   await expect(page.getByTestId('td-dialog')).toHaveCount(0);
 
+  // ── a drag across the title (selecting it) that ends on the row opens nothing ──
+  await page.getByTestId(`title-${ids.task}`).hover({ position: { x: 4, y: 6 } });
+  await page.mouse.down();
+  await row.locator('.px-t-meta').hover();
+  await page.mouse.up();
+  await expect(page.getByTestId('td-dialog')).toHaveCount(0);
+  await expect(page.getByTestId(`title-input-${ids.task}`)).toHaveCount(0);
+
   // ── click elsewhere on the row: the details card ──
   await row.locator('.px-t-meta').click();
   const card = page.getByTestId('td-dialog');
@@ -74,17 +82,25 @@ test('rename a task in place, then edit every detail in its card — all of it s
   // the page behind it is blurred like every other dialog's — in the BUILT css
   // too, whose minifier once kept only `-webkit-backdrop-filter` (theme.css)
   expect(await page.locator('.px-scrim').evaluate((el) => getComputedStyle(el).backdropFilter)).toContain('blur(');
+  // compact: the empty fields wait behind "+" chips (the budget is set, so it shows)
+  await expect(page.getByTestId('td-details')).toHaveCount(0);
 
+  await page.getByTestId('td-add-details').click();
+  await expect(page.getByTestId('td-details')).toBeFocused();
   await page.getByTestId('td-details').fill('Quote the mayor. Embargo until 9am.');
+  await page.getByTestId('td-add-due').click();
   await page.getByTestId('td-due').fill('2026-12-01');
   await page.getByTestId('td-hours').fill('2.5');
+  await page.getByTestId('td-add-location').click();
   await page.getByTestId('td-location').fill('Studio B');
   await page.getByTestId('td-location').press('Enter');
 
+  await page.getByTestId('td-add-steps').click();
   await page.getByTestId('td-step-add').fill('Draft the quotes');
   await page.getByTestId('td-step-add').press('Enter');
   await expect(page.getByTestId('td-steps')).toContainText('Draft the quotes');
 
+  await page.getByTestId('td-add-deps').click();
   await page.getByTestId('td-dep-add-before').selectOption(ids.date);
   await expect(page.getByTestId('td-deps')).toContainText('Pick a date');
 

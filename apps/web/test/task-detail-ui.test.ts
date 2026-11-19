@@ -168,6 +168,32 @@ describe('rows', () => {
     expect(screen.getByRole('dialog').getAttribute('aria-label')).toBe('Task details: Write the press release');
   });
 
+  it('a drag that ends on the row — off the title, or across its text — does not open the card', () => {
+    mount();
+    const row = screen.getByTestId(`row-${task.id}`);
+    // pressed on the title, released on the row: the click lands on the row
+    fireEvent.mouseDown(screen.getByTestId(`title-${task.id}`), { clientX: 10, clientY: 10 });
+    fireEvent.click(row, { clientX: 60, clientY: 10 });
+    expect(card()).toBeNull();
+    // pressed and released on the row's text, but moved in between
+    fireEvent.mouseDown(screen.getByTestId(`meta-${task.id}`), { clientX: 10, clientY: 10 });
+    fireEvent.click(screen.getByTestId(`meta-${task.id}`), { clientX: 30, clientY: 12 });
+    expect(card()).toBeNull();
+    // a click that leaves text selected in the row
+    const range = document.createRange();
+    range.selectNodeContents(screen.getByTestId(`meta-${task.id}`));
+    window.getSelection()!.removeAllRanges();
+    window.getSelection()!.addRange(range);
+    fireEvent.mouseDown(screen.getByTestId(`meta-${task.id}`), { clientX: 10, clientY: 10 });
+    fireEvent.click(screen.getByTestId(`meta-${task.id}`), { clientX: 10, clientY: 10 });
+    expect(card()).toBeNull();
+    // …and a plain click still opens it
+    window.getSelection()!.removeAllRanges();
+    fireEvent.mouseDown(screen.getByTestId(`meta-${task.id}`), { clientX: 10, clientY: 10 });
+    fireEvent.click(screen.getByTestId(`meta-${task.id}`), { clientX: 11, clientY: 10 });
+    expect(card()).not.toBeNull();
+  });
+
   it('Enter on a focused row opens the card too', () => {
     mount();
     const row = screen.getByTestId(`row-${task.id}`);
@@ -188,9 +214,39 @@ describe('the card’s fields', () => {
     expect(screen.getByTestId('td-logged').textContent).toBe('45m logged · 75% of budget');
   });
 
+  it('is compact: only fields with a value show, the rest are "+" chips that add and focus them', () => {
+    world({ estimate_minutes: null });
+    mount([other]);
+    openCard(other);
+    for (const id of ['td-start', 'td-due', 'td-location', 'td-details', 'td-steps', 'td-deps']) expect(screen.queryByTestId(id)).toBeNull();
+    // the budget row shows anyway: time is logged against the task (the mock logs 45m)
+    expect(screen.getByTestId('td-logged').textContent).toContain('45m logged');
+    const chips = within(screen.getByTestId('td-adds')).getAllByRole('button').map((b) => b.textContent);
+    expect(chips).toEqual(['Start date', 'Expected completion', 'Location', 'Details', 'Steps', 'Dependencies']);
+
+    fireEvent.click(screen.getByTestId('td-add-location'));
+    expect(document.activeElement).toBe(screen.getByTestId('td-location'));
+    expect(screen.queryByTestId('td-add-location')).toBeNull();
+    fireEvent.click(screen.getByTestId('td-add-steps'));
+    expect(document.activeElement).toBe(screen.getByTestId('td-step-add'));
+  });
+
+  it('shows the fields a task already has, with no chip for them', () => {
+    world({ start_date: '2026-11-20', description: 'Quote the mayor.', attributes: { location: 'Studio B' } });
+    mount();
+    openCard();
+    expect(input('td-start').value).toBe('2026-11-20');
+    expect(input('td-details').value).toBe('Quote the mayor.');
+    expect(input('td-location').value).toBe('Studio B');
+    expect(screen.getByTestId('td-deps')).toBeTruthy(); // it waits on "Pick a date"
+    const chips = within(screen.getByTestId('td-adds')).getAllByRole('button').map((b) => b.textContent);
+    expect(chips).toEqual(['Expected completion', 'Steps']);
+  });
+
   it('title, details, dates, budget and location save through their verbs', () => {
     mount();
     openCard();
+    for (const k of ['details', 'due', 'start', 'location']) fireEvent.click(screen.getByTestId(`td-add-${k}`));
 
     fireEvent.change(input('td-title'), { target: { value: 'Press release v2' } });
     fireEvent.keyDown(input('td-title'), { key: 'Enter' });
@@ -269,6 +325,8 @@ describe('project', () => {
     expect(screen.getByTestId('td-capture-hint')).toBeTruthy();
     expect(screen.queryByTestId('td-steps')).toBeNull();
     expect(screen.queryByTestId('td-deps')).toBeNull();
+    expect(screen.queryByTestId('td-add-steps')).toBeNull();
+    expect(screen.queryByTestId('td-add-deps')).toBeNull();
     fireEvent.change(input('td-project'), { target: { value: p1.id } });
     expect(command('promoteActivity')).toHaveBeenCalledWith(capture.id, { parentId: p1.id });
   });
@@ -357,6 +415,7 @@ describe('closing', () => {
   it('Done keeps an edit that is still in its field', () => {
     mount();
     openCard();
+    fireEvent.click(screen.getByTestId('td-add-location'));
     const loc = input('td-location');
     act(() => loc.focus());
     fireEvent.change(loc, { target: { value: 'Studio C' } });
@@ -368,6 +427,7 @@ describe('closing', () => {
   it('Escape in a field with unsaved text reverts it and keeps the card; Escape again closes', () => {
     mount();
     openCard();
+    fireEvent.click(screen.getByTestId('td-add-location'));
     const loc = input('td-location');
     act(() => loc.focus());
     fireEvent.change(loc, { target: { value: 'Studio C' } });

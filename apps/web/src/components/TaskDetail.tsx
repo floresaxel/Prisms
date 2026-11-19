@@ -10,6 +10,11 @@
  *   node.move for a task, activity.promote for an Inbox capture · steps → step.*
  *   · dependencies → edge.* (finish-to-start).
  *
+ * The card is compact: beyond the title and project, a field shows only when
+ * the task has a value for it or once it is added from the "+" chips under the
+ * project (td-add-<start|due|hours|location|details|steps|deps>), which focus
+ * the new field.
+ *
  * Fields save when they lose focus (Enter too, for one-line fields), and closing
  * the card blurs the focused field first so an edit in progress is kept. Escape
  * in a field with unsaved text puts the stored value back; Escape anywhere else
@@ -77,9 +82,11 @@ export interface TaskDetailApi {
   /**
    * Spread onto a list row: a click on the row — anywhere but its own controls
    * (check box, buttons, selects, the click-to-rename title) — opens the card,
-   * and so does Enter/Space while the row itself has focus.
+   * and so does Enter/Space while the row itself has focus. A click that ends a
+   * drag (selecting the row's text, say) does not.
    */
   rowProps: (taskId: string) => {
+    onMouseDown: (e: MouseEvent<HTMLElement>) => void;
     onClick: (e: MouseEvent<HTMLElement>) => void;
     onKeyDown: (e: KeyboardEvent<HTMLElement>) => void;
     tabIndex: number;
@@ -105,9 +112,30 @@ function fromRowControl(target: EventTarget, row: HTMLElement): boolean {
   return control !== null && control !== row && row.contains(control);
 }
 
+/** How far (px) the pointer may travel between press and release and still count as a click. */
+const CLICK_SLOP = 4;
+
+/** True when the page has text selected inside `row` — the click ended a selection. */
+function selectsTextIn(row: HTMLElement): boolean {
+  const sel = window.getSelection();
+  if (!sel || sel.isCollapsed) return false;
+  for (let i = 0; i < sel.rangeCount; i++) {
+    const range = sel.getRangeAt(i);
+    if (range.intersectsNode(row) && range.toString().trim() !== '') return true;
+  }
+  return false;
+}
+
 export function TaskDetailProvider({ ctx, children }: { ctx: CommandContext; children: ReactNode }) {
   const [taskId, setTaskId] = useState<string | null>(null);
   const open = useCallback((id: string) => setTaskId(id), []);
+  /**
+   * Where the last press on a row landed, and whether it was on one of the
+   * row's controls. A press that starts on the title and is released elsewhere
+   * on the row (a drag over its text) still fires `click` — on the row — so the
+   * row checks the press before it opens anything.
+   */
+  const press = useRef<{ x: number; y: number; onControl: boolean } | null>(null);
   const close = useCallback(() => {
     // Keep an edit in progress: blurring runs the focused field's save before
     // the card (and the field) unmount — removing an element fires no blur.
@@ -120,8 +148,16 @@ export function TaskDetailProvider({ ctx, children }: { ctx: CommandContext; chi
     () => ({
       open,
       rowProps: (id: string) => ({
+        onMouseDown: (e: MouseEvent<HTMLElement>) => {
+          press.current = { x: e.clientX, y: e.clientY, onControl: fromRowControl(e.target, e.currentTarget) };
+        },
         onClick: (e: MouseEvent<HTMLElement>) => {
+          const p = press.current;
+          press.current = null;
           if (fromRowControl(e.target, e.currentTarget)) return;
+          // a drag, not a click: it started on a control (the title) or moved
+          if (p && (p.onControl || Math.hypot(e.clientX - p.x, e.clientY - p.y) > CLICK_SLOP)) return;
+          if (selectsTextIn(e.currentTarget)) return;
           open(id);
         },
         onKeyDown: (e: KeyboardEvent<HTMLElement>) => {
@@ -359,6 +395,37 @@ function TaskDetailBody({ node, facts, ctx, onOpenTask, onClose }: { node: Node;
     onClose();
   }
 
+  // ── which optional fields show: those with a value, plus the ones added here ──
+  const steps = useTaskSteps(node.id);
+  const progress = useTaskProgress(node.id);
+  const frozen = done; // I8 spirit: a done task's checklist is frozen
+  const has: Record<Extra, boolean> = {
+    start: node.start_date !== null,
+    due: node.due_date !== null,
+    // the budget row also reports time logged, so it shows once any is
+    hours: node.estimate_minutes !== null || (progress?.consumedMinutes ?? 0) >= 1,
+    location: locationOf(node) !== '',
+    details: node.description !== '',
+    steps: isTask && steps.length > 0,
+    deps: isTask && (incomingEdges(facts.edgeIndex, node.id).length > 0 || outgoingEdges(facts.edgeIndex, node.id).length > 0),
+  };
+  // A field that showed once stays while the card is open, so clearing it does
+  // not yank it away mid-edit. (The body is keyed by task: a new task starts over.)
+  const [added, setAdded] = useState<ReadonlySet<Extra>>(() => new Set(EXTRAS.filter((k) => has[k])));
+  const shows = (k: Extra) => has[k] || added.has(k);
+  const offer = EXTRAS.filter((k) => !shows(k) && (isTask || !TASK_ONLY.has(k)) && !(k === 'steps' && frozen));
+  /** The field just added: focused once it is on screen. */
+  const [focusNext, setFocusNext] = useState<string | null>(null);
+  useEffect(() => {
+    if (focusNext === null) return;
+    document.getElementById(focusNext)?.focus();
+    setFocusNext(null);
+  }, [focusNext]);
+  function add(k: Extra) {
+    setAdded((s) => new Set(s).add(k));
+    setFocusNext(EXTRA_UI[k].focus);
+  }
+
   return (
     <div data-testid="td-dialog" data-task={node.id}>
       <div className="px-td-kicker">
@@ -393,17 +460,28 @@ function TaskDetailBody({ node, facts, ctx, onOpenTask, onClose }: { node: Node;
 
       <div className="px-td-props">
         <ProjectField node={node} facts={facts} targets={targets} commands={commands} run={run} />
-        <DateRow node={node} commands={commands} run={run} />
-        <BudgetField node={node} commands={commands} run={run} />
-        <LocationField node={node} commands={commands} run={run} />
+        <DateRow node={node} start={shows('start')} due={shows('due')} commands={commands} run={run} />
+        {shows('hours') && <BudgetField node={node} commands={commands} run={run} />}
+        {shows('location') && <LocationField node={node} commands={commands} run={run} />}
       </div>
 
-      <DetailsField node={node} commands={commands} run={run} />
+      {offer.length > 0 && (
+        <div className="px-td-adds" data-testid="td-adds">
+          {offer.map((k) => (
+            <button key={k} type="button" className="px-td-add" data-testid={`td-add-${k}`} onClick={() => add(k)}>
+              <Ic name="plus" />
+              {EXTRA_UI[k].label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {shows('details') && <DetailsField node={node} commands={commands} run={run} />}
 
       {isTask ? (
         <>
-          <StepsSection node={node} commands={commands} run={run} />
-          <DependenciesSection node={node} facts={facts} commands={commands} run={run} onOpenTask={onOpenTask} />
+          {shows('steps') && <StepsSection node={node} commands={commands} run={run} />}
+          {shows('deps') && <DependenciesSection node={node} facts={facts} commands={commands} run={run} onOpenTask={onOpenTask} />}
         </>
       ) : (
         <p className="px-td-hint" data-testid="td-capture-hint">Assign this capture to a project to give it steps and dependencies.</p>
@@ -429,6 +507,26 @@ function TaskDetailBody({ node, facts, ctx, onOpenTask, onClose }: { node: Node;
     </div>
   );
 }
+
+/**
+ * The card's optional fields. Each shows only once it has a value or is added
+ * from the card's "+" chips, so a bare task opens as a short card: kind, title,
+ * project, and a row of what can be added.
+ */
+const EXTRAS = ['start', 'due', 'hours', 'location', 'details', 'steps', 'deps'] as const;
+type Extra = (typeof EXTRAS)[number];
+/** Only a task has these; an Inbox capture gets them once it is in a project. */
+const TASK_ONLY: ReadonlySet<Extra> = new Set(['steps', 'deps']);
+/** Each chip's label, and the element id focused when it is added. */
+const EXTRA_UI: Record<Extra, { label: string; focus: string }> = {
+  start: { label: 'Start date', focus: 'td-start' },
+  due: { label: 'Expected completion', focus: 'td-due' },
+  hours: { label: 'Budget', focus: 'td-hours' },
+  location: { label: 'Location', focus: 'td-location' },
+  details: { label: 'Details', focus: 'td-details' },
+  steps: { label: 'Steps', focus: 'td-step-add' },
+  deps: { label: 'Dependencies', focus: 'td-dep-add-before' },
+};
 
 type Run = (write: () => Promise<void>) => Promise<void>;
 interface FieldProps {
@@ -526,17 +624,21 @@ function DateInput({ id, testId, value, onSave }: { id: string; testId: string; 
   );
 }
 
-function DateRow({ node, commands, run }: FieldProps) {
+function DateRow({ node, start, due, commands, run }: FieldProps & { start: boolean; due: boolean }) {
   const backwards = node.start_date !== null && node.due_date !== null && node.start_date > node.due_date;
   return (
     <>
-      <Prop icon="play" label="Starts" htmlFor="td-start">
-        <DateInput id="td-start" testId="td-start" value={node.start_date} onSave={(v) => void run(() => commands.setDates(node.id, { startDate: v }))} />
-      </Prop>
-      <Prop icon="cal" label="Expected completion" htmlFor="td-due">
-        <DateInput id="td-due" testId="td-due" value={node.due_date} onSave={(v) => void run(() => commands.setDates(node.id, { dueDate: v }))} />
-        {backwards && <span className="px-td-note px-td-note--warn" data-testid="td-dates-warn">ends before it starts</span>}
-      </Prop>
+      {start && (
+        <Prop icon="play" label="Starts" htmlFor="td-start">
+          <DateInput id="td-start" testId="td-start" value={node.start_date} onSave={(v) => void run(() => commands.setDates(node.id, { startDate: v }))} />
+        </Prop>
+      )}
+      {due && (
+        <Prop icon="cal" label="Expected completion" htmlFor="td-due">
+          <DateInput id="td-due" testId="td-due" value={node.due_date} onSave={(v) => void run(() => commands.setDates(node.id, { dueDate: v }))} />
+          {backwards && <span className="px-td-note px-td-note--warn" data-testid="td-dates-warn">ends before it starts</span>}
+        </Prop>
+      )}
     </>
   );
 }
@@ -707,6 +809,7 @@ function StepsSection({ node, commands, run }: FieldProps) {
       ) : (
         <div className="px-addstep">
           <input
+            id="td-step-add"
             data-testid="td-step-add"
             aria-label="Add a step"
             placeholder="Add a step — Enter to save"
@@ -910,6 +1013,7 @@ function DepList({
         </ul>
       )}
       <select
+        id={testId}
         className="px-td-in px-td-dep-add"
         data-testid={testId}
         aria-label={placeholder.replace(/^\+ |…$/g, '')}
