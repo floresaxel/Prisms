@@ -1213,7 +1213,8 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
 .px-sstep:hover { background: var(--px-surface-2); }
 .px-sstep-txt { flex: 1; }
 .px-sstep--done .px-sstep-txt { text-decoration: line-through; color: var(--px-faint); }
-.px-sstep-input { flex: 1; border: 1.5px solid var(--px-blue); border-radius: 4px; padding: 1px 5px; font: inherit; font-size: 12.5px; background: var(--px-surface); color: var(--px-text); }
+.px-sstep-input { flex: 1; border: 1.5px solid var(--px-border-2); border-radius: 4px; padding: 1px 5px; font: inherit; font-size: 12.5px; background: var(--px-surface); color: var(--px-text); }
+.px-sstep-input:focus { outline: none; box-shadow: none; }
 .px-sstep-ed { margin-left: auto; color: var(--px-faint); display: flex; padding: 2px; border-radius: 4px; border: none; background: none; cursor: pointer; opacity: 0; }
 .px-sstep:hover .px-sstep-ed { opacity: 1; }
 .px-sstep-ed:hover { background: #e9ecf1; color: var(--px-text-dim); }
