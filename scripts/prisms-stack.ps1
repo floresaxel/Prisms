@@ -62,6 +62,13 @@ pwsh scripts/prisms-stack.ps1                    # the status window (what the s
 pwsh scripts/prisms-stack.ps1 -NoGui             # the same, reported in this console
 pwsh scripts/prisms-stack.ps1 -Dev               # the Vite dev server (hot reload) instead of the built app
 pwsh scripts/prisms-stack.ps1 -Stop              # stop whatever an earlier launch started
+pwsh scripts/prisms-stack.ps1 -Update -NoGui     # update to the newest main on GitHub, then start
+
+The window's Update button pulls the newest main from GitHub (fast-forward
+only: it declines, saying why, if there are uncommitted changes or the
+checkout is on a branch that isn't merged yet), reinstalls packages when they
+changed, then starts the stack, which rebuilds the web app and runs any new
+migrations.
 #>
 [CmdletBinding()]
 param(
@@ -73,6 +80,8 @@ param(
   [switch]$InstallShortcut,
   # serve the web app from the Vite dev server (hot reload) instead of a build
   [switch]$Dev,
+  # update to the newest main on GitHub first (what the window's Update button does)
+  [switch]$Update,
   [string]$Distro = 'Ubuntu'
 )
 
@@ -314,7 +323,10 @@ $Engine = {
         Stop-Step files 'Dependencies are not installed. Run "pnpm install" once while online.'
       }
     }
-    Set-Row files ok ($fetch.Count ? "ready (fetched $($fetch.Count) from OneDrive)" : 'ready')
+    $ready = $fetch.Count ? "ready (fetched $($fetch.Count) from OneDrive)" : 'ready'
+    # what the Update button just did, said once
+    if ($sync.UpdateNote) { $ready += " · $($sync.UpdateNote)"; $sync.UpdateNote = $null }
+    Set-Row files ok $ready
   }
 
   function Step-Docker {
@@ -536,6 +548,128 @@ $Engine = {
     Set-Row $Key ok $up
   }
 
+  # ── update ────────────────────────────────────────────────────────────────
+  # The window's Update button: bring the checkout to the newest main on
+  # GitHub, reinstall packages if they changed, then start the stack as usual,
+  # which rebuilds the web app and runs any new migrations. It only ever moves
+  # FORWARD to origin/main. It never commits, stashes or merges, and it
+  # declines (saying why) rather than touch work that isn't on main yet.
+
+  function Invoke-Git([string]$GitArgs, [int]$TimeoutSec = 60) {
+    # no credential prompt to hang on behind a hidden window
+    Invoke-Logged ('git.exe -C "' + $sync.Repo + '" ' + $GitArgs) $TimeoutSec @{ GIT_TERMINAL_PROMPT = '0' }
+  }
+
+  function Get-GitLine([string]$GitArgs) { Get-LastLine (Invoke-Git $GitArgs).Out }
+
+  # What an update would do, decided before anything is touched. Throws (as a
+  # refusal) when it shouldn't happen at all.
+  function Get-UpdatePlan {
+    if (-not (Get-Command git.exe -ErrorAction SilentlyContinue)) { throw [InvalidOperationException]::new('Git is not on PATH.') }
+    $dirty = @((Invoke-Git 'status --porcelain --untracked-files=no').Out -split "`r?`n" | Where-Object { $_ })
+    if ($dirty.Count) {
+      throw [InvalidOperationException]::new("There are uncommitted changes in $($dirty.Count) file$($dirty.Count -eq 1 ? '' : 's'). Commit or stash them, then update.")
+    }
+    $fetch = Invoke-Git 'fetch origin main' 180
+    if ($fetch.Code -ne 0) { throw [InvalidOperationException]::new("Couldn't reach GitHub: $(Get-LastLine $fetch.Out)") }
+    $branch = Get-GitLine 'rev-parse --abbrev-ref HEAD'
+    $head = Get-GitLine 'rev-parse HEAD'
+    $target = Get-GitLine 'rev-parse origin/main'
+    if ($branch -ne 'main' -and (Invoke-Git "merge-base --is-ancestor HEAD origin/main").Code -ne 0) {
+      throw [InvalidOperationException]::new("This checkout is on ""$branch"", which has work that isn't on main yet. Update leaves it alone: merge it first, or switch to main yourself.")
+    }
+    $hasMain = (Invoke-Git 'rev-parse --verify --quiet refs/heads/main').Code -eq 0
+    if ($hasMain -and (Invoke-Git 'merge-base --is-ancestor refs/heads/main origin/main').Code -ne 0) {
+      throw [InvalidOperationException]::new("The local main has commits that aren't on GitHub, so it can't simply move forward. Push them or sort it out yourself.")
+    }
+    @{ Branch = $branch; Head = $head; Target = $target; HasMain = $hasMain; Current = ($branch -eq 'main' -and $head -eq $target) }
+  }
+
+  # Move to main at origin/main. Returns the files that changed on disk.
+  function Update-Checkout($Plan) {
+    if ($Plan.Branch -ne 'main') {
+      Set-Row files busy 'switching to main…'
+      $r = $Plan.HasMain ? (Invoke-Git 'switch main') : (Invoke-Git 'switch -c main --track origin/main')
+      if ($r.Code -ne 0) { Stop-Step files "Couldn't switch to main: $(Get-LastLine $r.Out)" }
+    }
+    Set-Row files busy 'downloading the latest version…'
+    $r = Invoke-Git 'merge --ff-only origin/main' 120
+    if ($r.Code -ne 0) { Stop-Step files "Couldn't move main forward: $(Get-LastLine $r.Out)" }
+    @((Invoke-Git "diff --name-only $($Plan.Head) HEAD").Out -split "`r?`n" | Where-Object { $_ })
+  }
+
+  # pnpm the way the repo pins it, through npx: a pnpm installed from inside a
+  # packaged app is invisible to anything launched from the desktop. CI=true
+  # answers pnpm's "remove node_modules?" question, which has no one to ask here.
+  function Install-Packages {
+    # minutes, not seconds: a desktop launch has its own package cache to fill
+    Set-Row files busy 'installing packages (can take a few minutes)…'
+    $pm = 'pnpm'
+    try { $pm = ([IO.File]::ReadAllText((Join-Path $sync.Repo 'package.json')) | ConvertFrom-Json).packageManager } catch { }
+    $r = Invoke-Logged "npx.cmd --yes $pm install --frozen-lockfile" 1800 @{ CI = 'true' }
+    if ($r.Code -ne 0) { Stop-Step files "Installing packages failed: $(Get-FailureText $r.Out)" }
+  }
+
+  # The servers run out of node_modules and the built bundle, which the update
+  # replaces underneath them: they go first. The containers stay up.
+  function Stop-OwnedServers {
+    $sync.Owned = Read-StackState
+    foreach ($k in 'web', 'api') {
+      if (Test-Alive $sync.Owned[$k]) {
+        Set-Row $k busy 'stopping for the update…'
+        Stop-Tree $sync.Owned[$k].Pid
+        $port = $k -eq 'api' ? $sync.ApiPort : $sync.WebPort
+        [void](Wait-Until { -not (Test-Port $port) } 20 300)
+        Set-Row $k off 'stopped for the update'
+      }
+      $sync.Owned[$k] = $null
+    }
+    $sync.Owned.webMode = $null
+    Save-StackState
+  }
+
+  function Invoke-StackUpdate {
+    $sync.Cancel = $false
+    $before = @{ Phase = $sync.Phase; Message = $sync.Message; Files = $sync.Rows['files'] }
+    $sync.StartedAt = Get-Date
+    Set-Phase updating 'Checking GitHub for a newer version…'
+    Set-Row files busy 'checking GitHub…'
+    try { $plan = Get-UpdatePlan }
+    catch {
+      # declined: nothing was touched, so the window goes back to how it was
+      $sync.Rows['files'] = $before.Files
+      $sync.Phase = $before.Phase
+      $sync.Message = $before.Message
+      $sync.Notice = "Prisms wasn't updated. $($_.Exception.Message)"
+      $sync.Version++
+      Write-StackLog "update   declined  $($_.Exception.Message)"
+      return
+    }
+    if ($plan.Current) {
+      $sync.UpdateNote = "already the latest ($($plan.Target.Substring(0, 7)))"
+    } else {
+      try {
+        Stop-OwnedServers
+        Set-Phase updating 'Updating to the latest version…'
+        $changed = Update-Checkout $plan
+        if ($changed | Where-Object { $_ -match '(^|/)package\.json$|^pnpm-lock\.yaml$|^pnpm-workspace\.yaml$' }) { Install-Packages }
+        $count = [int](Get-GitLine "rev-list --count $($plan.Head)..HEAD")
+        $sha = $plan.Target.Substring(0, 7)
+        $note = $count ? "updated to $sha ($count new commit$($count -eq 1 ? '' : 's'))" : "switched to main ($sha)"
+        if ($changed -contains 'scripts/prisms-stack.ps1') { $note += ' · reopen this window for the new launcher' }
+        $sync.UpdateNote = $note
+        Write-StackLog "update   $note"
+      } catch {
+        $row = $_.Exception.Data['row']
+        if ($row) { Set-Row $row fail 'failed' }
+        else { Write-StackLog "unexpected: $($_ | Out-String)" }
+        Set-Phase failed "The update stopped: $($_.Exception.Message)"
+        return
+      }
+    }
+    Invoke-StackStart
+  }
+
   function Invoke-StackStart {
     $sync.Cancel = $false
     $sync.Owned = Read-StackState
@@ -643,6 +777,7 @@ $Engine = {
             'start' { Invoke-StackStart }
             'stop' { Invoke-StackStop }
             'restart' { Invoke-StackStop; Invoke-StackStart }
+            'update' { Invoke-StackUpdate }
           }
         } catch {
           Write-StackLog "unexpected: $($_ | Out-String)"
@@ -715,6 +850,9 @@ function New-StackSync {
   $s.StartedAt = $null
   $s.UpAt = $null
   $s.Owned = @{ pin = $null; api = $null; web = $null; webMode = $null; compose = $false }
+  # the Update button: what it did (shown on the next "ready"), or why it didn't
+  $s.UpdateNote = $null
+  $s.Notice = $null
   $s
 }
 
@@ -863,7 +1001,9 @@ function New-StackWindow {
   $png = Join-Path $script:RepoRoot 'apps\web\public\icon-mark-192.png'
   if (Test-Path -LiteralPath $png) {
     $logo = [Windows.Forms.PictureBox]::new()
-    $logo.Image = [Drawing.Image]::FromFile($png)
+    # from a copy in memory: Image.FromFile keeps the file locked for as long as
+    # the window is open, and the Update button has to be able to replace it
+    $logo.Image = [Drawing.Image]::FromStream([IO.MemoryStream]::new([IO.File]::ReadAllBytes($png)))
     $logo.SizeMode = 'Zoom'
     $logo.Size = [Drawing.Size]::new((Px 28), (Px 28))
     $logo.Margin = Pad 0 2 10 0
@@ -933,12 +1073,15 @@ function New-StackWindow {
   $bar.Margin = Pad 0 16 0 0
   $open = New-Button 'Open Prisms'
   $toggle = New-Button 'Stop'
+  $update = New-Button 'Update'
   $logs = New-Button 'Logs'
-  $bar.Controls.AddRange(@($open, $toggle, $logs))
+  $bar.Controls.AddRange(@($open, $toggle, $update, $logs))
   $root.Controls.Add($bar)
+  $tips = [Windows.Forms.ToolTip]::new()
+  $tips.SetToolTip($update, 'Get the newest version from GitHub, rebuild and restart')
 
   @{ Form = $form; Rows = $rows; Glyph = $glyph; Banner = $banner; Sub = $sub; Link = $link
-    Open = $open; Toggle = $toggle; Logs = $logs; Colors = $C }
+    Open = $open; Toggle = $toggle; Update = $update; Logs = $logs; Colors = $C; Tips = $tips }
 }
 
 function Update-StackWindow($Ui) {
@@ -957,6 +1100,10 @@ function Update-StackWindow($Ui) {
     'starting' {
       $s = [int]((Get-Date) - $sync.StartedAt).TotalSeconds
       '', 'Starting Prisms…', $C.Ink, ('Started {0:HH:mm} · {1} s so far' -f $sync.StartedAt, $s)
+    }
+    'updating' {
+      $s = [int]((Get-Date) - $sync.StartedAt).TotalSeconds
+      '', 'Updating Prisms…', $C.Ink, ('{0} · {1} s so far' -f $sync.Message, $s)
     }
     'up' {
       $took = [int]($sync.UpAt - $sync.StartedAt).TotalSeconds
@@ -986,7 +1133,11 @@ function Update-StackWindow($Ui) {
     { $_ -in 'failed', 'down' } { 'Start again' }
     default { 'Start' }
   }
-  $Ui.Toggle.Enabled = $phase -ne 'stopping'
+  $Ui.Toggle.Enabled = $phase -notin 'stopping', 'updating'
+  # an update restarts the stack itself, so not while it is already moving
+  $busy = $phase -in 'starting', 'stopping', 'updating'
+  $Ui.Update.Enabled = -not $busy
+  $Ui.Update.ForeColor = $busy ? $C.Grey : $C.Ink
 }
 
 function Show-StackWindow {
@@ -1004,6 +1155,13 @@ function Show-StackWindow {
   $script:Ui.Link.Add_LinkClicked({ Start-Process $sync.Url })
   $script:Ui.Open.Add_Click({ Start-Process $sync.Url })
   $script:Ui.Logs.Add_Click({ Start-Process explorer.exe $sync.LogDir })
+  $script:Ui.Update.Add_Click({
+      if ($sync.Phase -in 'starting', 'stopping', 'updating') { return }
+      $answer = [Windows.Forms.MessageBox]::Show($script:Ui.Form,
+        "Update Prisms to the newest version on GitHub?`n`nThis gets the latest main, reinstalls packages if they changed, rebuilds the app and restarts it. The site is down for a minute or two.`n`nUncommitted changes, or a branch that isn't merged yet, are left alone: the update says so and does nothing.",
+        'Update Prisms', 'OKCancel', 'Question')
+      if ($answer -eq 'OK') { $sync.Queue.Enqueue('update') }
+    })
   $script:Ui.Toggle.Add_Click({
       switch ($sync.Phase) {
         'starting' { $sync.Cancel = $true; $sync.Queue.Enqueue('stop') }
@@ -1019,6 +1177,12 @@ function Show-StackWindow {
       if ($script:AllowClose) { return }
       # never stand between Windows and a shutdown, or Task Manager and its job
       if ($e.CloseReason -in 'WindowsShutDown', 'TaskManagerClosing') { return }
+      # cutting git or pnpm off halfway would leave the checkout in pieces
+      if ($sync.Phase -eq 'updating') {
+        [void][Windows.Forms.MessageBox]::Show($script:Ui.Form, 'Prisms is updating. Close this window once it has finished.', 'Prisms', 'OK', 'Information')
+        $e.Cancel = $true
+        return
+      }
       $ours = (Test-Alive $sync.Owned.api) -or (Test-Alive $sync.Owned.web) -or (Test-Alive $sync.Owned.pin)
       if (-not $ours) { return }
       $answer = [Windows.Forms.MessageBox]::Show($script:Ui.Form,
@@ -1050,6 +1214,12 @@ function Show-StackWindow {
         $script:AllowClose = $true
         $script:Ui.Form.Close()
       }
+      # an update that declined says why, once
+      $notice = $sync.Notice
+      if ($notice) {
+        $sync.Notice = $null
+        [void][Windows.Forms.MessageBox]::Show($script:Ui.Form, $notice, 'Prisms', 'OK', 'Warning')
+      }
     })
   $form.Add_Shown({ $script:Ui.Form.Activate(); $timer.Start() })
   Update-StackWindow $script:Ui
@@ -1075,6 +1245,10 @@ function Watch-StackConsole {
         $shown[$key] = $seen
         Write-Host ('  {0} {1,-14} {2}' -f $mark[$r.State], $sync.Labels[$key], $r.Detail) -ForegroundColor $color[$r.State]
       }
+    }
+    if ($sync.Notice) {
+      Write-Host "  $($sync.Notice)" -ForegroundColor Yellow
+      return
     }
     switch ($sync.Phase) {
       'up' {
@@ -1145,7 +1319,7 @@ function Invoke-Main {
   $worker = $null
   try {
     $worker = Start-StackWorker
-    $sync.Queue.Enqueue('start')
+    $sync.Queue.Enqueue($Update ? 'update' : 'start')
     if ($NoGui) { Watch-StackConsole } else { Show-StackWindow }
   } finally {
     $sync.Queue.Enqueue('exit')
