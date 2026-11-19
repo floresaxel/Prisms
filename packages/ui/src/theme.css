@@ -407,8 +407,8 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
    default crossfade is off — the tab bar and the rest of the page change at
    once — and the panel's group does not morph between the two heights, which
    would stretch the snapshots; the outgoing one just overflows while it fades. */
-@keyframes px-tab-out { to { opacity: 0; filter: blur(6px); } }
-@keyframes px-tab-in { from { opacity: 0; filter: blur(6px); } }
+@keyframes px-tab-out { to { opacity: 0; filter: blur(2.5px); } }
+@keyframes px-tab-in { from { opacity: 0; filter: blur(2.5px); } }
 .px-vt-tab::view-transition-old(root),
 .px-vt-tab::view-transition-new(root) { animation: none; }
 .px-vt-tab::view-transition-group(px-tabpanel) { animation: none; }
