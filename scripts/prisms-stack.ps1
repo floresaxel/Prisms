@@ -489,8 +489,15 @@ $Engine = {
       Set-Row code busy 'installing packages (the first time takes a few minutes)…'
       $pm = 'pnpm'
       try { $pm = ([IO.File]::ReadAllText((Join-Path $tree 'package.json')) | ConvertFrom-Json).packageManager } catch { }
-      # what the stack runs, not the mobile app; CI=true: no one to answer pnpm's questions
-      $r = Invoke-Logged "npx.cmd --yes $pm install --frozen-lockfile --prefer-offline --filter @prisms/web... --filter @prisms/server... --filter @prisms/db..." 1800 @{ CI = 'true' } $tree
+      # What the stack runs, not the mobile app. CI=true: no one to answer pnpm's
+      # questions. minimum-release-age=0 (approved by the repo owner, 2026-11-19):
+      # pnpm 11 otherwise re-checks every entry of a FROZEN lockfile against its
+      # one-day release-age policy, downloading the full registry metadata of all
+      # ~1600 packages first (tens of MB apiece for some). From a desktop launch,
+      # with nothing cached, that ran past ten minutes and failed. The policy
+      # already applied when each branch resolved its dependencies; this install
+      # only links what the lockfile says.
+      $r = Invoke-Logged "npx.cmd --yes $pm install --frozen-lockfile --prefer-offline --config.minimum-release-age=0 --filter @prisms/web... --filter @prisms/server... --filter @prisms/db..." 1800 @{ CI = 'true' } $tree
       if ($r.Code -ne 0) { Stop-Step code "Installing the build tree's packages failed: $(Get-FailureText $r.Out)" }
       try { [IO.File]::WriteAllText($stamp, $want) } catch { }
     }
