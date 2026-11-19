@@ -244,4 +244,5 @@ export {
   type ThresholdMarkProps,
   type DepthDoorProps,
   type MarkTone,
+  type MarkVariant,
 } from './components/Mark';

@@ -733,9 +733,9 @@ function Start-StackWorker {
 function Get-StackIcon {
   # Named after the artwork it was cut from: the cache is reused while it exists,
   # so a new mark needs a new name or the old icon lives on.
-  $ico = Join-Path $sync.StateDir 'prisms-threshold.ico'
+  $ico = Join-Path $sync.StateDir 'prisms-mark.ico'
   if (Test-Path -LiteralPath $ico) { return $ico }
-  $src = Join-Path $script:RepoRoot 'apps\web\public\icon-threshold-512.png'
+  $src = Join-Path $script:RepoRoot 'apps\web\public\icon-mark-512.png'
   if (-not (Test-Path -LiteralPath $src)) { return $null }
   Add-Type -AssemblyName System.Drawing
   $img = [Drawing.Image]::FromFile($src)
@@ -860,7 +860,7 @@ function New-StackWindow {
   $head.AutoSize = $true
   $head.WrapContents = $false
   $head.Margin = Pad 0 0 0 0
-  $png = Join-Path $script:RepoRoot 'apps\web\public\icon-threshold-192.png'
+  $png = Join-Path $script:RepoRoot 'apps\web\public\icon-mark-192.png'
   if (Test-Path -LiteralPath $png) {
     $logo = [Windows.Forms.PictureBox]::new()
     $logo.Image = [Drawing.Image]::FromFile($png)
