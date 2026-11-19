@@ -252,8 +252,10 @@ The site shows **every active branch**, not just what the checkout has checked
 out. The launcher runs the stack from a worktree of its own beside the repo
 (`prisms-preview`): `origin/main` with each local branch that has unmerged work
 and a commit in the last 3 days (`-ActiveDays`) merged on top. `wip/*` branches
-are skipped, and a branch that conflicts is left out and named in the window's
-**Code** row (hover it for the full list). While the window is open, a new
+are skipped. Branches merge newest first, so when two conflict, the one you
+committed to last goes in and the other is left out and named in the window's
+**Code** row (hover it for the full list). A conflict only in tests or docs,
+which the site never runs, leaves nothing out. While the window is open, a new
 commit on any branch, in any worktree, is picked up within a few seconds: the
 tree is merged again, migrations run, and the web app and API are rebuilt or
 restarted only if their code changed. No checkout you work in is touched. The
