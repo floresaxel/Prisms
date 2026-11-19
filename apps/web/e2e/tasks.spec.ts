@@ -184,9 +184,16 @@ test('capture → promote lands the task under its project group; the Inbox grou
   const inboxRow = page.getByTestId('inbox').locator('li', { hasText: 'Sharpen the gouges' });
   await expect(inboxRow).toBeVisible();
 
-  // wait for the seeded project to sync so it is a promote target, then promote
-  await expect(inboxRow.locator('select')).toContainText('Launch', { timeout: 30_000 });
-  await inboxRow.getByRole('button', { name: 'Assign' }).click();
+  // the picker starts empty ("Assign project"); wait for the seeded project to
+  // sync so it is a promote target, choose it, then promote
+  const picker = inboxRow.getByTestId(/^promote-target-/);
+  await expect(picker).toBeEnabled({ timeout: 30_000 });
+  await expect(picker).toContainText('Assign project');
+  await expect(inboxRow.getByRole('button', { name: 'Assign', exact: true })).toBeDisabled();
+  await picker.click();
+  await page.getByRole('option', { name: 'Launch' }).click();
+  await expect(picker).toContainText('Launch');
+  await inboxRow.getByRole('button', { name: 'Assign', exact: true }).click();
 
   // it leaves the Inbox group and now lives under the "Launch" project group
   await expect(page.getByTestId('inbox')).not.toContainText('Sharpen the gouges');
