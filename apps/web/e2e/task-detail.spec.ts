@@ -59,7 +59,7 @@ test('rename a task in place, then edit every detail in its card — all of it s
   const inline = page.getByTestId(`title-input-${ids.task}`);
   await expect(inline).toBeFocused();
   // …with a bare caret, not the whole title selected
-  expect(await inline.evaluate((el: HTMLInputElement) => el.selectionStart === el.selectionEnd)).toBe(true);
+  expect(await inline.evaluate((el: HTMLTextAreaElement) => el.selectionStart === el.selectionEnd)).toBe(true);
   await inline.fill('Write the launch note');
   await inline.press('Enter');
   await expect(page.getByTestId(`title-${ids.task}`)).toHaveText('Write the launch note');
@@ -72,6 +72,29 @@ test('rename a task in place, then edit every detail in its card — all of it s
   await page.mouse.up();
   await expect(page.getByTestId('td-dialog')).toHaveCount(0);
   await expect(page.getByTestId(`title-input-${ids.task}`)).toHaveCount(0);
+
+  // ── the title is text: a text cursor, and a drag within it selects part of it ──
+  const title = page.getByTestId(`title-${ids.task}`);
+  expect(await title.evaluate((el) => getComputedStyle(el).cursor)).toBe('text');
+  const tb = (await title.boundingBox())!;
+  // (the drag above left text selected; pressing on a selection would drag it instead)
+  await page.evaluate(() => window.getSelection()?.removeAllRanges());
+  await title.hover({ position: { x: 5, y: tb.height / 2 } });
+  await page.mouse.down();
+  await title.hover({ position: { x: tb.width / 2, y: tb.height / 2 } });
+  await page.mouse.up();
+  const selected = await page.evaluate(() => window.getSelection()?.toString() ?? '');
+  expect(selected.length).toBeGreaterThan(2);
+  expect('Write the launch note').toContain(selected);
+  await expect(page.getByTestId(`title-input-${ids.task}`)).toHaveCount(0);
+  await expect(page.getByTestId('td-dialog')).toHaveCount(0);
+
+  // ── a long press on the row (to start selecting) opens nothing either ──
+  await row.locator('.px-t-meta').hover();
+  await page.mouse.down();
+  await page.waitForTimeout(700);
+  await page.mouse.up();
+  await expect(page.getByTestId('td-dialog')).toHaveCount(0);
 
   // ── click elsewhere on the row: the details card ──
   await row.locator('.px-t-meta').click();

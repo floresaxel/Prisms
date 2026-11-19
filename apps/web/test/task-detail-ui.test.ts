@@ -194,6 +194,66 @@ describe('rows', () => {
     expect(card()).not.toBeNull();
   });
 
+  it('a long press on the row does not open the card', () => {
+    const now = vi.spyOn(performance, 'now');
+    try {
+      mount();
+      const meta = screen.getByTestId(`meta-${task.id}`);
+      now.mockReturnValue(1_000);
+      fireEvent.mouseDown(meta, { clientX: 10, clientY: 10 });
+      now.mockReturnValue(1_700); // held 0.7 s without moving
+      fireEvent.click(meta, { clientX: 10, clientY: 10 });
+      expect(card()).toBeNull();
+    } finally {
+      now.mockRestore();
+    }
+  });
+
+  it('the title is selectable text: a drag, a hold or a selection over it neither renames nor opens the card', () => {
+    const now = vi.spyOn(performance, 'now').mockReturnValue(1_000);
+    try {
+      mount();
+      const title = screen.getByTestId(`title-${task.id}`);
+      expect(title.tagName).toBe('SPAN'); // a <button>'s text can't be drag-selected
+      // dragged across its text
+      fireEvent.mouseDown(title, { clientX: 10, clientY: 10 });
+      fireEvent.click(title, { clientX: 60, clientY: 10 });
+      // held
+      fireEvent.mouseDown(title, { clientX: 10, clientY: 10 });
+      now.mockReturnValue(1_700);
+      fireEvent.click(title, { clientX: 10, clientY: 10 });
+      // a click that leaves part of it selected (a double-click on a word, say)
+      const range = document.createRange();
+      range.setStart(title.firstChild!, 0);
+      range.setEnd(title.firstChild!, 5);
+      window.getSelection()!.removeAllRanges();
+      window.getSelection()!.addRange(range);
+      fireEvent.mouseDown(title, { clientX: 10, clientY: 10 });
+      fireEvent.click(title, { clientX: 10, clientY: 10 });
+      expect(screen.queryByTestId(`title-input-${task.id}`)).toBeNull();
+      expect(card()).toBeNull();
+      // …a plain click still renames
+      window.getSelection()!.removeAllRanges();
+      fireEvent.mouseDown(title, { clientX: 10, clientY: 10 });
+      fireEvent.click(title, { clientX: 11, clientY: 10 });
+      expect(screen.getByTestId(`title-input-${task.id}`)).not.toBeNull();
+    } finally {
+      now.mockRestore();
+    }
+  });
+
+  it('the title editor is a wrapping text box; Enter/Space on the focused title opens it; a pasted line break becomes a space', () => {
+    mount();
+    const title = screen.getByTestId(`title-${task.id}`);
+    expect(title.getAttribute('role')).toBe('button');
+    fireEvent.keyDown(title, { key: 'Enter' });
+    const field = screen.getByTestId(`title-input-${task.id}`) as HTMLTextAreaElement;
+    expect(field.tagName).toBe('TEXTAREA');
+    fireEvent.change(field, { target: { value: 'Write the\npress  release' } });
+    expect(field.value).toBe('Write the press  release');
+    expect(card()).toBeNull();
+  });
+
   it('Enter on a focused row opens the card too', () => {
     mount();
     const row = screen.getByTestId(`row-${task.id}`);
