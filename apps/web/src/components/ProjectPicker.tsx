@@ -88,7 +88,7 @@ export function ProjectPicker({
             {current.type === 'milestone' && <span className="px-ppick-kind">milestone</span>}
           </span>
         ) : (
-          <span className="px-ppick-empty">{targets.length === 0 ? emptyLabel : 'Choose a project'}</span>
+          <span className="px-ppick-empty">{targets.length === 0 ? emptyLabel : 'Assign project'}</span>
         )}
         <Ic name="chevd" />
       </button>

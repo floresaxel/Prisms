@@ -297,8 +297,10 @@ function CompleteInboxDialog({ activity, targets, commands, onClose }: { activit
 }
 
 function InboxRow({ activity, targets, commands, detail, onComplete }: { activity: Node; targets: PromoteTarget[]; commands: PrismsCommands; detail: TaskDetailApi; onComplete: () => void }) {
+  // Nothing preselected: the picker reads "Assign project" until one is chosen,
+  // and Assign stays off. A choice whose project has since gone counts as none.
   const [parentId, setParentId] = useState('');
-  const selected = parentId || targets[0]?.id || '';
+  const selected = targets.some((t) => t.id === parentId) ? parentId : '';
   return (
     <li className="px-trow px-trow--inbox" {...detail.rowProps(activity.id)}>
       <InboxCheck activity={activity} onComplete={onComplete} />
