@@ -39,6 +39,7 @@ import {
 } from '@prisms/ui';
 
 import { InboxDelete } from '../components/InboxDelete';
+import { ProjectPicker } from '../components/ProjectPicker';
 import { EditableTitle, locationOf, useTaskDetail, type TaskDetailApi } from '../components/TaskDetail';
 import { UnfocusedTag } from '../components/UnfocusedTag';
 import { formatMinutes, projectTone } from '../format';
@@ -303,17 +304,7 @@ function InboxRow({ activity, targets, commands, detail, onComplete }: { activit
       <InboxCheck activity={activity} onComplete={onComplete} />
       <div className="px-t-main"><div className="px-t-title"><EditableTitle node={activity} commands={commands} /></div></div>
       <span className="px-promote">
-        <select
-          data-testid={`promote-target-${activity.id}`}
-          value={selected}
-          onChange={(e) => setParentId(e.target.value)}
-          disabled={targets.length === 0}
-        >
-          {targets.length === 0 && <option value="">No project to assign to</option>}
-          {targets.map((t) => (
-            <option key={t.id} value={t.id}>{t.title} ({t.type})</option>
-          ))}
-        </select>
+        <ProjectPicker targets={targets} value={selected} onChange={setParentId} testId={`promote-target-${activity.id}`} />
         <button
           className="px-btn px-btn--sm px-btn--primary"
           data-testid={`promote-${activity.id}`}
