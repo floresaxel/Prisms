@@ -1,6 +1,7 @@
 /**
- * A project dropdown whose project names are bubbles, like tags. The closed
- * control shows the chosen project as one bubble (colour chip + name); opened,
+ * A project dropdown whose project names are bubbles styled like the
+ * Journal's tags (blue pill, no #). The closed control shows the chosen project
+ * as one bubble; opened,
  * every project/milestone is a bubble in a small popover. It is a drop-in for the
  * native <select> the Inbox rows used (a native list can't style its options).
  *
@@ -12,8 +13,6 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 import { Ic, type PromoteTarget } from '@prisms/ui';
-
-import { projectTone } from '../format';
 
 const POP_MAX_W = 380;
 
@@ -84,8 +83,7 @@ export function ProjectPicker({
         onClick={() => setOpen((o) => !o)}
       >
         {current ? (
-          <span className="px-tag px-tag--grey px-ppick-tag">
-            <span className={`px-pdot px-pdot--${projectTone(current.id)}`} />
+          <span className="px-ppick-tag">
             <span className="px-ppick-name">{current.title}</span>
             {current.type === 'milestone' && <span className="px-ppick-kind">milestone</span>}
           </span>
@@ -111,7 +109,7 @@ export function ProjectPicker({
                 type="button"
                 role="option"
                 aria-selected={t.id === value}
-                className={`px-tag px-tag--grey px-ppick-opt${t.id === value ? ' px-ppick-opt--on' : ''}`}
+                className={`px-ppick-opt${t.id === value ? ' px-ppick-opt--on' : ''}`}
                 data-testid={testId ? `${testId}-opt-${t.id}` : undefined}
                 onClick={() => {
                   onChange(t.id);
@@ -119,7 +117,6 @@ export function ProjectPicker({
                   trigger.current?.focus();
                 }}
               >
-                <span className={`px-pdot px-pdot--${projectTone(t.id)}`} />
                 <span className="px-ppick-name">{t.title}</span>
                 {t.type === 'milestone' && <span className="px-ppick-kind">milestone</span>}
               </button>
