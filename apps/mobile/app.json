@@ -7,8 +7,22 @@
     "scheme": "prisms",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
+    "icon": "./assets/brand/icon.png",
+    "splash": {
+      "image": "./assets/brand/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0E1726"
+    },
     "ios": { "supportsTablet": true, "bundleIdentifier": "com.prisms.app" },
-    "android": { "package": "com.prisms.app", "softwareKeyboardLayoutMode": "resize" },
+    "android": {
+      "package": "com.prisms.app",
+      "softwareKeyboardLayoutMode": "resize",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/brand/adaptive-foreground.png",
+        "monochromeImage": "./assets/brand/adaptive-monochrome.png",
+        "backgroundColor": "#0E1726"
+      }
+    },
     "plugins": ["expo-notifications"]
   }
 }

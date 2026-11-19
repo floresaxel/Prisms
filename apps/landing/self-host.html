@@ -3,16 +3,16 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="theme-color" content="#f6f7f9" />
+  <meta name="theme-color" content="#f4f5f7" />
   <title>Self-host — Prisms</title>
   <meta name="description" content="Run Prisms on your own hardware: one docker compose brings up Postgres, the sync service, the API and the app. Encrypted backups, portable exports, tiny footprint." />
   <meta property="og:title" content="Self-host — Prisms" />
   <meta property="og:description" content="Your goals, your box: bring up the whole Prisms stack with one compose file. It runs happily on very small hardware." />
   <meta property="og:type" content="website" />
-  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%3E%3Crect%20width='24'%20height='24'%20rx='6'%20fill='%232563eb'/%3E%3Cpath%20d='M12%205.5%205.4%2017.8h13.2Z'%20fill='none'%20stroke='white'%20stroke-width='1.7'%20stroke-linejoin='round'/%3E%3Cpath%20d='M12%205.5v12.3'%20stroke='white'%20stroke-width='1.7'/%3E%3C/svg%3E" />
+  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..750&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..750&family=Space+Grotesk:wght@400..500&display=swap" rel="stylesheet" />
   <script>document.documentElement.classList.add('js');</script>
   <link rel="stylesheet" href="site.css" />
   <script defer src="site.js"></script>
@@ -20,7 +20,8 @@
 <body>
 
 <svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
-  <symbol id="i-prism" viewBox="0 0 24 24"><path d="M12 3 3 20h18Z"/><path d="M12 3v17"/></symbol>
+  <!-- brand marks (docs/brand): the same geometry as @prisms/ui ThresholdMark -->
+  <symbol id="m-simple" viewBox="6 0 188 188"><g style="fill:none;stroke:var(--mk-line,#0e1726);stroke-width:var(--mk-w,8);stroke-linejoin:round"><polygon points="100,18 179.9,76 149.4,170 50.6,170 20.1,76"/><polygon points="100,78.8 147.9,113.6 129.6,170 70.4,170 52.1,113.6"/><polygon style="fill:var(--mk-door,#2f6bff);stroke:var(--mk-door,#2f6bff)" points="100,124.4 124,141.8 114.8,170 85.2,170 76,141.8"/></g></symbol>
   <symbol id="i-zap" viewBox="0 0 24 24"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8Z"/></symbol>
   <symbol id="i-check" viewBox="0 0 24 24"><path d="m4 12 5 5L20 7"/></symbol>
   <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></symbol>
@@ -35,7 +36,7 @@
 
 <header class="lp-nav">
   <a class="lp-brand" href="index.html">
-    <span class="lp-brand-logo"><svg class="lp-ic"><use href="#i-prism"/></svg></span>
+    <svg class="lp-brand-logo" aria-hidden="true"><use href="#m-simple"/></svg>
     Prisms
   </a>
   <nav class="lp-nav-links">
@@ -144,7 +145,7 @@
 <footer class="lp-foot">
   <div class="lp-foot-inner">
     <div class="lp-foot-brand">
-      <span class="lp-brand"><span class="lp-brand-logo"><svg class="lp-ic"><use href="#i-prism"/></svg></span>Prisms</span>
+      <span class="lp-brand"><svg class="lp-brand-logo" aria-hidden="true"><use href="#m-simple"/></svg>Prisms</span>
       <p>Local-first goal execution.<br/>Your goals, your hardware, your data.</p>
     </div>
     <nav class="lp-foot-col" aria-label="Product">

@@ -70,12 +70,13 @@ export default defineConfig({
         display: 'standalone',
         // Installability requires real icons (audit S10-F7); generated under
         // apps/web/public/ (R1), maskable variant keeps the glyph in the safe zone.
-        // The Threshold mark; new file names (not the old ones overwritten) so
-        // browsers and OS launchers that cache install icons by URL pick it up.
+        // The simple (three-door) Threshold mark, drawn by scripts/render-brand.mjs.
+        // New file names (not the old ones overwritten) so browsers and OS
+        // launchers that cache install icons by URL pick it up.
         icons: [
-          { src: '/icon-threshold-192.png', sizes: '192x192', type: 'image/png' },
-          { src: '/icon-threshold-512.png', sizes: '512x512', type: 'image/png' },
-          { src: '/icon-threshold-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+          { src: '/icon-mark-192.png', sizes: '192x192', type: 'image/png' },
+          { src: '/icon-mark-512.png', sizes: '512x512', type: 'image/png' },
+          { src: '/icon-mark-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
       },
     }),

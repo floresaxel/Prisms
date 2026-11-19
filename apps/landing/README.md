@@ -22,8 +22,13 @@ Notes:
 
 - Design tokens are copied from `packages/ui/src/theme.css` so the mockups
   match the real app; keep them in sync if the app re-themes.
+- Logos follow `docs/brand/README.md`: the nav, footer and app-window mockups
+  use the **simple, three-door** mark (the `#m-simple` symbol in each page's
+  sprite); the **full, four-door** mark is drawn inline, large, in the hero
+  only (it is for 32 px and up). `favicon.svg` is generated.
 - `prefers-reduced-motion` renders every scene as its static final state.
 - Preview locally: the `landing` entry in `.claude/launch.json`
   (`npx http-server apps/landing -p 4174`).
 - Deploy: copy the folder to any static host (nginx/Caddy/Pages). Self-contained
-  except the Google Fonts Inter stylesheet, which degrades to system fonts.
+  except the Google Fonts stylesheet (Inter, Space Grotesk), which degrades to
+  system fonts.

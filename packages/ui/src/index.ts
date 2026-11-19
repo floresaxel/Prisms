@@ -239,10 +239,15 @@ export { List, ListItem, Skeleton, ListSkeleton, type ListProps, type ListItemPr
 export { Modal, type ModalProps } from './components/Modal';
 export {
   ThresholdMark,
+  ThresholdLockup,
   DepthDoor,
   LAYER_DOORS,
+  LOCKUP,
   markStroke,
   type ThresholdMarkProps,
+  type ThresholdLockupProps,
+  type LockupLayout,
   type DepthDoorProps,
   type MarkTone,
+  type MarkVariant,
 } from './components/Mark';

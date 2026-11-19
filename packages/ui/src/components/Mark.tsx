@@ -3,28 +3,62 @@
  * another, all standing on the same floor line. The innermost door is the only
  * filled shape, and it always means "now".
  *
- * Geometry is authored once in a 200-unit box; every size scales from it.
- * Three rules from the brand sheet are applied here, so callers cannot get them
- * wrong:
+ * Every door is the same shape (`doorAt`) scaled about the middle of the floor,
+ * authored once in a 200-unit box. The mark comes in three forms:
+ *   - `simple` (the default): three doors. The app's own mark: app icons, the
+ *     sidebar, sign-in. Fewer lines, so each one can be heavier.
+ *   - `full`: four doors. The landing page and other large brand moments.
+ *   - compact: two doors (the outer frame and the filled door). Both forms
+ *     drop to it under 20 px, where more lines smear together; the favicon.
+ *
+ * Rules from the brand sheet (docs/brand/README.md) are applied here, so
+ * callers cannot get them wrong:
  *   - the stroke gets HEAVIER as the mark gets smaller, holding roughly 1.5 px
  *     of line on screen at any size;
- *   - under 20 px the four doors smear together, so the mark drops to two (the
- *     outer frame and the filled door) — the favicon form;
+ *   - the filled door stands flush on the floor: its lower edge meets the
+ *     bottom of the floor line, with no sliver of frame showing beneath it;
  *   - the door's colour follows the ground: blue on light, lighter blue on ink,
  *     ink on brand blue.
+ *
+ * apps/web/scripts/render-brand.mjs repeats this geometry to draw the app icons
+ * and the SVG masters in docs/brand: change the two together.
  */
 import type { CSSProperties } from 'react';
 
-/** The four doors of the mark, outer → inner, sharing the base line y = 170. */
-const DOORS = [
-  '100,18 179.9,76 149.4,170 50.6,170 20.1,76',
-  '100,57.5 159.1,100.4 136.6,170 63.4,170 40.9,100.4',
-  '100,97 138.4,124.9 123.7,170 76.3,170 61.6,124.9',
-  '100,136.6 117.6,149.3 110.9,170 89.1,170 82.4,149.3',
-] as const;
+/**
+ * A door of the mark's shape at `s` × full size, standing on the floor
+ * (y = 170). `drop` lowers it, which is how a door drawn with a thinner line
+ * than its frame still reaches the bottom of the floor line.
+ */
+function doorAt(s: number, drop = 0): string {
+  const f = (n: number) => Math.round(n * 10) / 10;
+  const corners: readonly (readonly [number, number])[] = [
+    [100, 170 - 152 * s],
+    [100 + 79.9 * s, 170 - 94 * s],
+    [100 + 49.4 * s, 170],
+    [100 - 49.4 * s, 170],
+    [100 - 79.9 * s, 170 - 94 * s],
+  ];
+  return corners.map(([x, y]) => `${f(x)},${f(y + drop)}`).join(' ');
+}
 
-/** The filled door of the two-door (compact) form. */
-const COMPACT_DOOR = '100,94 140,123 124.7,170 75.3,170 60,123';
+export type MarkVariant = 'simple' | 'full';
+
+interface MarkForm {
+  /** Outline doors, outer → inner, as scales of the outermost. */
+  frames: readonly number[];
+  /** Scale of the filled door. */
+  door: number;
+  /** Line weight of the frames, then of the door, × `markStroke(size)`. */
+  weight: number;
+  doorWeight: number;
+}
+
+const FORMS: Record<MarkVariant | 'compact', MarkForm> = {
+  full: { frames: [1, 0.74, 0.48], door: 0.22, weight: 1, doorWeight: 1 },
+  simple: { frames: [1, 0.6], door: 0.3, weight: 1.1, doorWeight: 1.1 },
+  compact: { frames: [1], door: 0.5, weight: 1.6, doorWeight: 0.8 },
+};
 
 /**
  * Six doors, one per layer of the plan (vision → schedule block), on the same
@@ -66,6 +100,8 @@ export interface ThresholdMarkProps {
   /** Rendered width and height in px. */
   size?: number;
   tone?: MarkTone;
+  /** `simple` (three doors) is the app's mark; `full` (four) is for the landing page. */
+  variant?: MarkVariant;
   /** Force the two-door form; by default it is used below 20 px. */
   compact?: boolean;
   /** Accessible name. Omitted, the mark is decorative (hidden from AT). */
@@ -74,10 +110,19 @@ export interface ThresholdMarkProps {
   style?: CSSProperties;
 }
 
-export function ThresholdMark({ size = 24, tone = 'ink', compact, title, className, style }: ThresholdMarkProps) {
+export function ThresholdMark({
+  size = 24,
+  tone = 'ink',
+  variant = 'simple',
+  compact,
+  title,
+  className,
+  style,
+}: ThresholdMarkProps) {
   const { line, door } = TONES[tone];
-  const twoDoors = compact ?? size < 20;
-  const w = markStroke(size) * (twoDoors ? 1.6 : 1);
+  const form = FORMS[(compact ?? size < 20) ? 'compact' : variant];
+  const w = markStroke(size) * form.weight;
+  const wDoor = markStroke(size) * form.doorWeight;
   const a11y = title ? { role: 'img', 'aria-label': title } : { 'aria-hidden': true as const };
   return (
     <svg
@@ -89,29 +134,67 @@ export function ThresholdMark({ size = 24, tone = 'ink', compact, title, classNa
       focusable="false"
       {...a11y}
     >
-      {twoDoors ? (
-        <>
-          <polygon points={DOORS[0]} fill="none" stroke={line} strokeWidth={w} strokeLinejoin="round" />
-          <polygon points={COMPACT_DOOR} fill={door} stroke={door} strokeWidth={w / 2} strokeLinejoin="round" />
-        </>
-      ) : (
-        DOORS.map((pts, i) => {
-          const last = i === DOORS.length - 1;
-          return (
-            <polygon
-              key={i}
-              points={pts}
-              fill={last ? door : 'none'}
-              stroke={last ? door : line}
-              strokeWidth={w}
-              strokeLinejoin="round"
-            />
-          );
-        })
-      )}
+      {form.frames.map((s) => (
+        <polygon key={s} points={doorAt(s)} fill="none" stroke={line} strokeWidth={w} strokeLinejoin="round" />
+      ))}
+      {/* flush on the floor: the door's stroked lower edge meets the frame's */}
+      <polygon
+        points={doorAt(form.door, (w - wDoor) / 2)}
+        fill={door}
+        stroke={door}
+        strokeWidth={wDoor}
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }
+
+/**
+ * The lockup: the mark with the wordmark, in proportion to the mark's box
+ * (docs/brand, "Lockups"). Horizontal is the everyday logo (the sidebar keeps
+ * the same numbers in theme.css: 22 px mark, 18 px word, 8 px gap); stacked is
+ * for covers and splash moments, usually with the full mark.
+ */
+export const LOCKUP = {
+  horizontal: { word: 0.8, gap: 0.36 },
+  stacked: { word: 0.37, gap: 0.15 },
+} as const;
+
+export type LockupLayout = keyof typeof LOCKUP;
+
+export interface ThresholdLockupProps {
+  /** The mark's box in px; the wordmark and the gap follow from it. */
+  size?: number;
+  layout?: LockupLayout;
+  /** The ground it sits on. `white` is a glyph tone, not a logo one. */
+  tone?: Exclude<MarkTone, 'white'>;
+  variant?: MarkVariant;
+  className?: string;
+  style?: CSSProperties;
+}
+
+/** Mark + wordmark. The word is real text, so it is what assistive tech reads. */
+export function ThresholdLockup({
+  size = 30,
+  layout = 'horizontal',
+  tone = 'ink',
+  variant = 'simple',
+  className,
+  style,
+}: ThresholdLockupProps) {
+  const { word, gap } = LOCKUP[layout];
+  const cls = `px-lockup px-lockup--${layout} px-lockup--${tone}${className ? ` ${className}` : ''}`;
+  return (
+    <span className={cls} style={{ gap: round1(size * gap), ...style }}>
+      <ThresholdMark size={size} tone={tone} variant={variant} />
+      <span className="px-lockup-word" style={{ fontSize: round1(size * word) }}>
+        Prisms
+      </span>
+    </span>
+  );
+}
+
+const round1 = (n: number) => Math.round(n * 10) / 10;
 
 export interface DepthDoorProps {
   /** 0 = vision … 5 = schedule block. Clamped into range. */
@@ -127,19 +210,6 @@ export interface DepthDoorProps {
  * speck, and the deepest door is usually the one that is filled.
  */
 const GLYPH_SCALE = [1, 0.84, 0.7, 0.58, 0.48, 0.4] as const;
-
-/** A door of the mark's shape at `s` × full size, standing on the floor. */
-function doorAt(s: number): string {
-  const f = (n: number) => Math.round(n * 10) / 10;
-  const corners: readonly (readonly [number, number])[] = [
-    [100, 170 - 152 * s],
-    [100 + 79.9 * s, 170 - 94 * s],
-    [100 + 49.4 * s, 170],
-    [100 - 49.4 * s, 170],
-    [100 - 79.9 * s, 170 - 94 * s],
-  ];
-  return corners.map(([x, y]) => `${f(x)},${f(y)}`).join(' ');
-}
 
 /**
  * One layer's door, drawn at its depth inside a faint outline of the outermost
