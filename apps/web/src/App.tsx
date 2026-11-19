@@ -39,6 +39,7 @@ import { TimezoneClock } from './components/TimezoneClock';
 import { isDesktop, osNotify } from './desktop';
 import { rejectionMessage } from './format';
 import { ScreenBoundary } from './components/ScreenBoundary';
+import { swapTab } from './components/tabSwap';
 import { clearLocalAccount, connectDb, dbFor, forgetDb } from './powersync';
 import {
   Agenda,
@@ -140,6 +141,9 @@ function resolveBootRoute(): Route {
 // Start fetching the screen this page opens on now, while the rest of the
 // startup chunk is still being evaluated (see `screens.ts`).
 preloadScreen(landingFor(window.location.pathname, window.location.hash).route);
+
+/** The element around the current screen that a page switch blurs (see navigate). */
+const PAGE_SWAP_ID = 'px-page';
 
 /** Shell composition — mounted inside PrismsDataProvider so it can read the
  *  inbox/review counts for the nav badges. Layout itself stays presentational. */
@@ -255,8 +259,12 @@ function Shell({
           {rejections.map((r) => rejectionMessage(r.reject_code)).join(' ')}
         </div>
       )}
-      {/* keyed by route: a screen that failed to load does not take the next one down with it */}
-      <ScreenBoundary key={route}>{screen}</ScreenBoundary>
+      {/* The page area: stays mounted across screens so a sidebar switch can blur
+          the old page out and the new one in (navigate → swapTab). */}
+      <div id={PAGE_SWAP_ID}>
+        {/* keyed by route: a screen that failed to load does not take the next one down with it */}
+        <ScreenBoundary key={route}>{screen}</ScreenBoundary>
+      </div>
     </Layout>
     </TaskDetailProvider>
     </TimersProvider>
@@ -339,9 +347,15 @@ function AuthedApp({
     };
   }, [db, sessionChecked]);
 
+  // Moving to another screen blurs the old page out and the new one in, like a
+  // tab switch (tabSwap.ts); staying on the same screen (a new hash) does not.
+  const routeRef = useRef(route);
+  routeRef.current = route;
   const navigate = useCallback((href: string) => {
     window.history.pushState({}, '', href);
-    setRoute((href.split('#')[0] || '/') as Route);
+    const next = (href.split('#')[0] || '/') as Route;
+    if (next === routeRef.current) setRoute(next);
+    else swapTab(document.getElementById(PAGE_SWAP_ID), () => setRoute(next));
   }, []);
 
   // Once the first screen is up and the browser has a quiet moment, fetch the
