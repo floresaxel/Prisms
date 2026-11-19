@@ -511,3 +511,49 @@ describe('reaching a rail by keyboard', () => {
     expect(state()).toBe('open');
   });
 });
+
+describe('the nav, short of room', () => {
+  // jsdom lays nothing out, so the three numbers the scroll cue reads are set by hand.
+  const nav = () => document.querySelector('.px-nav') as HTMLElement;
+  function metrics(el: HTMLElement, m: { scrollTop: number; clientHeight: number; scrollHeight: number }) {
+    for (const [k, v] of Object.entries(m)) Object.defineProperty(el, k, { configurable: true, value: v });
+  }
+  const fade = () => ({
+    top: nav().style.getPropertyValue('--px-fade-top'),
+    bot: nav().style.getPropertyValue('--px-fade-bot'),
+  });
+
+  it('has no fade at all when everything fits', () => {
+    mount();
+    metrics(nav(), { scrollTop: 0, clientHeight: 600, scrollHeight: 600 });
+    fireEvent.scroll(nav());
+    expect(fade()).toEqual({ top: '0px', bot: '0px' });
+  });
+
+  it('fades the bottom edge only, at the top of a list that overflows', () => {
+    mount();
+    metrics(nav(), { scrollTop: 0, clientHeight: 300, scrollHeight: 600 });
+    fireEvent.scroll(nav());
+    expect(fade()).toEqual({ top: '0px', bot: '44px' });
+  });
+
+  it('fades both edges in the middle, and only the top once the bottom is reached', () => {
+    mount();
+    metrics(nav(), { scrollTop: 120, clientHeight: 300, scrollHeight: 600 });
+    fireEvent.scroll(nav());
+    expect(fade()).toEqual({ top: '44px', bot: '44px' });
+    metrics(nav(), { scrollTop: 300, clientHeight: 300, scrollHeight: 600 });
+    fireEvent.scroll(nav());
+    expect(fade()).toEqual({ top: '44px', bot: '0px' });
+  });
+
+  it('re-reads when the window is resized', () => {
+    mount();
+    metrics(nav(), { scrollTop: 0, clientHeight: 300, scrollHeight: 600 });
+    fireEvent(window, new Event('resize'));
+    expect(fade().bot).toBe('44px');
+    metrics(nav(), { scrollTop: 0, clientHeight: 700, scrollHeight: 600 });
+    fireEvent(window, new Event('resize'));
+    expect(fade().bot).toBe('0px');
+  });
+});
