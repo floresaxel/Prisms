@@ -589,6 +589,13 @@ $Engine = {
   function Update-Checkout($Plan) {
     if ($Plan.Branch -ne 'main') {
       Set-Row files busy 'switching to main…'
+      # Bring the main BRANCH up to date first, without checking it out. Switching
+      # to a stale main would check out an old tree, and any untracked file that
+      # old tree tracks (a leftover icon, say) makes git refuse and abort. The
+      # plan already proved main is behind origin/main, so this only moves forward.
+      # It can fail (main checked out in another worktree): then the switch below
+      # still works for the usual case, and the fast-forward after it finishes.
+      if ($Plan.HasMain) { [void](Invoke-Git 'fetch origin main:main') }
       $r = $Plan.HasMain ? (Invoke-Git 'switch main') : (Invoke-Git 'switch -c main --track origin/main')
       if ($r.Code -ne 0) { Stop-Step files "Couldn't switch to main: $(Get-LastLine $r.Out)" }
     }
