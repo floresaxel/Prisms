@@ -731,8 +731,12 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
 
 /* Every dialog sits over a BLURRED page, never a darkened one: the page behind is
    defocused (and faintly veiled in the app's own light surface colour, so the
-   card still reads against a busy view) rather than dimmed to black. */
-.px-scrim { position: fixed; inset: 0; background: rgba(246,247,249,0.18); backdrop-filter: blur(24px) saturate(115%); -webkit-backdrop-filter: blur(24px) saturate(115%); display: flex; align-items: center; justify-content: center; z-index: 50; }
+   card still reads against a busy view) rather than dimmed to black.
+   Write `backdrop-filter` UNPREFIXED only: the build's CSS minifier (lightningcss)
+   adds `-webkit-` itself, and given both in the order unprefixed → prefixed it
+   keeps only the prefixed one, which Chromium ignores — every dialog then
+   shipped with no blur at all (an e2e in task-detail.spec.ts guards this). */
+.px-scrim { position: fixed; inset: 0; background: rgba(246,247,249,0.18); backdrop-filter: blur(24px) saturate(115%); display: flex; align-items: center; justify-content: center; z-index: 50; }
 .px-modal { background: var(--px-surface); border: 1px solid var(--px-border); border-radius: var(--px-radius); padding: 22px; width: min(440px, 92vw); box-shadow: var(--px-shadow-pop); }
 .px-modal-title { margin: 0 0 12px; font-size: 18px; }
 .px-modal-sub { margin: -6px 0 18px; font-size: 13px; color: var(--px-text-dim); line-height: 1.55; }
@@ -741,7 +745,7 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
 /* full-screen dialog: the page behind is blurred harder and veiled lighter (the
    form sits straight on it, no card), the form itself stays a readable column
    centered in the viewport. */
-.px-scrim--blur { background: rgba(246,247,249,0.62); backdrop-filter: blur(32px) saturate(120%); -webkit-backdrop-filter: blur(32px) saturate(120%); }
+.px-scrim--blur { background: rgba(246,247,249,0.62); backdrop-filter: blur(32px) saturate(120%); }
 /* `scrollbar-gutter: both-edges` keeps the column optically centered when the
    form is taller than the viewport and the dialog grows a scrollbar. */
 .px-modal--full { width: 100%; height: 100%; max-width: none; border: none; border-radius: 0; background: transparent; box-shadow: none; padding: 0; overflow-y: auto; scrollbar-gutter: stable both-edges; display: flex; align-items: center; justify-content: center; }

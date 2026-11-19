@@ -71,6 +71,9 @@ test('rename a task in place, then edit every detail in its card — all of it s
   await expect(card).toBeVisible();
   await expect(page.getByTestId('td-title')).toHaveValue('Write the launch note');
   await expect(card).toContainText('Work › Plan › Launch');
+  // the page behind it is blurred like every other dialog's — in the BUILT css
+  // too, whose minifier once kept only `-webkit-backdrop-filter` (theme.css)
+  expect(await page.locator('.px-scrim').evaluate((el) => getComputedStyle(el).backdropFilter)).toContain('blur(');
 
   await page.getByTestId('td-details').fill('Quote the mayor. Embargo until 9am.');
   await page.getByTestId('td-due').fill('2026-12-01');
