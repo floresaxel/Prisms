@@ -58,12 +58,12 @@ code { font-family: Consolas, 'SF Mono', Menlo, monospace; font-size: .92em; bac
   background: rgba(244,245,247,.82);
   backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
 }
-/* The wordmark beside the four-door Threshold mark (the landing page's logo;
-   the app itself uses the simpler three-door mark). Mark symbols (#m-full,
-   #m-simple) read --mk-w (line, in the mark's 200-unit box), --mk-line and
-   --mk-door, so one symbol serves every size. */
+/* The logo: the simple, three-door Threshold mark beside the wordmark, as in
+   the app (the four-door mark is for 32 px and up: the hero). The #m-simple
+   symbol reads --mk-w (line, in the mark's 200-unit box; 280 / size × 1.1),
+   --mk-line and --mk-door, so one symbol serves every size. */
 .lp-brand { display: flex; align-items: center; gap: 10px; font-family: var(--px-font-display); font-weight: 400; font-size: 19px; letter-spacing: .02em; color: var(--px-ink); text-decoration: none; }
-.lp-brand-logo { width: 28px; height: 28px; flex: none; --mk-w: 10; }
+.lp-brand-logo { width: 28px; height: 28px; flex: none; --mk-w: 11; }
 .lp-nav-links { display: flex; gap: 22px; margin-left: 8px; }
 .lp-nav-links a { font-size: 13.5px; font-weight: 500; color: var(--px-text-dim); text-decoration: none; }
 .lp-nav-links a:hover { color: var(--px-text); }

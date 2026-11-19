@@ -13,8 +13,8 @@ innermost door is the only filled shape, and it always means **now**.
 
 | Form | Doors | Where | Size |
 |---|---|---|---|
-| **Full** | 4 (scales 1, 0.74, 0.48; door 0.22) | Landing page, hero, large brand moments | 32 px and up |
-| **Simple** | 3 (scales 1, 0.60; door 0.30) | The app: icons, sidebar, sign-in | 20 px and up |
+| **Full** | 4 (scales 1, 0.74, 0.48; door 0.22) | The landing hero and other large brand moments | 32 px and up |
+| **Simple** | 3 (scales 1, 0.60; door 0.30) | Every logo at everyday size: app icons, sidebar, sign-in, the landing nav and footer | 20 px and up |
 | **Compact** | 2 (scale 1; door 0.50) | Favicon, the "now" tag, the server chip | under 20 px |
 
 In code: `<ThresholdMark />` (`packages/ui/src/components/Mark.tsx`) draws the
