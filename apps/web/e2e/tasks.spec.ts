@@ -191,7 +191,8 @@ test('capture → promote lands the task under its project group; the Inbox grou
   await expect(picker).toContainText('Assign project');
   await expect(inboxRow.getByRole('button', { name: 'Assign', exact: true })).toBeDisabled();
   await picker.click();
-  await page.getByRole('option', { name: 'Launch' }).click();
+  // (the picker's own bubbles — the capture bar's project <select> has a "Launch" option too)
+  await page.locator('.px-ppick-opt', { hasText: 'Launch' }).click();
   await expect(picker).toContainText('Launch');
   await inboxRow.getByRole('button', { name: 'Assign', exact: true }).click();
 
