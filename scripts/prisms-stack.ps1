@@ -876,14 +876,18 @@ function Start-StackWorker {
 # The web app's own icon, as a .ico for the shortcut and the window. An .ico
 # may carry PNG frames as they are, so each size is just the PNG re-drawn.
 function Get-StackIcon {
-  # Named after the artwork it was cut from: the cache is reused while it exists,
-  # so a new mark needs a new name or the old icon lives on.
-  $ico = Join-Path $sync.StateDir 'prisms-mark.ico'
-  if (Test-Path -LiteralPath $ico) { return $ico }
   $src = Join-Path $script:RepoRoot 'apps\web\public\icon-mark-512.png'
   if (-not (Test-Path -LiteralPath $src)) { return $null }
+  # Named after a hash of the artwork it is cut from. The cache is reused while
+  # its file exists (and Windows caches an icon by path), so a changed mark has
+  # to get a new name, or the shortcut keeps showing the old one for good.
+  $bytes = [IO.File]::ReadAllBytes($src)
+  $hash = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes)).Substring(0, 8).ToLowerInvariant()
+  $ico = Join-Path $sync.StateDir "prisms-mark-$hash.ico"
+  if (Test-Path -LiteralPath $ico) { return $ico }
   Add-Type -AssemblyName System.Drawing
-  $img = [Drawing.Image]::FromFile($src)
+  # from a copy in memory, so nothing holds the PNG open
+  $img = [Drawing.Image]::FromStream([IO.MemoryStream]::new($bytes))
   try {
     $frames = foreach ($size in 16, 24, 32, 48, 64, 128, 256) {
       $bmp = [Drawing.Bitmap]::new($size, $size)
@@ -911,7 +915,29 @@ function Get-StackIcon {
   foreach ($f in $frames) { $w.Write([byte[]]$f[1]) }
   $w.Flush()
   [IO.File]::WriteAllBytes($ico, $out.ToArray())
+  # the icons of earlier artwork are no use to anyone now
+  try { Get-ChildItem -LiteralPath $sync.StateDir -Filter 'prisms-mark*.ico' | Where-Object { $_.FullName -ne $ico } | Remove-Item -Force } catch { }
   $ico
+}
+
+# The desktop shortcut that starts THIS script keeps showing the icon it was made
+# with. When the artwork changes, point it at the new one (an icon path it has
+# never shown, so Explorer cannot serve the old picture from its cache).
+function Update-StackShortcut {
+  try {
+    $lnk = Join-Path ([Environment]::GetFolderPath('Desktop')) 'Prisms.lnk'
+    if (-not (Test-Path -LiteralPath $lnk)) { return }
+    $ico = Get-StackIcon
+    if (-not $ico) { return }
+    $s = (New-Object -ComObject WScript.Shell).CreateShortcut($lnk)
+    # only a shortcut that starts this very script: never one that is someone else's
+    if ($s.Arguments -notlike "*$($script:ScriptPath)*") { return }
+    if ($s.IconLocation -eq "$ico,0") { return }
+    $s.IconLocation = "$ico,0"
+    $s.Save()
+    [IO.File]::AppendAllText((Join-Path $sync.LogDir 'launcher.log'),
+      ('{0:yyyy-MM-dd HH:mm:ss}  shortcut  icon updated{1}' -f (Get-Date), [Environment]::NewLine))
+  } catch { }
 }
 
 function Install-StackShortcut {
@@ -1324,6 +1350,7 @@ function Invoke-Main {
   $script:Mutex = [Threading.Mutex]::new($true, 'Local\PrismsDevStack', [ref]$created)
   if (-not $created) { Show-ExistingWindow; return }
   $worker = $null
+  Update-StackShortcut
   try {
     $worker = Start-StackWorker
     $sync.Queue.Enqueue($Update ? 'update' : 'start')

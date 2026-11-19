@@ -107,11 +107,11 @@ const MASTER = { full: 7, simple: 10 };
 const COMPACT = { w: 22, wDoor: 11 }; // the favicon: 16 px tabs
 // How much of an icon the mark's box fills. The doors reach 0.45 of the box out
 // from its centre (the door's bottom corners, line included), so:
-//   tile 0.84: the pentagon spans ~76 % of the tile's width;
+//   tile 0.80: the pentagon spans ~72 % of the tile's width;
 //   full-bleed icons cropped to a circle keep their centre: maskable PWA icons
-//   a radius of 0.40 (box 0.72 reaches 0.37), Android's adaptive layer 0.306
+//   a radius of 0.40 (box 0.70 reaches 0.36), Android's adaptive layer 0.306
 //   (box 0.59 reaches 0.307: already at the edge, so it stays put).
-const TILE = { w: 11, scale: 0.84, maskScale: 0.72, adaptiveScale: 0.59, radius: 112 }; // on a 512 tile
+const TILE = { w: 11, scale: 0.8, maskScale: 0.7, adaptiveScale: 0.59, radius: 112 }; // on a 512 tile
 
 const reversed = (form, w = TILE.w) => doors(form, { line: WHITE, door: DOOR_ON_INK, w });
 

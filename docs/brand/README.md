@@ -115,7 +115,7 @@ pnpm --filter @prisms/desktop tauri icon ../../docs/brand/app-icon-1024.png
 | `docs/brand/mark-full.svg` | Four-door master, ink + Blue 500 |
 | `docs/brand/mark-simple.svg` | Three-door master |
 | `docs/brand/mark-compact.svg` | Two-door master (favicon geometry) |
-| `docs/brand/app-icon.svg` | App icon: ink rounded tile, simple mark reversed, the pentagon about 76 % of the tile's width |
+| `docs/brand/app-icon.svg` | App icon: ink rounded tile, simple mark reversed, the pentagon about 72 % of the tile's width |
 | `docs/brand/app-icon-maskable.svg` | Full-bleed variant, mark inside the 80 % safe circle |
 | `docs/brand/app-icon-1024.png` | The app icon at 1024, source of the desktop icon set |
 | `docs/brand/lockups/lockup-{horizontal,stacked}-{ink,reversed,on-blue}.{svg,png}` | Lockups; the SVGs embed Space Grotesk, so they render the same anywhere |
@@ -130,6 +130,10 @@ pnpm --filter @prisms/desktop tauri icon ../../docs/brand/app-icon-1024.png
 The phone apps pick up icon and splash changes on their next native build
 (`expo prebuild`); a Metro reload is not enough.
 
-The launcher (`scripts/prisms-stack.ps1`) caches its `.ico` as `prisms-mark.ico`
-and the desktop shortcut points at it. After a new mark, give the cache a new
-name and re-run `-InstallShortcut`.
+The launcher (`scripts/prisms-stack.ps1`) cuts its `.ico` from
+`icon-mark-512.png` and caches it as `prisms-mark-<hash of the artwork>.ico` in
+`~\.prisms\dev-stack`. A changed mark gets a new name, and every time the
+launcher opens it points the desktop shortcut at the current one, so the
+shortcut follows the artwork with nothing to do by hand (`-InstallShortcut` is
+still how the shortcut is first made). It only touches a shortcut that starts
+this same script.
