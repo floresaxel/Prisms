@@ -5,7 +5,7 @@
  * count and status node is passed in from App — it only lays them out. The icon
  * sprite (W0) is mounted here once so `<Ic/>` works anywhere below.
  */
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 import { Ic, IconSprite, type IconName } from './icons';
 import { ThresholdMark } from './Mark';
@@ -254,6 +254,44 @@ function useSidebar(): SidebarState {
   };
 }
 
+/**
+ * The nav hides its scroll bar, so it says "there is more this way" itself: the
+ * edge with more behind it fades into the sidebar's colour. Sets `--px-fade-top`
+ * / `--px-fade-bot` (a length, or 0 when that end is reached) straight on the
+ * element — a scroll handler re-rendering React would be far too heavy.
+ */
+function useScrollFade(deps: readonly unknown[]) {
+  const ref = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return undefined;
+    const update = () => {
+      const top = el.scrollTop > 1;
+      const bot = el.scrollTop + el.clientHeight < el.scrollHeight - 1;
+      el.style.setProperty('--px-fade-top', top ? '44px' : '0px');
+      el.style.setProperty('--px-fade-bot', bot ? '44px' : '0px');
+    };
+    update();
+    el.addEventListener('scroll', update, { passive: true });
+    window.addEventListener('resize', update);
+    // content height changes (groups, labels wrapping) and the sidebar's own
+    // box (window resized, rail ↔ open) both move the answer
+    const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(update);
+    if (ro) {
+      ro.observe(el);
+      for (const child of Array.from(el.children)) ro.observe(child);
+    }
+    return () => {
+      el.removeEventListener('scroll', update);
+      window.removeEventListener('resize', update);
+      ro?.disconnect();
+    };
+    // `deps` is the caller's list on purpose: what re-arms the observers is what
+    // the nav is made of (its groups, rail vs open), not this closure's contents.
+  }, deps);
+  return ref;
+}
+
 export function Layout({ brand = 'Prisms', brandHref, groups, foot, active, onNavigate, breadcrumb, sync, timer, clock, user, footer, children }: LayoutProps) {
   const initial = (user?.name?.trim()?.[0] ?? user?.email?.[0] ?? '?').toUpperCase();
   const { rail, forced, pinned, peeking, togglePin, setHovering, setFocused } = useSidebar();
@@ -265,6 +303,7 @@ export function Layout({ brand = 'Prisms', brandHref, groups, foot, active, onNa
    * what an open sidebar's mark does.
    */
   const marksExpands = rail && !forced;
+  const navRef = useScrollFade([groups, rail]);
   /** The nav item the brand points at, for the mark's accessible name. */
   const home = brandHref === undefined
     ? undefined
@@ -358,7 +397,7 @@ export function Layout({ brand = 'Prisms', brandHref, groups, foot, active, onNa
             </div>
           )}
         </div>
-        <nav className="px-nav">
+        <nav className="px-nav" ref={navRef}>
           {groups.map((group, gi) => (
             <div key={group.label ?? `g${gi}`}>
               {group.label && <div className="px-nav-group">{group.label}</div>}

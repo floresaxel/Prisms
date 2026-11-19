@@ -289,7 +289,19 @@ input:not([type='button']):not([type='checkbox']):not([type='color']):not([type=
 @media (prefers-reduced-motion: reduce) { .px-brand-logo--act { transition: none; } }
 /* min-height:0 — a flex item defaults to min-height:auto, which refuses to
    shrink below its content and would push the foot out of the column again. */
-.px-nav { flex: 1; min-height: 0; overflow-y: auto; padding-bottom: 8px; }
+.px-nav { flex: 1; min-height: 0; overflow-y: auto; padding-bottom: 8px; scrollbar-width: none; -ms-overflow-style: none; }
+/* In a very short window the nav still scrolls (wheel, touch, keyboard) — it just never draws a bar. */
+.px-nav::-webkit-scrollbar { display: none; }
+/* Scroll cue: with the bar gone, the edge that has more behind it fades into the
+   sidebar's own colour. A mask (not an overlay) so the fade is exactly the
+   sidebar background in light and dark alike. Layout.tsx's useScrollFade sets
+   the two lengths — 0 at an end that is reached, so that edge stays crisp. */
+.px-nav {
+  --px-fade-top: 0px;
+  --px-fade-bot: 0px;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 var(--px-fade-top), #000 calc(100% - var(--px-fade-bot)), transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 var(--px-fade-top), #000 calc(100% - var(--px-fade-bot)), transparent 100%);
+}
 .px-nav-group { margin: 14px 8px 4px; font-size: 10.5px; font-weight: 640; letter-spacing: 0.7px; color: var(--px-faint); text-transform: uppercase; }
 .px-navlink { display: flex; align-items: center; gap: 9px; padding: 6px 9px; margin: 1px 0; border-radius: 7px; color: var(--px-text-dim); text-decoration: none; font-size: 13px; font-weight: 480; cursor: pointer; }
 .px-navlink .px-ic { width: 16px; height: 16px; color: var(--px-faint); }
