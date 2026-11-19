@@ -37,6 +37,8 @@ import {
 } from '../roadmap-model';
 import { shortMinutes, type ShapeNode } from '../vision-shape';
 
+import { useTabSwap } from './tabSwap';
+
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 const fmtDue = (iso: string | null) =>
   iso ? new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' }) : null;
@@ -95,8 +97,11 @@ export function RoadmapViews({
   const views = flow ? [FLOW_VIEW, ...ROADMAP_VIEWS] : ROADMAP_VIEWS;
   const [stored, setViewState] = useState<RoadmapView>(() => readRoadmapView(!!flow));
   const view: RoadmapView = embedded ? embedded.view : stored === 'flow' && !flow ? 'order' : stored;
+  // The card body blurs out and back in on a view switch (tabSwap.ts).
+  const [bodyRef, swapBody] = useTabSwap();
   const setView = (v: RoadmapView) => {
-    setViewState(v);
+    if (v === view) return;
+    swapBody(() => setViewState(v));
     writeRoadmapView(v);
   };
   const [ownSelectedId, setSelectedId] = useState<string | null>(null);
@@ -215,7 +220,7 @@ export function RoadmapViews({
         </div>
       </div>
 
-      <div className={`px-rmv-body${view === 'flow' ? ' px-rmv-body--flow' : ''}`}>{body}</div>
+      <div className={`px-rmv-body${view === 'flow' ? ' px-rmv-body--flow' : ''}`} ref={bodyRef}>{body}</div>
 
       {view !== 'flow' && <Strip model={model} selected={selected} onNavigate={onNavigate} />}
     </div>

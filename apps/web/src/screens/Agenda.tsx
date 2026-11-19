@@ -58,6 +58,7 @@ import { formatAgendaRange, useRangeFormatPref } from '../agenda-range';
 import { fmtGridClock, pointerMinutes, snapMinutes, useSnapPref } from '../agenda-snap';
 import { DayJournalPanel } from '../components/DayJournal';
 import { NoteSwap } from '../components/NoteSwap';
+import { useTabSwap } from '../components/tabSwap';
 import { WhyButton } from '../components/Why';
 import { useMeasuredWidth } from '../use-measured-width';
 
@@ -225,9 +226,14 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
       return DEFAULT_SPAN;
     }
   });
+  // The calendar blurs out and back in when the days shown change (tabSwap.ts).
+  const [calRef, swapCal] = useTabSwap();
   const chooseSpan = (value: number) => {
-    setSpan(value);
-    setPageOffset(0); // pages are span-sized, so the old offset means something else
+    if (value === span) return;
+    swapCal(() => {
+      setSpan(value);
+      setPageOffset(0); // pages are span-sized, so the old offset means something else
+    });
     try {
       localStorage.setItem(SPAN_KEY, String(value));
     } catch {
@@ -561,7 +567,7 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
           )}
         </div>
 
-        <div className="px-agenda-cal">
+        <div className="px-agenda-cal" ref={calRef}>
         {/* one grid per row — a span over a week wraps, and a narrow window
             simply gets fewer columns rather than a sideways scrollbar. */}
         <div className="px-cal-rows">

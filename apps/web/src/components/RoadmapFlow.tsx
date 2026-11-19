@@ -63,6 +63,8 @@ import {
 } from '../roadmap-flow';
 import { itemDone, readRoadmapView, writeRoadmapView, type LinkKind, type RoadmapLink, type RoadmapModel, type RoadmapView } from '../roadmap-model';
 
+import { useTabSwap } from './tabSwap';
+
 export type OtherView = Exclude<RoadmapView, 'flow'>;
 /** The view switch, in the builder's order: the builder first, then the read-only views. */
 const VIEW_TABS: readonly { value: RoadmapView; label: string; icon: 'flow' | 'outline' | 'list' | 'order' | 'mindmap' }[] = [
@@ -166,6 +168,8 @@ export function RoadmapFlow({
   const [storedView, setViewState] = useState<RoadmapView>(() => readRoadmapView(true));
   const view: RoadmapView = renderView ? storedView : 'flow';
   const [layout, setLayoutState] = useState<FlowLayout>(readFlowLayout);
+  // The board under the view / layout switches blurs out and back in (tabSwap.ts).
+  const [stageRef, swapStage] = useTabSwap();
   const [sel, setSel] = useState<Sel>({ kind: 'roadmap' });
   const [multi, setMulti] = useState<string[]>([]);
   const [chain, setChain] = useState(false);
@@ -271,7 +275,8 @@ export function RoadmapFlow({
   }, [focusReq, shownId]);
   const setView = (v: RoadmapView) => {
     commitEdit();
-    setViewState(v);
+    if (v === view) return;
+    swapStage(() => setViewState(v));
     writeRoadmapView(v);
   };
   const pick = (id: string) => {
@@ -467,9 +472,11 @@ export function RoadmapFlow({
   const setLayout = (l: FlowLayout) => {
     if (l === layout) return;
     commitEdit();
-    setLayoutState(l);
+    swapStage(() => {
+      setLayoutState(l);
+      setDrag(null);
+    });
     writeFlowLayout(l);
-    setDrag(null);
     dragRef.current = null;
     say(l === 'free' ? 'Free flow: groups are your outcomes. Move anything; the order still comes from the links.' : 'Structured: one row per outcome, one column per step. Your free-flow spots are kept.');
   };
@@ -1452,15 +1459,17 @@ export function RoadmapFlow({
               This roadmap has no projects yet. Start with the outcomes it has to make true, then use “+ Project” to add what delivers each one.
             </p>
           )}
-          {view === 'flow' ? (
-            layout === 'free' ? (
-              freeBoard()
+          <div className="px-rb-stage" ref={stageRef}>
+            {view === 'flow' ? (
+              layout === 'free' ? (
+                freeBoard()
+              ) : (
+                structured()
+              )
             ) : (
-              structured()
-            )
-          ) : (
-            <div className="px-rb-other">{renderView?.(view, { selectedId: selP?.id ?? null, onPick: pick })}</div>
-          )}
+              <div className="px-rb-other">{renderView?.(view, { selectedId: selP?.id ?? null, onPick: pick })}</div>
+            )}
+          </div>
         </section>
       </div>
 
