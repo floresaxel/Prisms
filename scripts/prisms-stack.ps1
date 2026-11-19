@@ -406,6 +406,26 @@ $Engine = {
     "$($sync.Src)|$($ids -join ',')"
   }
 
+  # The pnpm store that already holds this repo's packages. Installs here run
+  # inside Claude sessions, and Claude Desktop is a packaged app: its pnpm store
+  # lands in a private copy of AppData (Packages\<app>\LocalCache\Local\pnpm),
+  # while a launch from the desktop sees the real AppData, where the store has
+  # next to nothing. The fullest store wins, so the tree installs by linking,
+  # offline, and keeps sharing what later installs add.
+  function Get-PnpmStore {
+    $local = [Environment]::GetFolderPath('LocalApplicationData')
+    $candidates = @(Join-Path $local 'pnpm\store')
+    $candidates += @(Get-ChildItem -LiteralPath (Join-Path $local 'Packages') -Directory -ErrorAction SilentlyContinue |
+        ForEach-Object { Join-Path $_.FullName 'LocalCache\Local\pnpm\store' })
+    $best = $null
+    $size = -1
+    foreach ($c in $candidates) {
+      $db = Get-ChildItem -LiteralPath $c -Filter 'index.db' -Recurse -Depth 1 -File -ErrorAction SilentlyContinue | Select-Object -First 1
+      if ($db -and $db.Length -gt $size) { $best = $c; $size = $db.Length }
+    }
+    $best
+  }
+
   function Step-Code {
     if (-not $sync.Integrate) {
       $sync.Src = $sync.Checkout
@@ -499,7 +519,10 @@ $Engine = {
       # only links what the lockfile says.
       # (Set through the environment: pnpm 11 takes settings as pnpm_config_*,
       # and ignores a --config.minimum-release-age flag.)
-      $r = Invoke-Logged "npx.cmd --yes $pm install --frozen-lockfile --prefer-offline --filter @prisms/web... --filter @prisms/server... --filter @prisms/db..." 1800 @{ CI = 'true'; pnpm_config_minimum_release_age = '0' } $tree
+      $pnpmEnv = @{ CI = 'true'; pnpm_config_minimum_release_age = '0' }
+      $store = Get-PnpmStore
+      if ($store) { $pnpmEnv.pnpm_config_store_dir = $store; Write-StackLog "code     pnpm store $store" }
+      $r = Invoke-Logged "npx.cmd --yes $pm install --frozen-lockfile --prefer-offline --filter @prisms/web... --filter @prisms/server... --filter @prisms/db..." 1800 $pnpmEnv $tree
       if ($r.Code -ne 0) { Stop-Step code "Installing the build tree's packages failed: $(Get-FailureText $r.Out)" }
       try { [IO.File]::WriteAllText($stamp, $want) } catch { }
     }
