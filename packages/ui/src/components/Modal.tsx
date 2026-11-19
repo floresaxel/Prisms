@@ -9,10 +9,11 @@ export interface ModalProps {
   actions?: ReactNode;
   /**
    * `'panel'` (default) is the compact centered card. `'full'` covers the
-   * viewport and blurs what is behind it — for a dialog that is a task in its
-   * own right rather than a confirmation. `'card'` sits between them: a wider
-   * centered card over a lightly blurred page, for a form that edits something
-   * already on screen; it scrolls inside itself when it is taller than the window.
+   * viewport and blurs what is behind it harder — for a dialog that is a task in
+   * its own right rather than a confirmation. `'card'` sits between them: a wider
+   * centered card, for a form that edits something already on screen; it scrolls
+   * inside itself when it is taller than the window. Every size blurs the page
+   * behind it — none of them darkens it.
    */
   size?: 'panel' | 'card' | 'full';
   /** Optional lead-in under the title, inside the full-screen header. */
