@@ -160,6 +160,9 @@ test('tag a note, sort the journal by tag, and filter the day log by project and
 
   // --- filter the list by project / vision: only days whose log touches it ---
   await page.getByTestId('journal-view-date').click();
+  // the list blurs between views, so the switch lands a frame after the click; until it
+  // does the by-tag list is still up, with today under every tag (more than one match)
+  await expect(page.getByTestId('journal-view-date')).toHaveAttribute('aria-pressed', 'true');
   await page.getByTestId('journal-filter-project').selectOption({ label: 'Marathon' });
   await expect(page.getByTestId(`journal-day-${today}`)).toBeVisible();
   await expect(page.getByTestId(`journal-day-${otherDay}`)).toHaveCount(0); // that day has no clocked time at all

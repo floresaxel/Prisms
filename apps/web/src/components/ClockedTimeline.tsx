@@ -246,10 +246,10 @@ export function ClockedSection({
         </ul>
       </div>
 
-      {open &&
-        createPortal(
+      {/* always mounted, so closing can play the Modal's blur-out */}
+      {createPortal(
           <Modal
-            open
+            open={open}
             size="card"
             title={`Clocked · ${dayLabel(date)}`}
             subtitle={`${formatDayLogDuration(totalMinutes)} total · ${entries.length + truncated} session${entries.length + truncated === 1 ? '' : 's'} · ${day.tasks.length} task${day.tasks.length === 1 ? '' : 's'}`}

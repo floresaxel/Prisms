@@ -1,5 +1,5 @@
 /** A centered modal over a scrim; closes on scrim click or Escape. */
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 export interface ModalProps {
   open: boolean;
@@ -27,7 +27,40 @@ export interface ModalProps {
   className?: string;
 }
 
-export function Modal({ open, title, onClose, children, actions, size = 'panel', subtitle, label, className }: ModalProps) {
+/** How long the exit plays: matches `px-scrim-out` / `px-modal-out` in theme.css. */
+export const MODAL_EXIT_MS = 180;
+
+/**
+ * Close at once, with no exit: when the user asks for less motion, and where
+ * there is no `matchMedia` to ask (jsdom) — the exit is purely cosmetic.
+ */
+function skipExit(): boolean {
+  return typeof window.matchMedia !== 'function' || window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
+export function Modal(props: ModalProps) {
+  const { open, onClose } = props;
+
+  // On close the dialog stays mounted for MODAL_EXIT_MS while it blurs out and the
+  // page behind comes back into focus. It plays the LAST props it had while open:
+  // a parent usually clears the data the dialog shows in the same update that
+  // closes it, and the card must not go blank on its way out.
+  const last = useRef(props);
+  if (open) last.current = props;
+  const [mounted, setMounted] = useState(open);
+  useEffect(() => {
+    if (open) {
+      setMounted(true);
+      return;
+    }
+    if (skipExit()) {
+      setMounted(false);
+      return;
+    }
+    const t = window.setTimeout(() => setMounted(false), MODAL_EXIT_MS);
+    return () => window.clearTimeout(t);
+  }, [open]);
+
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -37,6 +70,7 @@ export function Modal({ open, title, onClose, children, actions, size = 'panel',
     return () => window.removeEventListener('keydown', onKey);
   }, [open, onClose]);
 
+  const size = last.current.size ?? 'panel';
   // A full-screen or card dialog owns the viewport: stop the page behind it scrolling.
   useEffect(() => {
     if (!open || size === 'panel') return;
@@ -47,16 +81,25 @@ export function Modal({ open, title, onClose, children, actions, size = 'panel',
     };
   }, [open, size]);
 
-  if (!open) return null;
+  if (!open && (!mounted || skipExit())) return null;
+  const closing = !open;
+  const { title, children, actions, subtitle, label, className } = last.current;
   const full = size === 'full';
   const scrim = full ? ' px-scrim--blur' : size === 'card' ? ' px-scrim--soft' : '';
   return (
-    <div className={`px-scrim${scrim}`} onClick={onClose} role="presentation">
+    <div
+      className={`px-scrim${scrim}${closing ? ' px-scrim--out' : ''}`}
+      onClick={closing ? undefined : onClose}
+      role="presentation"
+      // on its way out it is a picture of the dialog: nothing in it can be reached
+      inert={closing}
+      data-state={closing ? 'closing' : 'open'}
+    >
       <div
         className={`px-modal${full ? ' px-modal--full' : size === 'card' ? ' px-modal--card' : ''}${className ? ` ${className}` : ''}`}
         onClick={(e) => e.stopPropagation()}
         role="dialog"
-        aria-modal="true"
+        aria-modal={closing ? undefined : true}
         aria-label={title ?? label}
       >
         <div className={full ? 'px-modal-inner' : undefined}>

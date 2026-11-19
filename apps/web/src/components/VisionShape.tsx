@@ -40,6 +40,7 @@ import {
   type ShapeView,
 } from '../vision-shape';
 
+import { useTabSwap } from './tabSwap';
 import { VisionSunburst } from './VisionSunburst';
 
 /** Row pitch: a 44px block plus a 4px gap, matched by `.px-shape-cell` in theme.css. */
@@ -62,11 +63,17 @@ export function VisionShape({
   onNavigate: (href: string) => void;
 }) {
   const shape = useMemo(() => buildShape(tree, visionId), [tree, visionId]);
-  const [metric, setMetric] = useState<ShapeMetric>('open');
+  const [metric, setMetricState] = useState<ShapeMetric>('open');
   const [view, setViewState] = useState<ShapeView>(readShapeView);
+  // The chart blurs out and back in on a view or metric switch (tabSwap.ts).
+  const [chartRef, swapChart] = useTabSwap();
   const setView = (v: ShapeView) => {
-    setViewState(v);
+    if (v === view) return;
+    swapChart(() => setViewState(v));
     writeShapeView(v);
+  };
+  const setMetric = (m: ShapeMetric) => {
+    if (m !== metric) swapChart(() => setMetricState(m));
   };
   const sizeWord = view === 'icicle' ? 'width' : 'size';
   const [focusId, setFocusId] = useState<string | null>(null);
@@ -178,6 +185,7 @@ export function VisionShape({
       {head}
 
       <Trail focus={focus} onZoom={zoomTo} />
+      <div ref={chartRef}>
       <Note focus={focus} metric={metric} sizeWord={sizeWord} />
 
       {view === 'sunburst' ? (
@@ -246,6 +254,7 @@ export function VisionShape({
         </div>
       </div>
       )}
+      </div>
 
       <Detail item={shown} onNavigate={onNavigate} />
     </div>

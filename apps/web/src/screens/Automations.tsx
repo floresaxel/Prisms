@@ -21,7 +21,7 @@ const TABS: readonly TabSpec[] = [
 ];
 
 export function Automations({ ctx }: { ctx: CommandContext }) {
-  const [tab, select] = useHashTab(TABS, 'rules');
+  const [tab, select, panelRef] = useHashTab(TABS, 'rules');
   return (
     <section>
       <div className="px-page-head">
@@ -29,9 +29,11 @@ export function Automations({ ctx }: { ctx: CommandContext }) {
         <span className="px-page-sub">rules spawn tasks; blockers gate them</span>
       </div>
       <TabBar tabs={TABS} active={tab} onSelect={select} />
-      {tab === 'rules' && <Rules ctx={ctx} />}
-      {tab === 'blockers' && <Blockers ctx={ctx} />}
-      {tab === 'built-in' && <BuiltIn ctx={ctx} />}
+      <div ref={panelRef} role="tabpanel">
+        {tab === 'rules' && <Rules ctx={ctx} />}
+        {tab === 'blockers' && <Blockers ctx={ctx} />}
+        {tab === 'built-in' && <BuiltIn ctx={ctx} />}
+      </div>
     </section>
   );
 }

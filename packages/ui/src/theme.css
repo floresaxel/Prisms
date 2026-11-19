@@ -401,6 +401,20 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
 .px-tab:hover { color: var(--px-text); }
 .px-tab--on { color: var(--px-blue-deep); border-bottom-color: var(--px-blue); font-weight: 600; }
 
+/* Tab switch: a very quick blur out / blur in on the panel being replaced
+   (apps/web/src/components/tabSwap.ts). `.px-vt-tab` sits on <html> only while
+   a tab swap runs, so these never touch any other view transition. The root's
+   default crossfade is off — the tab bar and the rest of the page change at
+   once — and the panel's group does not morph between the two heights, which
+   would stretch the snapshots; the outgoing one just overflows while it fades. */
+@keyframes px-tab-out { to { opacity: 0; filter: blur(2.5px); } }
+@keyframes px-tab-in { from { opacity: 0; filter: blur(2.5px); } }
+.px-vt-tab::view-transition-old(root),
+.px-vt-tab::view-transition-new(root) { animation: none; }
+.px-vt-tab::view-transition-group(px-tabpanel) { animation: none; }
+.px-vt-tab::view-transition-old(px-tabpanel) { animation: px-tab-out 90ms ease-in both; }
+.px-vt-tab::view-transition-new(px-tabpanel) { animation: px-tab-in 140ms ease-out 40ms both; }
+
 /* shared icon primitive (W0): 16px default, non-shrinking, inherits currentColor */
 .px-ic { width: 16px; height: 16px; flex: none; }
 
@@ -756,6 +770,15 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
   .px-modal--full .px-modal-inner { animation: px-rise 160ms ease-out; }
 }
 @keyframes px-rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+/* Closing (Modal.tsx keeps the dialog mounted for MODAL_EXIT_MS = 180 ms): the
+   dialog blurs out as it fades, and the page behind eases back into focus as
+   the scrim's own blur and veil drain away — no snap from blurred to sharp. */
+@keyframes px-scrim-out {
+  to { background-color: transparent; backdrop-filter: blur(0) saturate(100%); -webkit-backdrop-filter: blur(0) saturate(100%); }
+}
+@keyframes px-modal-out { to { opacity: 0; filter: blur(4px); transform: scale(0.985); } }
+.px-scrim--out { pointer-events: none; animation: px-scrim-out 180ms ease-out forwards; }
+.px-scrim--out > .px-modal { animation: px-modal-out 140ms ease-in forwards; }
 /* card dialog: a wider centered card over the same blurred page as the compact
    panel (the base `.px-scrim`); it only adds breathing room around the card. */
 .px-scrim--soft { padding: 24px 16px; }
@@ -1784,6 +1807,9 @@ input.px-rb-title:focus { outline: none; border-color: var(--px-accent); backgro
 .px-rb-hint { flex: 1 1 260px; min-width: 0; display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--px-text-dim); }
 .px-rb-hint-dot { flex: none; width: 10px; height: 10px; box-sizing: border-box; border-radius: 50%; border: 2px solid var(--px-rf-sel); background: var(--px-surface); }
 .px-rb-tidy { margin-left: auto; }
+/* holds whichever board the view / layout switch shows, so the swap can blur it
+   (tabSwap.ts); a flex column like the builder, so the boards size as before */
+.px-rb-stage { flex: 1 1 auto; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .px-rb-other { min-height: 320px; display: flex; flex-direction: column; padding: 16px; overflow-x: auto; }
 .px-rf-toggle { display: inline-flex; align-items: center; gap: 7px; }
 .px-rf-sw { position: relative; flex: none; width: 24px; height: 14px; border-radius: 7px; background: var(--px-border-2); transition: background 140ms; }

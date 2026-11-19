@@ -40,6 +40,7 @@ import {
 
 import { InboxDelete } from '../components/InboxDelete';
 import { EditableTitle, locationOf, useTaskDetail, type TaskDetailApi } from '../components/TaskDetail';
+import { useTabSwap } from '../components/tabSwap';
 import { UnfocusedTag } from '../components/UnfocusedTag';
 import { formatMinutes, projectTone } from '../format';
 import { listLayoutClass } from '../list-layout';
@@ -54,6 +55,8 @@ export function Tasks({ ctx }: { ctx: CommandContext }) {
   const detail = useTaskDetail();
   const hydrated = useIsHydrated();
   const [tab, setTab] = useState<'byproject' | 'bystatus'>('byproject');
+  const [panelRef, swap] = useTabSwap();
+  const pickTab = (key: typeof tab) => { if (key !== tab) swap(() => setTab(key)); };
   const [title, setTitle] = useState('');
 
   const activities = useActivityInbox();
@@ -127,90 +130,92 @@ export function Tasks({ ctx }: { ctx: CommandContext }) {
       </form>
 
       <div className="px-tabs" role="tablist">
-        <button role="tab" aria-selected={tab === 'byproject'} data-testid="tasks-tab-byproject" className={`px-tab${tab === 'byproject' ? ' px-tab--on' : ''}`} onClick={() => setTab('byproject')}>
+        <button role="tab" aria-selected={tab === 'byproject'} data-testid="tasks-tab-byproject" className={`px-tab${tab === 'byproject' ? ' px-tab--on' : ''}`} onClick={() => pickTab('byproject')}>
           <Ic name="layers" /> By project
         </button>
-        <button role="tab" aria-selected={tab === 'bystatus'} data-testid="tasks-tab-bystatus" className={`px-tab${tab === 'bystatus' ? ' px-tab--on' : ''}`} onClick={() => setTab('bystatus')}>
+        <button role="tab" aria-selected={tab === 'bystatus'} data-testid="tasks-tab-bystatus" className={`px-tab${tab === 'bystatus' ? ' px-tab--on' : ''}`} onClick={() => pickTab('bystatus')}>
           <Ic name="cols" /> By status
         </button>
       </div>
 
-      {tab === 'byproject' ? (
-        <div style={{ maxWidth: 900 }}>
-          <div className="px-sec">Inbox <span className="px-sec-cnt">· {activities.length} — no parent yet</span><span className="px-sec-ln" /></div>
-          <ul className="px-rows" data-testid="inbox">
-            {activities.length === 0 && <li className="px-trow px-muted">{hydrated ? 'Inbox is empty.' : 'Loading…'}</li>}
-            {inboxNewestFirst.map((a) => (
-              <InboxRow key={a.id} activity={a} targets={targets} commands={commands} detail={detail} onComplete={() => setCompleting(a)} />
-            ))}
-          </ul>
+      <div ref={panelRef} role="tabpanel" style={{ maxWidth: 900 }}>
+        {tab === 'byproject' ? (
+          <>
+            <div className="px-sec">Inbox <span className="px-sec-cnt">· {activities.length} — no parent yet</span><span className="px-sec-ln" /></div>
+            <ul className="px-rows" data-testid="inbox">
+              {activities.length === 0 && <li className="px-trow px-muted">{hydrated ? 'Inbox is empty.' : 'Loading…'}</li>}
+              {inboxNewestFirst.map((a) => (
+                <InboxRow key={a.id} activity={a} targets={targets} commands={commands} detail={detail} onComplete={() => setCompleting(a)} />
+              ))}
+            </ul>
 
-          {groups.map((g) => (
-            <div key={g.project.id}>
-              <div className="px-sec">
-                <span className={`px-pdot px-pdot--${projectTone(g.project.id)}`} />
-                {g.project.title} <span className="px-sec-cnt">· {g.tasks.length}</span><span className="px-sec-ln" />
+            {groups.map((g) => (
+              <div key={g.project.id}>
+                <div className="px-sec">
+                  <span className={`px-pdot px-pdot--${projectTone(g.project.id)}`} />
+                  {g.project.title} <span className="px-sec-cnt">· {g.tasks.length}</span><span className="px-sec-ln" />
+                </div>
+                <ul className="px-rows" data-testid={`project-group-${g.project.id}`}>
+                  {g.tasks.map((t) => (
+                    <TaskRow key={t.task.id} task={t.task} status={t.status} blockedBy={t.blockedBy} steps={stepsByTask.get(t.task.id) ?? []} commands={commands} detail={detail} />
+                  ))}
+                </ul>
               </div>
-              <ul className="px-rows" data-testid={`project-group-${g.project.id}`}>
-                {g.tasks.map((t) => (
-                  <TaskRow key={t.task.id} task={t.task} status={t.status} blockedBy={t.blockedBy} steps={stepsByTask.get(t.task.id) ?? []} commands={commands} detail={detail} />
-                ))}
-              </ul>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div style={{ maxWidth: 900 }}>
-          <div className="px-sec">Available <span className="px-sec-cnt">· {available.length} — priority order</span><span className="px-sec-ln" /></div>
-          <ul className="px-rows" data-testid="status-available">
-            {available.length === 0 && <li className="px-trow px-muted">Nothing available.</li>}
-            {available.map((it) => (
-              <AvailableStatusRow key={it.task.id} item={it} commands={commands} detail={detail} onCheck={() => void commands.checkOff(it.task.id)} />
             ))}
-          </ul>
+          </>
+        ) : (
+          <>
+            <div className="px-sec">Available <span className="px-sec-cnt">· {available.length} — priority order</span><span className="px-sec-ln" /></div>
+            <ul className="px-rows" data-testid="status-available">
+              {available.length === 0 && <li className="px-trow px-muted">Nothing available.</li>}
+              {available.map((it) => (
+                <AvailableStatusRow key={it.task.id} item={it} commands={commands} detail={detail} onCheck={() => void commands.checkOff(it.task.id)} />
+              ))}
+            </ul>
 
-          {blocked.length > 0 && (
-            <>
-              <div className="px-sec" style={{ color: 'var(--px-red)' }}>Blocked <span className="px-sec-cnt">· {blocked.length}</span><span className="px-sec-ln" /></div>
-              <ul className="px-rows px-rows--muted" data-testid="status-blocked">
-                {blocked.map((b) => (
-                  <li className="px-trow" key={b.task.id} {...detail.rowProps(b.task.id)}>
-                    <span className="px-ckb" style={{ opacity: 0.4 }}><Ic name="check" /></span>
-                    <div className="px-t-main"><div className="px-t-title" style={{ color: 'var(--px-text-dim)' }}><EditableTitle node={b.task} commands={commands} /></div></div>
-                    <span className="px-tag px-tag--red"><Ic name="alert" />{b.blockedBy[0] ?? 'blocked'}</span>
-                  </li>
-                ))}
-              </ul>
-            </>
-          )}
+            {blocked.length > 0 && (
+              <>
+                <div className="px-sec" style={{ color: 'var(--px-red)' }}>Blocked <span className="px-sec-cnt">· {blocked.length}</span><span className="px-sec-ln" /></div>
+                <ul className="px-rows px-rows--muted" data-testid="status-blocked">
+                  {blocked.map((b) => (
+                    <li className="px-trow" key={b.task.id} {...detail.rowProps(b.task.id)}>
+                      <span className="px-ckb" style={{ opacity: 0.4 }}><Ic name="check" /></span>
+                      <div className="px-t-main"><div className="px-t-title" style={{ color: 'var(--px-text-dim)' }}><EditableTitle node={b.task} commands={commands} /></div></div>
+                      <span className="px-tag px-tag--red"><Ic name="alert" />{b.blockedBy[0] ?? 'blocked'}</span>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
 
-          <div className="px-sec">Inbox <span className="px-sec-cnt">· {activities.length}</span><span className="px-sec-ln" /></div>
-          <ul className="px-rows" data-testid="status-inbox">
-            {activities.length === 0 && <li className="px-trow px-muted">Inbox is empty.</li>}
-            {inboxNewestFirst.map((a) => (
-              <li className="px-trow" key={a.id} {...detail.rowProps(a.id)}>
-                <InboxCheck activity={a} onComplete={() => setCompleting(a)} />
-                <div className="px-t-main"><div className="px-t-title"><EditableTitle node={a} commands={commands} /></div></div>
-              </li>
-            ))}
-          </ul>
+            <div className="px-sec">Inbox <span className="px-sec-cnt">· {activities.length}</span><span className="px-sec-ln" /></div>
+            <ul className="px-rows" data-testid="status-inbox">
+              {activities.length === 0 && <li className="px-trow px-muted">Inbox is empty.</li>}
+              {inboxNewestFirst.map((a) => (
+                <li className="px-trow" key={a.id} {...detail.rowProps(a.id)}>
+                  <InboxCheck activity={a} onComplete={() => setCompleting(a)} />
+                  <div className="px-t-main"><div className="px-t-title"><EditableTitle node={a} commands={commands} /></div></div>
+                </li>
+              ))}
+            </ul>
 
-          {doneToday.length > 0 && (
-            <>
-              <div className="px-sec" style={{ color: 'var(--px-green)' }}>Done today <span className="px-sec-cnt">· {doneToday.length}</span><span className="px-sec-ln" /></div>
-              <ul className="px-rows px-rows--muted" data-testid="status-done">
-                {doneToday.map((d) => (
-                  <li className="px-trow px-trow--done" key={d.task.id} data-testid={`done-${d.task.id}`} {...detail.rowProps(d.task.id)}>
-                    <span className="px-ckb px-ckb--done"><Ic name="check" /></span>
-                    <div className="px-t-main"><div className="px-t-title"><EditableTitle node={d.task} commands={commands} /></div></div>
-                    {d.unfocused && <UnfocusedTag />}
-                  </li>
-                ))}
-              </ul>
-            </>
-          )}
-        </div>
-      )}
+            {doneToday.length > 0 && (
+              <>
+                <div className="px-sec" style={{ color: 'var(--px-green)' }}>Done today <span className="px-sec-cnt">· {doneToday.length}</span><span className="px-sec-ln" /></div>
+                <ul className="px-rows px-rows--muted" data-testid="status-done">
+                  {doneToday.map((d) => (
+                    <li className="px-trow px-trow--done" key={d.task.id} data-testid={`done-${d.task.id}`} {...detail.rowProps(d.task.id)}>
+                      <span className="px-ckb px-ckb--done"><Ic name="check" /></span>
+                      <div className="px-t-main"><div className="px-t-title"><EditableTitle node={d.task} commands={commands} /></div></div>
+                      {d.unfocused && <UnfocusedTag />}
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </>
+        )}
+      </div>
 
       <CompleteInboxDialog activity={completing} targets={targets} commands={commands} onClose={() => setCompleting(null)} />
     </section>
