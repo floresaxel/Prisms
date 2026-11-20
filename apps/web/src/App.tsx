@@ -39,7 +39,7 @@ import { TimezoneClock } from './components/TimezoneClock';
 import { isDesktop, osNotify } from './desktop';
 import { rejectionMessage } from './format';
 import { ScreenBoundary } from './components/ScreenBoundary';
-import { swapTab } from './components/tabSwap';
+import { swapPage } from './components/pageSwap';
 import { clearLocalAccount, connectDb, dbFor, forgetDb } from './powersync';
 import {
   Agenda,
@@ -49,6 +49,7 @@ import {
   Journal,
   MyDay,
   preloadAllScreens,
+  loadScreen,
   preloadScreen,
   Projects,
   Review,
@@ -150,6 +151,7 @@ const PAGE_SWAP_ID = 'px-page';
 function Shell({
   user,
   route,
+  navRoute,
   navigate,
   ctx,
   connected,
@@ -159,6 +161,9 @@ function Shell({
 }: {
   user: SessionUser;
   route: Route;
+  /** Where the user is going: the sidebar and breadcrumb move at once, while
+   *  `route` (the screen) follows when the page swap has blurred the old one out. */
+  navRoute: Route;
   navigate: (href: string) => void;
   ctx: CommandContext;
   connected: boolean;
@@ -229,9 +234,9 @@ function Shell({
       foot={foot}
       // the brand mark opens a collapsed sidebar; once open it goes to My Day
       brandHref="/"
-      active={route}
+      active={navRoute}
       onNavigate={navigate}
-      breadcrumb={CRUMBS[route]}
+      breadcrumb={CRUMBS[navRoute]}
       clock={<TimezoneClock ctx={ctx} />}
       timer={<GlobalTimer />}
       user={{ name: user.name, email: user.email }}
@@ -260,8 +265,9 @@ function Shell({
         </div>
       )}
       {/* The page area: stays mounted across screens so a sidebar switch can blur
-          the old page out and the new one in (navigate → swapTab). */}
-      <div id={PAGE_SWAP_ID}>
+          the old page out and the new one in (navigate → swapPage). */}
+      {/* data-route: the screen actually shown (it lags navRoute during a swap) */}
+      <div id={PAGE_SWAP_ID} data-route={route}>
         {/* keyed by route: a screen that failed to load does not take the next one down with it */}
         <ScreenBoundary key={route}>{screen}</ScreenBoundary>
       </div>
@@ -347,15 +353,21 @@ function AuthedApp({
     };
   }, [db, sessionChecked]);
 
-  // Moving to another screen blurs the old page out and the new one in, like a
-  // tab switch (tabSwap.ts); staying on the same screen (a new hash) does not.
-  const routeRef = useRef(route);
-  routeRef.current = route;
+  // Moving to another screen blurs the whole page out, gets the next screen
+  // ready, and blurs it in (pageSwap.ts). The sidebar follows the click at once
+  // (navRoute); the screen itself (route) changes mid-swap. Staying on the same
+  // screen (a new hash) does nothing.
+  const [navRoute, setNavRoute] = useState<Route>(route);
+  const navRef = useRef(route);
+  const swapSeq = useRef(0);
   const navigate = useCallback((href: string) => {
     window.history.pushState({}, '', href);
     const next = (href.split('#')[0] || '/') as Route;
-    if (next === routeRef.current) setRoute(next);
-    else swapTab(document.getElementById(PAGE_SWAP_ID), () => setRoute(next));
+    if (next === navRef.current) return;
+    navRef.current = next;
+    setNavRoute(next);
+    const seq = ++swapSeq.current;
+    void swapPage(document.getElementById(PAGE_SWAP_ID), loadScreen(next), () => seq === swapSeq.current, () => setRoute(next));
   }, []);
 
   // Once the first screen is up and the browser has a quiet moment, fetch the
@@ -373,6 +385,7 @@ function AuthedApp({
         <Shell
           user={user}
           route={route}
+          navRoute={navRoute}
           navigate={navigate}
           ctx={ctx}
           connected={connected}
