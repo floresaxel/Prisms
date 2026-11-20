@@ -9,7 +9,9 @@
  * With nothing chosen it reads `placeholder` in light grey, no bubble. `noneLabel`
  * adds a first, plain (non-bubble) choice that sets the value back to '' — the
  * capture bar's "Inbox — assign later". `variant="field"` boxes the control like
- * a text input, for forms.
+ * a text input, for forms. `newProject` adds a "+ New project" row to the list:
+ * it turns into a name field (and a roadmap choice when there are several), and the
+ * project it creates is selected at once.
  *
  * The popover is portalled to <body> and positioned from the trigger — the rows'
  * list clips whatever overflows it. It closes on Escape (without also closing a
@@ -20,6 +22,8 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 import { Ic, type PromoteTarget } from '@prisms/ui';
+
+import type { NewProjectApi } from './useNewProject';
 
 const POP_MAX_W = 380;
 
@@ -34,6 +38,7 @@ export function ProjectPicker({
   variant,
   ariaLabel,
   title,
+  newProject,
 }: {
   targets: PromoteTarget[];
   value: string;
@@ -48,18 +53,50 @@ export function ProjectPicker({
   variant?: 'field';
   ariaLabel?: string;
   title?: string;
+  /** Offer "+ New project" in the list (omit it, or pass undefined, to hide it). */
+  newProject?: NewProjectApi;
 }) {
   const [open, setOpen] = useState(false);
+  // the "+ New project" form, shown in place of the list
+  const [making, setMaking] = useState(false);
+  const [name, setName] = useState('');
+  const [roadmapId, setRoadmapId] = useState('');
+  const [creating, setCreating] = useState(false);
+  const nameInput = useRef<HTMLInputElement>(null);
   const [pos, setPos] = useState<{ left: number; top: number; width: number } | null>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const pop = useRef<HTMLDivElement>(null);
   const current = targets.find((t) => t.id === value) ?? null;
-  const disabled = targets.length === 0 && noneLabel === undefined;
+  const disabled = targets.length === 0 && noneLabel === undefined && !newProject;
+  const roadmap = newProject?.roadmaps.find((r) => r.id === roadmapId) ?? newProject?.roadmaps[0];
 
   function pick(id: string) {
     onChange(id);
     setOpen(false);
     trigger.current?.focus();
+  }
+
+  // every opening starts on the list, with a clean form
+  useEffect(() => {
+    if (!open) {
+      setMaking(false);
+      setName('');
+    }
+  }, [open]);
+
+  useEffect(() => {
+    if (making) nameInput.current?.focus();
+  }, [making]);
+
+  async function make() {
+    const t = name.trim();
+    if (!newProject || !roadmap || t === '' || creating) return;
+    setCreating(true);
+    try {
+      pick(await newProject.create(t, roadmap.id));
+    } finally {
+      setCreating(false);
+    }
   }
 
   useLayoutEffect(() => {
@@ -129,37 +166,100 @@ export function ProjectPicker({
           <div
             ref={pop}
             className="px-ppick-pop"
-            role="listbox"
-            aria-label="Project"
+            role={making ? 'group' : 'listbox'}
+            aria-label={making ? 'New project' : 'Project'}
             style={{ left: pos.left, top: pos.top, width: pos.width }}
             onClick={(e) => e.stopPropagation()}
           >
-            {noneLabel !== undefined && (
-              <button
-                type="button"
-                role="option"
-                aria-selected={value === ''}
-                className={`px-ppick-none${value === '' ? ' px-ppick-none--on' : ''}`}
-                data-testid={testId ? `${testId}-opt-none` : undefined}
-                onClick={() => pick('')}
-              >
-                {noneLabel}
-              </button>
+            {making && roadmap && newProject ? (
+              <div className="px-ppick-new" data-testid={testId ? `${testId}-new` : undefined}>
+                <input
+                  ref={nameInput}
+                  className="px-ppick-new-in"
+                  data-testid={testId ? `${testId}-new-name` : undefined}
+                  placeholder="Project name"
+                  aria-label="Project name"
+                  value={name}
+                  maxLength={200}
+                  onChange={(e) => setName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key !== 'Enter') return;
+                    e.preventDefault();
+                    void make();
+                  }}
+                />
+                {newProject.roadmaps.length > 1 && (
+                  <div className="px-ppick-new-rm" role="radiogroup" aria-label="In roadmap">
+                    <span className="px-ppick-new-lbl">In roadmap</span>
+                    {newProject.roadmaps.map((r) => (
+                      <button
+                        key={r.id}
+                        type="button"
+                        role="radio"
+                        aria-checked={r.id === roadmap.id}
+                        className={`px-ppick-opt${r.id === roadmap.id ? ' px-ppick-opt--on' : ''}`}
+                        onClick={() => setRoadmapId(r.id)}
+                      >
+                        <span className="px-ppick-name">{r.title}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <div className="px-ppick-new-act">
+                  <button type="button" className="px-btn px-btn--sm" onClick={() => setMaking(false)}>
+                    Back
+                  </button>
+                  <button
+                    type="button"
+                    className="px-btn px-btn--sm px-btn--primary"
+                    data-testid={testId ? `${testId}-new-create` : undefined}
+                    disabled={name.trim() === '' || creating}
+                    onClick={() => void make()}
+                  >
+                    Create project
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                {noneLabel !== undefined && (
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={value === ''}
+                    className={`px-ppick-none${value === '' ? ' px-ppick-none--on' : ''}`}
+                    data-testid={testId ? `${testId}-opt-none` : undefined}
+                    onClick={() => pick('')}
+                  >
+                    {noneLabel}
+                  </button>
+                )}
+                {targets.map((t) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    role="option"
+                    aria-selected={t.id === value}
+                    className={`px-ppick-opt${t.id === value ? ' px-ppick-opt--on' : ''}`}
+                    data-testid={testId ? `${testId}-opt-${t.id}` : undefined}
+                    onClick={() => pick(t.id)}
+                  >
+                    <span className="px-ppick-name">{t.title}</span>
+                    {t.type === 'milestone' && <span className="px-ppick-kind">milestone</span>}
+                  </button>
+                ))}
+                {newProject && (
+                  <button
+                    type="button"
+                    className="px-ppick-add"
+                    data-testid={testId ? `${testId}-new-open` : undefined}
+                    onClick={() => setMaking(true)}
+                  >
+                    <Ic name="plus" /> New project
+                  </button>
+                )}
+              </>
             )}
-            {targets.map((t) => (
-              <button
-                key={t.id}
-                type="button"
-                role="option"
-                aria-selected={t.id === value}
-                className={`px-ppick-opt${t.id === value ? ' px-ppick-opt--on' : ''}`}
-                data-testid={testId ? `${testId}-opt-${t.id}` : undefined}
-                onClick={() => pick(t.id)}
-              >
-                <span className="px-ppick-name">{t.title}</span>
-                {t.type === 'milestone' && <span className="px-ppick-kind">milestone</span>}
-              </button>
-            ))}
           </div>,
           document.body,
         )}
