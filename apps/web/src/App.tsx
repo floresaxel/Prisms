@@ -21,6 +21,7 @@ import {
   loadImportedHlcFloor,
   PrismsDataProvider,
   useActivityInbox,
+  useIsHydrated,
   useReviewInbox,
   type BreadcrumbSpec,
   type CommandContext,
@@ -39,7 +40,7 @@ import { TimezoneClock } from './components/TimezoneClock';
 import { isDesktop, osNotify } from './desktop';
 import { rejectionMessage } from './format';
 import { ScreenBoundary } from './components/ScreenBoundary';
-import { swapPage } from './components/pageSwap';
+import { holdPage, revealPage, swapPage } from './components/pageSwap';
 import { clearLocalAccount, connectDb, dbFor, forgetDb } from './powersync';
 import {
   Agenda,
@@ -146,6 +147,58 @@ preloadScreen(landingFor(window.location.pathname, window.location.hash).route);
 /** The element around the current screen that a page switch blurs (see navigate). */
 const PAGE_SWAP_ID = 'px-page';
 
+/** The longest the first screen waits, hidden, for its data before it blurs in anyway. */
+const BOOT_MAX_WAIT_MS = 700;
+
+/**
+ * First load — a reload, or the first screen after signing in: the page area
+ * starts hidden and blurred, and blurs in once the first screen's chunk is here
+ * and the local data has hydrated, so what blurs in is the page itself rather
+ * than a skeleton. A first sign-in can wait seconds on its first sync, so after
+ * BOOT_MAX_WAIT_MS it blurs in regardless. The sidebar is never held.
+ */
+function useBootReveal(route: Route): (el: HTMLDivElement | null) => void {
+  const hydrated = useIsHydrated();
+  const pageRef = useRef<HTMLDivElement | null>(null);
+  // a ref callback runs at commit, before the first paint
+  const holdRef = useCallback((el: HTMLDivElement | null) => {
+    pageRef.current = el;
+    if (el) holdPage(el);
+  }, []);
+  const [firstRoute] = useState(route);
+  const [chunkReady, setChunkReady] = useState(false);
+  const [capped, setCapped] = useState(false);
+  useEffect(() => {
+    let live = true;
+    void loadScreen(firstRoute)
+      .catch(() => undefined)
+      .then(() => {
+        if (live) setChunkReady(true);
+      });
+    const t = window.setTimeout(() => {
+      if (live) setCapped(true);
+    }, BOOT_MAX_WAIT_MS);
+    return () => {
+      live = false;
+      window.clearTimeout(t);
+    };
+  }, [firstRoute]);
+  useEffect(() => {
+    const el = pageRef.current;
+    if (!el || !(capped || (chunkReady && hydrated))) return;
+    // two frames: a screen that suspended on its first render commits before the reveal
+    let second = 0;
+    const first = requestAnimationFrame(() => {
+      second = requestAnimationFrame(() => revealPage(el));
+    });
+    return () => {
+      cancelAnimationFrame(first);
+      cancelAnimationFrame(second);
+    };
+  }, [capped, chunkReady, hydrated]);
+  return holdRef;
+}
+
 /** Shell composition — mounted inside PrismsDataProvider so it can read the
  *  inbox/review counts for the nav badges. Layout itself stays presentational. */
 function Shell({
@@ -173,6 +226,7 @@ function Shell({
 }) {
   const inboxCount = useActivityInbox().length;
   const reviewCount = useReviewInbox().length;
+  const pageRef = useBootReveal(route);
 
   const groups: NavGroupSpec[] = [
     {
@@ -267,7 +321,7 @@ function Shell({
       {/* The page area: stays mounted across screens so a sidebar switch can blur
           the old page out and the new one in (navigate → swapPage). */}
       {/* data-route: the screen actually shown (it lags navRoute during a swap) */}
-      <div id={PAGE_SWAP_ID} data-route={route}>
+      <div id={PAGE_SWAP_ID} data-route={route} ref={pageRef}>
         {/* keyed by route: a screen that failed to load does not take the next one down with it */}
         <ScreenBoundary key={route}>{screen}</ScreenBoundary>
       </div>
