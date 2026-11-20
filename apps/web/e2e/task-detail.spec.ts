@@ -83,10 +83,12 @@ test('rename a task in place, then edit every detail in its card — all of it s
   // too, whose minifier once kept only `-webkit-backdrop-filter` (theme.css)
   expect(await page.locator('.px-scrim').evaluate((el) => getComputedStyle(el).backdropFilter)).toContain('blur(');
   // compact: the empty fields wait behind "+" chips (the budget is set, so it shows)
-  await expect(page.getByTestId('td-details')).toHaveCount(0);
-
-  await page.getByTestId('td-add-details').click();
-  await expect(page.getByTestId('td-details')).toBeFocused();
+  // — except Details, which is always there, empty or not
+  await expect(page.getByTestId('td-add-details')).toHaveCount(0);
+  await expect(page.getByTestId('td-details')).toBeVisible();
+  // a focused text field gets a light grey outline, not the accent blue
+  await page.getByTestId('td-details').focus();
+  expect(await page.getByTestId('td-details').evaluate((el) => getComputedStyle(el).borderTopColor)).toBe('rgb(197, 203, 214)');
   await page.getByTestId('td-details').fill('Quote the mayor. Embargo until 9am.');
   await page.getByTestId('td-add-due').click();
   await page.getByTestId('td-due').fill('2026-12-01');
