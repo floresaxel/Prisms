@@ -1,5 +1,7 @@
 /**
- * A very quick blur out / blur in on the content a tab switch replaces.
+ * A very quick blur out / blur in on the content a tab switch replaces — the
+ * in-page tab bars and view switchers. (Moving to another screen has its own,
+ * stronger swap: pageSwap.ts.)
  *
  * Built on the View Transitions API: the browser snapshots the old panel, React
  * commits the new tab synchronously inside the callback (`flushSync`), and CSS

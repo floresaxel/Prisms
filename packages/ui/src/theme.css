@@ -407,6 +407,17 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
    default crossfade is off — the tab bar and the rest of the page change at
    once — and the panel's group does not morph between the two heights, which
    would stretch the snapshots; the outgoing one just overflows while it fades. */
+/* Page switch (apps/web/src/components/pageSwap.ts): the whole page area blurs
+   out, the next screen is made ready, and it blurs in already drawn. Stronger
+   and a little longer than the tab swap, so a change of screen reads as one.
+   PAGE_OUT_MS = 112 there; the out state holds (`forwards`) until the swap. */
+@keyframes px-page-out { to { opacity: 0; filter: blur(6px); } }
+@keyframes px-page-in { from { opacity: 0; filter: blur(6px); } }
+.px-page--out { animation: px-page-out 112ms ease-in forwards; pointer-events: none; }
+/* first load (pageSwap.ts holdPage / revealPage): hidden and blurred from the
+   first paint until the first screen is ready, then `.px-page--in` takes over */
+.px-page--boot { opacity: 0; filter: blur(6px); }
+.px-page--in { animation: px-page-in 165ms ease-out; }
 @keyframes px-tab-out { to { opacity: 0; filter: blur(2.5px); } }
 @keyframes px-tab-in { from { opacity: 0; filter: blur(2.5px); } }
 .px-vt-tab::view-transition-old(root),
