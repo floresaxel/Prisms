@@ -52,7 +52,7 @@ const ROUTE: Partial<Record<NavKey, string>> = {
 
 /**
  * Click a sidebar item and wait until its screen is the one SHOWN. A screen
- * change blurs the old page out first (pageSwap.ts), so for ~150 ms the sidebar
+ * change blurs the old page out first (pageSwap.ts), so for ~110 ms the sidebar
  * already names the new screen while the old one is still mounted; the page
  * wrapper's `data-route` moves only when the new screen is committed. Without
  * this, a spec that leaves a screen and comes straight back never left it.

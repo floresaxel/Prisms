@@ -15,9 +15,9 @@
 import { flushSync } from 'react-dom';
 
 /** Matches `px-page-out` in theme.css. */
-export const PAGE_OUT_MS = 150;
+export const PAGE_OUT_MS = 112;
 /** Matches `px-page-in` in theme.css (plus slack), for when animationend never comes. */
-const PAGE_IN_MS = 260;
+const PAGE_IN_MS = 200;
 
 function skipMotion(): boolean {
   return typeof window.matchMedia !== 'function' || window.matchMedia('(prefers-reduced-motion: reduce)').matches;
