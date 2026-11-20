@@ -1153,6 +1153,9 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
    the only solid shape, and its colour means the present). */
 .px-run-banner { display: flex; align-items: center; gap: 14px; background: var(--px-surface); border: 1.5px solid var(--px-door); border-radius: 10px; padding: 11px 16px; margin: 6px 0 4px; box-shadow: var(--px-shadow); }
 .px-run-banner > svg { flex: none; }
+/* a run card's expanded steps: a tray tucked under the card */
+.px-run-steps { margin: -4px 14px 8px; padding: 10px 0 8px; background: var(--px-sb-bg); border: 1px solid var(--px-border); border-top: none; border-radius: 0 0 8px 8px; }
+.px-run-steps .px-substeps { margin-left: 22px; }
 .px-run-main { min-width: 0; }
 .px-run-title { font-weight: 620; font-size: 13.5px; }
 .px-run-sub { font-size: 11.5px; color: var(--px-blue-deep); margin-top: 2px; }
@@ -1246,8 +1249,11 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
 .px-promote { display: inline-flex; align-items: center; gap: 6px; }
 .px-promote select { border: 1px solid var(--px-border); border-radius: 7px; padding: 4px 8px; font-size: 12px; background: var(--px-surface); color: var(--px-text-dim); }
 .px-tag--grey { background: var(--px-surface-2); color: var(--px-text-dim); }
-.px-steps-tg { cursor: pointer; border: none; font: inherit; }
-.px-steps-tg:hover { background: #e7eaef; }
+/* a row's steps toggle: a plain white bubble with a thin dark outline */
+.px-steps-tg { flex: none; display: inline-flex; align-items: center; font: inherit; font-size: 11px; font-weight: 560; line-height: 1; color: var(--px-text); background: #fff; border: 1px solid var(--px-text); border-radius: 999px; padding: 4px 10px; cursor: pointer; white-space: nowrap; transition: background 0.12s ease, box-shadow 0.12s ease; }
+.px-steps-tg:hover { box-shadow: 0 1px 3px rgba(15, 18, 24, 0.12); }
+.px-steps-tg:active { background: var(--px-surface-2); }
+.px-steps-tg--open { background: var(--px-surface-2); }
 
 .px-sub-wrap { border-bottom: 1px solid var(--px-border); background: var(--px-sb-bg); padding: 7px 0 9px; }
 .px-sub-wrap:last-child { border-bottom: none; }
@@ -1513,8 +1519,8 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
 .px-tab:focus-visible,
 .px-fchip:focus-visible,
 .px-rv-f:focus-visible,
-.px-toggle:focus-visible,
-.px-steps-tg:focus-visible { outline-offset: 1px; border-radius: 6px; }
+.px-toggle:focus-visible { outline-offset: 1px; border-radius: 6px; }
+.px-steps-tg:focus-visible { outline-offset: 2px; }
 /* the run-banner pulse joins the timer-pill/skeleton in respecting reduced motion. */
 @media (prefers-reduced-motion: reduce) {
   .px-run-banner .px-dot, .px-run-core { animation: none; }

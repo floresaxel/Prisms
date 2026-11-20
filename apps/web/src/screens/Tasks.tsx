@@ -40,6 +40,7 @@ import {
 
 import { InboxDelete } from '../components/InboxDelete';
 import { ProjectPicker } from '../components/ProjectPicker';
+import { StepsToggle, SubstepPanel } from '../components/Substeps';
 import { EditableTitle, locationOf, useTaskDetail, type TaskDetailApi } from '../components/TaskDetail';
 import { useTabSwap } from '../components/tabSwap';
 import { UnfocusedTag } from '../components/UnfocusedTag';
@@ -344,8 +345,6 @@ function AvailableStatusRow({ item, commands, detail, onCheck }: { item: MyDayIt
 function TaskRow({ task, status, blockedBy, steps, commands, detail }: { task: Node; status: TaskStatus; blockedBy: string[]; steps: TaskStep[]; commands: PrismsCommands; detail: TaskDetailApi }) {
   const [open, setOpen] = useState(false);
   const isBlocked = status === 'blocked';
-  const doneCount = steps.filter((s) => s.done).length;
-  const stepsLabel = steps.length === 0 ? '+ steps' : doneCount > 0 ? `${doneCount}/${steps.length} steps` : `${steps.length} steps`;
   const location = locationOf(task);
   return (
     <>
@@ -362,7 +361,7 @@ function TaskRow({ task, status, blockedBy, steps, commands, detail }: { task: N
         {isBlocked ? (
           <span className="px-tag px-tag--red"><Ic name="alert" />{blockedBy[0] ?? 'blocked'}</span>
         ) : (
-          <button className="px-tag px-tag--grey px-steps-tg" data-testid={`steps-toggle-${task.id}`} title="Show substeps" onClick={() => setOpen((o) => !o)}>{stepsLabel}</button>
+          <StepsToggle taskId={task.id} steps={steps} open={open} onToggle={() => setOpen((o) => !o)} />
         )}
       </li>
       {open && !isBlocked && (
@@ -371,85 +370,5 @@ function TaskRow({ task, status, blockedBy, steps, commands, detail }: { task: N
         </li>
       )}
     </>
-  );
-}
-
-function SubstepPanel({ taskId, steps, commands }: { taskId: string; steps: TaskStep[]; commands: PrismsCommands }) {
-  const [draft, setDraft] = useState('');
-  async function add() {
-    const t = draft.trim();
-    if (t === '') return;
-    const last = steps.at(-1)?.sort_order ?? null;
-    const sortOrder = last === null ? initialSortOrder() : sortOrderBetween(last, null);
-    await commands.addStep({ taskId, title: t, sortOrder });
-    setDraft('');
-  }
-  return (
-    <div className="px-substeps" data-testid={`substeps-${taskId}`}>
-      {steps.map((s) => (
-        <SubstepRow key={s.id} step={s} commands={commands} />
-      ))}
-      <div className="px-addstep">
-        <input
-          data-testid={`step-add-${taskId}`}
-          placeholder="Add a step — Enter to save"
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault();
-              void add();
-            }
-          }}
-        />
-      </div>
-    </div>
-  );
-}
-
-function SubstepRow({ step, commands }: { step: TaskStep; commands: PrismsCommands }) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(step.title);
-  async function commit() {
-    setEditing(false);
-    const t = draft.trim();
-    if (t !== '' && t !== step.title) await commands.renameStep(step.id, t);
-    else setDraft(step.title);
-  }
-  return (
-    <div className={`px-sstep${step.done ? ' px-sstep--done' : ''}`}>
-      <button
-        className={`px-ss-ck${step.done ? ' px-ss-ck--done' : ''}`}
-        data-testid={`step-toggle-${step.id}`}
-        aria-label="toggle step"
-        onClick={() => void commands.toggleStep(step.id, !step.done)}
-      >
-        <Ic name="check" />
-      </button>
-      {editing ? (
-        <input
-          className="px-sstep-input"
-          data-testid={`step-rename-input-${step.id}`}
-          value={draft}
-          autoFocus
-          onChange={(e) => setDraft(e.target.value)}
-          onBlur={() => void commit()}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault();
-              void commit();
-            } else if (e.key === 'Escape') {
-              setDraft(step.title);
-              setEditing(false);
-            }
-          }}
-        />
-      ) : (
-        <span className="px-sstep-txt">{step.title}</span>
-      )}
-      <button className="px-sstep-ed" data-testid={`step-rename-${step.id}`} title="Rename step" onClick={() => { setDraft(step.title); setEditing(true); }}>
-        <Ic name="pen" />
-      </button>
-    </div>
   );
 }

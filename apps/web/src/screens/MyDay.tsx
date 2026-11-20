@@ -11,7 +11,7 @@
  * Load-bearing testids preserved from the old Worklist: worklist, clock-in-*,
  * check-*, progress-* + progress-pct-*, force-clock-in-*, checkoff-* (D8).
  */
-import { useEffect, useState, type FormEvent } from 'react';
+import { Fragment, useEffect, useState, type FormEvent } from 'react';
 
 import {
   ancestorsOf,
@@ -24,6 +24,7 @@ import {
   type Node,
   type NodeType,
   type ProgressValue,
+  type TaskStep,
   type TreeIndex,
 } from '@prisms/core';
 import {
@@ -43,6 +44,7 @@ import {
   useMyDayAvailable,
   usePromoteTargets,
   useRunningTimers,
+  useTaskStepsByTask,
   useTimeBlocksForDay,
   Ic,
   type CommandContext,
@@ -54,6 +56,7 @@ import {
 
 import { InboxDelete } from '../components/InboxDelete';
 import { RunMark } from '../components/RunMark';
+import { StepsToggle, SubstepPanel } from '../components/Substeps';
 import { EditableTitle, useTaskDetail, type TaskDetailApi } from '../components/TaskDetail';
 import { useTimers } from '../components/Timers';
 import { UnfocusedTag } from '../components/UnfocusedTag';
@@ -140,11 +143,19 @@ function ClockInButton({ testId, disabled, title, danger, label = 'Clock in', on
 }
 
 const LIMIT_TITLE = `${MAX_OPEN_TIMERS} timers are already running — clock out of one first`;
+const NO_STEPS: readonly TaskStep[] = [];
 
-function AvailableRow({ item, atLimit, todayDate, commands, detail, onCheck, onClockIn }: { item: MyDayItem; atLimit: boolean; todayDate: string; commands: PrismsCommands; detail: TaskDetailApi; onCheck: () => void; onClockIn: () => void }) {
+/**
+ * Only a task that already has steps gets the steps bubble here (Tasks is where
+ * a bare task gets its first one). Clicking it expands the checklist under the
+ * row; the same open state follows the task into its run card when clocked in.
+ */
+function AvailableRow({ item, atLimit, todayDate, commands, detail, steps, stepsOpen, onToggleSteps, onCheck, onClockIn }: { item: MyDayItem; atLimit: boolean; todayDate: string; commands: PrismsCommands; detail: TaskDetailApi; steps: readonly TaskStep[]; stepsOpen: boolean; onToggleSteps: () => void; onCheck: () => void; onClockIn: () => void }) {
   const id = item.task.id;
   const dueToday = item.task.due_date === todayDate;
+  const hasSteps = steps.length > 0;
   return (
+    <>
     <li className="px-trow" data-testid={`myday-row-${id}`} data-project={item.projectId ?? ''} {...detail.rowProps(id)}>
       <button className="px-ckb" data-testid={`check-${id}`} aria-label="check off" onClick={onCheck}><Ic name="check" /></button>
       <div className="px-t-main">
@@ -160,10 +171,17 @@ function AvailableRow({ item, atLimit, todayDate, commands, detail, onCheck, onC
           {item.priority !== null && <span className="px-prio" title="Parent-project priority — Projects › Decisions">prio {item.priority.toFixed(1)}</span>}
         </div>
       </div>
+      {hasSteps && <StepsToggle taskId={id} steps={steps} open={stepsOpen} onToggle={onToggleSteps} />}
       <ProgressCell id={id} progress={item.progress} />
       {item.task.due_date &&<span className={`px-due${dueToday ? ' px-due--today' : ''}`}>{dueToday ? 'Today' : item.task.due_date.slice(5)}</span>}
       <ClockInButton testId={`clock-in-${id}`} disabled={atLimit} title={atLimit ? LIMIT_TITLE : undefined} onClick={onClockIn} />
     </li>
+    {hasSteps && stepsOpen && (
+      <li className="px-sub-wrap">
+        <SubstepPanel taskId={id} steps={steps} commands={commands} />
+      </li>
+    )}
+    </>
   );
 }
 
@@ -226,6 +244,16 @@ export function MyDay({ ctx, onNavigate }:{ ctx: CommandContext; onNavigate?: (h
   const timeBlocks = useTimeBlocksForDay(nowMin);
   const agenda = useAgenda(nowMin);
   const habits = useHabits(nowMin);
+
+  const stepsByTask = useTaskStepsByTask();
+  /** Tasks whose steps are expanded (a row and its run card share it). */
+  const [openSteps, setOpenSteps] = useState<ReadonlySet<string>>(() => new Set());
+  const toggleSteps = (taskId: string) =>
+    setOpenSteps((s) => {
+      const next = new Set(s);
+      if (!next.delete(taskId)) next.add(taskId);
+      return next;
+    });
 
   const runningEntryIds = new Set(runningTimers.map((t) => t.entry.id));
   const available = allActionable.filter((it) => !(it.openEntryId !== undefined && runningEntryIds.has(it.openEntryId)));
@@ -309,8 +337,12 @@ export function MyDay({ ctx, onNavigate }:{ ctx: CommandContext; onNavigate?: (h
           )}
           {runningTimers.map((t) => {
             const item = allActionable.find((it) => it.openEntryId === t.entry.id) ?? null;
+            const taskId = t.entry.task_id;
+            const steps = stepsByTask.get(taskId) ?? NO_STEPS;
+            const stepsOpen = steps.length > 0 && openSteps.has(taskId);
             return (
-              <div className="px-run-banner" data-testid="run-banner" data-task={t.entry.task_id} key={t.entry.id} {...detail.rowProps(t.entry.task_id)}>
+              <Fragment key={t.entry.id}>
+              <div className="px-run-banner" data-testid="run-banner" data-task={taskId} {...detail.rowProps(taskId)}>
                 <RunMark tone={projectTone(item?.projectId ?? null)} testId="run-mark" />
                 <div className="px-run-main">
                   <div className="px-run-title">{t.task?.title ?? 'Running task'}</div>
@@ -325,6 +357,7 @@ export function MyDay({ ctx, onNavigate }:{ ctx: CommandContext; onNavigate?: (h
                     {splitWays > 1 && ` · logging 1/${splitWays}`}
                   </div>
                 </div>
+                {steps.length > 0 && <StepsToggle taskId={taskId} steps={steps} open={stepsOpen} onToggle={() => toggleSteps(taskId)} />}
                 {item && <ProgressCell id={item.task.id} progress={item.progress} />}
                 <div className="px-run-clock">{formatElapsed(t.elapsedMs)}</div>
                 <button
@@ -336,6 +369,12 @@ export function MyDay({ ctx, onNavigate }:{ ctx: CommandContext; onNavigate?: (h
                   <Ic name="stop" className="px-ic px-ic--solid" /> <span className="px-btn-lbl">Clock out</span>
                 </button>
               </div>
+              {stepsOpen && (
+                <div className="px-run-steps">
+                  <SubstepPanel taskId={taskId} steps={steps} commands={commands} />
+                </div>
+              )}
+              </Fragment>
             );
           })}
 
@@ -369,6 +408,9 @@ export function MyDay({ ctx, onNavigate }:{ ctx: CommandContext; onNavigate?: (h
                 todayDate={todayDate}
                 commands={commands}
                 detail={detail}
+                steps={stepsByTask.get(item.task.id) ?? NO_STEPS}
+                stepsOpen={openSteps.has(item.task.id)}
+                onToggleSteps={() => toggleSteps(item.task.id)}
                 onCheck={() => openCheckOff(item)}
                 onClockIn={() => timersApi.requestClockIn(item.task.id)}
               />
