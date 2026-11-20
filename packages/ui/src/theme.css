@@ -19,6 +19,7 @@
   --px-sb-bg: #fbfbfc;
   --px-border: #e1e5ec;
   --px-border-2: #d5dae3;
+  --px-focus: #c5cbd6; /* a focused text field: light grey outline, never accent blue */
   --px-text: #0e1726;
   --px-text-dim: #5b6678;
   --px-faint: #8a94a6;
@@ -64,7 +65,7 @@ body {
   cursor: default;
   caret-color: transparent;
 }
-input, textarea, [contenteditable]:not([contenteditable='false']) { caret-color: auto; }
+input, textarea, [contenteditable]:not([contenteditable='false']) { caret-color: var(--px-text); }
 textarea,
 [contenteditable]:not([contenteditable='false']),
 input:not([type='button']):not([type='checkbox']):not([type='color']):not([type='file']):not([type='image']):not([type='radio']):not([type='range']):not([type='reset']):not([type='submit']) { cursor: text; }
@@ -846,7 +847,7 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
 .px-jn-titlerow { display: flex; align-items: center; gap: 8px; }
 .px-jn-title { font: inherit; font-size: 15px; font-weight: 620; color: var(--px-text); background: none; border: 1px solid transparent; border-radius: 6px; padding: 2px 6px; margin: -2px 0 -2px -6px; flex: 1 1 auto; min-width: 0; }
 .px-jn-title:hover:not(:disabled) { border-color: var(--px-border); }
-.px-jn-title:focus { outline: none; border-color: var(--px-accent); background: var(--px-surface); }
+.px-jn-title:focus { outline: none; border-color: var(--px-focus); background: var(--px-surface); }
 .px-jn-title:disabled { color: var(--px-text); opacity: 1; }
 .px-jn-date { font-size: 11.5px; color: var(--px-faint); font-variant-numeric: tabular-nums; padding-left: 0; }
 
@@ -1000,7 +1001,7 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
 
 /* line-height is `.px-md`'s job (same element, later rule would win otherwise) */
 .px-journal-rich { flex: 1 1 auto; cursor: text; }
-.px-journal-rich:focus, .px-journal-rich:focus-visible { outline: none; border-color: var(--px-accent); }
+.px-journal-rich:focus, .px-journal-rich:focus-visible { outline: none; border-color: var(--px-focus); }
 .px-md-toolbar { display: flex; flex-wrap: wrap; gap: 4px; }
 .px-md-toolbar .px-btn { padding: 4px 8px; font-size: 12px; min-width: 30px; }
 .px-md { background: var(--px-surface); border: 1px solid var(--px-border); border-radius: var(--px-radius); padding: 2px 14px; margin-top: 8px; }
@@ -1268,7 +1269,7 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
 .px-addstep { margin-top: 4px; }
 .px-addstep input { width: 280px; max-width: 100%; border: 1px dashed var(--px-border-2); border-radius: 6px; padding: 4.5px 10px; font-size: 12px; background: var(--px-surface); color: var(--px-text); }
 .px-addstep input::placeholder { color: var(--px-faint); }
-.px-addstep input:focus { outline: none; border-color: var(--px-blue); border-style: solid; }
+.px-addstep input:focus { outline: none; border-color: var(--px-focus); border-style: solid; }
 
 /* ── task rows open their details; titles rename in place ──
    A row that opens the details card reads as clickable; its title text is its
@@ -1294,7 +1295,7 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
 .px-td-x .px-ic { width: 16px; height: 16px; }
 .px-td-title { display: block; width: calc(100% + 18px); margin: 0 -9px 12px; padding: 5px 8px; border: 1px solid transparent; border-radius: 8px; background: none; color: var(--px-text); font: inherit; font-size: 20px; font-weight: 620; letter-spacing: -0.2px; }
 .px-td-title:hover { border-color: var(--px-border); }
-.px-td-title:focus { outline: none; border-color: var(--px-blue); background: var(--px-surface); box-shadow: 0 0 0 3px var(--px-blue-bg); }
+.px-td-title:focus { outline: none; border-color: var(--px-focus); background: var(--px-surface); box-shadow: none; }
 .px-td-props { display: grid; grid-template-columns: 168px minmax(0, 1fr); gap: 8px 14px; align-items: center; padding: 14px 0; border-top: 1px solid var(--px-border); border-bottom: 1px solid var(--px-border); }
 .px-td-k { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--px-text-dim); }
 .px-td-k .px-ic { width: 14px; height: 14px; color: var(--px-faint); flex: none; }
@@ -1302,7 +1303,7 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
 .px-td-in { font: inherit; font-size: 13px; padding: 6px 9px; border: 1px solid var(--px-border); border-radius: 7px; background: var(--px-surface); color: var(--px-text); min-width: 0; }
 .px-td-in::placeholder { color: var(--px-faint); }
 .px-td-in:hover { border-color: var(--px-border-2); }
-.px-td-in:focus { outline: none; border-color: var(--px-blue); box-shadow: 0 0 0 3px var(--px-blue-bg); }
+.px-td-in:focus { outline: none; border-color: var(--px-focus); box-shadow: none; }
 .px-td-in--grow { flex: 1 1 200px; }
 .px-td-hours { width: 80px; text-align: right; font-variant-numeric: tabular-nums; }
 .px-td-unit { font-size: 12.5px; color: var(--px-text-dim); }
@@ -1518,6 +1519,10 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
 .px-content { min-width: 0; min-height: 0; }
 /* a visible focus ring for KEYBOARD navigation only (mouse clicks don't trigger it). */
 :focus-visible { outline: 2px solid var(--px-accent); outline-offset: 2px; }
+/* …except in a text field: keyboard or pointer, its focus is a light grey border (the
+   field's own rule may add more), never the accent ring. Checkboxes and radios keep it. */
+input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='button']):not([type='submit']):focus-visible,
+textarea:focus-visible, select:focus-visible, [contenteditable]:not([contenteditable='false']):focus-visible { outline: none; border-color: var(--px-focus); }
 .px-navlink:focus-visible,
 .px-tab:focus-visible,
 .px-fchip:focus-visible,
@@ -1587,7 +1592,7 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
 /* the name reads as a heading until you reach for it, then it is a field */
 .px-mgr-title-input { flex: 1; min-width: 0; font: inherit; font-size: 16px; font-weight: 640; border: 1px solid transparent; border-radius: 8px; padding: 5px 8px; background: none; color: var(--px-text); }
 .px-mgr-title-input:hover { border-color: var(--px-border); }
-.px-mgr-title-input:focus { outline: none; border-color: var(--px-accent); background: var(--px-surface); }
+.px-mgr-title-input:focus { outline: none; border-color: var(--px-focus); background: var(--px-surface); }
 .px-mgr-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .px-mgr-stats { display: flex; gap: 22px; flex-wrap: wrap; font-size: 11.5px; color: var(--px-faint); }
 .px-mgr-stat { display: flex; flex-direction: column; gap: 1px; }
@@ -1813,7 +1818,7 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
 .px-rb-title { display: block; width: 100%; box-sizing: border-box; margin: 0; padding: 0; border: 0; background: none; font: 600 28px/1.15 var(--px-font-display, var(--px-font)); letter-spacing: -0.01em; color: var(--px-text); }
 input.px-rb-title { margin-left: -7px; padding: 1px 6px; border: 1px solid transparent; border-radius: 8px; }
 input.px-rb-title:hover { border-color: var(--px-border); }
-input.px-rb-title:focus { outline: none; border-color: var(--px-accent); background: var(--px-surface); }
+input.px-rb-title:focus { outline: none; border-color: var(--px-focus); background: var(--px-surface); }
 .px-rb-realized { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 4px; }
 .px-rb-realized-l { margin-right: 4px; font-size: 12px; color: var(--px-text-dim); }
 .px-rb-stats { display: flex; flex-wrap: wrap; margin: 0; }
@@ -1911,7 +1916,7 @@ input.px-rb-title:focus { outline: none; border-color: var(--px-accent); backgro
 .px-rf-fstep { flex: none; display: grid; place-items: center; min-width: 18px; height: 18px; padding: 0 4px; box-sizing: border-box; border-radius: 9px; background: var(--px-surface-2); font: 600 10.5px var(--px-font-mono, ui-monospace, monospace); }
 .px-rf-ftitle { overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; font-size: 12.5px; line-height: 16px; font-weight: 600; }
 .px-rf-dead { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; font-size: 10.5px; font-weight: 600; color: var(--px-rf-amber-ink); }
-.px-rf-finput { position: absolute; inset: 0; width: 100%; height: 100%; box-sizing: border-box; padding: 0 10px; border: 1px solid var(--px-rf-sel); border-radius: 10px; box-shadow: 0 0 0 3px var(--px-rf-sel-bg); background: var(--px-surface); font: inherit; font-size: 13px; font-weight: 600; color: var(--px-text); outline: none; }
+.px-rf-finput { position: absolute; inset: 0; width: 100%; height: 100%; box-sizing: border-box; padding: 0 10px; border: 1px solid var(--px-focus); border-radius: 10px; box-shadow: none; background: var(--px-surface); font: inherit; font-size: 13px; font-weight: 600; color: var(--px-text); outline: none; }
 
 .px-rf-door { flex: none; overflow: visible; }
 .px-rf-door polygon { stroke-width: 20; stroke-linejoin: round; }
@@ -1964,7 +1969,7 @@ input.px-rb-title:focus { outline: none; border-color: var(--px-accent); backgro
 .px-rf-grip circle { fill: var(--px-faint); }
 .px-rf-group-t { overflow: hidden; text-overflow: ellipsis; font-weight: 500; color: var(--px-text-dim); }
 .px-rf-group-n { font: 500 10.5px var(--px-font-mono, ui-monospace, monospace); color: var(--px-text-dim); }
-.px-rf-group-input { position: absolute; left: 8px; top: 5px; width: calc(100% - 16px); max-width: 300px; height: 26px; box-sizing: border-box; padding: 0 8px; border: 1px solid var(--px-rf-sel); border-radius: 6px; box-shadow: 0 0 0 3px var(--px-rf-sel-bg); background: var(--px-surface); font: inherit; font-size: 12.5px; font-weight: 600; outline: none; }
+.px-rf-group-input { position: absolute; left: 8px; top: 5px; width: calc(100% - 16px); max-width: 300px; height: 26px; box-sizing: border-box; padding: 0 8px; border: 1px solid var(--px-focus); border-radius: 6px; box-shadow: none; background: var(--px-surface); font: inherit; font-size: 12.5px; font-weight: 600; outline: none; }
 .px-rf-group-empty { position: absolute; left: 16px; right: 16px; top: 40px; bottom: 10px; display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 12.5px; color: var(--px-rf-amber-ink); text-align: center; pointer-events: none; }
 .px-rf-vdoor { position: absolute; filter: drop-shadow(0 1px 2px rgba(16,24,40,.06)); }
 .px-rf-vdoor-frame, .px-rf-vdoor-fill { clip-path: polygon(50% 0, 100% 7%, 100% 100%, 0 100%, 0 7%); }
@@ -1995,7 +2000,7 @@ input.px-rb-title:focus { outline: none; border-color: var(--px-accent); backgro
 .px-rf-stack { display: flex; flex-direction: column; gap: 8px; }
 .px-rf-title-input { width: 100%; box-sizing: border-box; margin: -4px -6px 0; padding: 4px 6px; border: 1px solid transparent; border-radius: 8px; background: transparent; font: 600 19px var(--px-font-display, var(--px-font)); color: var(--px-text); }
 .px-rf-title-input:hover { border-color: var(--px-border); }
-.px-rf-title-input:focus, .px-rf-input:focus, .px-rf-select:focus, .px-rf-textarea:focus { outline: none; border-color: var(--px-rf-sel); box-shadow: 0 0 0 3px var(--px-rf-sel-bg); background: var(--px-surface); }
+.px-rf-title-input:focus, .px-rf-input:focus, .px-rf-select:focus, .px-rf-textarea:focus { outline: none; border-color: var(--px-focus); box-shadow: none; background: var(--px-surface); }
 .px-rf-state { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; line-height: 18px; }
 .px-rf-state .px-rf-door { margin-top: 3px; }
 .px-rf-note { padding: 8px 10px; border-radius: 8px; background: var(--px-surface-2); font-size: 12px; line-height: 17px; }
@@ -2182,7 +2187,7 @@ button.px-rf-dep-kind:hover { border-color: var(--px-border-2); color: var(--px-
 .px-vd-hint { font-size: 11.5px; color: var(--px-faint); margin: 6px 0 0; line-height: 1.5; }
 .px-vd-input { width: 100%; font: inherit; padding: 10px 13px; border-radius: 9px; border: 1px solid var(--px-border); background: var(--px-surface); color: var(--px-text); }
 .px-vd-input::placeholder { color: var(--px-faint); }
-.px-vd-input:focus { outline: none; border-color: var(--px-accent); }
+.px-vd-input:focus { outline: none; border-color: var(--px-focus); }
 textarea.px-vd-input { min-height: 92px; resize: vertical; line-height: 1.55; }
 .px-vd-units { display: inline-flex; gap: 2px; padding: 3px; background: var(--px-surface-2); border-radius: 9px; }
 .px-vd-unit { font: inherit; font-size: 12.5px; font-weight: 560; padding: 5px 14px; border-radius: 7px; border: none; background: none; color: var(--px-text-dim); cursor: pointer; }
@@ -2193,7 +2198,7 @@ textarea.px-vd-input { min-height: 92px; resize: vertical; line-height: 1.55; }
 .px-vd-preset:hover { border-color: var(--px-border-2); }
 .px-vd-preset--on { background: var(--px-blue-bg); border-color: var(--px-blue-brd); color: var(--px-blue-deep); }
 .px-vd-amount { width: 84px; font: inherit; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--px-border); background: var(--px-surface); color: var(--px-text); }
-.px-vd-amount:focus { outline: none; border-color: var(--px-accent); }
+.px-vd-amount:focus { outline: none; border-color: var(--px-focus); }
 .px-vd-sep { font-size: 12px; color: var(--px-faint); }
 .px-vd-preview { font-size: 13px; font-weight: 560; }
 .px-vd-err { color: var(--px-danger); font-size: 12px; margin: 8px 0 0; }
@@ -2213,7 +2218,7 @@ textarea.px-vd-input { min-height: 92px; resize: vertical; line-height: 1.55; }
 .px-jn-tag-x:hover { opacity: 1; background: rgba(0, 0, 0, 0.08); }
 .px-jn-tag-x .px-ic, .px-jn-tag-x svg { width: 10px; height: 10px; }
 .px-jn-tag-input { font: inherit; font-size: 12px; color: var(--px-text); background: none; border: 1px dashed var(--px-border-2); border-radius: 999px; padding: 2px 9px; width: 96px; min-width: 0; outline: none; }
-.px-jn-tag-input:focus { border-style: solid; border-color: var(--px-blue); width: 130px; }
+.px-jn-tag-input:focus { border-style: solid; border-color: var(--px-focus); width: 130px; }
 .px-jn-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 10px 0 14px; }
 .px-jn-sel { padding: 5px 9px; font-size: 12.5px; max-width: 200px; }
 .px-jn-mh--static { cursor: default; }

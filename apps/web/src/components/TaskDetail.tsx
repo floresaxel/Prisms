@@ -405,7 +405,6 @@ function TaskDetailBody({ node, facts, ctx, onOpenTask, onClose }: { node: Node;
     // the budget row also reports time logged, so it shows once any is
     hours: node.estimate_minutes !== null || (progress?.consumedMinutes ?? 0) >= 1,
     location: locationOf(node) !== '',
-    details: node.description !== '',
     steps: isTask && steps.length > 0,
     deps: isTask && (incomingEdges(facts.edgeIndex, node.id).length > 0 || outgoingEdges(facts.edgeIndex, node.id).length > 0),
   };
@@ -476,7 +475,8 @@ function TaskDetailBody({ node, facts, ctx, onOpenTask, onClose }: { node: Node;
         </div>
       )}
 
-      {shows('details') && <DetailsField node={node} commands={commands} run={run} />}
+      {/* always there, even empty: notes are the most-used field, so no "+" chip first */}
+      <DetailsField node={node} commands={commands} run={run} />
 
       {isTask ? (
         <>
@@ -513,7 +513,7 @@ function TaskDetailBody({ node, facts, ctx, onOpenTask, onClose }: { node: Node;
  * from the card's "+" chips, so a bare task opens as a short card: kind, title,
  * project, and a row of what can be added.
  */
-const EXTRAS = ['start', 'due', 'hours', 'location', 'details', 'steps', 'deps'] as const;
+const EXTRAS = ['start', 'due', 'hours', 'location', 'steps', 'deps'] as const;
 type Extra = (typeof EXTRAS)[number];
 /** Only a task has these; an Inbox capture gets them once it is in a project. */
 const TASK_ONLY: ReadonlySet<Extra> = new Set(['steps', 'deps']);
@@ -523,7 +523,6 @@ const EXTRA_UI: Record<Extra, { label: string; focus: string }> = {
   due: { label: 'Expected completion', focus: 'td-due' },
   hours: { label: 'Budget', focus: 'td-hours' },
   location: { label: 'Location', focus: 'td-location' },
-  details: { label: 'Details', focus: 'td-details' },
   steps: { label: 'Steps', focus: 'td-step-add' },
   deps: { label: 'Dependencies', focus: 'td-dep-add-before' },
 };

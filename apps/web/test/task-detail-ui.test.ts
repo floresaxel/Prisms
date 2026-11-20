@@ -218,11 +218,13 @@ describe('the card’s fields', () => {
     world({ estimate_minutes: null });
     mount([other]);
     openCard(other);
-    for (const id of ['td-start', 'td-due', 'td-location', 'td-details', 'td-steps', 'td-deps']) expect(screen.queryByTestId(id)).toBeNull();
+    for (const id of ['td-start', 'td-due', 'td-location', 'td-steps', 'td-deps']) expect(screen.queryByTestId(id)).toBeNull();
+    // Details is the exception: always there, even empty, with no chip
+    expect(input('td-details').value).toBe('');
     // the budget row shows anyway: time is logged against the task (the mock logs 45m)
     expect(screen.getByTestId('td-logged').textContent).toContain('45m logged');
     const chips = within(screen.getByTestId('td-adds')).getAllByRole('button').map((b) => b.textContent);
-    expect(chips).toEqual(['Start date', 'Expected completion', 'Location', 'Details', 'Steps', 'Dependencies']);
+    expect(chips).toEqual(['Start date', 'Expected completion', 'Location', 'Steps', 'Dependencies']);
 
     fireEvent.click(screen.getByTestId('td-add-location'));
     expect(document.activeElement).toBe(screen.getByTestId('td-location'));
@@ -246,7 +248,7 @@ describe('the card’s fields', () => {
   it('title, details, dates, budget and location save through their verbs', () => {
     mount();
     openCard();
-    for (const k of ['details', 'due', 'start', 'location']) fireEvent.click(screen.getByTestId(`td-add-${k}`));
+    for (const k of ['due', 'start', 'location']) fireEvent.click(screen.getByTestId(`td-add-${k}`));
 
     fireEvent.change(input('td-title'), { target: { value: 'Press release v2' } });
     fireEvent.keyDown(input('td-title'), { key: 'Enter' });
