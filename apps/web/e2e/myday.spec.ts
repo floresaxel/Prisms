@@ -120,8 +120,13 @@ test('My Day: a capture is due today, waits under the bar, and keeps its date wh
   const row = page.getByTestId('myday-captured').locator('li', { hasText: 'Call the plumber' });
   const activityId = ((await row.getAttribute('data-testid')) ?? '').replace('myday-captured-', '');
   expect(activityId).not.toBe('');
-  await expect(page.getByTestId(`myday-promote-target-${activityId}`).locator(`option[value="${ids.p}"]`)).toHaveCount(1, { timeout: 30_000 });
-  await page.getByTestId(`myday-promote-target-${activityId}`).selectOption(ids.p);
+  // the picker starts empty ("Assign project"); once the project has synced it is a choice
+  const pick = page.getByTestId(`myday-promote-target-${activityId}`);
+  await expect(pick).toBeEnabled({ timeout: 30_000 });
+  await expect(pick).toContainText('Assign project');
+  await expect(page.getByTestId(`myday-promote-${activityId}`)).toBeDisabled();
+  await pick.click();
+  await page.getByTestId(`myday-promote-target-${activityId}-opt-${ids.p}`).click();
   await page.getByTestId(`myday-promote-${activityId}`).click();
   const promoted = page.getByTestId(`myday-row-${activityId}`);
   await expect(promoted).toBeVisible({ timeout: 30_000 });
