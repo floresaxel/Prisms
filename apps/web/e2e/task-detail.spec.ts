@@ -156,3 +156,81 @@ test('rename a task in place, then edit every detail in its card — all of it s
   await expect(page.getByTestId('td-steps')).toContainText('Draft the quotes', { timeout: 30_000 });
   await expect(page.getByTestId('td-deps')).toContainText('Pick a date');
 });
+
+test('My Day: clicking the running-timer banner opens that task’s card; Clock out still just clocks out', async ({ page }) => {
+  await register(page);
+  const ids = { v: randomUUID(), r: randomUUID(), p: randomUUID(), task: randomUUID() };
+  const seed = await page.request.post('/sync/upload', {
+    data: {
+      device_id: 'e2e-seed',
+      commands: [
+        cmd('node.create', { id: ids.v, node_type: 'vision', title: 'Work', sort_order: 'a0' }),
+        cmd('node.create', { id: ids.r, node_type: 'roadmap', title: 'Plan', sort_order: 'a0', parent_id: ids.v }),
+        cmd('node.create', { id: ids.p, node_type: 'project', title: 'Launch', sort_order: 'a0', parent_id: ids.r }),
+        cmd('node.create', { id: ids.task, node_type: 'task', title: 'Clocked task', sort_order: 'a0', parent_id: ids.p, estimate_minutes: 30 }),
+      ],
+    },
+  });
+  expect(seed.ok()).toBeTruthy();
+
+  await expect(page.getByTestId(`myday-row-${ids.task}`)).toBeVisible({ timeout: 30_000 });
+  await page.getByTestId(`clock-in-${ids.task}`).click();
+  const banner = page.getByTestId('run-banner');
+  await expect(banner).toContainText('Clocked task');
+
+  await banner.locator('.px-run-sub').click();
+  await expect(page.getByTestId('td-dialog')).toBeVisible();
+  await expect(page.getByTestId('td-title')).toHaveValue('Clocked task');
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('td-dialog')).toHaveCount(0);
+
+  // the Clock out button keeps its own click
+  await page.getByTestId(`run-clock-out-${ids.task}`).click();
+  await expect(banner).toHaveCount(0);
+  await expect(page.getByTestId('td-dialog')).toHaveCount(0);
+});
+
+test('a done task reopens from its green tick or from its card', async ({ page }) => {
+  await register(page);
+  const ids = { v: randomUUID(), r: randomUUID(), p: randomUUID(), task: randomUUID() };
+  const seed = await page.request.post('/sync/upload', {
+    data: {
+      device_id: 'e2e-seed',
+      commands: [
+        cmd('node.create', { id: ids.v, node_type: 'vision', title: 'Work', sort_order: 'a0' }),
+        cmd('node.create', { id: ids.r, node_type: 'roadmap', title: 'Plan', sort_order: 'a0', parent_id: ids.v }),
+        cmd('node.create', { id: ids.p, node_type: 'project', title: 'Launch', sort_order: 'a0', parent_id: ids.r }),
+        cmd('node.create', { id: ids.task, node_type: 'task', title: 'Finish me', sort_order: 'a0', parent_id: ids.p, estimate_minutes: 30 }),
+      ],
+    },
+  });
+  expect(seed.ok()).toBeTruthy();
+
+  const row = page.getByTestId(`myday-row-${ids.task}`);
+  const doneRow = page.getByTestId(`myday-done-${ids.task}`);
+  await expect(row).toBeVisible({ timeout: 30_000 });
+
+  // ── check off, then click the green tick: back in Available now ──
+  await page.getByTestId(`check-${ids.task}`).click();
+  await page.getByTestId('checkoff-completed').click();
+  await expect(doneRow).toHaveCount(1);
+  // "Done today" starts collapsed
+  if ((await page.getByTestId('sec-done').getAttribute('aria-expanded')) !== 'true') await page.getByTestId('sec-done').click();
+  await expect(doneRow).toBeVisible();
+  await page.getByTestId(`reopen-${ids.task}`).click();
+  await expect(row).toBeVisible();
+  await expect(doneRow).toHaveCount(0);
+
+  // ── done again; reopen from the details card instead ──
+  await page.getByTestId(`check-${ids.task}`).click();
+  await page.getByTestId('checkoff-completed').click();
+  await expect(doneRow).toBeVisible();
+  await doneRow.locator('.px-t-meta').click();
+  await expect(page.getByTestId('td-status')).toContainText('done');
+  await page.getByTestId('td-reopen').click();
+  await expect(page.getByTestId('td-status')).toHaveCount(0);
+  await expect(page.getByTestId('td-reopen')).toHaveCount(0);
+  await page.getByTestId('td-done').click();
+  await expect(row).toBeVisible();
+  await expect(doneRow).toHaveCount(0);
+});

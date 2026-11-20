@@ -595,6 +595,11 @@ function TaskDetailBody({ node, facts, ctx, onOpenTask, onClose }: { node: Node;
           </button>
         )}
         <span className="px-grow" />
+        {done && (
+          <button type="button" className="px-btn" data-testid="td-reopen" onClick={() => void run(() => commands.uncheck(node.id))}>
+            Reopen
+          </button>
+        )}
         <button type="button" className="px-btn px-btn--primary" data-testid="td-done" onClick={onClose}>Done</button>
       </div>
     </div>

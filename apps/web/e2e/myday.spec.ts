@@ -262,3 +262,54 @@ test('My Day: the running task has its own Clock out, which opens the session re
   await expect(page.getByTestId('running-timer')).toHaveCount(0);
   await expect(page.getByTestId(`clock-in-${ids.t}`)).toBeEnabled();
 });
+
+test('My Day: a task with steps expands and collapses them, on its row and in its run card', async ({ page }) => {
+  await register(page, 'steps');
+  const ids = { v: randomUUID(), r: randomUUID(), p: randomUUID(), withSteps: randomUUID(), bare: randomUUID(), s1: randomUUID() };
+  const seed = await page.request.post('/sync/upload', {
+    data: {
+      device_id: 'e2e-seed',
+      commands: [
+        cmd('node.create', { id: ids.v, node_type: 'vision', title: 'Steps Vision', sort_order: 'a0' }),
+        cmd('node.create', { id: ids.r, node_type: 'roadmap', title: 'Steps Roadmap', sort_order: 'a0', parent_id: ids.v }),
+        cmd('node.create', { id: ids.p, node_type: 'project', title: 'Steps Project', sort_order: 'a0', parent_id: ids.r }),
+        cmd('node.create', { id: ids.withSteps, node_type: 'task', title: 'Stepped Task', sort_order: 'a0', parent_id: ids.p, estimate_minutes: 30 }),
+        cmd('node.create', { id: ids.bare, node_type: 'task', title: 'Bare Task', sort_order: 'a1', parent_id: ids.p, estimate_minutes: 30 }),
+        cmd('step.add', { id: ids.s1, task_id: ids.withSteps, title: 'First step', sort_order: 'a0' }),
+      ],
+    },
+  });
+  expect(seed.ok()).toBeTruthy();
+  await expect(page.getByTestId(`myday-row-${ids.bare}`)).toBeVisible({ timeout: 30_000 });
+
+  // only the task WITH steps gets the bubble
+  const toggle = page.getByTestId(`steps-toggle-${ids.withSteps}`);
+  await expect(toggle).toHaveText('1 step', { timeout: 30_000 });
+  await expect(page.getByTestId(`steps-toggle-${ids.bare}`)).toHaveCount(0);
+
+  // expand: the checklist shows; adding and ticking work here too; no card opens
+  const panel = page.getByTestId(`substeps-${ids.withSteps}`);
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(panel.getByText('First step')).toBeVisible();
+  await expect(page.getByTestId('td-dialog')).toHaveCount(0);
+  await page.getByTestId(`step-add-${ids.withSteps}`).fill('Second step');
+  await page.getByTestId(`step-add-${ids.withSteps}`).press('Enter');
+  await expect(panel.getByText('Second step')).toBeVisible();
+  await page.getByTestId(`step-toggle-${ids.s1}`).click();
+  await expect(toggle).toHaveText('1/2 steps');
+
+  // collapse
+  await toggle.click();
+  await expect(panel).toHaveCount(0);
+
+  // clocked in: the run card carries the same bubble
+  await page.getByTestId(`clock-in-${ids.withSteps}`).click();
+  const banner = page.getByTestId('run-banner');
+  await expect(banner).toContainText('Stepped Task');
+  await banner.getByTestId(`steps-toggle-${ids.withSteps}`).click();
+  await expect(panel.getByText('Second step')).toBeVisible();
+  await expect(page.getByTestId('td-dialog')).toHaveCount(0);
+  await banner.getByTestId(`steps-toggle-${ids.withSteps}`).click();
+  await expect(panel).toHaveCount(0);
+});
