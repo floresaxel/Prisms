@@ -1493,6 +1493,7 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
 .px-ppick--field .px-ic { margin-left: auto; }
 .px-ppick--field .px-ppick-empty { font-size: 13px; }
 .px-promote--field { display: flex; align-items: stretch; }
+.px-td-v .px-ppick--field { flex: 1 1 200px; }
 /* the plain "clear" choice (e.g. Inbox — assign later): grey text on its own line, no bubble */
 .px-ppick-none { flex: 1 1 100%; padding: 3px 4px; border: 0; border-radius: 6px; background: none; color: var(--px-faint); font: inherit; font-size: 12px; text-align: left; cursor: pointer; }
 .px-ppick-none:hover, .px-ppick-none--on { color: var(--px-text-dim); background: var(--px-surface-2); }

@@ -39,6 +39,8 @@ export function ProjectPicker({
   ariaLabel,
   title,
   newProject,
+  id,
+  labelOf,
 }: {
   targets: PromoteTarget[];
   value: string;
@@ -55,7 +57,13 @@ export function ProjectPicker({
   title?: string;
   /** Offer "+ New project" in the list (omit it, or pass undefined, to hide it). */
   newProject?: NewProjectApi;
+  /** The trigger's DOM id, so a <label htmlFor> can point at it. */
+  id?: string;
+  /** How a project is named (e.g. "Garden › Beds"); it then replaces the "milestone" suffix. */
+  labelOf?: (t: PromoteTarget) => string;
 }) {
+  const nameOf = (t: PromoteTarget) => (labelOf ? labelOf(t) : t.title);
+  const isMilestone = (t: PromoteTarget) => !labelOf && t.type === 'milestone';
   const [open, setOpen] = useState(false);
   // the "+ New project" form, shown in place of the list
   const [making, setMaking] = useState(false);
@@ -141,19 +149,20 @@ export function ProjectPicker({
         ref={trigger}
         type="button"
         className={`px-ppick${variant === 'field' ? ' px-ppick--field' : ''}`}
+        id={id}
         data-testid={testId}
         data-value={value}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-label={ariaLabel}
         disabled={disabled}
-        title={title ?? (current ? current.title : undefined)}
+        title={title ?? (current ? nameOf(current) : undefined)}
         onClick={() => setOpen((o) => !o)}
       >
         {current ? (
           <span className="px-ppick-tag">
-            <span className="px-ppick-name">{current.title}</span>
-            {current.type === 'milestone' && <span className="px-ppick-kind">milestone</span>}
+            <span className="px-ppick-name">{nameOf(current)}</span>
+            {isMilestone(current) && <span className="px-ppick-kind">milestone</span>}
           </span>
         ) : (
           <span className="px-ppick-empty">{disabled ? emptyLabel : placeholder}</span>
@@ -244,8 +253,8 @@ export function ProjectPicker({
                     data-testid={testId ? `${testId}-opt-${t.id}` : undefined}
                     onClick={() => pick(t.id)}
                   >
-                    <span className="px-ppick-name">{t.title}</span>
-                    {t.type === 'milestone' && <span className="px-ppick-kind">milestone</span>}
+                    <span className="px-ppick-name">{nameOf(t)}</span>
+                    {isMilestone(t) && <span className="px-ppick-kind">milestone</span>}
                   </button>
                 ))}
                 {newProject && (

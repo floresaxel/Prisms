@@ -74,6 +74,8 @@ import {
 
 import { useSnapPref } from '../agenda-snap';
 import { formatMinutes, projectTone, rejectionMessage } from '../format';
+import { ProjectPicker } from './ProjectPicker';
+import { newProjectFor } from './useNewProject';
 
 // --- the shared controller ------------------------------------------------------
 
@@ -578,7 +580,7 @@ function ProjectField({ node, facts, targets, commands, run }: FieldProps & { fa
     const parent = facts.tree.byId.get(facts.tree.byId.get(t.id)?.parent_id ?? '');
     return parent ? `${parent.title} › ${t.title}` : `${t.title} (milestone)`;
   };
-  const options = [...targets].map((t) => ({ id: t.id, text: label(t) })).sort((a, b) => a.text.localeCompare(b.text));
+  const sorted = [...targets].sort((a, b) => label(a).localeCompare(label(b)));
 
   function choose(parentId: string) {
     if (parentId === '' || parentId === current) return;
@@ -593,12 +595,17 @@ function ProjectField({ node, facts, targets, commands, run }: FieldProps & { fa
 
   return (
     <Prop icon="layers" label="Project" htmlFor="td-project">
-      <select id="td-project" className="px-td-in px-td-in--grow" data-testid="td-project" value={current} onChange={(e) => choose(e.target.value)}>
-        {isCapture && <option value="">Inbox — not in a project yet</option>}
-        {options.map((o) => (
-          <option key={o.id} value={o.id}>{o.text}</option>
-        ))}
-      </select>
+      <ProjectPicker
+        variant="field"
+        id="td-project"
+        testId="td-project"
+        targets={sorted}
+        value={current}
+        onChange={choose}
+        labelOf={label}
+        placeholder="Inbox — not in a project yet"
+        newProject={newProjectFor(facts.tree, commands)}
+      />
     </Prop>
   );
 }

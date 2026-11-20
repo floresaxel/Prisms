@@ -209,7 +209,7 @@ describe('the card’s fields', () => {
     openCard();
     const dlg = card()!;
     expect(dlg.textContent).toContain('Work › Plan › Launch');
-    expect(input('td-project').value).toBe(p1.id);
+    expect(screen.getByTestId('td-project').getAttribute('data-value')).toBe(p1.id);
     expect(input('td-hours').value).toBe('1');
     expect(screen.getByTestId('td-logged').textContent).toBe('45m logged · 75% of duration');
   });
@@ -338,19 +338,43 @@ describe('the card’s fields', () => {
 });
 
 describe('project', () => {
+  /** Opens the project picker and clicks one of its bubbles. */
+  const choose = (id: string) => {
+    fireEvent.click(screen.getByTestId('td-project'));
+    fireEvent.click(screen.getByTestId(`td-project-opt-${id}`));
+  };
+
   it('a task moves to the end of the chosen project', () => {
     mount();
     openCard();
     const last = state.facts.tree.childrenByParent.get(p2.id)!.at(-1)!;
-    fireEvent.change(input('td-project'), { target: { value: p2.id } });
+    choose(p2.id);
     expect(command('moveNode')).toHaveBeenCalledWith(task.id, p2.id, sortOrderBetween(last.sort_order, null));
   });
 
   it('milestones are named with their project', () => {
     mount();
     openCard();
-    const options = [...(screen.getByTestId('td-project') as HTMLSelectElement).options].map((o) => o.textContent);
+    fireEvent.click(screen.getByTestId('td-project'));
+    const options = within(screen.getByRole('listbox', { name: 'Project' }))
+      .getAllByRole('option')
+      .map((o) => o.textContent);
     expect(options).toEqual(['Garden', 'Garden › Beds', 'Launch']);
+  });
+
+  it('offers a new project under a roadmap, and a task moves into it', async () => {
+    mount();
+    openCard();
+    command('createProject').mockResolvedValue(uuid(999));
+    fireEvent.click(screen.getByTestId('td-project'));
+    fireEvent.click(screen.getByTestId('td-project-new-open'));
+    fireEvent.change(screen.getByTestId('td-project-new-name'), { target: { value: 'Brand refresh' } });
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('td-project-new-create'));
+    });
+    const last = state.facts.tree.childrenByParent.get(r.id)!.at(-1)!;
+    expect(command('createProject')).toHaveBeenCalledWith({ roadmapId: r.id, title: 'Brand refresh', sortOrder: sortOrderBetween(last.sort_order, null) });
+    expect(command('moveNode')).toHaveBeenCalledWith(task.id, uuid(999), expect.any(String));
   });
 
   it('an Inbox capture is promoted into it, and has no steps or dependencies until then', () => {
@@ -362,7 +386,7 @@ describe('project', () => {
     expect(screen.queryByTestId('td-deps')).toBeNull();
     expect(screen.queryByTestId('td-add-steps')).toBeNull();
     expect(screen.queryByTestId('td-add-deps')).toBeNull();
-    fireEvent.change(input('td-project'), { target: { value: p1.id } });
+    choose(p1.id);
     expect(command('promoteActivity')).toHaveBeenCalledWith(capture.id, { parentId: p1.id });
   });
 });
