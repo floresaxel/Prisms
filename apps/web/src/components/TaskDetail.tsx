@@ -33,6 +33,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -86,8 +87,9 @@ export interface TaskDetailApi {
   /**
    * Spread onto a list row: a click on the row — anywhere but its own controls
    * (check box, buttons, selects, the click-to-rename title) — opens the card,
-   * and so does Enter/Space while the row itself has focus. A click that ends a
-   * drag (selecting the row's text, say) does not.
+   * and so does Enter/Space while the row itself has focus. A release that ends
+   * a drag or a long press (selecting the row's text, say), or that leaves text
+   * selected in the row, does not.
    */
   rowProps: (taskId: string) => {
     onMouseDown: (e: MouseEvent<HTMLElement>) => void;
@@ -118,6 +120,23 @@ function fromRowControl(target: EventTarget, row: HTMLElement): boolean {
 
 /** How far (px) the pointer may travel between press and release and still count as a click. */
 const CLICK_SLOP = 4;
+/** How long (ms) a press may be held and still count as a click — longer is a hold (to select text, say). */
+const HOLD_MS = 500;
+
+/** Where and when a press landed. */
+interface Press {
+  x: number;
+  y: number;
+  at: number;
+}
+
+const pressAt = (e: MouseEvent<HTMLElement>): Press => ({ x: e.clientX, y: e.clientY, at: performance.now() });
+
+/** True when the release that fired `e` ended a drag or a long hold, not a click. */
+function dragOrHold(p: Press | null, e: MouseEvent<HTMLElement>): boolean {
+  if (p === null) return false; // no press seen (a keyboard-made click): a click
+  return Math.hypot(e.clientX - p.x, e.clientY - p.y) > CLICK_SLOP || performance.now() - p.at >= HOLD_MS;
+}
 
 /** True when the page has text selected inside `row` — the click ended a selection. */
 function selectsTextIn(row: HTMLElement): boolean {
@@ -139,7 +158,7 @@ export function TaskDetailProvider({ ctx, children }: { ctx: CommandContext; chi
    * on the row (a drag over its text) still fires `click` — on the row — so the
    * row checks the press before it opens anything.
    */
-  const press = useRef<{ x: number; y: number; onControl: boolean } | null>(null);
+  const press = useRef<(Press & { onControl: boolean }) | null>(null);
   const close = useCallback(() => {
     // Keep an edit in progress: blurring runs the focused field's save before
     // the card (and the field) unmount — removing an element fires no blur.
@@ -153,14 +172,14 @@ export function TaskDetailProvider({ ctx, children }: { ctx: CommandContext; chi
       open,
       rowProps: (id: string) => ({
         onMouseDown: (e: MouseEvent<HTMLElement>) => {
-          press.current = { x: e.clientX, y: e.clientY, onControl: fromRowControl(e.target, e.currentTarget) };
+          press.current = { ...pressAt(e), onControl: fromRowControl(e.target, e.currentTarget) };
         },
         onClick: (e: MouseEvent<HTMLElement>) => {
           const p = press.current;
           press.current = null;
           if (fromRowControl(e.target, e.currentTarget)) return;
-          // a drag, not a click: it started on a control (the title) or moved
-          if (p && (p.onControl || Math.hypot(e.clientX - p.x, e.clientY - p.y) > CLICK_SLOP)) return;
+          // not a click: it started on a control (the title), moved, or was held
+          if (p && (p.onControl || dragOrHold(p, e))) return;
           if (selectsTextIn(e.currentTarget)) return;
           open(id);
         },
@@ -210,17 +229,53 @@ function textOffsetAt(el: HTMLElement, x: number, y: number): number | null {
   return hit !== null && hit.node instanceof Text && el.contains(hit.node) ? hit.offset : null;
 }
 
+/** Grow or shrink a textarea to exactly its content: as many rows as the text wraps to. */
+function fitHeight(el: HTMLTextAreaElement): void {
+  el.style.height = 'auto';
+  // border-box sizing: the content's scroll height plus the borders
+  el.style.height = `${el.scrollHeight + el.offsetHeight - el.clientHeight}px`;
+}
+
 /**
- * A row's title. Clicking the text turns it into an input right there, with the
- * caret where the click landed (nothing selected): Enter or clicking away saves,
- * Escape leaves the title as it was. The row's other clicks still open the
- * details card.
+ * A row's title. The text reads as text — a text cursor, and it can be selected
+ * by dragging (a drag or a long press neither renames nor opens the card). A
+ * plain click turns it into an editor right there, wrapped over the same rows
+ * as the title, with the caret where the click landed (nothing selected): Enter
+ * or clicking away saves, Escape leaves the title as it was. The row's other
+ * clicks still open the details card.
  */
 export function EditableTitle({ node, commands }: { node: Node; commands: PrismsCommands }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(node.title);
   /** Where the click that started the edit landed in the title text. */
   const caretAt = useRef<number | null>(null);
+  /** The press on the title text, to tell a click from a drag or a hold. */
+  const press = useRef<Press | null>(null);
+  const box = useRef<HTMLTextAreaElement>(null);
+
+  // the editor is as tall as its text wraps to — now, as it is typed in…
+  useLayoutEffect(() => {
+    if (editing && box.current) fitHeight(box.current);
+  }, [editing, draft]);
+  // …and when its width changes (the window is resized while editing)
+  useEffect(() => {
+    const el = box.current;
+    if (!editing || !el || typeof ResizeObserver === 'undefined') return;
+    let width = el.clientWidth;
+    const watch = new ResizeObserver(() => {
+      if (el.clientWidth === width) return;
+      width = el.clientWidth;
+      fitHeight(el);
+    });
+    watch.observe(el);
+    return () => watch.disconnect();
+  }, [editing]);
+
+  function startEditing(at: number | null) {
+    caretAt.current = at;
+    setDraft(node.title);
+    setEditing(true);
+  }
 
   function commit() {
     setEditing(false);
@@ -230,10 +285,12 @@ export function EditableTitle({ node, commands }: { node: Node; commands: Prisms
 
   if (editing) {
     return (
-      <input
+      <textarea
+        ref={box}
         className="px-title-input"
         data-testid={`title-input-${node.id}`}
         aria-label="Task title"
+        rows={1}
         value={draft}
         maxLength={MAX_TITLE_LENGTH}
         autoFocus
@@ -243,7 +300,8 @@ export function EditableTitle({ node, commands }: { node: Node; commands: Prisms
           caretAt.current = null;
           e.currentTarget.setSelectionRange(at, at);
         }}
-        onChange={(e) => setDraft(e.target.value)}
+        // a title is one line of text that wraps: a pasted line break becomes a space
+        onChange={(e) => setDraft(e.target.value.replace(/\s*[\r\n]+\s*/g, ' '))}
         onBlur={commit}
         onKeyDown={(e) => {
           if (e.key === 'Enter') {
@@ -259,21 +317,35 @@ export function EditableTitle({ node, commands }: { node: Node; commands: Prisms
       />
     );
   }
-  // the notebook mark follows the title, in every list that shows a task's title
+  // A span, not a <button>: a button's text can't be selected by dragging.
+  // role="button" also keeps the row from treating a press here as its own.
+  // The notebook mark follows the title, in every list that shows a task's title.
   return (
     <>
-      <button
-        type="button"
+      <span
+        role="button"
+        tabIndex={0}
         className="px-title-btn"
         data-testid={`title-${node.id}`}
+        onMouseDown={(e) => {
+          press.current = pressAt(e);
+        }}
         onClick={(e) => {
-          caretAt.current = textOffsetAt(e.currentTarget, e.clientX, e.clientY);
-          setDraft(node.title);
-          setEditing(true);
+          const p = press.current;
+          press.current = null;
+          // selecting the text (a drag, a hold, or a selection it leaves) is not a rename
+          if (dragOrHold(p, e) || selectsTextIn(e.currentTarget)) return;
+          startEditing(textOffsetAt(e.currentTarget, e.clientX, e.clientY));
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            startEditing(null);
+          }
         }}
       >
         {node.title}
-      </button>
+      </span>
       <DetailsMark node={node} />
     </>
   );
