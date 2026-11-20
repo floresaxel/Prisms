@@ -176,7 +176,7 @@ function DoneRow({ item, commands, detail }: { item: DoneTodayItem; commands: Pr
   const id = item.task.id;
   return (
     <li className="px-trow px-trow--done" data-testid={`myday-done-${id}`} data-project={item.projectId ?? ''} {...detail.rowProps(id)}>
-      <span className="px-ckb px-ckb--done"><Ic name="check" /></span>
+      <button className="px-ckb px-ckb--done" data-testid={`reopen-${id}`} aria-label="Reopen" title="Reopen" onClick={() => void commands.uncheck(id)}><Ic name="check" /></button>
       <div className="px-t-main">
         <div className="px-t-title"><EditableTitle node={item.task} commands={commands} /></div>
         <div className="px-t-meta">

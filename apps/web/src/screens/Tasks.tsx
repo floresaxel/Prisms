@@ -206,7 +206,7 @@ export function Tasks({ ctx }: { ctx: CommandContext }) {
                 <ul className="px-rows px-rows--muted" data-testid="status-done">
                   {doneToday.map((d) => (
                     <li className="px-trow px-trow--done" key={d.task.id} data-testid={`done-${d.task.id}`} {...detail.rowProps(d.task.id)}>
-                      <span className="px-ckb px-ckb--done"><Ic name="check" /></span>
+                      <button className="px-ckb px-ckb--done" data-testid={`reopen-${d.task.id}`} aria-label="Reopen" title="Reopen" onClick={() => void commands.uncheck(d.task.id)}><Ic name="check" /></button>
                       <div className="px-t-main"><div className="px-t-title"><EditableTitle node={d.task} commands={commands} /></div></div>
                       {d.unfocused && <UnfocusedTag />}
                     </li>
