@@ -54,10 +54,12 @@ import {
 
 import { DueDate } from '../components/DueDate';
 import { InboxDelete } from '../components/InboxDelete';
+import { ProjectPicker } from '../components/ProjectPicker';
 import { RunMark } from '../components/RunMark';
 import { EditableTitle, useTaskDetail, type TaskDetailApi } from '../components/TaskDetail';
 import { useTimers } from '../components/Timers';
 import { UnfocusedTag } from '../components/UnfocusedTag';
+import { useNewProject, type NewProjectApi } from '../components/useNewProject';
 import { AutomatedMark } from '../components/Why';
 import { formatElapsed, formatMinutes, projectTone } from '../format';
 import { listLayoutClass } from '../list-layout';
@@ -246,6 +248,7 @@ export function MyDay({ ctx, onNavigate }:{ ctx: CommandContext; onNavigate?: (h
   // they join Available now with their date intact.
   const activities = useActivityInbox();
   const promoteTargets = usePromoteTargets();
+  const newProject = useNewProject(commands);
   const todayDate = ctxFacts.today(nowMin);
   const capturedToday = activities.filter((a) => a.due_date === todayDate);
   const [captureTitle, setCaptureTitle] = useState('');
@@ -421,7 +424,7 @@ export function MyDay({ ctx, onNavigate }:{ ctx: CommandContext; onNavigate?: (h
               </div>
               <ul className="px-rows" data-testid="myday-captured">
                 {capturedToday.map((a) => (
-                  <CapturedRow key={a.id} activity={a} targets={promoteTargets} commands={commands} detail={detail} />
+                  <CapturedRow key={a.id} activity={a} targets={promoteTargets} newProject={newProject} commands={commands} detail={detail} />
                 ))}
               </ul>
             </>
@@ -491,26 +494,16 @@ export function MyDay({ ctx, onNavigate }:{ ctx: CommandContext; onNavigate?: (h
  * into from here — promoting it (as on Tasks) makes it a real task, which keeps
  * its due date and moves up into Available now.
  */
-function CapturedRow({ activity, targets, commands, detail }: { activity: Node; targets: PromoteTarget[]; commands: PrismsCommands; detail: TaskDetailApi }) {
+function CapturedRow({ activity, targets, newProject, commands, detail }: { activity: Node; targets: PromoteTarget[]; newProject: NewProjectApi | undefined; commands: PrismsCommands; detail: TaskDetailApi }) {
+  // Same as the Tasks Inbox row: nothing preselected, so Assign waits for a choice.
   const [parentId, setParentId] = useState('');
-  const selected = parentId || targets[0]?.id || '';
+  const selected = targets.some((t) => t.id === parentId) ? parentId : '';
   return (
     <li className="px-trow px-trow--inbox" data-testid={`myday-captured-${activity.id}`} {...detail.rowProps(activity.id)}>
       <div className="px-t-main"><div className="px-t-title"><EditableTitle node={activity} commands={commands} /></div></div>
       <span className="px-due px-due--today"><Ic name="cal" />Today</span>
       <span className="px-promote">
-        <select
-          data-testid={`myday-promote-target-${activity.id}`}
-          aria-label="Assign to"
-          value={selected}
-          onChange={(e) => setParentId(e.target.value)}
-          disabled={targets.length === 0}
-        >
-          {targets.length === 0 && <option value="">No project to assign to</option>}
-          {targets.map((t) => (
-            <option key={t.id} value={t.id}>{t.title} ({t.type})</option>
-          ))}
-        </select>
+        <ProjectPicker targets={targets} value={selected} onChange={setParentId} testId={`myday-promote-target-${activity.id}`} newProject={newProject} />
         <button
           className="px-btn px-btn--sm px-btn--primary"
           data-testid={`myday-promote-${activity.id}`}
