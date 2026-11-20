@@ -312,10 +312,6 @@ function InboxRow({ activity, targets, newProject, commands, detail, onComplete 
     <li className="px-trow px-trow--inbox" {...detail.rowProps(activity.id)}>
       <InboxCheck activity={activity} onComplete={onComplete} />
       <div className="px-t-main"><div className="px-t-title"><EditableTitle node={activity} commands={commands} /></div></div>
-      {/* a fixed slot, so the pickers line up whether or not a row has details */}
-      <span className="px-t-hasnote" data-testid={`inbox-has-details-${activity.id}`} data-has={activity.description.trim() !== ''}>
-        {activity.description.trim() !== '' && <Ic name="notebook" title="Has details" />}
-      </span>
       <span className="px-promote">
         <ProjectPicker targets={targets} value={selected} onChange={setParentId} testId={`promote-target-${activity.id}`} newProject={newProject} />
         <button

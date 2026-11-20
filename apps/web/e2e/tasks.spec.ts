@@ -204,19 +204,20 @@ test('every project picker can mint a project on the spot, and selects it', asyn
   await expect(page.getByTestId('inbox-complete-promote')).toBeEnabled();
 });
 
-test('an Inbox capture with details shows a notebook icon before its project picker', async ({ page }) => {
+test('a task with details shows a notebook icon right after its title, in every list', async ({ page }) => {
   await register(page, 'notebook');
   await goto(page, 'tasks');
   await page.getByTestId('activity-title').fill('Plan the offsite');
   await page.getByTestId('activity-add').click();
   const row = page.getByTestId('inbox').locator('li', { hasText: 'Plan the offsite' });
   await expect(row).toBeVisible();
-  const slot = row.getByTestId(/^inbox-has-details-/);
-  await expect(slot).toHaveAttribute('data-has', 'false');
-  await expect(slot.locator('svg')).toHaveCount(0);
+  const title = row.getByTestId(/^title-/);
+  const mark = row.getByTestId(/^has-details-/);
+  await expect(mark).toHaveCount(0); // no details yet, no icon
 
-  // write some details in the card (click the row's quiet slot: it opens the card)
-  await slot.click();
+  // write some details in the card (click the empty part of the title line: it opens the card)
+  const line = await row.locator('.px-t-title').boundingBox();
+  await row.locator('.px-t-title').click({ position: { x: line!.width - 8, y: line!.height / 2 } });
   await expect(page.getByTestId('td-dialog')).toBeVisible();
   if ((await page.getByTestId('td-details').count()) === 0) await page.getByTestId('td-add-details').click();
   await page.getByTestId('td-details').fill('Venue shortlist and budget.');
@@ -224,16 +225,16 @@ test('an Inbox capture with details shows a notebook icon before its project pic
   await page.keyboard.press('Escape');
   await expect(page.getByTestId('td-dialog')).toHaveCount(0);
 
-  await expect(slot).toHaveAttribute('data-has', 'true');
-  await expect(slot.locator('svg')).toHaveCount(1);
-  // the icon sits between the title and the project picker
-  const [slotBox, pickBox, titleBox] = await Promise.all([
-    slot.boundingBox(),
-    row.getByTestId(/^promote-target-/).boundingBox(),
-    row.locator('.px-t-main').boundingBox(),
-  ]);
-  expect(slotBox!.x).toBeGreaterThanOrEqual(titleBox!.x + titleBox!.width - 1);
-  expect(slotBox!.x + slotBox!.width).toBeLessThanOrEqual(pickBox!.x + 1);
+  // the icon follows the title on the same line, ahead of the project picker
+  await expect(mark).toHaveCount(1);
+  const [t, m, p] = await Promise.all([title.boundingBox(), mark.boundingBox(), row.getByTestId(/^promote-target-/).boundingBox()]);
+  expect(m!.x).toBeGreaterThanOrEqual(t!.x + t!.width - 1);
+  expect(m!.x + m!.width).toBeLessThanOrEqual(p!.x + 1);
+  expect(Math.abs(m!.y + m!.height / 2 - (t!.y + t!.height / 2))).toBeLessThan(t!.height);
+
+  // …and on the other tab
+  await page.getByTestId('tasks-tab-bystatus').click();
+  await expect(page.getByTestId('status-inbox').getByTestId(/^has-details-/)).toHaveCount(1);
 });
 
 test('the Inbox × asks before deleting — Keep and Escape leave the item, Delete removes it', async ({ page }) => {

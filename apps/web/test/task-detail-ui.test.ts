@@ -302,6 +302,20 @@ describe('the card’s fields', () => {
   });
 });
 
+describe('details mark', () => {
+  it('a notebook icon follows the title only when the task has details', () => {
+    const plain = node('task', 'No notes here', p1);
+    const noted = node('task', 'Has notes', p1, { description: 'Quote the mayor.' });
+    const blank = node('task', 'Whitespace only', p1, { description: '   \n ' });
+    mount([plain, noted, blank]);
+    expect(screen.queryByTestId(`has-details-${plain.id}`)).toBeNull();
+    expect(screen.queryByTestId(`has-details-${blank.id}`)).toBeNull();
+    const mark = screen.getByTestId(`has-details-${noted.id}`);
+    // right after the title button, in the same row
+    expect(screen.getByTestId(`title-${noted.id}`).nextElementSibling).toBe(mark);
+  });
+});
+
 describe('project', () => {
   /** Opens the project picker and clicks one of its bubbles. */
   const choose = (id: string) => {
