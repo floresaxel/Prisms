@@ -204,6 +204,39 @@ test('every project picker can mint a project on the spot, and selects it', asyn
   await expect(page.getByTestId('inbox-complete-promote')).toBeEnabled();
 });
 
+test('a task with details shows a notebook icon right after its title, in every list', async ({ page }) => {
+  await register(page, 'notebook');
+  await goto(page, 'tasks');
+  await page.getByTestId('activity-title').fill('Plan the offsite');
+  await page.getByTestId('activity-add').click();
+  const row = page.getByTestId('inbox').locator('li', { hasText: 'Plan the offsite' });
+  await expect(row).toBeVisible();
+  const title = row.getByTestId(/^title-/);
+  const mark = row.getByTestId(/^has-details-/);
+  await expect(mark).toHaveCount(0); // no details yet, no icon
+
+  // write some details in the card (click the empty part of the title line: it opens the card)
+  const line = await row.locator('.px-t-title').boundingBox();
+  await row.locator('.px-t-title').click({ position: { x: line!.width - 8, y: line!.height / 2 } });
+  await expect(page.getByTestId('td-dialog')).toBeVisible();
+  if ((await page.getByTestId('td-details').count()) === 0) await page.getByTestId('td-add-details').click();
+  await page.getByTestId('td-details').fill('Venue shortlist and budget.');
+  await page.getByTestId('td-details').blur();
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('td-dialog')).toHaveCount(0);
+
+  // the icon follows the title on the same line, ahead of the project picker
+  await expect(mark).toHaveCount(1);
+  const [t, m, p] = await Promise.all([title.boundingBox(), mark.boundingBox(), row.getByTestId(/^promote-target-/).boundingBox()]);
+  expect(m!.x).toBeGreaterThanOrEqual(t!.x + t!.width - 1);
+  expect(m!.x + m!.width).toBeLessThanOrEqual(p!.x + 1);
+  expect(Math.abs(m!.y + m!.height / 2 - (t!.y + t!.height / 2))).toBeLessThan(t!.height);
+
+  // …and on the other tab
+  await page.getByTestId('tasks-tab-bystatus').click();
+  await expect(page.getByTestId('status-inbox').getByTestId(/^has-details-/)).toHaveCount(1);
+});
+
 test('the Inbox × asks before deleting — Keep and Escape leave the item, Delete removes it', async ({ page }) => {
   await register(page, 'delete');
   await goto(page, 'tasks');

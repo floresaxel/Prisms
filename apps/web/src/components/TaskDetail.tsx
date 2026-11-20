@@ -74,6 +74,7 @@ import {
 
 import { useSnapPref } from '../agenda-snap';
 import { formatMinutes, projectTone, rejectionMessage } from '../format';
+import { DetailsMark } from './DetailsMark';
 import { ProjectPicker } from './ProjectPicker';
 import { newProjectFor } from './useNewProject';
 
@@ -258,19 +259,23 @@ export function EditableTitle({ node, commands }: { node: Node; commands: Prisms
       />
     );
   }
+  // the notebook mark follows the title, in every list that shows a task's title
   return (
-    <button
-      type="button"
-      className="px-title-btn"
-      data-testid={`title-${node.id}`}
-      onClick={(e) => {
-        caretAt.current = textOffsetAt(e.currentTarget, e.clientX, e.clientY);
-        setDraft(node.title);
-        setEditing(true);
-      }}
-    >
-      {node.title}
-    </button>
+    <>
+      <button
+        type="button"
+        className="px-title-btn"
+        data-testid={`title-${node.id}`}
+        onClick={(e) => {
+          caretAt.current = textOffsetAt(e.currentTarget, e.clientX, e.clientY);
+          setDraft(node.title);
+          setEditing(true);
+        }}
+      >
+        {node.title}
+      </button>
+      <DetailsMark node={node} />
+    </>
   );
 }
 

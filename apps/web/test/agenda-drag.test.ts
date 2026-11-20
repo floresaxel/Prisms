@@ -50,8 +50,8 @@ const command = (name: string) => {
 };
 const commands = new Proxy({} as Record<string, unknown>, { get: (_t, p: string) => command(p) });
 
-/** Only `.id` and `.title` are read off the node here — the rest is not this screen's business. */
-const node = (id: string, title: string) => ({ id, title }) as AgendaTask['task'];
+/** Only `.id`, `.title` and `.description` (for the details mark) are read off the node here — the rest is not this screen's business. */
+const node = (id: string, title: string) => ({ id, title, description: '' }) as AgendaTask['task'];
 
 const task = (id: string, title: string, minutes: number, scheduled = false): AgendaTask => ({
   task: node(id, title),
