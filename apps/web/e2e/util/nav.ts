@@ -34,6 +34,35 @@ export type NavKey =
 const PROJECT_TABS = new Set<NavKey>(['board', 'timeline', 'graph', 'decisions']);
 const AUTOMATION_TABS = new Set<NavKey>(['rules', 'blockers', 'built-in']);
 
+/** The route each sidebar item shows. */
+const ROUTE: Partial<Record<NavKey, string>> = {
+  myday: '/',
+  tasks: '/tasks',
+  review: '/review',
+  agenda: '/agenda',
+  habits: '/habits',
+  journal: '/journal',
+  vision: '/vision',
+  roadmap: '/roadmap',
+  projects: '/projects',
+  dashboard: '/dashboard',
+  automations: '/automations',
+  settings: '/settings',
+};
+
+/**
+ * Click a sidebar item and wait until its screen is the one SHOWN. A screen
+ * change blurs the old page out first (pageSwap.ts), so for ~110 ms the sidebar
+ * already names the new screen while the old one is still mounted; the page
+ * wrapper's `data-route` moves only when the new screen is committed. Without
+ * this, a spec that leaves a screen and comes straight back never left it.
+ */
+async function openScreen(page: Page, key: NavKey): Promise<void> {
+  await page.getByTestId(`nav-${key}`).click();
+  const route = ROUTE[key];
+  if (route) await page.locator(`#px-page[data-route="${route}"]`).waitFor();
+}
+
 /**
  * Navigate to a screen by semantic key. For a hub tab, clicks the parent nav
  * item then the tab, so the intended tab is reached regardless of the hub's
@@ -41,14 +70,14 @@ const AUTOMATION_TABS = new Set<NavKey>(['rules', 'blockers', 'built-in']);
  */
 export async function goto(page: Page, key: NavKey): Promise<void> {
   if (PROJECT_TABS.has(key)) {
-    await page.getByTestId('nav-projects').click();
+    await openScreen(page, 'projects');
     await page.getByTestId(`tab-${key}`).click();
     return;
   }
   if (AUTOMATION_TABS.has(key)) {
-    await page.getByTestId('nav-automations').click();
+    await openScreen(page, 'automations');
     await page.getByTestId(`tab-${key}`).click();
     return;
   }
-  await page.getByTestId(`nav-${key}`).click();
+  await openScreen(page, key);
 }

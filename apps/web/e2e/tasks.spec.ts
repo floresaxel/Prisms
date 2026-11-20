@@ -67,8 +67,18 @@ test('an Inbox capture completes from the Inbox — as an unfocused task, or add
   // ── add to a project and complete ──
   const email = await rowId('Draft the launch email');
   await page.getByTestId(`inbox-check-${email}`).click();
-  await expect(page.getByTestId('inbox-complete-target').locator(`option[value="${ids.p}"]`)).toHaveCount(1, { timeout: 30_000 });
-  await page.getByTestId('inbox-complete-target').selectOption(ids.p);
+  // the picker starts empty, so "Add & complete" waits for a choice
+  const target = page.getByTestId('inbox-complete-target');
+  await expect(target).toBeEnabled({ timeout: 30_000 });
+  await expect(target).toContainText('Assign project');
+  await expect(page.getByTestId('inbox-complete-promote')).toBeDisabled();
+  await target.click();
+  await page.getByTestId(`inbox-complete-target-opt-${ids.p}`).click();
+  await expect(target).toHaveAttribute('data-value', ids.p);
+  // Escape on the open picker closes only the picker, not the dialog
+  await target.click();
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('inbox-complete-dialog')).toBeVisible();
   await page.getByTestId('inbox-complete-promote').click();
   await expect(page.getByTestId('inbox')).not.toContainText('Draft the launch email');
 
@@ -103,9 +113,17 @@ test('the capture bar can preselect a project; it sticks until you leave Tasks',
 
   await goto(page, 'tasks');
   const pick = page.getByTestId('capture-project');
-  await expect(pick.locator(`option[value="${ids.p}"]`)).toHaveCount(1, { timeout: 30_000 });
-  await expect(pick).toHaveValue(''); // Inbox by default
-  await pick.selectOption(ids.p);
+  // the capture picker is a bubble picker: open it and click a choice
+  const choose = async (id: string) => {
+    await pick.click();
+    await page.getByTestId(`capture-project-opt-${id === '' ? 'none' : id}`).click();
+  };
+  await expect(pick).toHaveAttribute('data-value', ''); // Inbox by default
+  await expect(pick).toContainText('Inbox — assign later');
+  await pick.click();
+  await expect(page.getByTestId(`capture-project-opt-${ids.p}`)).toBeVisible({ timeout: 30_000 });
+  await page.getByTestId(`capture-project-opt-${ids.p}`).click();
+  await expect(pick).toContainText('Launch');
 
   // two captures in a row: both go into the project, and the choice is still there
   for (const t of ['Book the venue', 'Order the banners']) {
@@ -113,24 +131,110 @@ test('the capture bar can preselect a project; it sticks until you leave Tasks',
     await page.getByTestId('activity-add').click();
     await expect(page.getByTestId(`project-group-${ids.p}`)).toContainText(t);
   }
-  await expect(pick).toHaveValue(ids.p);
+  await expect(pick).toHaveAttribute('data-value', ids.p);
   await expect(page.getByTestId('inbox')).not.toContainText('Book the venue');
 
   // other Tasks tabs keep it
   await page.getByTestId('tasks-tab-bystatus').click();
-  await expect(pick).toHaveValue(ids.p);
+  await expect(pick).toHaveAttribute('data-value', ids.p);
 
   // back to Inbox: captures wait there again
-  await pick.selectOption('');
+  await choose('');
   await page.getByTestId('activity-title').fill('Stray thought');
   await page.getByTestId('activity-add').click();
   await expect(page.getByTestId('status-inbox')).toContainText('Stray thought');
 
   // leave Tasks and return: reset to Inbox
-  await pick.selectOption(ids.p);
+  await choose(ids.p);
   await goto(page, 'myday');
   await goto(page, 'tasks');
-  await expect(page.getByTestId('capture-project')).toHaveValue('');
+  await expect(page.getByTestId('capture-project')).toHaveAttribute('data-value', '');
+});
+
+test('every project picker can mint a project on the spot, and selects it', async ({ page }) => {
+  await register(page, 'newproject');
+  const ids = { v: randomUUID(), r: randomUUID() };
+  const seed = await page.request.post('/sync/upload', {
+    data: {
+      device_id: 'e2e-seed',
+      commands: [
+        cmd('node.create', { id: ids.v, node_type: 'vision', title: 'Work', sort_order: 'a0' }),
+        cmd('node.create', { id: ids.r, node_type: 'roadmap', title: 'Roadmap', sort_order: 'a0', parent_id: ids.v }),
+      ],
+    },
+  });
+  expect(seed.ok()).toBeTruthy();
+
+  await goto(page, 'tasks');
+  const pick = page.getByTestId('capture-project');
+
+  // the capture bar: "+ New project" is offered even with no project yet; the new
+  // one becomes the capture target (one roadmap → no roadmap choice is asked)
+  await expect(pick).toBeEnabled({ timeout: 30_000 });
+  await pick.click();
+  await expect(page.getByTestId('capture-project-new-open')).toBeVisible({ timeout: 30_000 });
+  await page.getByTestId('capture-project-new-open').click();
+  await expect(page.getByTestId('capture-project-new-create')).toBeDisabled();
+  await page.getByTestId('capture-project-new-name').fill('Brand refresh');
+  await page.getByTestId('capture-project-new-name').press('Enter');
+  await expect(pick).toContainText('Brand refresh');
+
+  // an Inbox row and the complete dialog offer it too, and can add another
+  await pick.click();
+  await page.getByTestId('capture-project-opt-none').click();
+  await page.getByTestId('activity-title').fill('Pick a typeface');
+  await page.getByTestId('activity-add').click();
+  const row = page.getByTestId('inbox').locator('li', { hasText: 'Pick a typeface' });
+  const rowPick = row.getByTestId(/^promote-target-/);
+  await rowPick.click();
+  await expect(page.getByRole('option', { name: 'Brand refresh' })).toBeVisible();
+  await page.getByTestId(/^promote-target-.*-new-open$/).click();
+  await page.getByTestId(/^promote-target-.*-new-name$/).fill('Website');
+  await page.getByTestId(/^promote-target-.*-new-create$/).click();
+  await expect(rowPick).toContainText('Website');
+  await expect(row.getByRole('button', { name: 'Assign', exact: true })).toBeEnabled();
+
+  await row.getByTestId(/^inbox-check-/).click();
+  const target = page.getByTestId('inbox-complete-target');
+  await target.click();
+  await page.getByTestId('inbox-complete-target-new-open').click();
+  await page.getByTestId('inbox-complete-target-new-name').fill('Launch plan');
+  await page.getByTestId('inbox-complete-target-new-create').click();
+  await expect(target).toContainText('Launch plan');
+  await expect(page.getByTestId('inbox-complete-promote')).toBeEnabled();
+});
+
+test('a task with details shows a notebook icon right after its title, in every list', async ({ page }) => {
+  await register(page, 'notebook');
+  await goto(page, 'tasks');
+  await page.getByTestId('activity-title').fill('Plan the offsite');
+  await page.getByTestId('activity-add').click();
+  const row = page.getByTestId('inbox').locator('li', { hasText: 'Plan the offsite' });
+  await expect(row).toBeVisible();
+  const title = row.getByTestId(/^title-/);
+  const mark = row.getByTestId(/^has-details-/);
+  await expect(mark).toHaveCount(0); // no details yet, no icon
+
+  // write some details in the card (click the empty part of the title line: it opens the card)
+  const line = await row.locator('.px-t-title').boundingBox();
+  await row.locator('.px-t-title').click({ position: { x: line!.width - 8, y: line!.height / 2 } });
+  await expect(page.getByTestId('td-dialog')).toBeVisible();
+  if ((await page.getByTestId('td-details').count()) === 0) await page.getByTestId('td-add-details').click();
+  await page.getByTestId('td-details').fill('Venue shortlist and budget.');
+  await page.getByTestId('td-details').blur();
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('td-dialog')).toHaveCount(0);
+
+  // the icon follows the title on the same line, ahead of the project picker
+  await expect(mark).toHaveCount(1);
+  const [t, m, p] = await Promise.all([title.boundingBox(), mark.boundingBox(), row.getByTestId(/^promote-target-/).boundingBox()]);
+  expect(m!.x).toBeGreaterThanOrEqual(t!.x + t!.width - 1);
+  expect(m!.x + m!.width).toBeLessThanOrEqual(p!.x + 1);
+  expect(Math.abs(m!.y + m!.height / 2 - (t!.y + t!.height / 2))).toBeLessThan(t!.height);
+
+  // …and on the other tab
+  await page.getByTestId('tasks-tab-bystatus').click();
+  await expect(page.getByTestId('status-inbox').getByTestId(/^has-details-/)).toHaveCount(1);
 });
 
 test('the Inbox × asks before deleting — Keep and Escape leave the item, Delete removes it', async ({ page }) => {
@@ -184,9 +288,17 @@ test('capture → promote lands the task under its project group; the Inbox grou
   const inboxRow = page.getByTestId('inbox').locator('li', { hasText: 'Sharpen the gouges' });
   await expect(inboxRow).toBeVisible();
 
-  // wait for the seeded project to sync so it is a promote target, then promote
-  await expect(inboxRow.locator('select')).toContainText('Launch', { timeout: 30_000 });
-  await inboxRow.getByRole('button', { name: 'Assign' }).click();
+  // the picker starts empty ("Assign project"); wait for the seeded project to
+  // sync so it is a promote target, choose it, then promote
+  const picker = inboxRow.getByTestId(/^promote-target-/);
+  await expect(picker).toBeEnabled({ timeout: 30_000 });
+  await expect(picker).toContainText('Assign project');
+  await expect(inboxRow.getByRole('button', { name: 'Assign', exact: true })).toBeDisabled();
+  await picker.click();
+  // (the picker's own bubbles — the capture bar's project <select> has a "Launch" option too)
+  await page.locator('.px-ppick-opt', { hasText: 'Launch' }).click();
+  await expect(picker).toContainText('Launch');
+  await inboxRow.getByRole('button', { name: 'Assign', exact: true }).click();
 
   // it leaves the Inbox group and now lives under the "Launch" project group
   await expect(page.getByTestId('inbox')).not.toContainText('Sharpen the gouges');

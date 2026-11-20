@@ -34,6 +34,7 @@ import {
 
 import { DayJournalPanel } from '../components/DayJournal';
 import { NoteSwap } from '../components/NoteSwap';
+import { useTabSwap } from '../components/tabSwap';
 import { isJournalFilterActive, toDayLogFilter, useJournalFilter } from '../journal-filter';
 
 const MONTHS_SHOWN = 12;
@@ -153,7 +154,12 @@ export function Journal({ ctx }: { ctx: CommandContext }) {
   const monthList = useMemo(() => monthsBack(curMonth, MONTHS_SHOWN), [curMonth]);
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set([curMonth]));
   const [selectedDay, setSelectedDay] = useState<string>(today);
-  const [view, setView] = useState<View>('date');
+  const [view, setViewState] = useState<View>('date');
+  // The note list blurs out and back in when the grouping changes (tabSwap.ts).
+  const [listRef, swapList] = useTabSwap();
+  const setView = (v: View) => {
+    if (v !== view) swapList(() => setViewState(v));
+  };
   const { filter, patch, clear } = useJournalFilter();
 
   // By date holds only the expanded months (lazy); by tag needs them all. The
@@ -324,7 +330,7 @@ export function Journal({ ctx }: { ctx: CommandContext }) {
       </div>
 
       <div className="px-jn-cols">
-        <div className="px-jn-months" data-testid="journal-months">
+        <div className="px-jn-months" data-testid="journal-months" ref={listRef}>
           {/* Pinned to the top of the list in both views, and independent of the
               filters: it is a way BACK, not a note, so it stays even when today has
               nothing written and no note row exists. */}

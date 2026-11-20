@@ -62,8 +62,11 @@ test('inbox → promote → clock in/out → review, offline then synced; double
   const inboxRow = page.getByTestId('inbox').locator('li', { hasText: 'Promoted Task' });
   await expect(inboxRow).toBeVisible();
 
-  // promote it into the seeded project (only target → default selection)
-  await inboxRow.getByRole('button', { name: 'Assign' }).click();
+  // promote it into the seeded project: the picker starts empty, so choose it
+  await inboxRow.getByTestId(/^promote-target-/).click();
+  // (the picker's own bubbles — the capture bar's project <select> has a "Launch" option too)
+  await page.locator('.px-ppick-opt', { hasText: 'Launch' }).click();
+  await inboxRow.getByRole('button', { name: 'Assign', exact: true }).click();
   await expect(page.getByTestId('inbox')).not.toContainText('Promoted Task');
 
   // --- worklist: the promoted task is now an available task --------------

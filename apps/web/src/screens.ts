@@ -14,7 +14,7 @@
  * Every chunk is still in the service worker's precache, so offline navigation
  * works exactly as before.
  */
-import { lazy } from 'react';
+import { lazy, type ComponentType } from 'react';
 
 export type Route =
   | '/'
@@ -46,30 +46,64 @@ const modules = {
   '/settings': () => import('./screens/Settings'),
 } satisfies Record<Route, () => Promise<unknown>>;
 
-export const MyDay = lazy(() => modules['/']().then((m) => ({ default: m.MyDay })));
-export const Tasks = lazy(() => modules['/tasks']().then((m) => ({ default: m.Tasks })));
-export const Agenda = lazy(() => modules['/agenda']().then((m) => ({ default: m.Agenda })));
-export const Habits = lazy(() => modules['/habits']().then((m) => ({ default: m.Habits })));
-export const Journal = lazy(() => modules['/journal']().then((m) => ({ default: m.Journal })));
-export const Vision = lazy(() => modules['/vision']().then((m) => ({ default: m.Vision })));
-export const Roadmap = lazy(() => modules['/roadmap']().then((m) => ({ default: m.Roadmap })));
-export const Projects = lazy(() => modules['/projects']().then((m) => ({ default: m.Projects })));
-export const Dashboard = lazy(() => modules['/dashboard']().then((m) => ({ default: m.Dashboard })));
-export const Automations = lazy(() => modules['/automations']().then((m) => ({ default: m.Automations })));
-export const Review = lazy(() => modules['/review']().then((m) => ({ default: m.Review })));
-export const Settings = lazy(() => modules['/settings']().then((m) => ({ default: m.Settings })));
+/** Each route's module once its chunk has arrived (see `screen`). */
+const loaded = new Map<Route, unknown>();
+
+/** Fetch a screen's chunk, remembering the module for `screen`'s synchronous path. */
+function load(route: Route): Promise<unknown> {
+  return modules[route]().then((m) => {
+    loaded.set(route, m);
+    return m;
+  });
+}
+
+/**
+ * A lazy screen that does NOT suspend once its chunk is already here. React's
+ * `lazy` resolves synchronously when its loader returns a thenable that settles
+ * on the spot (it calls `then` and checks the status straight after); a real
+ * promise settles a microtask later, so the first render of every screen used
+ * to flash the Suspense skeleton even with the chunk preloaded — and a page
+ * switch (`swapPage`) would blur in on that skeleton, then snap to the page.
+ */
+function screen<P extends object>(route: Route, pick: (m: never) => ComponentType<P>) {
+  const component = (m: unknown) => ({ default: pick(m as never) });
+  return lazy(() => {
+    const m = loaded.get(route);
+    if (m === undefined) return load(route).then(component);
+    const settled = { then: (resolve: (v: { default: ComponentType<P> }) => void) => resolve(component(m)) };
+    return settled as unknown as Promise<{ default: ComponentType<P> }>;
+  });
+}
+
+export const MyDay = screen('/', (m: typeof import('./screens/MyDay')) => m.MyDay);
+export const Tasks = screen('/tasks', (m: typeof import('./screens/Tasks')) => m.Tasks);
+export const Agenda = screen('/agenda', (m: typeof import('./screens/Agenda')) => m.Agenda);
+export const Habits = screen('/habits', (m: typeof import('./screens/Habits')) => m.Habits);
+export const Journal = screen('/journal', (m: typeof import('./screens/Journal')) => m.Journal);
+export const Vision = screen('/vision', (m: typeof import('./screens/Vision')) => m.Vision);
+export const Roadmap = screen('/roadmap', (m: typeof import('./screens/Roadmap')) => m.Roadmap);
+export const Projects = screen('/projects', (m: typeof import('./screens/Projects')) => m.Projects);
+export const Dashboard = screen('/dashboard', (m: typeof import('./screens/Dashboard')) => m.Dashboard);
+export const Automations = screen('/automations', (m: typeof import('./screens/Automations')) => m.Automations);
+export const Review = screen('/review', (m: typeof import('./screens/Review')) => m.Review);
+export const Settings = screen('/settings', (m: typeof import('./screens/Settings')) => m.Settings);
 
 /**
  * Start fetching one screen's chunk now. A failure is not reported here: the
  * screen's own render asks again, and its error boundary says what went wrong.
  */
 export function preloadScreen(route: Route): void {
-  modules[route]().catch(() => undefined);
+  load(route).catch(() => undefined);
+}
+
+/** A screen's chunk; once this resolves the screen renders without suspending. */
+export function loadScreen(route: Route): Promise<unknown> {
+  return load(route);
 }
 
 /** Fetch every screen's chunk — for an idle moment after the first one is up. */
 export function preloadAllScreens(): void {
-  for (const load of Object.values(modules)) load().catch(() => undefined);
+  for (const route of Object.keys(modules) as Route[]) load(route).catch(() => undefined);
 }
 
 /**

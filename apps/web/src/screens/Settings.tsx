@@ -7,7 +7,8 @@
  * Not everything here is account data: the agenda snap grid is a property of
  * the pointer in front of you, and the agenda's date-range label is a property
  * of the screen you are reading it on, so both are stored per device and apply
- * the moment they are picked — no Save, nothing to sync. Their rows say so.
+ * the moment they are picked — no Save, nothing to sync. Their rows say so. The
+ * task due-date format (`20/Nov` by default) is stored the same way.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 
@@ -16,8 +17,10 @@ import { addDays, asEpochMillis, bucketDate, type ImportReport } from '@prisms/c
 import { Ic, subscribeHistory, useCommands, useUserSettings, type CommandContext, type StreamSubscriber } from '@prisms/ui';
 
 import { DEFAULT_SPAN } from '../agenda-layout';
+import { DUE_DATE_FORMATS, formatDueDate, setDueDateFormatPref, useDueDateFormatPref } from '../due-date-format';
 import { formatAgendaRange, RANGE_FORMATS, setRangeFormatPref, useRangeFormatPref } from '../agenda-range';
 import { setSnapPref, SNAP_OPTIONS, useSnapPref } from '../agenda-snap';
+import { useTabSwap } from '../components/tabSwap';
 import { isDesktop } from '../desktop';
 import { downloadExport, downloadJournalArchive, dryRunImport, fetchExport, readImportFile, restoreImport } from '../portability';
 import { allTimezones, deviceTimezone, isValidTimezone, timezoneTitle } from '../timezones';
@@ -31,6 +34,7 @@ export function Settings({ ctx }: { ctx: CommandContext }) {
 
   const snap = useSnapPref();
   const rangeFormat = useRangeFormatPref();
+  const dueFormat = useDueDateFormatPref();
   /**
    * The options are labelled with what they would ACTUALLY say, over the days
    * the Agenda would open on — today, forward by the default span. A live
@@ -48,6 +52,8 @@ export function Settings({ ctx }: { ctx: CommandContext }) {
   const device = useMemo(() => deviceTimezone(), []);
   const [saved, setSaved] = useState(false);
   const [tab, setTab] = useState<'general' | 'data' | 'account'>('general');
+  const [panelRef, swap] = useTabSwap();
+  const pickTab = (key: typeof tab) => { if (key !== tab) swap(() => setTab(key)); };
 
   // keep inputs in sync if settings arrive after mount
   useEffect(() => {
@@ -78,116 +84,142 @@ export function Settings({ ctx }: { ctx: CommandContext }) {
       </div>
 
       <div className="px-tabs" role="tablist">
-        <button role="tab" aria-selected={tab === 'general'} data-testid="settings-tab-general" className={`px-tab${tab === 'general' ? ' px-tab--on' : ''}`} onClick={() => setTab('general')}>
+        <button role="tab" aria-selected={tab === 'general'} data-testid="settings-tab-general" className={`px-tab${tab === 'general' ? ' px-tab--on' : ''}`} onClick={() => pickTab('general')}>
           <Ic name="sliders" /> General
         </button>
-        <button role="tab" aria-selected={tab === 'data'} data-testid="settings-tab-data" className={`px-tab${tab === 'data' ? ' px-tab--on' : ''}`} onClick={() => setTab('data')}>
+        <button role="tab" aria-selected={tab === 'data'} data-testid="settings-tab-data" className={`px-tab${tab === 'data' ? ' px-tab--on' : ''}`} onClick={() => pickTab('data')}>
           <Ic name="down" /> Data &amp; portability
         </button>
-        <button role="tab" aria-selected={tab === 'account'} data-testid="settings-tab-account" className={`px-tab${tab === 'account' ? ' px-tab--on' : ''}`} onClick={() => setTab('account')}>
+        <button role="tab" aria-selected={tab === 'account'} data-testid="settings-tab-account" className={`px-tab${tab === 'account' ? ' px-tab--on' : ''}`} onClick={() => pickTab('account')}>
           <Ic name="lock" /> Account
         </button>
       </div>
 
-      {tab === 'general' && (
-        <div className="px-set-grid">
-          <div className="px-set-row">
-            <div className="px-set-lbl"><b>Day-reset hour</b><span>When your day flips for “today/daily” computations (§7.2). 0–23.</span></div>
-            <div className="px-set-ctl">
-              <input className="px-input" type="number" min={0} max={23} data-testid="settings-hour" value={hour} onChange={(e) => setHour(e.target.value)} style={{ width: 120 }} />
+      <div ref={panelRef} role="tabpanel">
+        {tab === 'general' && (
+          <div className="px-set-grid">
+            <div className="px-set-row">
+              <div className="px-set-lbl"><b>Day-reset hour</b><span>When your day flips for “today/daily” computations (§7.2). 0–23.</span></div>
+              <div className="px-set-ctl">
+                <input className="px-input" type="number" min={0} max={23} data-testid="settings-hour" value={hour} onChange={(e) => setHour(e.target.value)} style={{ width: 120 }} />
+              </div>
             </div>
-          </div>
-          <div className="px-set-row">
-            <div className="px-set-lbl">
-              <b>Timezone</b>
-              <span>
-                IANA timezone name (e.g. America/New_York). The clock in the top bar shows this zone, and you can also change it by clicking the clock.
-              </span>
-            </div>
-            <div className="px-set-ctl">
-              <input className="px-input" data-testid="settings-tz" list="px-tz-options" value={tz} onChange={(e) => { setTz(e.target.value); setTzError(''); }} />
-              <datalist id="px-tz-options">
-                {allTimezones().map((z) => <option key={z} value={z} />)}
-              </datalist>
-              {isValidTimezone(tz.trim()) && (
-                <div className="px-muted" data-testid="settings-tz-place" style={{ marginTop: 6 }}>{timezoneTitle(tz.trim())}</div>
-              )}
-              {tzError && <div className="px-tz-err" data-testid="settings-tz-error" style={{ marginTop: 6 }}>{tzError}</div>}
-              {device && device !== tz.trim() && (
-                <button className="px-btn px-btn--sm" data-testid="settings-tz-device" style={{ marginTop: 8 }} onClick={() => { setTz(device); setTzError(''); }}>
-                  Use this device’s timezone ({device})
-                </button>
-              )}
-            </div>
-          </div>
-          <div className="px-set-row">
-            <div className="px-set-lbl" />
-            <div className="px-set-ctl">
-              <button className="px-btn px-btn--primary" data-testid="settings-save" onClick={() => void save()}>Save</button>
-              {saved && <span className="px-muted" data-testid="settings-saved" style={{ marginLeft: 10 }}>Saved ✓</span>}
-            </div>
-          </div>
-          <div className="px-set-row">
-            <div className="px-set-lbl">
-              <b>Agenda snap</b>
-              <span>The grid a dragged task snaps to on the Agenda. This device only — it applies straight away.</span>
-            </div>
-            <div className="px-set-ctl">
-              <div className="px-seg" role="group" aria-label="agenda snap interval" data-testid="settings-snap">
-                {SNAP_OPTIONS.map((o) => (
-                  <button
-                    key={o.value}
-                    className={`px-seg-btn${snap === o.value ? ' px-seg-btn--on' : ''}`}
-                    data-testid={`snap-${o.value}`}
-                    aria-pressed={snap === o.value}
-                    title={o.label}
-                    onClick={() => setSnapPref(o.value)}
-                  >
-                    {o.short}
+            <div className="px-set-row">
+              <div className="px-set-lbl">
+                <b>Timezone</b>
+                <span>
+                  IANA timezone name (e.g. America/New_York). The clock in the top bar shows this zone, and you can also change it by clicking the clock.
+                </span>
+              </div>
+              <div className="px-set-ctl">
+                <input className="px-input" data-testid="settings-tz" list="px-tz-options" value={tz} onChange={(e) => { setTz(e.target.value); setTzError(''); }} />
+                <datalist id="px-tz-options">
+                  {allTimezones().map((z) => <option key={z} value={z} />)}
+                </datalist>
+                {isValidTimezone(tz.trim()) && (
+                  <div className="px-muted" data-testid="settings-tz-place" style={{ marginTop: 6 }}>{timezoneTitle(tz.trim())}</div>
+                )}
+                {tzError && <div className="px-tz-err" data-testid="settings-tz-error" style={{ marginTop: 6 }}>{tzError}</div>}
+                {device && device !== tz.trim() && (
+                  <button className="px-btn px-btn--sm" data-testid="settings-tz-device" style={{ marginTop: 8 }} onClick={() => { setTz(device); setTzError(''); }}>
+                    Use this device’s timezone ({device})
                   </button>
-                ))}
+                )}
+              </div>
+            </div>
+            <div className="px-set-row">
+              <div className="px-set-lbl" />
+              <div className="px-set-ctl">
+                <button className="px-btn px-btn--primary" data-testid="settings-save" onClick={() => void save()}>Save</button>
+                {saved && <span className="px-muted" data-testid="settings-saved" style={{ marginLeft: 10 }}>Saved ✓</span>}
+              </div>
+            </div>
+            <div className="px-set-row">
+              <div className="px-set-lbl">
+                <b>Agenda snap</b>
+                <span>The grid a dragged task snaps to on the Agenda. This device only — it applies straight away.</span>
+              </div>
+              <div className="px-set-ctl">
+                <div className="px-seg" role="group" aria-label="agenda snap interval" data-testid="settings-snap">
+                  {SNAP_OPTIONS.map((o) => (
+                    <button
+                      key={o.value}
+                      className={`px-seg-btn${snap === o.value ? ' px-seg-btn--on' : ''}`}
+                      data-testid={`snap-${o.value}`}
+                      aria-pressed={snap === o.value}
+                      title={o.label}
+                      onClick={() => setSnapPref(o.value)}
+                    >
+                      {o.short}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="px-set-row">
+              <div className="px-set-lbl">
+                <b>Agenda date range</b>
+                <span>
+                  How the Agenda names the days it is showing. This device only — it applies straight away.
+                  Each option is shown as it would read for the days ahead of you.
+                </span>
+              </div>
+              <div className="px-set-ctl">
+                <select
+                  className="px-select"
+                  data-testid="settings-range"
+                  aria-label="agenda date range format"
+                  value={rangeFormat}
+                  onChange={(e) => setRangeFormatPref(e.target.value)}
+                >
+                  {RANGE_FORMATS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label} — {formatAgendaRange(sample.from, sample.to, o.value)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="px-set-row">
+              <div className="px-set-lbl">
+                <b>Task due date</b>
+                <span>
+                  How a task&rsquo;s due date is written in your lists, next to its calendar icon. This device only — it applies
+                  straight away. Each option is shown with today&rsquo;s date.
+                </span>
+              </div>
+              <div className="px-set-ctl">
+                <select
+                  className="px-select"
+                  data-testid="settings-due-format"
+                  aria-label="task due date format"
+                  value={dueFormat}
+                  onChange={(e) => setDueDateFormatPref(e.target.value)}
+                >
+                  {DUE_DATE_FORMATS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label} — {formatDueDate(sample.from, o.value)}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
           </div>
-          <div className="px-set-row">
-            <div className="px-set-lbl">
-              <b>Agenda date range</b>
-              <span>
-                How the Agenda names the days it is showing. This device only — it applies straight away.
-                Each option is shown as it would read for the days ahead of you.
-              </span>
-            </div>
-            <div className="px-set-ctl">
-              <select
-                className="px-select"
-                data-testid="settings-range"
-                aria-label="agenda date range format"
-                value={rangeFormat}
-                onChange={(e) => setRangeFormatPref(e.target.value)}
-              >
-                {RANGE_FORMATS.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label} — {formatAgendaRange(sample.from, sample.to, o.value)}
-                  </option>
-                ))}
-              </select>
+        )}
+
+        {tab === 'data' && <Portability timezone={settings.timezone} />}
+
+        {tab === 'account' && (
+          <div className="px-set-grid">
+            <div className="px-set-row">
+              <div className="px-set-lbl"><b>Account</b><span>This account&rsquo;s session on this device.</span></div>
+              <div className="px-set-ctl px-muted" style={{ lineHeight: 1.5 }}>
+                Sign out from the sidebar. On a shared device, signing out wipes this account&rsquo;s local replica and command queue so nothing survives for the next login (§13.2).
+              </div>
             </div>
           </div>
-        </div>
-      )}
-
-      {tab === 'data' && <Portability timezone={settings.timezone} />}
-
-      {tab === 'account' && (
-        <div className="px-set-grid">
-          <div className="px-set-row">
-            <div className="px-set-lbl"><b>Account</b><span>This account&rsquo;s session on this device.</span></div>
-            <div className="px-set-ctl px-muted" style={{ lineHeight: 1.5 }}>
-              Sign out from the sidebar. On a shared device, signing out wipes this account&rsquo;s local replica and command queue so nothing survives for the next login (§13.2).
-            </div>
-          </div>
-        </div>
-      )}
+        )}
+      </div>
     </section>
   );
 }

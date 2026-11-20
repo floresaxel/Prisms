@@ -30,7 +30,7 @@ const TABS: readonly TabSpec[] = [
 const UNSCOPED = new Set(['decisions']);
 
 export function Projects({ ctx }: { ctx: CommandContext }) {
-  const [tab, select] = useHashTab(TABS, 'board');
+  const [tab, select, panelRef] = useHashTab(TABS, 'board');
   const tree = useNodeTree();
   const projects = useMemo(
     () => [...tree.byId.values()].filter((n) => n.node_type === 'project').sort((a, b) => (a.title < b.title ? -1 : a.title > b.title ? 1 : 0)),
@@ -57,10 +57,12 @@ export function Projects({ ctx }: { ctx: CommandContext }) {
 
       <TabBar tabs={TABS} active={tab} onSelect={select} />
 
-      {tab === 'board' && <Kanban ctx={ctx} projectId={scope || null} />}
-      {tab === 'timeline' && <Gantt projectId={scope || null} />}
-      {tab === 'graph' && <Flowchart ctx={ctx} rootId={scope || null} />}
-      {tab === 'decisions' && <DecisionBoard ctx={ctx} />}
+      <div ref={panelRef} role="tabpanel">
+        {tab === 'board' && <Kanban ctx={ctx} projectId={scope || null} />}
+        {tab === 'timeline' && <Gantt projectId={scope || null} />}
+        {tab === 'graph' && <Flowchart ctx={ctx} rootId={scope || null} />}
+        {tab === 'decisions' && <DecisionBoard ctx={ctx} />}
+      </div>
     </section>
   );
 }

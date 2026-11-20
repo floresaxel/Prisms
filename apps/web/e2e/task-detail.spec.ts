@@ -106,10 +106,12 @@ test('rename a task in place, then edit every detail in its card — all of it s
   // too, whose minifier once kept only `-webkit-backdrop-filter` (theme.css)
   expect(await page.locator('.px-scrim').evaluate((el) => getComputedStyle(el).backdropFilter)).toContain('blur(');
   // compact: the empty fields wait behind "+" chips (the budget is set, so it shows)
-  await expect(page.getByTestId('td-details')).toHaveCount(0);
-
-  await page.getByTestId('td-add-details').click();
-  await expect(page.getByTestId('td-details')).toBeFocused();
+  // — except Details, which is always there, empty or not
+  await expect(page.getByTestId('td-add-details')).toHaveCount(0);
+  await expect(page.getByTestId('td-details')).toBeVisible();
+  // a focused text field gets a light grey outline, not the accent blue
+  await page.getByTestId('td-details').focus();
+  expect(await page.getByTestId('td-details').evaluate((el) => getComputedStyle(el).borderTopColor)).toBe('rgb(197, 203, 214)');
   await page.getByTestId('td-details').fill('Quote the mayor. Embargo until 9am.');
   await page.getByTestId('td-add-due').click();
   await page.getByTestId('td-due').fill('2026-12-01');
@@ -127,7 +129,8 @@ test('rename a task in place, then edit every detail in its card — all of it s
   await page.getByTestId('td-dep-add-before').selectOption(ids.date);
   await expect(page.getByTestId('td-deps')).toContainText('Pick a date');
 
-  await page.getByTestId('td-project').selectOption(ids.p2);
+  await page.getByTestId('td-project').click();
+  await page.getByTestId(`td-project-opt-${ids.p2}`).click();
   await expect(card).toContainText('Work › Plan › Garden');
 
   await page.getByTestId('td-done').click();
@@ -136,7 +139,7 @@ test('rename a task in place, then edit every detail in its card — all of it s
   // the row shows the move and the new facts
   const moved = page.getByTestId(`project-group-${ids.p2}`).getByTestId(`task-row-${ids.task}`);
   await expect(moved).toContainText('Studio B');
-  await expect(moved).toContainText('due 12-01');
+  await expect(moved).toContainText('01/Dec'); // due date: calendar icon + DD/MMM
 
   // ── the server took all of it: reload and read it back ──
   await expect(page.getByTestId('sync-state')).toHaveAttribute('data-sync', 'synced', { timeout: 30_000 });

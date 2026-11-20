@@ -77,7 +77,7 @@ vi.mock('@prisms/ui', async (importOriginal) => {
   };
 });
 
-const { EditableTitle, TaskDetailProvider, useTaskDetail, hoursText, parseHours } = await import('../src/components/TaskDetail');
+const { EditableTitle, TaskDetailProvider, useTaskDetail, hoursText, parseHours, stepMinutes } = await import('../src/components/TaskDetail');
 
 // ── a small world: one vision › roadmap › two projects ──
 let v: Node, r: Node, p1: Node, p2: Node, ms: Node, task: Node, other: Node, waitsFor: Node, finished: Node, capture: Node;
@@ -269,20 +269,22 @@ describe('the card’s fields', () => {
     openCard();
     const dlg = card()!;
     expect(dlg.textContent).toContain('Work › Plan › Launch');
-    expect(input('td-project').value).toBe(p1.id);
+    expect(screen.getByTestId('td-project').getAttribute('data-value')).toBe(p1.id);
     expect(input('td-hours').value).toBe('1');
-    expect(screen.getByTestId('td-logged').textContent).toBe('45m logged · 75% of budget');
+    expect(screen.getByTestId('td-logged').textContent).toBe('45m logged · 75% of duration');
   });
 
   it('is compact: only fields with a value show, the rest are "+" chips that add and focus them', () => {
     world({ estimate_minutes: null });
     mount([other]);
     openCard(other);
-    for (const id of ['td-start', 'td-due', 'td-location', 'td-details', 'td-steps', 'td-deps']) expect(screen.queryByTestId(id)).toBeNull();
+    for (const id of ['td-start', 'td-due', 'td-location', 'td-steps', 'td-deps']) expect(screen.queryByTestId(id)).toBeNull();
+    // Details is the exception: always there, even empty, with no chip
+    expect(input('td-details').value).toBe('');
     // the budget row shows anyway: time is logged against the task (the mock logs 45m)
     expect(screen.getByTestId('td-logged').textContent).toContain('45m logged');
     const chips = within(screen.getByTestId('td-adds')).getAllByRole('button').map((b) => b.textContent);
-    expect(chips).toEqual(['Start date', 'Expected completion', 'Location', 'Details', 'Steps', 'Dependencies']);
+    expect(chips).toEqual(['Start date', 'Expected by', 'Location', 'Steps', 'Dependencies']);
 
     fireEvent.click(screen.getByTestId('td-add-location'));
     expect(document.activeElement).toBe(screen.getByTestId('td-location'));
@@ -300,13 +302,13 @@ describe('the card’s fields', () => {
     expect(input('td-location').value).toBe('Studio B');
     expect(screen.getByTestId('td-deps')).toBeTruthy(); // it waits on "Pick a date"
     const chips = within(screen.getByTestId('td-adds')).getAllByRole('button').map((b) => b.textContent);
-    expect(chips).toEqual(['Expected completion', 'Steps']);
+    expect(chips).toEqual(['Expected by', 'Steps']);
   });
 
   it('title, details, dates, budget and location save through their verbs', () => {
     mount();
     openCard();
-    for (const k of ['details', 'due', 'start', 'location']) fireEvent.click(screen.getByTestId(`td-add-${k}`));
+    for (const k of ['due', 'start', 'location']) fireEvent.click(screen.getByTestId(`td-add-${k}`));
 
     fireEvent.change(input('td-title'), { target: { value: 'Press release v2' } });
     fireEvent.keyDown(input('td-title'), { key: 'Enter' });
@@ -331,6 +333,39 @@ describe('the card’s fields', () => {
     fireEvent.change(input('td-location'), { target: { value: ' Studio B ' } });
     fireEvent.blur(input('td-location'));
     expect(command('setNodeAttributes')).toHaveBeenCalledWith(task.id, { color: 'teal', location: 'Studio B' });
+  });
+
+  it('the duration arrows step by the Agenda snap grid, from zero, and clear at zero', () => {
+    world({ estimate_minutes: null });
+    mount();
+    openCard();
+    expect((screen.getByTestId('td-hours-down') as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByTestId('td-hours-up')); // 0 → 15 (the default grid)
+    expect(command('setEstimate')).toHaveBeenLastCalledWith(task.id, 15);
+    expect(input('td-hours').value).toBe('0.25');
+    fireEvent.click(screen.getByTestId('td-hours-up'));
+    expect(command('setEstimate')).toHaveBeenLastCalledWith(task.id, 30);
+    fireEvent.click(screen.getByTestId('td-hours-down'));
+    fireEvent.click(screen.getByTestId('td-hours-down')); // back to nothing
+    expect(command('setEstimate')).toHaveBeenLastCalledWith(task.id, null);
+    expect(input('td-hours').value).toBe('');
+
+    // ↑ / ↓ in the field do the same
+    fireEvent.keyDown(input('td-hours'), { key: 'ArrowUp' });
+    expect(command('setEstimate')).toHaveBeenLastCalledWith(task.id, 15);
+  });
+
+  it('the arrows follow the snap chosen in Settings', () => {
+    vi.stubGlobal('localStorage', { getItem: (k: string) => (k === 'prisms.agenda.snap' ? '30' : null), setItem() {}, removeItem() {} });
+    try {
+      mount();
+      openCard(); // 1h → 1h30
+      fireEvent.click(screen.getByTestId('td-hours-up'));
+      expect(command('setEstimate')).toHaveBeenLastCalledWith(task.id, 90);
+      expect(input('td-hours').value).toBe('1.5');
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('a budget that is not a number puts the stored hours back', () => {
@@ -362,20 +397,58 @@ describe('the card’s fields', () => {
   });
 });
 
+describe('details mark', () => {
+  it('a notebook icon follows the title only when the task has details', () => {
+    const plain = node('task', 'No notes here', p1);
+    const noted = node('task', 'Has notes', p1, { description: 'Quote the mayor.' });
+    const blank = node('task', 'Whitespace only', p1, { description: '   \n ' });
+    mount([plain, noted, blank]);
+    expect(screen.queryByTestId(`has-details-${plain.id}`)).toBeNull();
+    expect(screen.queryByTestId(`has-details-${blank.id}`)).toBeNull();
+    const mark = screen.getByTestId(`has-details-${noted.id}`);
+    // right after the title button, in the same row
+    expect(screen.getByTestId(`title-${noted.id}`).nextElementSibling).toBe(mark);
+  });
+});
+
 describe('project', () => {
+  /** Opens the project picker and clicks one of its bubbles. */
+  const choose = (id: string) => {
+    fireEvent.click(screen.getByTestId('td-project'));
+    fireEvent.click(screen.getByTestId(`td-project-opt-${id}`));
+  };
+
   it('a task moves to the end of the chosen project', () => {
     mount();
     openCard();
     const last = state.facts.tree.childrenByParent.get(p2.id)!.at(-1)!;
-    fireEvent.change(input('td-project'), { target: { value: p2.id } });
+    choose(p2.id);
     expect(command('moveNode')).toHaveBeenCalledWith(task.id, p2.id, sortOrderBetween(last.sort_order, null));
   });
 
   it('milestones are named with their project', () => {
     mount();
     openCard();
-    const options = [...(screen.getByTestId('td-project') as HTMLSelectElement).options].map((o) => o.textContent);
+    fireEvent.click(screen.getByTestId('td-project'));
+    const options = within(screen.getByRole('listbox', { name: 'Project' }))
+      .getAllByRole('option')
+      .map((o) => o.textContent);
     expect(options).toEqual(['Garden', 'Garden › Beds', 'Launch']);
+  });
+
+  it('offers a new project under a roadmap, and a task moves into it', async () => {
+    mount();
+    openCard();
+    command('createProject').mockResolvedValue(uuid(999));
+    fireEvent.click(screen.getByTestId('td-project'));
+    fireEvent.click(screen.getByTestId('td-project-new-open'));
+    fireEvent.change(screen.getByTestId('td-project-new-name'), { target: { value: 'Brand refresh' } });
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('td-project-new-create'));
+    });
+    const last = state.facts.tree.childrenByParent.get(r.id)!.at(-1)!;
+    expect(command('createProject')).toHaveBeenCalledWith({ roadmapId: r.id, title: 'Brand refresh', sortOrder: sortOrderBetween(last.sort_order, null) });
+    expect(command('moveNode')).toHaveBeenCalledWith(task.id, uuid(999), expect.any(String));
   });
 
   it('an Inbox capture is promoted into it, and has no steps or dependencies until then', () => {
@@ -387,7 +460,7 @@ describe('project', () => {
     expect(screen.queryByTestId('td-deps')).toBeNull();
     expect(screen.queryByTestId('td-add-steps')).toBeNull();
     expect(screen.queryByTestId('td-add-deps')).toBeNull();
-    fireEvent.change(input('td-project'), { target: { value: p1.id } });
+    choose(p1.id);
     expect(command('promoteActivity')).toHaveBeenCalledWith(capture.id, { parentId: p1.id });
   });
 });
@@ -529,5 +602,16 @@ describe('hours ↔ minutes', () => {
     expect(parseHours('0')).toBeNull();
     expect(parseHours('-1')).toBeUndefined();
     expect(parseHours('soon')).toBeUndefined();
+  });
+
+  it('steps to the next multiple of the grid, never below zero', () => {
+    expect(stepMinutes(null, 1, 15)).toBe(15);
+    expect(stepMinutes(60, 1, 15)).toBe(75);
+    expect(stepMinutes(70, 1, 15)).toBe(75); // off-grid values land on the grid
+    expect(stepMinutes(70, -1, 15)).toBe(60);
+    expect(stepMinutes(15, -1, 15)).toBeNull();
+    expect(stepMinutes(10, -1, 15)).toBeNull();
+    expect(stepMinutes(null, -1, 15)).toBeNull();
+    expect(stepMinutes(60, 1, 60)).toBe(120);
   });
 });
