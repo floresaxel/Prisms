@@ -285,7 +285,7 @@ function CompleteInboxDialog({ activity, targets, commands, onClose }: { activit
               emptyLabel="No project to add it to"
             />
             <button
-              className="px-btn px-btn--sm px-btn--primary"
+              className="px-btn px-btn--primary"
               data-testid="inbox-complete-promote"
               disabled={selected === '' || busy}
               onClick={() => void finish(true)}
