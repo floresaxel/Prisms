@@ -5,7 +5,7 @@
  */
 import { useMemo } from 'react';
 
-import { initialSortOrder, sortOrderBetween } from '@prisms/core';
+import { initialSortOrder, sortOrderBetween, type TreeIndex } from '@prisms/core';
 import { useNodeTree, type PrismsCommands } from '@prisms/ui';
 
 export interface NewProjectApi {
@@ -15,21 +15,24 @@ export interface NewProjectApi {
   create: (title: string, roadmapId: string) => Promise<string>;
 }
 
+/** The same thing from a tree already in hand (the task card has its own). */
+export function newProjectFor(tree: TreeIndex, commands: PrismsCommands): NewProjectApi | undefined {
+  const roadmaps = [...tree.byId.values()]
+    .filter((n) => n.node_type === 'roadmap')
+    .sort((a, b) => (a.sort_order < b.sort_order ? -1 : a.sort_order > b.sort_order ? 1 : a.id < b.id ? -1 : 1))
+    .map((n) => ({ id: n.id, title: n.title }));
+  if (roadmaps.length === 0) return undefined;
+  return {
+    roadmaps,
+    create: (title, roadmapId) => {
+      const last = tree.childrenByParent.get(roadmapId)?.at(-1)?.sort_order ?? null;
+      const sortOrder = last === null ? initialSortOrder() : sortOrderBetween(last, null);
+      return commands.createProject({ roadmapId, title, sortOrder });
+    },
+  };
+}
+
 export function useNewProject(commands: PrismsCommands): NewProjectApi | undefined {
   const tree = useNodeTree();
-  return useMemo(() => {
-    const roadmaps = [...tree.byId.values()]
-      .filter((n) => n.node_type === 'roadmap')
-      .sort((a, b) => (a.sort_order < b.sort_order ? -1 : a.sort_order > b.sort_order ? 1 : a.id < b.id ? -1 : 1))
-      .map((n) => ({ id: n.id, title: n.title }));
-    if (roadmaps.length === 0) return undefined;
-    return {
-      roadmaps,
-      create: (title, roadmapId) => {
-        const last = tree.childrenByParent.get(roadmapId)?.at(-1)?.sort_order ?? null;
-        const sortOrder = last === null ? initialSortOrder() : sortOrderBetween(last, null);
-        return commands.createProject({ roadmapId, title, sortOrder });
-      },
-    };
-  }, [tree, commands]);
+  return useMemo(() => newProjectFor(tree, commands), [tree, commands]);
 }

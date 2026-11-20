@@ -104,7 +104,8 @@ test('rename a task in place, then edit every detail in its card — all of it s
   await page.getByTestId('td-dep-add-before').selectOption(ids.date);
   await expect(page.getByTestId('td-deps')).toContainText('Pick a date');
 
-  await page.getByTestId('td-project').selectOption(ids.p2);
+  await page.getByTestId('td-project').click();
+  await page.getByTestId(`td-project-opt-${ids.p2}`).click();
   await expect(card).toContainText('Work › Plan › Garden');
 
   await page.getByTestId('td-done').click();
