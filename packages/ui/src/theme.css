@@ -1288,6 +1288,10 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
    the inline editor's border+padding likewise, so neither state shifts the
    row; the editor wraps at the same width as the text, over as many rows. */
 .px-trow[data-opens-detail] { cursor: pointer; }
+/* A task's title (and its editor) spans at most 55% of the row — not all the
+   way to the right — and wraps there; whatever follows it stays on the right. */
+.px-trow > .px-t-main:has(.px-title-btn, .px-title-input) { max-width: 55%; }
+.px-trow > .px-t-main:has(.px-title-btn, .px-title-input) + * { margin-left: auto; }
 .px-trow[data-opens-detail]:focus-visible { outline: 2px solid var(--px-blue); outline-offset: -2px; }
 .px-run-banner[data-opens-detail] { cursor: pointer; }
 .px-run-banner[data-opens-detail]:focus-visible { outline: 2px solid var(--px-blue); outline-offset: 2px; }
@@ -1533,6 +1537,7 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
 
 .px-list--compact .px-page-sub { flex-basis: 100%; }
 .px-list--compact .px-trow { flex-wrap: wrap; gap: 8px 10px; padding: 9px 12px; }
+.px-list--compact .px-trow > .px-t-main { max-width: none; }
 .px-list--compact .px-trow > .px-pbar-sm { order: 9; flex: 1 1 100%; width: auto; margin-left: 27px; }
 .px-list--compact .px-trow--inbox > .px-promote { order: 9; flex: 1 1 100%; min-width: 0; }
 .px-list--compact .px-trow--inbox .px-promote select { flex: 1; max-width: none; }
