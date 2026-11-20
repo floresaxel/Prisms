@@ -211,7 +211,7 @@ describe('the card’s fields', () => {
     expect(dlg.textContent).toContain('Work › Plan › Launch');
     expect(input('td-project').value).toBe(p1.id);
     expect(input('td-hours').value).toBe('1');
-    expect(screen.getByTestId('td-logged').textContent).toBe('45m logged · 75% of budget');
+    expect(screen.getByTestId('td-logged').textContent).toBe('45m logged · 75% of duration');
   });
 
   it('is compact: only fields with a value show, the rest are "+" chips that add and focus them', () => {
@@ -224,7 +224,7 @@ describe('the card’s fields', () => {
     // the budget row shows anyway: time is logged against the task (the mock logs 45m)
     expect(screen.getByTestId('td-logged').textContent).toContain('45m logged');
     const chips = within(screen.getByTestId('td-adds')).getAllByRole('button').map((b) => b.textContent);
-    expect(chips).toEqual(['Start date', 'Expected completion', 'Location', 'Steps', 'Dependencies']);
+    expect(chips).toEqual(['Start date', 'Expected by', 'Location', 'Steps', 'Dependencies']);
 
     fireEvent.click(screen.getByTestId('td-add-location'));
     expect(document.activeElement).toBe(screen.getByTestId('td-location'));
@@ -242,7 +242,7 @@ describe('the card’s fields', () => {
     expect(input('td-location').value).toBe('Studio B');
     expect(screen.getByTestId('td-deps')).toBeTruthy(); // it waits on "Pick a date"
     const chips = within(screen.getByTestId('td-adds')).getAllByRole('button').map((b) => b.textContent);
-    expect(chips).toEqual(['Expected completion', 'Steps']);
+    expect(chips).toEqual(['Expected by', 'Steps']);
   });
 
   it('title, details, dates, budget and location save through their verbs', () => {

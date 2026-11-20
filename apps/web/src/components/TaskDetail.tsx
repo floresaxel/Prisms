@@ -520,8 +520,8 @@ const TASK_ONLY: ReadonlySet<Extra> = new Set(['steps', 'deps']);
 /** Each chip's label, and the element id focused when it is added. */
 const EXTRA_UI: Record<Extra, { label: string; focus: string }> = {
   start: { label: 'Start date', focus: 'td-start' },
-  due: { label: 'Expected completion', focus: 'td-due' },
-  hours: { label: 'Budget', focus: 'td-hours' },
+  due: { label: 'Expected by', focus: 'td-due' },
+  hours: { label: 'Duration', focus: 'td-hours' },
   location: { label: 'Location', focus: 'td-location' },
   steps: { label: 'Steps', focus: 'td-step-add' },
   deps: { label: 'Dependencies', focus: 'td-dep-add-before' },
@@ -628,12 +628,12 @@ function DateRow({ node, start, due, commands, run }: FieldProps & { start: bool
   return (
     <>
       {start && (
-        <Prop icon="play" label="Starts" htmlFor="td-start">
+        <Prop icon="play" label="Start date" htmlFor="td-start">
           <DateInput id="td-start" testId="td-start" value={node.start_date} onSave={(v) => void run(() => commands.setDates(node.id, { startDate: v }))} />
         </Prop>
       )}
       {due && (
-        <Prop icon="cal" label="Expected completion" htmlFor="td-due">
+        <Prop icon="cal" label="Expected by" htmlFor="td-due">
           <DateInput id="td-due" testId="td-due" value={node.due_date} onSave={(v) => void run(() => commands.setDates(node.id, { dueDate: v }))} />
           {backwards && <span className="px-td-note px-td-note--warn" data-testid="td-dates-warn">ends before it starts</span>}
         </Prop>
@@ -657,7 +657,7 @@ function BudgetField({ node, commands, run }: FieldProps) {
   const logged = progress ? Math.round(progress.consumedMinutes) : 0;
   const over = progress?.ratio != null && progress.ratio > 1;
   return (
-    <Prop icon="clock" label="Budget" htmlFor="td-hours">
+    <Prop icon="clock" label="Duration" htmlFor="td-hours">
       <input
         id="td-hours"
         className="px-td-in px-td-hours"
@@ -678,7 +678,7 @@ function BudgetField({ node, commands, run }: FieldProps) {
       <span className="px-td-unit">hours</span>
       <span className={`px-td-note${over ? ' px-td-note--over' : ''}`} data-testid="td-logged">
         {logged > 0 ? `${formatMinutes(logged)} logged` : 'nothing logged yet'}
-        {progress?.ratio != null && logged > 0 && ` · ${Math.round(progress.ratio * 100)}% of budget`}
+        {progress?.ratio != null && logged > 0 && ` · ${Math.round(progress.ratio * 100)}% of duration`}
       </span>
     </Prop>
   );
