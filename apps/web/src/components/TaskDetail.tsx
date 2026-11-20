@@ -72,6 +72,7 @@ import {
   type PromoteTarget,
 } from '@prisms/ui';
 
+import { useSnapPref } from '../agenda-snap';
 import { formatMinutes, projectTone, rejectionMessage } from '../format';
 
 // --- the shared controller ------------------------------------------------------
@@ -346,6 +347,19 @@ export function parseHours(text: string): number | null | undefined {
   if (!Number.isFinite(h) || h < 0) return undefined;
   const minutes = Math.round(h * 60);
   return minutes === 0 ? null : minutes;
+}
+
+/**
+ * The duration after one arrow press: up goes to the next multiple of `step` above
+ * `current` (so 0 / empty → `step`), down to the next one below it. Going down to
+ * 0 clears the duration (null) — an estimate must be positive. `null` in, `null`
+ * out on down: nothing to lower.
+ */
+export function stepMinutes(current: number | null, dir: 1 | -1, step: number): number | null {
+  const base = current ?? 0;
+  if (dir === 1) return (Math.floor(base / step) + 1) * step;
+  const next = (Math.ceil(base / step) - 1) * step;
+  return next > 0 ? next : null;
 }
 
 /** `attributes.location`, or '' when the task has none. */
@@ -654,6 +668,16 @@ function BudgetField({ node, commands, run }: FieldProps) {
     }
     void run(() => commands.setEstimate(node.id, minutes));
   }
+  // The arrows (and ↑/↓ in the field) move by the Agenda snap grid from Settings.
+  const snap = useSnapPref();
+  const current = parseHours(d.draft);
+  const shown = current === undefined ? node.estimate_minutes : current;
+  function step(dir: 1 | -1) {
+    const next = stepMinutes(shown, dir, snap);
+    d.setDraft(hoursText(next));
+    // against what is SHOWN, not what is stored: a quick second press lands before the store catches up
+    if (next !== shown) void run(() => commands.setEstimate(node.id, next));
+  }
   const logged = progress ? Math.round(progress.consumedMinutes) : 0;
   const over = progress?.ratio != null && progress.ratio > 1;
   return (
@@ -672,9 +696,20 @@ function BudgetField({ node, commands, run }: FieldProps) {
           if (e.key === 'Enter') {
             e.preventDefault();
             e.currentTarget.blur();
+          } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+            e.preventDefault();
+            step(e.key === 'ArrowUp' ? 1 : -1);
           } else escapeReverts(e, d);
         }}
       />
+      <span className="px-td-spin">
+        <button type="button" tabIndex={-1} aria-label={`Add ${snap} minutes`} data-testid="td-hours-up" onClick={() => step(1)}>
+          <Ic name="chevd" />
+        </button>
+        <button type="button" tabIndex={-1} aria-label={`Take off ${snap} minutes`} data-testid="td-hours-down" disabled={shown === null} onClick={() => step(-1)}>
+          <Ic name="chevd" />
+        </button>
+      </span>
       <span className="px-td-unit">hours</span>
       <span className={`px-td-note${over ? ' px-td-note--over' : ''}`} data-testid="td-logged">
         {logged > 0 ? `${formatMinutes(logged)} logged` : 'nothing logged yet'}

@@ -1307,6 +1307,13 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
 .px-td-in--grow { flex: 1 1 200px; }
 .px-td-hours { width: 80px; text-align: right; font-variant-numeric: tabular-nums; }
 .px-td-unit { font-size: 12.5px; color: var(--px-text-dim); }
+/* the duration's up/down arrows: two small stacked buttons beside the field */
+.px-td-spin { display: inline-flex; flex-direction: column; gap: 2px; }
+.px-td-spin button { display: flex; align-items: center; justify-content: center; width: 20px; height: 14px; padding: 0; border: 1px solid var(--px-border); border-radius: 4px; background: var(--px-surface); color: var(--px-text-dim); cursor: pointer; }
+.px-td-spin .px-ic { width: 10px; height: 10px; }
+.px-td-spin button:first-child .px-ic { transform: rotate(180deg); }
+.px-td-spin button:hover:not(:disabled) { background: #e9ecf1; color: var(--px-text); }
+.px-td-spin button:disabled { opacity: 0.3; cursor: default; }
 .px-td-date { display: inline-flex; align-items: center; gap: 2px; }
 .px-td-clear { display: flex; padding: 4px; border: 0; border-radius: 5px; background: none; color: var(--px-faint); cursor: pointer; }
 .px-td-clear:hover { background: var(--px-surface-2); color: var(--px-text-dim); }

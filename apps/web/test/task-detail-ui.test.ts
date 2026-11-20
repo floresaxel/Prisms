@@ -77,7 +77,7 @@ vi.mock('@prisms/ui', async (importOriginal) => {
   };
 });
 
-const { EditableTitle, TaskDetailProvider, useTaskDetail, hoursText, parseHours } = await import('../src/components/TaskDetail');
+const { EditableTitle, TaskDetailProvider, useTaskDetail, hoursText, parseHours, stepMinutes } = await import('../src/components/TaskDetail');
 
 // ── a small world: one vision › roadmap › two projects ──
 let v: Node, r: Node, p1: Node, p2: Node, ms: Node, task: Node, other: Node, waitsFor: Node, finished: Node, capture: Node;
@@ -273,6 +273,39 @@ describe('the card’s fields', () => {
     fireEvent.change(input('td-location'), { target: { value: ' Studio B ' } });
     fireEvent.blur(input('td-location'));
     expect(command('setNodeAttributes')).toHaveBeenCalledWith(task.id, { color: 'teal', location: 'Studio B' });
+  });
+
+  it('the duration arrows step by the Agenda snap grid, from zero, and clear at zero', () => {
+    world({ estimate_minutes: null });
+    mount();
+    openCard();
+    expect((screen.getByTestId('td-hours-down') as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByTestId('td-hours-up')); // 0 → 15 (the default grid)
+    expect(command('setEstimate')).toHaveBeenLastCalledWith(task.id, 15);
+    expect(input('td-hours').value).toBe('0.25');
+    fireEvent.click(screen.getByTestId('td-hours-up'));
+    expect(command('setEstimate')).toHaveBeenLastCalledWith(task.id, 30);
+    fireEvent.click(screen.getByTestId('td-hours-down'));
+    fireEvent.click(screen.getByTestId('td-hours-down')); // back to nothing
+    expect(command('setEstimate')).toHaveBeenLastCalledWith(task.id, null);
+    expect(input('td-hours').value).toBe('');
+
+    // ↑ / ↓ in the field do the same
+    fireEvent.keyDown(input('td-hours'), { key: 'ArrowUp' });
+    expect(command('setEstimate')).toHaveBeenLastCalledWith(task.id, 15);
+  });
+
+  it('the arrows follow the snap chosen in Settings', () => {
+    vi.stubGlobal('localStorage', { getItem: (k: string) => (k === 'prisms.agenda.snap' ? '30' : null), setItem() {}, removeItem() {} });
+    try {
+      mount();
+      openCard(); // 1h → 1h30
+      fireEvent.click(screen.getByTestId('td-hours-up'));
+      expect(command('setEstimate')).toHaveBeenLastCalledWith(task.id, 90);
+      expect(input('td-hours').value).toBe('1.5');
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('a budget that is not a number puts the stored hours back', () => {
@@ -471,5 +504,16 @@ describe('hours ↔ minutes', () => {
     expect(parseHours('0')).toBeNull();
     expect(parseHours('-1')).toBeUndefined();
     expect(parseHours('soon')).toBeUndefined();
+  });
+
+  it('steps to the next multiple of the grid, never below zero', () => {
+    expect(stepMinutes(null, 1, 15)).toBe(15);
+    expect(stepMinutes(60, 1, 15)).toBe(75);
+    expect(stepMinutes(70, 1, 15)).toBe(75); // off-grid values land on the grid
+    expect(stepMinutes(70, -1, 15)).toBe(60);
+    expect(stepMinutes(15, -1, 15)).toBeNull();
+    expect(stepMinutes(10, -1, 15)).toBeNull();
+    expect(stepMinutes(null, -1, 15)).toBeNull();
+    expect(stepMinutes(60, 1, 60)).toBe(120);
   });
 });
