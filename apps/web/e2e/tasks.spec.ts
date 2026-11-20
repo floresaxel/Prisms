@@ -204,6 +204,38 @@ test('every project picker can mint a project on the spot, and selects it', asyn
   await expect(page.getByTestId('inbox-complete-promote')).toBeEnabled();
 });
 
+test('an Inbox capture with details shows a notebook icon before its project picker', async ({ page }) => {
+  await register(page, 'notebook');
+  await goto(page, 'tasks');
+  await page.getByTestId('activity-title').fill('Plan the offsite');
+  await page.getByTestId('activity-add').click();
+  const row = page.getByTestId('inbox').locator('li', { hasText: 'Plan the offsite' });
+  await expect(row).toBeVisible();
+  const slot = row.getByTestId(/^inbox-has-details-/);
+  await expect(slot).toHaveAttribute('data-has', 'false');
+  await expect(slot.locator('svg')).toHaveCount(0);
+
+  // write some details in the card (click the row's quiet slot: it opens the card)
+  await slot.click();
+  await expect(page.getByTestId('td-dialog')).toBeVisible();
+  if ((await page.getByTestId('td-details').count()) === 0) await page.getByTestId('td-add-details').click();
+  await page.getByTestId('td-details').fill('Venue shortlist and budget.');
+  await page.getByTestId('td-details').blur();
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('td-dialog')).toHaveCount(0);
+
+  await expect(slot).toHaveAttribute('data-has', 'true');
+  await expect(slot.locator('svg')).toHaveCount(1);
+  // the icon sits between the title and the project picker
+  const [slotBox, pickBox, titleBox] = await Promise.all([
+    slot.boundingBox(),
+    row.getByTestId(/^promote-target-/).boundingBox(),
+    row.locator('.px-t-main').boundingBox(),
+  ]);
+  expect(slotBox!.x).toBeGreaterThanOrEqual(titleBox!.x + titleBox!.width - 1);
+  expect(slotBox!.x + slotBox!.width).toBeLessThanOrEqual(pickBox!.x + 1);
+});
+
 test('the Inbox × asks before deleting — Keep and Escape leave the item, Delete removes it', async ({ page }) => {
   await register(page, 'delete');
   await goto(page, 'tasks');
