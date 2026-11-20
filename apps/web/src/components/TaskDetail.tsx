@@ -33,6 +33,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -72,7 +73,11 @@ import {
   type PromoteTarget,
 } from '@prisms/ui';
 
+import { useSnapPref } from '../agenda-snap';
 import { formatMinutes, projectTone, rejectionMessage } from '../format';
+import { DetailsMark } from './DetailsMark';
+import { ProjectPicker } from './ProjectPicker';
+import { newProjectFor } from './useNewProject';
 
 // --- the shared controller ------------------------------------------------------
 
@@ -82,8 +87,9 @@ export interface TaskDetailApi {
   /**
    * Spread onto a list row: a click on the row — anywhere but its own controls
    * (check box, buttons, selects, the click-to-rename title) — opens the card,
-   * and so does Enter/Space while the row itself has focus. A click that ends a
-   * drag (selecting the row's text, say) does not.
+   * and so does Enter/Space while the row itself has focus. A release that ends
+   * a drag or a long press (selecting the row's text, say), or that leaves text
+   * selected in the row, does not.
    */
   rowProps: (taskId: string) => {
     onMouseDown: (e: MouseEvent<HTMLElement>) => void;
@@ -114,6 +120,23 @@ function fromRowControl(target: EventTarget, row: HTMLElement): boolean {
 
 /** How far (px) the pointer may travel between press and release and still count as a click. */
 const CLICK_SLOP = 4;
+/** How long (ms) a press may be held and still count as a click — longer is a hold (to select text, say). */
+const HOLD_MS = 500;
+
+/** Where and when a press landed. */
+interface Press {
+  x: number;
+  y: number;
+  at: number;
+}
+
+const pressAt = (e: MouseEvent<HTMLElement>): Press => ({ x: e.clientX, y: e.clientY, at: performance.now() });
+
+/** True when the release that fired `e` ended a drag or a long hold, not a click. */
+function dragOrHold(p: Press | null, e: MouseEvent<HTMLElement>): boolean {
+  if (p === null) return false; // no press seen (a keyboard-made click): a click
+  return Math.hypot(e.clientX - p.x, e.clientY - p.y) > CLICK_SLOP || performance.now() - p.at >= HOLD_MS;
+}
 
 /** True when the page has text selected inside `row` — the click ended a selection. */
 function selectsTextIn(row: HTMLElement): boolean {
@@ -135,7 +158,7 @@ export function TaskDetailProvider({ ctx, children }: { ctx: CommandContext; chi
    * on the row (a drag over its text) still fires `click` — on the row — so the
    * row checks the press before it opens anything.
    */
-  const press = useRef<{ x: number; y: number; onControl: boolean } | null>(null);
+  const press = useRef<(Press & { onControl: boolean }) | null>(null);
   const close = useCallback(() => {
     // Keep an edit in progress: blurring runs the focused field's save before
     // the card (and the field) unmount — removing an element fires no blur.
@@ -149,14 +172,14 @@ export function TaskDetailProvider({ ctx, children }: { ctx: CommandContext; chi
       open,
       rowProps: (id: string) => ({
         onMouseDown: (e: MouseEvent<HTMLElement>) => {
-          press.current = { x: e.clientX, y: e.clientY, onControl: fromRowControl(e.target, e.currentTarget) };
+          press.current = { ...pressAt(e), onControl: fromRowControl(e.target, e.currentTarget) };
         },
         onClick: (e: MouseEvent<HTMLElement>) => {
           const p = press.current;
           press.current = null;
           if (fromRowControl(e.target, e.currentTarget)) return;
-          // a drag, not a click: it started on a control (the title) or moved
-          if (p && (p.onControl || Math.hypot(e.clientX - p.x, e.clientY - p.y) > CLICK_SLOP)) return;
+          // not a click: it started on a control (the title), moved, or was held
+          if (p && (p.onControl || dragOrHold(p, e))) return;
           if (selectsTextIn(e.currentTarget)) return;
           open(id);
         },
@@ -206,17 +229,53 @@ function textOffsetAt(el: HTMLElement, x: number, y: number): number | null {
   return hit !== null && hit.node instanceof Text && el.contains(hit.node) ? hit.offset : null;
 }
 
+/** Grow or shrink a textarea to exactly its content: as many rows as the text wraps to. */
+function fitHeight(el: HTMLTextAreaElement): void {
+  el.style.height = 'auto';
+  // border-box sizing: the content's scroll height plus the borders
+  el.style.height = `${el.scrollHeight + el.offsetHeight - el.clientHeight}px`;
+}
+
 /**
- * A row's title. Clicking the text turns it into an input right there, with the
- * caret where the click landed (nothing selected): Enter or clicking away saves,
- * Escape leaves the title as it was. The row's other clicks still open the
- * details card.
+ * A row's title. The text reads as text — a text cursor, and it can be selected
+ * by dragging (a drag or a long press neither renames nor opens the card). A
+ * plain click turns it into an editor right there, wrapped over the same rows
+ * as the title, with the caret where the click landed (nothing selected): Enter
+ * or clicking away saves, Escape leaves the title as it was. The row's other
+ * clicks still open the details card.
  */
 export function EditableTitle({ node, commands }: { node: Node; commands: PrismsCommands }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(node.title);
   /** Where the click that started the edit landed in the title text. */
   const caretAt = useRef<number | null>(null);
+  /** The press on the title text, to tell a click from a drag or a hold. */
+  const press = useRef<Press | null>(null);
+  const box = useRef<HTMLTextAreaElement>(null);
+
+  // the editor is as tall as its text wraps to — now, as it is typed in…
+  useLayoutEffect(() => {
+    if (editing && box.current) fitHeight(box.current);
+  }, [editing, draft]);
+  // …and when its width changes (the window is resized while editing)
+  useEffect(() => {
+    const el = box.current;
+    if (!editing || !el || typeof ResizeObserver === 'undefined') return;
+    let width = el.clientWidth;
+    const watch = new ResizeObserver(() => {
+      if (el.clientWidth === width) return;
+      width = el.clientWidth;
+      fitHeight(el);
+    });
+    watch.observe(el);
+    return () => watch.disconnect();
+  }, [editing]);
+
+  function startEditing(at: number | null) {
+    caretAt.current = at;
+    setDraft(node.title);
+    setEditing(true);
+  }
 
   function commit() {
     setEditing(false);
@@ -226,10 +285,12 @@ export function EditableTitle({ node, commands }: { node: Node; commands: Prisms
 
   if (editing) {
     return (
-      <input
+      <textarea
+        ref={box}
         className="px-title-input"
         data-testid={`title-input-${node.id}`}
         aria-label="Task title"
+        rows={1}
         value={draft}
         maxLength={MAX_TITLE_LENGTH}
         autoFocus
@@ -239,7 +300,8 @@ export function EditableTitle({ node, commands }: { node: Node; commands: Prisms
           caretAt.current = null;
           e.currentTarget.setSelectionRange(at, at);
         }}
-        onChange={(e) => setDraft(e.target.value)}
+        // a title is one line of text that wraps: a pasted line break becomes a space
+        onChange={(e) => setDraft(e.target.value.replace(/\s*[\r\n]+\s*/g, ' '))}
         onBlur={commit}
         onKeyDown={(e) => {
           if (e.key === 'Enter') {
@@ -255,19 +317,37 @@ export function EditableTitle({ node, commands }: { node: Node; commands: Prisms
       />
     );
   }
+  // A span, not a <button>: a button's text can't be selected by dragging.
+  // role="button" also keeps the row from treating a press here as its own.
+  // The notebook mark follows the title, in every list that shows a task's title.
   return (
-    <button
-      type="button"
-      className="px-title-btn"
-      data-testid={`title-${node.id}`}
-      onClick={(e) => {
-        caretAt.current = textOffsetAt(e.currentTarget, e.clientX, e.clientY);
-        setDraft(node.title);
-        setEditing(true);
-      }}
-    >
-      {node.title}
-    </button>
+    <>
+      <span
+        role="button"
+        tabIndex={0}
+        className="px-title-btn"
+        data-testid={`title-${node.id}`}
+        onMouseDown={(e) => {
+          press.current = pressAt(e);
+        }}
+        onClick={(e) => {
+          const p = press.current;
+          press.current = null;
+          // selecting the text (a drag, a hold, or a selection it leaves) is not a rename
+          if (dragOrHold(p, e) || selectsTextIn(e.currentTarget)) return;
+          startEditing(textOffsetAt(e.currentTarget, e.clientX, e.clientY));
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            startEditing(null);
+          }
+        }}
+      >
+        {node.title}
+      </span>
+      <DetailsMark node={node} />
+    </>
   );
 }
 
@@ -348,6 +428,19 @@ export function parseHours(text: string): number | null | undefined {
   return minutes === 0 ? null : minutes;
 }
 
+/**
+ * The duration after one arrow press: up goes to the next multiple of `step` above
+ * `current` (so 0 / empty → `step`), down to the next one below it. Going down to
+ * 0 clears the duration (null) — an estimate must be positive. `null` in, `null`
+ * out on down: nothing to lower.
+ */
+export function stepMinutes(current: number | null, dir: 1 | -1, step: number): number | null {
+  const base = current ?? 0;
+  if (dir === 1) return (Math.floor(base / step) + 1) * step;
+  const next = (Math.ceil(base / step) - 1) * step;
+  return next > 0 ? next : null;
+}
+
 /** `attributes.location`, or '' when the task has none. */
 export function locationOf(node: Node): string {
   const v = node.attributes['location'];
@@ -405,7 +498,6 @@ function TaskDetailBody({ node, facts, ctx, onOpenTask, onClose }: { node: Node;
     // the budget row also reports time logged, so it shows once any is
     hours: node.estimate_minutes !== null || (progress?.consumedMinutes ?? 0) >= 1,
     location: locationOf(node) !== '',
-    details: node.description !== '',
     steps: isTask && steps.length > 0,
     deps: isTask && (incomingEdges(facts.edgeIndex, node.id).length > 0 || outgoingEdges(facts.edgeIndex, node.id).length > 0),
   };
@@ -476,7 +568,8 @@ function TaskDetailBody({ node, facts, ctx, onOpenTask, onClose }: { node: Node;
         </div>
       )}
 
-      {shows('details') && <DetailsField node={node} commands={commands} run={run} />}
+      {/* always there, even empty: notes are the most-used field, so no "+" chip first */}
+      <DetailsField node={node} commands={commands} run={run} />
 
       {isTask ? (
         <>
@@ -518,17 +611,16 @@ function TaskDetailBody({ node, facts, ctx, onOpenTask, onClose }: { node: Node;
  * from the card's "+" chips, so a bare task opens as a short card: kind, title,
  * project, and a row of what can be added.
  */
-const EXTRAS = ['start', 'due', 'hours', 'location', 'details', 'steps', 'deps'] as const;
+const EXTRAS = ['start', 'due', 'hours', 'location', 'steps', 'deps'] as const;
 type Extra = (typeof EXTRAS)[number];
 /** Only a task has these; an Inbox capture gets them once it is in a project. */
 const TASK_ONLY: ReadonlySet<Extra> = new Set(['steps', 'deps']);
 /** Each chip's label, and the element id focused when it is added. */
 const EXTRA_UI: Record<Extra, { label: string; focus: string }> = {
   start: { label: 'Start date', focus: 'td-start' },
-  due: { label: 'Expected completion', focus: 'td-due' },
-  hours: { label: 'Budget', focus: 'td-hours' },
+  due: { label: 'Expected by', focus: 'td-due' },
+  hours: { label: 'Duration', focus: 'td-hours' },
   location: { label: 'Location', focus: 'td-location' },
-  details: { label: 'Details', focus: 'td-details' },
   steps: { label: 'Steps', focus: 'td-step-add' },
   deps: { label: 'Dependencies', focus: 'td-dep-add-before' },
 };
@@ -570,7 +662,7 @@ function ProjectField({ node, facts, targets, commands, run }: FieldProps & { fa
     const parent = facts.tree.byId.get(facts.tree.byId.get(t.id)?.parent_id ?? '');
     return parent ? `${parent.title} › ${t.title}` : `${t.title} (milestone)`;
   };
-  const options = [...targets].map((t) => ({ id: t.id, text: label(t) })).sort((a, b) => a.text.localeCompare(b.text));
+  const sorted = [...targets].sort((a, b) => label(a).localeCompare(label(b)));
 
   function choose(parentId: string) {
     if (parentId === '' || parentId === current) return;
@@ -585,12 +677,17 @@ function ProjectField({ node, facts, targets, commands, run }: FieldProps & { fa
 
   return (
     <Prop icon="layers" label="Project" htmlFor="td-project">
-      <select id="td-project" className="px-td-in px-td-in--grow" data-testid="td-project" value={current} onChange={(e) => choose(e.target.value)}>
-        {isCapture && <option value="">Inbox — not in a project yet</option>}
-        {options.map((o) => (
-          <option key={o.id} value={o.id}>{o.text}</option>
-        ))}
-      </select>
+      <ProjectPicker
+        variant="field"
+        id="td-project"
+        testId="td-project"
+        targets={sorted}
+        value={current}
+        onChange={choose}
+        labelOf={label}
+        placeholder="Inbox — not in a project yet"
+        newProject={newProjectFor(facts.tree, commands)}
+      />
     </Prop>
   );
 }
@@ -634,12 +731,12 @@ function DateRow({ node, start, due, commands, run }: FieldProps & { start: bool
   return (
     <>
       {start && (
-        <Prop icon="play" label="Starts" htmlFor="td-start">
+        <Prop icon="play" label="Start date" htmlFor="td-start">
           <DateInput id="td-start" testId="td-start" value={node.start_date} onSave={(v) => void run(() => commands.setDates(node.id, { startDate: v }))} />
         </Prop>
       )}
       {due && (
-        <Prop icon="cal" label="Expected completion" htmlFor="td-due">
+        <Prop icon="cal" label="Expected by" htmlFor="td-due">
           <DateInput id="td-due" testId="td-due" value={node.due_date} onSave={(v) => void run(() => commands.setDates(node.id, { dueDate: v }))} />
           {backwards && <span className="px-td-note px-td-note--warn" data-testid="td-dates-warn">ends before it starts</span>}
         </Prop>
@@ -660,10 +757,20 @@ function BudgetField({ node, commands, run }: FieldProps) {
     }
     void run(() => commands.setEstimate(node.id, minutes));
   }
+  // The arrows (and ↑/↓ in the field) move by the Agenda snap grid from Settings.
+  const snap = useSnapPref();
+  const current = parseHours(d.draft);
+  const shown = current === undefined ? node.estimate_minutes : current;
+  function step(dir: 1 | -1) {
+    const next = stepMinutes(shown, dir, snap);
+    d.setDraft(hoursText(next));
+    // against what is SHOWN, not what is stored: a quick second press lands before the store catches up
+    if (next !== shown) void run(() => commands.setEstimate(node.id, next));
+  }
   const logged = progress ? Math.round(progress.consumedMinutes) : 0;
   const over = progress?.ratio != null && progress.ratio > 1;
   return (
-    <Prop icon="clock" label="Budget" htmlFor="td-hours">
+    <Prop icon="clock" label="Duration" htmlFor="td-hours">
       <input
         id="td-hours"
         className="px-td-in px-td-hours"
@@ -678,13 +785,24 @@ function BudgetField({ node, commands, run }: FieldProps) {
           if (e.key === 'Enter') {
             e.preventDefault();
             e.currentTarget.blur();
+          } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+            e.preventDefault();
+            step(e.key === 'ArrowUp' ? 1 : -1);
           } else escapeReverts(e, d);
         }}
       />
+      <span className="px-td-spin">
+        <button type="button" tabIndex={-1} aria-label={`Add ${snap} minutes`} data-testid="td-hours-up" onClick={() => step(1)}>
+          <Ic name="chevd" />
+        </button>
+        <button type="button" tabIndex={-1} aria-label={`Take off ${snap} minutes`} data-testid="td-hours-down" disabled={shown === null} onClick={() => step(-1)}>
+          <Ic name="chevd" />
+        </button>
+      </span>
       <span className="px-td-unit">hours</span>
       <span className={`px-td-note${over ? ' px-td-note--over' : ''}`} data-testid="td-logged">
         {logged > 0 ? `${formatMinutes(logged)} logged` : 'nothing logged yet'}
-        {progress?.ratio != null && logged > 0 && ` · ${Math.round(progress.ratio * 100)}% of budget`}
+        {progress?.ratio != null && logged > 0 && ` · ${Math.round(progress.ratio * 100)}% of duration`}
       </span>
     </Prop>
   );

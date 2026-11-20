@@ -19,6 +19,7 @@
   --px-sb-bg: #fbfbfc;
   --px-border: #e1e5ec;
   --px-border-2: #d5dae3;
+  --px-focus: #c5cbd6; /* a focused text field: light grey outline, never accent blue */
   --px-text: #0e1726;
   --px-text-dim: #5b6678;
   --px-faint: #8a94a6;
@@ -64,7 +65,7 @@ body {
   cursor: default;
   caret-color: transparent;
 }
-input, textarea, [contenteditable]:not([contenteditable='false']) { caret-color: auto; }
+input, textarea, [contenteditable]:not([contenteditable='false']) { caret-color: var(--px-text); }
 textarea,
 [contenteditable]:not([contenteditable='false']),
 input:not([type='button']):not([type='checkbox']):not([type='color']):not([type='file']):not([type='image']):not([type='radio']):not([type='range']):not([type='reset']):not([type='submit']) { cursor: text; }
@@ -761,7 +762,7 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
    adds `-webkit-` itself, and given both in the order unprefixed → prefixed it
    keeps only the prefixed one, which Chromium ignores — every dialog then
    shipped with no blur at all (an e2e in task-detail.spec.ts guards this). */
-.px-scrim { position: fixed; inset: 0; background: rgba(246,247,249,0.18); backdrop-filter: blur(24px) saturate(115%); display: flex; align-items: center; justify-content: center; z-index: 50; }
+.px-scrim { position: fixed; inset: 0; background: rgba(246,247,249,0.18); backdrop-filter: blur(8px) saturate(115%); display: flex; align-items: center; justify-content: center; z-index: 50; }
 .px-modal { background: var(--px-surface); border: 1px solid var(--px-border); border-radius: var(--px-radius); padding: 22px; width: min(440px, 92vw); box-shadow: var(--px-shadow-pop); }
 .px-modal-title { margin: 0 0 12px; font-size: 18px; }
 .px-modal-sub { margin: -6px 0 18px; font-size: 13px; color: var(--px-text-dim); line-height: 1.55; }
@@ -770,7 +771,7 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
 /* full-screen dialog: the page behind is blurred harder and veiled lighter (the
    form sits straight on it, no card), the form itself stays a readable column
    centered in the viewport. */
-.px-scrim--blur { background: rgba(246,247,249,0.62); backdrop-filter: blur(32px) saturate(120%); }
+.px-scrim--blur { background: rgba(246,247,249,0.62); backdrop-filter: blur(12px) saturate(120%); }
 /* `scrollbar-gutter: both-edges` keeps the column optically centered when the
    form is taller than the viewport and the dialog grows a scrollbar. */
 .px-modal--full { width: 100%; height: 100%; max-width: none; border: none; border-radius: 0; background: transparent; box-shadow: none; padding: 0; overflow-y: auto; scrollbar-gutter: stable both-edges; display: flex; align-items: center; justify-content: center; }
@@ -783,9 +784,11 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
 @keyframes px-rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 /* Closing (Modal.tsx keeps the dialog mounted for MODAL_EXIT_MS = 180 ms): the
    dialog blurs out as it fades, and the page behind eases back into focus as
-   the scrim's own blur and veil drain away — no snap from blurred to sharp. */
+   the scrim's own blur and veil drain away — no snap from blurred to sharp.
+   (Unprefixed `backdrop-filter` only, as above: with both spellings the minifier
+   kept just the prefixed one here too, so the blur never animated in Chromium.) */
 @keyframes px-scrim-out {
-  to { background-color: transparent; backdrop-filter: blur(0) saturate(100%); -webkit-backdrop-filter: blur(0) saturate(100%); }
+  to { background-color: transparent; backdrop-filter: blur(0) saturate(100%); }
 }
 @keyframes px-modal-out { to { opacity: 0; filter: blur(4px); transform: scale(0.985); } }
 .px-scrim--out { pointer-events: none; animation: px-scrim-out 180ms ease-out forwards; }
@@ -844,7 +847,7 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
 .px-jn-titlerow { display: flex; align-items: center; gap: 8px; }
 .px-jn-title { font: inherit; font-size: 15px; font-weight: 620; color: var(--px-text); background: none; border: 1px solid transparent; border-radius: 6px; padding: 2px 6px; margin: -2px 0 -2px -6px; flex: 1 1 auto; min-width: 0; }
 .px-jn-title:hover:not(:disabled) { border-color: var(--px-border); }
-.px-jn-title:focus { outline: none; border-color: var(--px-accent); background: var(--px-surface); }
+.px-jn-title:focus { outline: none; border-color: var(--px-focus); background: var(--px-surface); }
 .px-jn-title:disabled { color: var(--px-text); opacity: 1; }
 .px-jn-date { font-size: 11.5px; color: var(--px-faint); font-variant-numeric: tabular-nums; padding-left: 0; }
 
@@ -998,7 +1001,7 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
 
 /* line-height is `.px-md`'s job (same element, later rule would win otherwise) */
 .px-journal-rich { flex: 1 1 auto; cursor: text; }
-.px-journal-rich:focus, .px-journal-rich:focus-visible { outline: none; border-color: var(--px-accent); }
+.px-journal-rich:focus, .px-journal-rich:focus-visible { outline: none; border-color: var(--px-focus); }
 .px-md-toolbar { display: flex; flex-wrap: wrap; gap: 4px; }
 .px-md-toolbar .px-btn { padding: 4px 8px; font-size: 12px; min-width: 30px; }
 .px-md { background: var(--px-surface); border: 1px solid var(--px-border); border-radius: var(--px-radius); padding: 2px 14px; margin-top: 8px; }
@@ -1132,7 +1135,10 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
 .px-pdot--amber { background: var(--px-amber); }
 .px-pdot--green { background: var(--px-green); }
 .px-prio { font-weight: 640; }
-.px-due { font-size: 11px; color: var(--px-text-dim); background: var(--px-surface-2); border-radius: 6px; padding: 2px 7px; white-space: nowrap; }
+.px-due { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--px-text-dim); background: var(--px-surface-2); border-radius: 6px; padding: 2px 7px; white-space: nowrap; }
+.px-due .px-ic, .px-t-due .px-ic { width: 12px; height: 12px; flex: none; }
+/* the due date in a row's meta line: no chip, just the calendar icon and the date */
+.px-t-due { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
 .px-due--today { background: var(--px-blue-bg); color: var(--px-blue-deep); }
 .px-pbar-sm { width: 120px; flex: none; }
 .px-pbar-lbl { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--px-faint); margin-bottom: 3px; }
@@ -1243,8 +1249,7 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
 .px-capture--day { margin: 18px 0 0; max-width: none; }
 .px-capture input { flex: 1; min-width: 0; border: 1px solid var(--px-border); border-radius: 8px; padding: 8px 12px; background: var(--px-surface); color: var(--px-text); font: inherit; }
 .px-capture input::placeholder { color: var(--px-faint); }
-.px-capture-to { flex: 0 1 220px; min-width: 0; border: 1px solid var(--px-border); border-radius: 8px; padding: 8px 10px; background: var(--px-surface); color: var(--px-text-dim); font: inherit; font-size: 13px; }
-.px-capture-to:focus { outline: none; border-color: var(--px-blue); box-shadow: 0 0 0 3px var(--px-blue-bg); }
+.px-capture-to { flex: 0 1 220px; min-width: 0; display: flex; }
 @media (max-width: 560px) { .px-capture { flex-wrap: wrap; } .px-capture input { flex-basis: 100%; } .px-capture-to { flex: 1 1 0; } }
 .px-promote { display: inline-flex; align-items: center; gap: 6px; }
 .px-promote select { border: 1px solid var(--px-border); border-radius: 7px; padding: 4px 8px; font-size: 12px; background: var(--px-surface); color: var(--px-text-dim); }
@@ -1274,21 +1279,21 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
 .px-addstep { margin-top: 4px; }
 .px-addstep input { width: 280px; max-width: 100%; border: 1px dashed var(--px-border-2); border-radius: 6px; padding: 4.5px 10px; font-size: 12px; background: var(--px-surface); color: var(--px-text); }
 .px-addstep input::placeholder { color: var(--px-faint); }
-.px-addstep input:focus { outline: none; border-color: var(--px-blue); border-style: solid; }
+.px-addstep input:focus { outline: none; border-color: var(--px-focus); border-style: solid; }
 
 /* ── task rows open their details; titles rename in place ──
-   A row that opens the details card reads as clickable; its title text is its
-   own control, but it is deliberately inert on hover (no wash, no cursor
-   change, no tooltip). The title's padding is cancelled by a matching negative
-   margin, and the inline input's border+padding likewise, so neither state
-   shifts the row. */
+   A row that opens the details card reads as clickable; its title is plain
+   text — a text cursor, selectable, no hover wash or tooltip — that renames on
+   a click. The title's padding is cancelled by a matching negative margin, and
+   the inline editor's border+padding likewise, so neither state shifts the
+   row; the editor wraps at the same width as the text, over as many rows. */
 .px-trow[data-opens-detail] { cursor: pointer; }
 .px-trow[data-opens-detail]:focus-visible { outline: 2px solid var(--px-blue); outline-offset: -2px; }
 .px-run-banner[data-opens-detail] { cursor: pointer; }
 .px-run-banner[data-opens-detail]:focus-visible { outline: 2px solid var(--px-blue); outline-offset: 2px; }
-.px-title-btn { background: none; border: 0; padding: 1px 4px; margin: -1px -4px; font: inherit; color: inherit; text-align: left; cursor: inherit; border-radius: 5px; min-width: 0; overflow-wrap: anywhere; }
+.px-title-btn { background: none; border: 0; padding: 1px 4px; margin: -1px -4px; font: inherit; color: inherit; text-align: left; cursor: text; user-select: text; border-radius: 5px; min-width: 0; overflow-wrap: anywhere; }
 .px-title-btn:focus-visible { outline: 2px solid var(--px-blue); outline-offset: 1px; }
-.px-title-input { flex: 1; min-width: 140px; border: 1.5px solid var(--px-border-2); border-radius: 5px; padding: 1px 5px; margin: -2.5px -6.5px; font: inherit; background: var(--px-surface); color: var(--px-text); }
+.px-title-input { flex: 1; min-width: 140px; display: block; border: 1.5px solid var(--px-border-2); border-radius: 5px; padding: 1px 5px; margin: -2.5px -6.5px; font: inherit; background: var(--px-surface); color: var(--px-text); resize: none; overflow: hidden; overflow-wrap: anywhere; }
 .px-title-input:focus { outline: none; box-shadow: none; }
 .px-t-loc { display: inline-flex; align-items: center; gap: 4px; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .px-t-loc .px-ic { width: 11px; height: 11px; flex: none; }
@@ -1302,7 +1307,7 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
 .px-td-x .px-ic { width: 16px; height: 16px; }
 .px-td-title { display: block; width: calc(100% + 18px); margin: 0 -9px 12px; padding: 5px 8px; border: 1px solid transparent; border-radius: 8px; background: none; color: var(--px-text); font: inherit; font-size: 20px; font-weight: 620; letter-spacing: -0.2px; }
 .px-td-title:hover { border-color: var(--px-border); }
-.px-td-title:focus { outline: none; border-color: var(--px-blue); background: var(--px-surface); box-shadow: 0 0 0 3px var(--px-blue-bg); }
+.px-td-title:focus { outline: none; border-color: var(--px-focus); background: var(--px-surface); box-shadow: none; }
 .px-td-props { display: grid; grid-template-columns: 168px minmax(0, 1fr); gap: 8px 14px; align-items: center; padding: 14px 0; border-top: 1px solid var(--px-border); border-bottom: 1px solid var(--px-border); }
 .px-td-k { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--px-text-dim); }
 .px-td-k .px-ic { width: 14px; height: 14px; color: var(--px-faint); flex: none; }
@@ -1310,10 +1315,17 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
 .px-td-in { font: inherit; font-size: 13px; padding: 6px 9px; border: 1px solid var(--px-border); border-radius: 7px; background: var(--px-surface); color: var(--px-text); min-width: 0; }
 .px-td-in::placeholder { color: var(--px-faint); }
 .px-td-in:hover { border-color: var(--px-border-2); }
-.px-td-in:focus { outline: none; border-color: var(--px-blue); box-shadow: 0 0 0 3px var(--px-blue-bg); }
+.px-td-in:focus { outline: none; border-color: var(--px-focus); box-shadow: none; }
 .px-td-in--grow { flex: 1 1 200px; }
 .px-td-hours { width: 80px; text-align: right; font-variant-numeric: tabular-nums; }
 .px-td-unit { font-size: 12.5px; color: var(--px-text-dim); }
+/* the duration's up/down arrows: two small stacked buttons beside the field */
+.px-td-spin { display: inline-flex; flex-direction: column; gap: 2px; }
+.px-td-spin button { display: flex; align-items: center; justify-content: center; width: 20px; height: 14px; padding: 0; border: 1px solid var(--px-border); border-radius: 4px; background: var(--px-surface); color: var(--px-text-dim); cursor: pointer; }
+.px-td-spin .px-ic { width: 10px; height: 10px; }
+.px-td-spin button:first-child .px-ic { transform: rotate(180deg); }
+.px-td-spin button:hover:not(:disabled) { background: #e9ecf1; color: var(--px-text); }
+.px-td-spin button:disabled { opacity: 0.3; cursor: default; }
 .px-td-date { display: inline-flex; align-items: center; gap: 2px; }
 .px-td-clear { display: flex; padding: 4px; border: 0; border-radius: 5px; background: none; color: var(--px-faint); cursor: pointer; }
 .px-td-clear:hover { background: var(--px-surface-2); color: var(--px-text-dim); }
@@ -1331,7 +1343,8 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
 .px-td-sec-h { display: flex; align-items: center; gap: 7px; margin-bottom: 8px; font-size: 11.5px; font-weight: 650; letter-spacing: 0.06em; text-transform: uppercase; color: var(--px-text-dim); }
 .px-td-sec-h .px-ic { width: 14px; height: 14px; color: var(--px-faint); }
 .px-td-count { font-weight: 560; letter-spacing: 0; text-transform: none; color: var(--px-faint); }
-.px-td-desc { display: block; width: 100%; resize: vertical; line-height: 1.55; }
+/* no resize grip: the box already grows with its text (rows follow the line count) */
+.px-td-desc { display: block; width: 100%; resize: none; line-height: 1.55; }
 .px-td-hint { margin: 10px 0 0; font-size: 12.5px; color: var(--px-faint); }
 .px-td-steps { display: flex; flex-direction: column; gap: 1px; }
 .px-td-step { margin: 0 -8px; }
@@ -1468,7 +1481,11 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
 .px-xbtn:focus-visible { outline: 2px solid var(--px-blue); outline-offset: 1px; }
 .px-xpop { position: absolute; right: 100%; top: 50%; transform: translateY(-50%); margin-right: 4px; z-index: 5; display: flex; align-items: center; gap: 6px; white-space: nowrap; padding: 4px 6px 4px 10px; background: var(--px-surface); border: 1px solid var(--px-border); border-radius: 8px; box-shadow: var(--px-shadow-pop); }
 .px-xpop-q { font-size: 12px; color: var(--px-text-dim); }
-.px-trow--inbox > .px-promote { flex: 0 1 42%; min-width: 0; }
+/* The picker hugs the right edge (a fixed-ish width, the title takes the rest). */
+.px-trow--inbox > .px-promote { flex: 0 1 260px; max-width: 34%; min-width: 0; }
+/* The notebook mark right after a task's title (DetailsMark): a task with details */
+.px-t-hasnote { flex: none; display: inline-flex; align-items: center; color: var(--px-faint); }
+.px-t-hasnote .px-ic { width: 14px; height: 14px; }
 .px-trow--inbox .px-promote select { flex: 1 1 0; width: 100%; max-width: none; min-width: 0; text-overflow: ellipsis; }
 .px-trow--inbox .px-promote .px-btn { flex: none; }
 /* Inbox project picker: projects are bubbles styled like the Journal tags (blue pill, no #) */
@@ -1485,6 +1502,29 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
 .px-ppick-opt:hover { opacity: 1; }
 .px-ppick-opt--on { opacity: 1; box-shadow: inset 0 0 0 1.5px var(--px-blue); }
 .px-list--compact .px-trow--inbox .px-ppick { flex: 1; }
+/* field variant (capture bar, complete-capture dialog): boxed like a text input */
+.px-ppick--field { min-height: 34px; padding: 4px 10px; border: 1px solid var(--px-border); border-radius: 8px; background: var(--px-surface); }
+.px-ppick--field:hover:not(:disabled) { border-color: var(--px-border-2); }
+.px-ppick--field:focus-visible, .px-ppick--field[aria-expanded="true"] { outline: none; border-radius: 8px; border-color: var(--px-blue); box-shadow: 0 0 0 3px var(--px-blue-bg); }
+.px-ppick--field .px-ic { margin-left: auto; }
+.px-ppick--field .px-ppick-empty { font-size: 13px; }
+.px-promote--field { display: flex; align-items: stretch; }
+.px-td-v .px-ppick--field { flex: 1 1 200px; }
+/* the plain "clear" choice (e.g. Inbox — assign later): grey text on its own line, no bubble */
+.px-ppick-none { flex: 1 1 100%; padding: 3px 4px; border: 0; border-radius: 6px; background: none; color: var(--px-faint); font: inherit; font-size: 12px; text-align: left; cursor: pointer; }
+.px-ppick-none:hover, .px-ppick-none--on { color: var(--px-text-dim); background: var(--px-surface-2); }
+.px-ppick-none:focus-visible { outline: 2px solid var(--px-blue); outline-offset: 1px; }
+/* "+ New project" row and its name form, inside the picker popover */
+.px-ppick-add { flex: 1 1 100%; display: inline-flex; align-items: center; gap: 5px; margin-top: 2px; padding: 5px 4px 2px; border: 0; border-top: 1px solid var(--px-border); border-radius: 0; background: none; color: var(--px-text-dim); font: inherit; font-size: 12px; text-align: left; cursor: pointer; }
+.px-ppick-add .px-ic { width: 12px; height: 12px; }
+.px-ppick-add:hover { color: var(--px-blue-deep); }
+.px-ppick-add:focus-visible { outline: 2px solid var(--px-blue); outline-offset: 1px; }
+.px-ppick-new { flex: 1 1 100%; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.px-ppick-new-in { font: inherit; font-size: 13px; padding: 7px 10px; border: 1px solid var(--px-border); border-radius: 8px; background: var(--px-surface); color: var(--px-text); min-width: 0; }
+.px-ppick-new-in:focus { outline: none; border-color: var(--px-blue); box-shadow: 0 0 0 3px var(--px-blue-bg); }
+.px-ppick-new-rm { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
+.px-ppick-new-lbl { font-size: 11px; color: var(--px-faint); margin-right: 2px; }
+.px-ppick-new-act { display: flex; justify-content: flex-end; gap: 6px; }
 .px-list--stack .px-day-cols { flex-direction: column; align-items: stretch; gap: 0; }
 .px-list--stack .px-day-left { flex: none; width: 100%; }
 .px-list--stack .px-day-rail { width: auto; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); align-items: start; margin-top: 18px; }
@@ -1515,6 +1555,10 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
 .px-content { min-width: 0; min-height: 0; }
 /* a visible focus ring for KEYBOARD navigation only (mouse clicks don't trigger it). */
 :focus-visible { outline: 2px solid var(--px-accent); outline-offset: 2px; }
+/* …except in a text field: keyboard or pointer, its focus is a light grey border (the
+   field's own rule may add more), never the accent ring. Checkboxes and radios keep it. */
+input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='button']):not([type='submit']):focus-visible,
+textarea:focus-visible, select:focus-visible, [contenteditable]:not([contenteditable='false']):focus-visible { outline: none; border-color: var(--px-focus); }
 .px-navlink:focus-visible,
 .px-tab:focus-visible,
 .px-fchip:focus-visible,
@@ -1584,7 +1628,7 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
 /* the name reads as a heading until you reach for it, then it is a field */
 .px-mgr-title-input { flex: 1; min-width: 0; font: inherit; font-size: 16px; font-weight: 640; border: 1px solid transparent; border-radius: 8px; padding: 5px 8px; background: none; color: var(--px-text); }
 .px-mgr-title-input:hover { border-color: var(--px-border); }
-.px-mgr-title-input:focus { outline: none; border-color: var(--px-accent); background: var(--px-surface); }
+.px-mgr-title-input:focus { outline: none; border-color: var(--px-focus); background: var(--px-surface); }
 .px-mgr-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .px-mgr-stats { display: flex; gap: 22px; flex-wrap: wrap; font-size: 11.5px; color: var(--px-faint); }
 .px-mgr-stat { display: flex; flex-direction: column; gap: 1px; }
@@ -1810,7 +1854,7 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
 .px-rb-title { display: block; width: 100%; box-sizing: border-box; margin: 0; padding: 0; border: 0; background: none; font: 600 28px/1.15 var(--px-font-display, var(--px-font)); letter-spacing: -0.01em; color: var(--px-text); }
 input.px-rb-title { margin-left: -7px; padding: 1px 6px; border: 1px solid transparent; border-radius: 8px; }
 input.px-rb-title:hover { border-color: var(--px-border); }
-input.px-rb-title:focus { outline: none; border-color: var(--px-accent); background: var(--px-surface); }
+input.px-rb-title:focus { outline: none; border-color: var(--px-focus); background: var(--px-surface); }
 .px-rb-realized { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 4px; }
 .px-rb-realized-l { margin-right: 4px; font-size: 12px; color: var(--px-text-dim); }
 .px-rb-stats { display: flex; flex-wrap: wrap; margin: 0; }
@@ -1908,7 +1952,7 @@ input.px-rb-title:focus { outline: none; border-color: var(--px-accent); backgro
 .px-rf-fstep { flex: none; display: grid; place-items: center; min-width: 18px; height: 18px; padding: 0 4px; box-sizing: border-box; border-radius: 9px; background: var(--px-surface-2); font: 600 10.5px var(--px-font-mono, ui-monospace, monospace); }
 .px-rf-ftitle { overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; font-size: 12.5px; line-height: 16px; font-weight: 600; }
 .px-rf-dead { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; font-size: 10.5px; font-weight: 600; color: var(--px-rf-amber-ink); }
-.px-rf-finput { position: absolute; inset: 0; width: 100%; height: 100%; box-sizing: border-box; padding: 0 10px; border: 1px solid var(--px-rf-sel); border-radius: 10px; box-shadow: 0 0 0 3px var(--px-rf-sel-bg); background: var(--px-surface); font: inherit; font-size: 13px; font-weight: 600; color: var(--px-text); outline: none; }
+.px-rf-finput { position: absolute; inset: 0; width: 100%; height: 100%; box-sizing: border-box; padding: 0 10px; border: 1px solid var(--px-focus); border-radius: 10px; box-shadow: none; background: var(--px-surface); font: inherit; font-size: 13px; font-weight: 600; color: var(--px-text); outline: none; }
 
 .px-rf-door { flex: none; overflow: visible; }
 .px-rf-door polygon { stroke-width: 20; stroke-linejoin: round; }
@@ -1961,7 +2005,7 @@ input.px-rb-title:focus { outline: none; border-color: var(--px-accent); backgro
 .px-rf-grip circle { fill: var(--px-faint); }
 .px-rf-group-t { overflow: hidden; text-overflow: ellipsis; font-weight: 500; color: var(--px-text-dim); }
 .px-rf-group-n { font: 500 10.5px var(--px-font-mono, ui-monospace, monospace); color: var(--px-text-dim); }
-.px-rf-group-input { position: absolute; left: 8px; top: 5px; width: calc(100% - 16px); max-width: 300px; height: 26px; box-sizing: border-box; padding: 0 8px; border: 1px solid var(--px-rf-sel); border-radius: 6px; box-shadow: 0 0 0 3px var(--px-rf-sel-bg); background: var(--px-surface); font: inherit; font-size: 12.5px; font-weight: 600; outline: none; }
+.px-rf-group-input { position: absolute; left: 8px; top: 5px; width: calc(100% - 16px); max-width: 300px; height: 26px; box-sizing: border-box; padding: 0 8px; border: 1px solid var(--px-focus); border-radius: 6px; box-shadow: none; background: var(--px-surface); font: inherit; font-size: 12.5px; font-weight: 600; outline: none; }
 .px-rf-group-empty { position: absolute; left: 16px; right: 16px; top: 40px; bottom: 10px; display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 12.5px; color: var(--px-rf-amber-ink); text-align: center; pointer-events: none; }
 .px-rf-vdoor { position: absolute; filter: drop-shadow(0 1px 2px rgba(16,24,40,.06)); }
 .px-rf-vdoor-frame, .px-rf-vdoor-fill { clip-path: polygon(50% 0, 100% 7%, 100% 100%, 0 100%, 0 7%); }
@@ -1992,7 +2036,7 @@ input.px-rb-title:focus { outline: none; border-color: var(--px-accent); backgro
 .px-rf-stack { display: flex; flex-direction: column; gap: 8px; }
 .px-rf-title-input { width: 100%; box-sizing: border-box; margin: -4px -6px 0; padding: 4px 6px; border: 1px solid transparent; border-radius: 8px; background: transparent; font: 600 19px var(--px-font-display, var(--px-font)); color: var(--px-text); }
 .px-rf-title-input:hover { border-color: var(--px-border); }
-.px-rf-title-input:focus, .px-rf-input:focus, .px-rf-select:focus, .px-rf-textarea:focus { outline: none; border-color: var(--px-rf-sel); box-shadow: 0 0 0 3px var(--px-rf-sel-bg); background: var(--px-surface); }
+.px-rf-title-input:focus, .px-rf-input:focus, .px-rf-select:focus, .px-rf-textarea:focus { outline: none; border-color: var(--px-focus); box-shadow: none; background: var(--px-surface); }
 .px-rf-state { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; line-height: 18px; }
 .px-rf-state .px-rf-door { margin-top: 3px; }
 .px-rf-note { padding: 8px 10px; border-radius: 8px; background: var(--px-surface-2); font-size: 12px; line-height: 17px; }
@@ -2179,7 +2223,7 @@ button.px-rf-dep-kind:hover { border-color: var(--px-border-2); color: var(--px-
 .px-vd-hint { font-size: 11.5px; color: var(--px-faint); margin: 6px 0 0; line-height: 1.5; }
 .px-vd-input { width: 100%; font: inherit; padding: 10px 13px; border-radius: 9px; border: 1px solid var(--px-border); background: var(--px-surface); color: var(--px-text); }
 .px-vd-input::placeholder { color: var(--px-faint); }
-.px-vd-input:focus { outline: none; border-color: var(--px-accent); }
+.px-vd-input:focus { outline: none; border-color: var(--px-focus); }
 textarea.px-vd-input { min-height: 92px; resize: vertical; line-height: 1.55; }
 .px-vd-units { display: inline-flex; gap: 2px; padding: 3px; background: var(--px-surface-2); border-radius: 9px; }
 .px-vd-unit { font: inherit; font-size: 12.5px; font-weight: 560; padding: 5px 14px; border-radius: 7px; border: none; background: none; color: var(--px-text-dim); cursor: pointer; }
@@ -2190,7 +2234,7 @@ textarea.px-vd-input { min-height: 92px; resize: vertical; line-height: 1.55; }
 .px-vd-preset:hover { border-color: var(--px-border-2); }
 .px-vd-preset--on { background: var(--px-blue-bg); border-color: var(--px-blue-brd); color: var(--px-blue-deep); }
 .px-vd-amount { width: 84px; font: inherit; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--px-border); background: var(--px-surface); color: var(--px-text); }
-.px-vd-amount:focus { outline: none; border-color: var(--px-accent); }
+.px-vd-amount:focus { outline: none; border-color: var(--px-focus); }
 .px-vd-sep { font-size: 12px; color: var(--px-faint); }
 .px-vd-preview { font-size: 13px; font-weight: 560; }
 .px-vd-err { color: var(--px-danger); font-size: 12px; margin: 8px 0 0; }
@@ -2210,7 +2254,7 @@ textarea.px-vd-input { min-height: 92px; resize: vertical; line-height: 1.55; }
 .px-jn-tag-x:hover { opacity: 1; background: rgba(0, 0, 0, 0.08); }
 .px-jn-tag-x .px-ic, .px-jn-tag-x svg { width: 10px; height: 10px; }
 .px-jn-tag-input { font: inherit; font-size: 12px; color: var(--px-text); background: none; border: 1px dashed var(--px-border-2); border-radius: 999px; padding: 2px 9px; width: 96px; min-width: 0; outline: none; }
-.px-jn-tag-input:focus { border-style: solid; border-color: var(--px-blue); width: 130px; }
+.px-jn-tag-input:focus { border-style: solid; border-color: var(--px-focus); width: 130px; }
 .px-jn-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 10px 0 14px; }
 .px-jn-sel { padding: 5px 9px; font-size: 12.5px; max-width: 200px; }
 .px-jn-mh--static { cursor: default; }

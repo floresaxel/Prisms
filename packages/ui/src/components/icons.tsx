@@ -13,7 +13,7 @@ export type IconName =
   | 'x' | 'chevd' | 'chevl' | 'chevr' | 'play' | 'stop' | 'down' | 'up' | 'info'
   | 'alert' | 'flame' | 'trash' | 'cols' | 'gantt' | 'net' | 'scale' | 'list' | 'pen'
   | 'dots' | 'route' | 'note' | 'tasklist' | 'eye' | 'lockbody' | 'lockshackle' | 'pin'
-  | 'order' | 'mindmap' | 'outline' | 'flow' | 'freeflow';
+  | 'order' | 'mindmap' | 'outline' | 'flow' | 'freeflow' | 'notebook';
 
 /** Mount once, high in the tree (the app shell). Renders no visible output. */
 export function IconSprite() {
@@ -87,6 +87,8 @@ export function IconSprite() {
           ☑ character (U+2611): Inter has no glyph for it, so the font stack fell
           through to Segoe UI Emoji and rendered a COLOUR emoji that ignores
           `color` — the one non-monochrome mark in the editor chrome. */}
+      {/* a spiral notebook: cover, spine rule, ring stubs on the left, two text lines */}
+      <symbol id="i-notebook" viewBox="0 0 24 24"><rect x="6" y="3" width="14" height="18" rx="2" /><path d="M10 3v18" /><path d="M3 8h4M3 12h4M3 16h4" /><path d="M13 9h4M13 13h4" /></symbol>
       <symbol id="i-tasklist" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" /><path d="m9 12 2 2 4-4" /></symbol>
       {/* what you are looking towards — the Vision nav item. `route` (a path
           between two points) already carries Roadmap, so the pair reads as

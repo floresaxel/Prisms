@@ -57,6 +57,7 @@ import { agendaLayout, DAY_SPANS, DEFAULT_SPAN, GUTTER_W, isDaySpan } from '../a
 import { formatAgendaRange, useRangeFormatPref } from '../agenda-range';
 import { fmtGridClock, pointerMinutes, snapMinutes, useSnapPref } from '../agenda-snap';
 import { DayJournalPanel } from '../components/DayJournal';
+import { DetailsMark } from '../components/DetailsMark';
 import { NoteSwap } from '../components/NoteSwap';
 import { useTabSwap } from '../components/tabSwap';
 import { WhyButton } from '../components/Why';
@@ -810,6 +811,7 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
                 }}
               >
                 <span className="px-todo-title">{t.task.title}</span>
+                <DetailsMark node={t.task} />
                 <span className="px-todo-sub">
                   {t.kind === 'activity' && <span className="px-tag px-tag--grey px-todo-flag">inbox</span>}
                   {t.estimated ? '' : '~'}{t.schedulable.estimateMinutes}m
@@ -839,6 +841,7 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
                   }}
                 >
                   <span className="px-todo-title">{t.task.title}</span>
+                  <DetailsMark node={t.task} />
                   <span className="px-todo-sub">
                     {t.kind === 'activity' && <span className="px-tag px-tag--grey px-todo-flag">inbox</span>}
                     {t.scheduled ? 'scheduled · ' : ''}

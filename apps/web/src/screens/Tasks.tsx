@@ -38,12 +38,14 @@ import {
   type PromoteTarget,
 } from '@prisms/ui';
 
+import { DueDate } from '../components/DueDate';
 import { InboxDelete } from '../components/InboxDelete';
 import { ProjectPicker } from '../components/ProjectPicker';
 import { StepsToggle, SubstepPanel } from '../components/Substeps';
 import { EditableTitle, locationOf, useTaskDetail, type TaskDetailApi } from '../components/TaskDetail';
 import { useTabSwap } from '../components/tabSwap';
 import { UnfocusedTag } from '../components/UnfocusedTag';
+import { useNewProject, type NewProjectApi } from '../components/useNewProject';
 import { formatMinutes, projectTone } from '../format';
 import { listLayoutClass } from '../list-layout';
 import { useMeasuredWidth } from '../use-measured-width';
@@ -69,6 +71,7 @@ export function Tasks({ ctx }: { ctx: CommandContext }) {
     [activities],
   );
   const targets = usePromoteTargets();
+  const newProject = useNewProject(commands);
   const tree = useNodeTree();
   const groups = useTasksByProject(now);
   const stepsByTask = useTaskStepsByTask();
@@ -115,19 +118,20 @@ export function Tasks({ ctx }: { ctx: CommandContext }) {
           value={title}
           onChange={(e) => setTitle(e.target.value)}
         />
-        <select
-          className="px-capture-to"
-          data-testid="capture-project"
-          aria-label="Capture into"
-          title="Where new captures go — stays selected until you leave Tasks"
-          value={captureTarget?.id ?? ''}
-          onChange={(e) => setCaptureTo(e.target.value)}
-        >
-          <option value="">Inbox — assign later</option>
-          {targets.map((t) => (
-            <option key={t.id} value={t.id}>{t.title}{t.type === 'milestone' ? ' (milestone)' : ''}</option>
-          ))}
-        </select>
+        <span className="px-capture-to">
+          <ProjectPicker
+            variant="field"
+            targets={targets}
+            value={captureTarget?.id ?? ''}
+            onChange={setCaptureTo}
+            testId="capture-project"
+            ariaLabel="Capture into"
+            title="Where new captures go — stays selected until you leave Tasks"
+            placeholder="Inbox — assign later"
+            noneLabel="Inbox — assign later"
+            newProject={newProject}
+          />
+        </span>
         <button className="px-btn px-btn--primary" type="submit" data-testid="activity-add">Capture</button>
       </form>
 
@@ -147,7 +151,7 @@ export function Tasks({ ctx }: { ctx: CommandContext }) {
             <ul className="px-rows" data-testid="inbox">
               {activities.length === 0 && <li className="px-trow px-muted">{hydrated ? 'Inbox is empty.' : 'Loading…'}</li>}
               {inboxNewestFirst.map((a) => (
-                <InboxRow key={a.id} activity={a} targets={targets} commands={commands} detail={detail} onComplete={() => setCompleting(a)} />
+                <InboxRow key={a.id} activity={a} targets={targets} newProject={newProject} commands={commands} detail={detail} onComplete={() => setCompleting(a)} />
               ))}
             </ul>
 
@@ -219,7 +223,7 @@ export function Tasks({ ctx }: { ctx: CommandContext }) {
         )}
       </div>
 
-      <CompleteInboxDialog activity={completing} targets={targets} commands={commands} onClose={() => setCompleting(null)} />
+      <CompleteInboxDialog activity={completing} targets={targets} newProject={newProject} commands={commands} onClose={() => setCompleting(null)} />
     </section>
   );
 }
@@ -239,9 +243,10 @@ function InboxCheck({ activity, onComplete }: { activity: Node; onComplete: () =
  * one (promote, then check off — it becomes an ordinary completed task) or
  * complete it as it is, an unfocused task.
  */
-function CompleteInboxDialog({ activity, targets, commands, onClose }: { activity: Node | null; targets: PromoteTarget[]; commands: PrismsCommands; onClose: () => void }) {
+function CompleteInboxDialog({ activity, targets, newProject, commands, onClose }: { activity: Node | null; targets: PromoteTarget[]; newProject: NewProjectApi | undefined; commands: PrismsCommands; onClose: () => void }) {
+  // Like the Inbox row: nothing preselected, so "Add & complete" waits for a choice.
   const [parentId, setParentId] = useState('');
-  const selected = parentId || targets[0]?.id || '';
+  const selected = targets.some((t) => t.id === parentId) ? parentId : '';
   const [busy, setBusy] = useState(false);
 
   async function finish(withProject: boolean) {
@@ -273,22 +278,20 @@ function CompleteInboxDialog({ activity, targets, commands, onClose }: { activit
     >
       <div data-testid="inbox-complete-dialog">
         <p className="px-modal-sub">This capture isn't in a project yet. Add it to one so the work counts toward that project, or just complete it as an unfocused task.</p>
-        <label className="px-field">
-          Add to a project
-          <span className="px-promote">
-            <select
-              data-testid="inbox-complete-target"
+        <div className="px-field">
+          <span>Add to a project</span>
+          <span className="px-promote px-promote--field">
+            <ProjectPicker
+              variant="field"
+              targets={targets}
               value={selected}
-              onChange={(e) => setParentId(e.target.value)}
-              disabled={targets.length === 0}
-            >
-              {targets.length === 0 && <option value="">No project to add it to</option>}
-              {targets.map((t) => (
-                <option key={t.id} value={t.id}>{t.title} ({t.type})</option>
-              ))}
-            </select>
+              onChange={setParentId}
+              testId="inbox-complete-target"
+              emptyLabel="No project to add it to"
+              newProject={newProject}
+            />
             <button
-              className="px-btn px-btn--sm px-btn--primary"
+              className="px-btn px-btn--primary"
               data-testid="inbox-complete-promote"
               disabled={selected === '' || busy}
               onClick={() => void finish(true)}
@@ -296,13 +299,13 @@ function CompleteInboxDialog({ activity, targets, commands, onClose }: { activit
               Add &amp; complete
             </button>
           </span>
-        </label>
+        </div>
       </div>
     </Modal>
   );
 }
 
-function InboxRow({ activity, targets, commands, detail, onComplete }: { activity: Node; targets: PromoteTarget[]; commands: PrismsCommands; detail: TaskDetailApi; onComplete: () => void }) {
+function InboxRow({ activity, targets, newProject, commands, detail, onComplete }: { activity: Node; targets: PromoteTarget[]; newProject: NewProjectApi | undefined; commands: PrismsCommands; detail: TaskDetailApi; onComplete: () => void }) {
   // Nothing preselected: the picker reads "Assign project" until one is chosen,
   // and Assign stays off. A choice whose project has since gone counts as none.
   const [parentId, setParentId] = useState('');
@@ -312,7 +315,7 @@ function InboxRow({ activity, targets, commands, detail, onComplete }: { activit
       <InboxCheck activity={activity} onComplete={onComplete} />
       <div className="px-t-main"><div className="px-t-title"><EditableTitle node={activity} commands={commands} /></div></div>
       <span className="px-promote">
-        <ProjectPicker targets={targets} value={selected} onChange={setParentId} testId={`promote-target-${activity.id}`} />
+        <ProjectPicker targets={targets} value={selected} onChange={setParentId} testId={`promote-target-${activity.id}`} newProject={newProject} />
         <button
           className="px-btn px-btn--sm px-btn--primary"
           data-testid={`promote-${activity.id}`}
@@ -354,7 +357,7 @@ function TaskRow({ task, status, blockedBy, steps, commands, detail }: { task: N
           <div className="px-t-title" style={isBlocked ? { color: 'var(--px-text-dim)' } : undefined}><EditableTitle node={task} commands={commands} /></div>
           <div className="px-t-meta">
             {task.estimate_minutes != null && <span>est {formatMinutes(task.estimate_minutes)}</span>}
-            {task.due_date && <span>due {task.due_date.slice(5)}</span>}
+            {task.due_date && <DueDate date={task.due_date} />}
             {location !== '' && <span className="px-t-loc" title={location}><Ic name="pin" />{location}</span>}
           </div>
         </div>
