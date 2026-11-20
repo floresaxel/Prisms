@@ -237,6 +237,38 @@ test('a task with details shows a notebook icon right after its title, in every 
   await expect(page.getByTestId('status-inbox').getByTestId(/^has-details-/)).toHaveCount(1);
 });
 
+test('the notebook icon stays to the right of a title that wraps onto several lines', async ({ page }) => {
+  await register(page, 'notebookwrap');
+  await goto(page, 'tasks');
+  const long =
+    'Prepare the full quarterly offsite agenda, book the venue and the catering, confirm travel for every attendee, ' +
+    'and circulate the pre-read packet to the whole leadership team well before the first session starts';
+  await page.getByTestId('activity-title').fill(long);
+  await page.getByTestId('activity-add').click();
+  const row = page.getByTestId('inbox').locator('li', { hasText: 'Prepare the full quarterly offsite agenda' });
+  await expect(row).toBeVisible();
+
+  // open the card from the keyboard (a long title leaves no empty spot to click) and add details
+  await row.focus();
+  await row.press('Enter');
+  await expect(page.getByTestId('td-dialog')).toBeVisible();
+  if ((await page.getByTestId('td-details').count()) === 0) await page.getByTestId('td-add-details').click();
+  await page.getByTestId('td-details').fill('Everything the offsite needs.');
+  await page.getByTestId('td-details').blur();
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('td-dialog')).toHaveCount(0);
+
+  const title = row.getByTestId(/^title-/);
+  const mark = row.getByTestId(/^has-details-/);
+  await expect(mark).toHaveCount(1);
+  const [t, m] = await Promise.all([title.boundingBox(), mark.boundingBox()]);
+  // the title really did wrap (taller than one 13px line), and the mark sits to its right, on its height
+  expect(t!.height).toBeGreaterThan(30);
+  expect(m!.x).toBeGreaterThanOrEqual(t!.x + t!.width - 1);
+  expect(m!.y).toBeGreaterThanOrEqual(t!.y - 1);
+  expect(m!.y + m!.height).toBeLessThanOrEqual(t!.y + t!.height + 1);
+});
+
 test('the Inbox × asks before deleting — Keep and Escape leave the item, Delete removes it', async ({ page }) => {
   await register(page, 'delete');
   await goto(page, 'tasks');
