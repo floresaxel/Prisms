@@ -310,7 +310,7 @@ export function MyDay({ ctx, onNavigate }:{ ctx: CommandContext; onNavigate?: (h
           {runningTimers.map((t) => {
             const item = allActionable.find((it) => it.openEntryId === t.entry.id) ?? null;
             return (
-              <div className="px-run-banner" data-testid="run-banner" data-task={t.entry.task_id} key={t.entry.id}>
+              <div className="px-run-banner" data-testid="run-banner" data-task={t.entry.task_id} key={t.entry.id} {...detail.rowProps(t.entry.task_id)}>
                 <RunMark tone={projectTone(item?.projectId ?? null)} testId="run-mark" />
                 <div className="px-run-main">
                   <div className="px-run-title">{t.task?.title ?? 'Running task'}</div>

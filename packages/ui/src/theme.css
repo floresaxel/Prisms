@@ -1277,6 +1277,8 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
    shifts the row. */
 .px-trow[data-opens-detail] { cursor: pointer; }
 .px-trow[data-opens-detail]:focus-visible { outline: 2px solid var(--px-blue); outline-offset: -2px; }
+.px-run-banner[data-opens-detail] { cursor: pointer; }
+.px-run-banner[data-opens-detail]:focus-visible { outline: 2px solid var(--px-blue); outline-offset: 2px; }
 .px-title-btn { background: none; border: 0; padding: 1px 4px; margin: -1px -4px; font: inherit; color: inherit; text-align: left; cursor: inherit; border-radius: 5px; min-width: 0; overflow-wrap: anywhere; }
 .px-title-btn:focus-visible { outline: 2px solid var(--px-blue); outline-offset: 1px; }
 .px-title-input { flex: 1; min-width: 140px; border: 1.5px solid var(--px-border-2); border-radius: 5px; padding: 1px 5px; margin: -2.5px -6.5px; font: inherit; background: var(--px-surface); color: var(--px-text); }
