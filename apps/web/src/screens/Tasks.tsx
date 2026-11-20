@@ -38,6 +38,7 @@ import {
   type PromoteTarget,
 } from '@prisms/ui';
 
+import { DueDate } from '../components/DueDate';
 import { InboxDelete } from '../components/InboxDelete';
 import { ProjectPicker } from '../components/ProjectPicker';
 import { EditableTitle, locationOf, useTaskDetail, type TaskDetailApi } from '../components/TaskDetail';
@@ -357,7 +358,7 @@ function TaskRow({ task, status, blockedBy, steps, commands, detail }: { task: N
           <div className="px-t-title" style={isBlocked ? { color: 'var(--px-text-dim)' } : undefined}><EditableTitle node={task} commands={commands} /></div>
           <div className="px-t-meta">
             {task.estimate_minutes != null && <span>est {formatMinutes(task.estimate_minutes)}</span>}
-            {task.due_date && <span>due {task.due_date.slice(5)}</span>}
+            {task.due_date && <DueDate date={task.due_date} />}
             {location !== '' && <span className="px-t-loc" title={location}><Ic name="pin" />{location}</span>}
           </div>
         </div>

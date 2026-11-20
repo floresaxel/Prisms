@@ -116,7 +116,7 @@ test('rename a task in place, then edit every detail in its card — all of it s
   // the row shows the move and the new facts
   const moved = page.getByTestId(`project-group-${ids.p2}`).getByTestId(`task-row-${ids.task}`);
   await expect(moved).toContainText('Studio B');
-  await expect(moved).toContainText('due 12-01');
+  await expect(moved).toContainText('01/Dec'); // due date: calendar icon + DD/MMM
 
   // ── the server took all of it: reload and read it back ──
   await expect(page.getByTestId('sync-state')).toHaveAttribute('data-sync', 'synced', { timeout: 30_000 });

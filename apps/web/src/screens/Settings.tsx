@@ -7,7 +7,8 @@
  * Not everything here is account data: the agenda snap grid is a property of
  * the pointer in front of you, and the agenda's date-range label is a property
  * of the screen you are reading it on, so both are stored per device and apply
- * the moment they are picked — no Save, nothing to sync. Their rows say so.
+ * the moment they are picked — no Save, nothing to sync. Their rows say so. The
+ * task due-date format (`20/Nov` by default) is stored the same way.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 
@@ -16,6 +17,7 @@ import { addDays, asEpochMillis, bucketDate, type ImportReport } from '@prisms/c
 import { Ic, subscribeHistory, useCommands, useUserSettings, type CommandContext, type StreamSubscriber } from '@prisms/ui';
 
 import { DEFAULT_SPAN } from '../agenda-layout';
+import { DUE_DATE_FORMATS, formatDueDate, setDueDateFormatPref, useDueDateFormatPref } from '../due-date-format';
 import { formatAgendaRange, RANGE_FORMATS, setRangeFormatPref, useRangeFormatPref } from '../agenda-range';
 import { setSnapPref, SNAP_OPTIONS, useSnapPref } from '../agenda-snap';
 import { useTabSwap } from '../components/tabSwap';
@@ -32,6 +34,7 @@ export function Settings({ ctx }: { ctx: CommandContext }) {
 
   const snap = useSnapPref();
   const rangeFormat = useRangeFormatPref();
+  const dueFormat = useDueDateFormatPref();
   /**
    * The options are labelled with what they would ACTUALLY say, over the days
    * the Agenda would open on — today, forward by the default span. A live
@@ -172,6 +175,30 @@ export function Settings({ ctx }: { ctx: CommandContext }) {
                   {RANGE_FORMATS.map((o) => (
                     <option key={o.value} value={o.value}>
                       {o.label} — {formatAgendaRange(sample.from, sample.to, o.value)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="px-set-row">
+              <div className="px-set-lbl">
+                <b>Task due date</b>
+                <span>
+                  How a task&rsquo;s due date is written in your lists, next to its calendar icon. This device only — it applies
+                  straight away. Each option is shown with today&rsquo;s date.
+                </span>
+              </div>
+              <div className="px-set-ctl">
+                <select
+                  className="px-select"
+                  data-testid="settings-due-format"
+                  aria-label="task due date format"
+                  value={dueFormat}
+                  onChange={(e) => setDueDateFormatPref(e.target.value)}
+                >
+                  {DUE_DATE_FORMATS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label} — {formatDueDate(sample.from, o.value)}
                     </option>
                   ))}
                 </select>

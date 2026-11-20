@@ -1134,7 +1134,10 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
 .px-pdot--amber { background: var(--px-amber); }
 .px-pdot--green { background: var(--px-green); }
 .px-prio { font-weight: 640; }
-.px-due { font-size: 11px; color: var(--px-text-dim); background: var(--px-surface-2); border-radius: 6px; padding: 2px 7px; white-space: nowrap; }
+.px-due { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--px-text-dim); background: var(--px-surface-2); border-radius: 6px; padding: 2px 7px; white-space: nowrap; }
+.px-due .px-ic, .px-t-due .px-ic { width: 12px; height: 12px; flex: none; }
+/* the due date in a row's meta line: no chip, just the calendar icon and the date */
+.px-t-due { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
 .px-due--today { background: var(--px-blue-bg); color: var(--px-blue-deep); }
 .px-pbar-sm { width: 120px; flex: none; }
 .px-pbar-lbl { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--px-faint); margin-bottom: 3px; }
