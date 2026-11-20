@@ -114,19 +114,19 @@ export function Tasks({ ctx }: { ctx: CommandContext }) {
           value={title}
           onChange={(e) => setTitle(e.target.value)}
         />
-        <select
-          className="px-capture-to"
-          data-testid="capture-project"
-          aria-label="Capture into"
-          title="Where new captures go — stays selected until you leave Tasks"
-          value={captureTarget?.id ?? ''}
-          onChange={(e) => setCaptureTo(e.target.value)}
-        >
-          <option value="">Inbox — assign later</option>
-          {targets.map((t) => (
-            <option key={t.id} value={t.id}>{t.title}{t.type === 'milestone' ? ' (milestone)' : ''}</option>
-          ))}
-        </select>
+        <span className="px-capture-to">
+          <ProjectPicker
+            variant="field"
+            targets={targets}
+            value={captureTarget?.id ?? ''}
+            onChange={setCaptureTo}
+            testId="capture-project"
+            ariaLabel="Capture into"
+            title="Where new captures go — stays selected until you leave Tasks"
+            placeholder="Inbox — assign later"
+            noneLabel="Inbox — assign later"
+          />
+        </span>
         <button className="px-btn px-btn--primary" type="submit" data-testid="activity-add">Capture</button>
       </form>
 
@@ -239,8 +239,9 @@ function InboxCheck({ activity, onComplete }: { activity: Node; onComplete: () =
  * complete it as it is, an unfocused task.
  */
 function CompleteInboxDialog({ activity, targets, commands, onClose }: { activity: Node | null; targets: PromoteTarget[]; commands: PrismsCommands; onClose: () => void }) {
+  // Like the Inbox row: nothing preselected, so "Add & complete" waits for a choice.
   const [parentId, setParentId] = useState('');
-  const selected = parentId || targets[0]?.id || '';
+  const selected = targets.some((t) => t.id === parentId) ? parentId : '';
   const [busy, setBusy] = useState(false);
 
   async function finish(withProject: boolean) {
@@ -272,20 +273,17 @@ function CompleteInboxDialog({ activity, targets, commands, onClose }: { activit
     >
       <div data-testid="inbox-complete-dialog">
         <p className="px-modal-sub">This capture isn't in a project yet. Add it to one so the work counts toward that project, or just complete it as an unfocused task.</p>
-        <label className="px-field">
-          Add to a project
-          <span className="px-promote">
-            <select
-              data-testid="inbox-complete-target"
+        <div className="px-field">
+          <span>Add to a project</span>
+          <span className="px-promote px-promote--field">
+            <ProjectPicker
+              variant="field"
+              targets={targets}
               value={selected}
-              onChange={(e) => setParentId(e.target.value)}
-              disabled={targets.length === 0}
-            >
-              {targets.length === 0 && <option value="">No project to add it to</option>}
-              {targets.map((t) => (
-                <option key={t.id} value={t.id}>{t.title} ({t.type})</option>
-              ))}
-            </select>
+              onChange={setParentId}
+              testId="inbox-complete-target"
+              emptyLabel="No project to add it to"
+            />
             <button
               className="px-btn px-btn--sm px-btn--primary"
               data-testid="inbox-complete-promote"
@@ -295,7 +293,7 @@ function CompleteInboxDialog({ activity, targets, commands, onClose }: { activit
               Add &amp; complete
             </button>
           </span>
-        </label>
+        </div>
       </div>
     </Modal>
   );

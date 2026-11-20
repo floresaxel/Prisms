@@ -1241,8 +1241,7 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
 .px-capture--day { margin: 18px 0 0; max-width: none; }
 .px-capture input { flex: 1; min-width: 0; border: 1px solid var(--px-border); border-radius: 8px; padding: 8px 12px; background: var(--px-surface); color: var(--px-text); font: inherit; }
 .px-capture input::placeholder { color: var(--px-faint); }
-.px-capture-to { flex: 0 1 220px; min-width: 0; border: 1px solid var(--px-border); border-radius: 8px; padding: 8px 10px; background: var(--px-surface); color: var(--px-text-dim); font: inherit; font-size: 13px; }
-.px-capture-to:focus { outline: none; border-color: var(--px-blue); box-shadow: 0 0 0 3px var(--px-blue-bg); }
+.px-capture-to { flex: 0 1 220px; min-width: 0; display: flex; }
 @media (max-width: 560px) { .px-capture { flex-wrap: wrap; } .px-capture input { flex-basis: 100%; } .px-capture-to { flex: 1 1 0; } }
 .px-promote { display: inline-flex; align-items: center; gap: 6px; }
 .px-promote select { border: 1px solid var(--px-border); border-radius: 7px; padding: 4px 8px; font-size: 12px; background: var(--px-surface); color: var(--px-text-dim); }
@@ -1478,6 +1477,17 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
 .px-ppick-opt:hover { opacity: 1; }
 .px-ppick-opt--on { opacity: 1; box-shadow: inset 0 0 0 1.5px var(--px-blue); }
 .px-list--compact .px-trow--inbox .px-ppick { flex: 1; }
+/* field variant (capture bar, complete-capture dialog): boxed like a text input */
+.px-ppick--field { min-height: 34px; padding: 4px 10px; border: 1px solid var(--px-border); border-radius: 8px; background: var(--px-surface); }
+.px-ppick--field:hover:not(:disabled) { border-color: var(--px-border-2); }
+.px-ppick--field:focus-visible, .px-ppick--field[aria-expanded="true"] { outline: none; border-radius: 8px; border-color: var(--px-blue); box-shadow: 0 0 0 3px var(--px-blue-bg); }
+.px-ppick--field .px-ic { margin-left: auto; }
+.px-ppick--field .px-ppick-empty { font-size: 13px; }
+.px-promote--field { display: flex; }
+/* the plain "clear" choice (e.g. Inbox — assign later): grey text on its own line, no bubble */
+.px-ppick-none { flex: 1 1 100%; padding: 3px 4px; border: 0; border-radius: 6px; background: none; color: var(--px-faint); font: inherit; font-size: 12px; text-align: left; cursor: pointer; }
+.px-ppick-none:hover, .px-ppick-none--on { color: var(--px-text-dim); background: var(--px-surface-2); }
+.px-ppick-none:focus-visible { outline: 2px solid var(--px-blue); outline-offset: 1px; }
 .px-list--stack .px-day-cols { flex-direction: column; align-items: stretch; gap: 0; }
 .px-list--stack .px-day-left { flex: none; width: 100%; }
 .px-list--stack .px-day-rail { width: auto; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); align-items: start; margin-top: 18px; }

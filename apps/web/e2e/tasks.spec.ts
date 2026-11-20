@@ -67,8 +67,18 @@ test('an Inbox capture completes from the Inbox — as an unfocused task, or add
   // ── add to a project and complete ──
   const email = await rowId('Draft the launch email');
   await page.getByTestId(`inbox-check-${email}`).click();
-  await expect(page.getByTestId('inbox-complete-target').locator(`option[value="${ids.p}"]`)).toHaveCount(1, { timeout: 30_000 });
-  await page.getByTestId('inbox-complete-target').selectOption(ids.p);
+  // the picker starts empty, so "Add & complete" waits for a choice
+  const target = page.getByTestId('inbox-complete-target');
+  await expect(target).toBeEnabled({ timeout: 30_000 });
+  await expect(target).toContainText('Assign project');
+  await expect(page.getByTestId('inbox-complete-promote')).toBeDisabled();
+  await target.click();
+  await page.getByTestId(`inbox-complete-target-opt-${ids.p}`).click();
+  await expect(target).toHaveAttribute('data-value', ids.p);
+  // Escape on the open picker closes only the picker, not the dialog
+  await target.click();
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('inbox-complete-dialog')).toBeVisible();
   await page.getByTestId('inbox-complete-promote').click();
   await expect(page.getByTestId('inbox')).not.toContainText('Draft the launch email');
 
@@ -103,9 +113,17 @@ test('the capture bar can preselect a project; it sticks until you leave Tasks',
 
   await goto(page, 'tasks');
   const pick = page.getByTestId('capture-project');
-  await expect(pick.locator(`option[value="${ids.p}"]`)).toHaveCount(1, { timeout: 30_000 });
-  await expect(pick).toHaveValue(''); // Inbox by default
-  await pick.selectOption(ids.p);
+  // the capture picker is a bubble picker: open it and click a choice
+  const choose = async (id: string) => {
+    await pick.click();
+    await page.getByTestId(`capture-project-opt-${id === '' ? 'none' : id}`).click();
+  };
+  await expect(pick).toHaveAttribute('data-value', ''); // Inbox by default
+  await expect(pick).toContainText('Inbox — assign later');
+  await pick.click();
+  await expect(page.getByTestId(`capture-project-opt-${ids.p}`)).toBeVisible({ timeout: 30_000 });
+  await page.getByTestId(`capture-project-opt-${ids.p}`).click();
+  await expect(pick).toContainText('Launch');
 
   // two captures in a row: both go into the project, and the choice is still there
   for (const t of ['Book the venue', 'Order the banners']) {
@@ -113,24 +131,24 @@ test('the capture bar can preselect a project; it sticks until you leave Tasks',
     await page.getByTestId('activity-add').click();
     await expect(page.getByTestId(`project-group-${ids.p}`)).toContainText(t);
   }
-  await expect(pick).toHaveValue(ids.p);
+  await expect(pick).toHaveAttribute('data-value', ids.p);
   await expect(page.getByTestId('inbox')).not.toContainText('Book the venue');
 
   // other Tasks tabs keep it
   await page.getByTestId('tasks-tab-bystatus').click();
-  await expect(pick).toHaveValue(ids.p);
+  await expect(pick).toHaveAttribute('data-value', ids.p);
 
   // back to Inbox: captures wait there again
-  await pick.selectOption('');
+  await choose('');
   await page.getByTestId('activity-title').fill('Stray thought');
   await page.getByTestId('activity-add').click();
   await expect(page.getByTestId('status-inbox')).toContainText('Stray thought');
 
   // leave Tasks and return: reset to Inbox
-  await pick.selectOption(ids.p);
+  await choose(ids.p);
   await goto(page, 'myday');
   await goto(page, 'tasks');
-  await expect(page.getByTestId('capture-project')).toHaveValue('');
+  await expect(page.getByTestId('capture-project')).toHaveAttribute('data-value', '');
 });
 
 test('the Inbox × asks before deleting — Keep and Escape leave the item, Delete removes it', async ({ page }) => {
