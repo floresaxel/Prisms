@@ -52,6 +52,7 @@ import {
   type PromoteTarget,
 } from '@prisms/ui';
 
+import { DueDate } from '../components/DueDate';
 import { InboxDelete } from '../components/InboxDelete';
 import { RunMark } from '../components/RunMark';
 import { EditableTitle, useTaskDetail, type TaskDetailApi } from '../components/TaskDetail';
@@ -143,7 +144,6 @@ const LIMIT_TITLE = `${MAX_OPEN_TIMERS} timers are already running — clock out
 
 function AvailableRow({ item, atLimit, todayDate, commands, detail, onCheck, onClockIn }: { item: MyDayItem; atLimit: boolean; todayDate: string; commands: PrismsCommands; detail: TaskDetailApi; onCheck: () => void; onClockIn: () => void }) {
   const id = item.task.id;
-  const dueToday = item.task.due_date === todayDate;
   return (
     <li className="px-trow" data-testid={`myday-row-${id}`} data-project={item.projectId ?? ''} {...detail.rowProps(id)}>
       <button className="px-ckb" data-testid={`check-${id}`} aria-label="check off" onClick={onCheck}><Ic name="check" /></button>
@@ -161,7 +161,7 @@ function AvailableRow({ item, atLimit, todayDate, commands, detail, onCheck, onC
         </div>
       </div>
       <ProgressCell id={id} progress={item.progress} />
-      {item.task.due_date &&<span className={`px-due${dueToday ? ' px-due--today' : ''}`}>{dueToday ? 'Today' : item.task.due_date.slice(5)}</span>}
+      {item.task.due_date && <DueDate chip date={item.task.due_date} todayDate={todayDate} />}
       <ClockInButton testId={`clock-in-${id}`} disabled={atLimit} title={atLimit ? LIMIT_TITLE : undefined} onClick={onClockIn} />
     </li>
   );
@@ -497,7 +497,7 @@ function CapturedRow({ activity, targets, commands, detail }: { activity: Node; 
   return (
     <li className="px-trow px-trow--inbox" data-testid={`myday-captured-${activity.id}`} {...detail.rowProps(activity.id)}>
       <div className="px-t-main"><div className="px-t-title"><EditableTitle node={activity} commands={commands} /></div></div>
-      <span className="px-due px-due--today">Today</span>
+      <span className="px-due px-due--today"><Ic name="cal" />Today</span>
       <span className="px-promote">
         <select
           data-testid={`myday-promote-target-${activity.id}`}
