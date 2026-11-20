@@ -151,6 +151,59 @@ test('the capture bar can preselect a project; it sticks until you leave Tasks',
   await expect(page.getByTestId('capture-project')).toHaveAttribute('data-value', '');
 });
 
+test('every project picker can mint a project on the spot, and selects it', async ({ page }) => {
+  await register(page, 'newproject');
+  const ids = { v: randomUUID(), r: randomUUID() };
+  const seed = await page.request.post('/sync/upload', {
+    data: {
+      device_id: 'e2e-seed',
+      commands: [
+        cmd('node.create', { id: ids.v, node_type: 'vision', title: 'Work', sort_order: 'a0' }),
+        cmd('node.create', { id: ids.r, node_type: 'roadmap', title: 'Roadmap', sort_order: 'a0', parent_id: ids.v }),
+      ],
+    },
+  });
+  expect(seed.ok()).toBeTruthy();
+
+  await goto(page, 'tasks');
+  const pick = page.getByTestId('capture-project');
+
+  // the capture bar: "+ New project" is offered even with no project yet; the new
+  // one becomes the capture target (one roadmap → no roadmap choice is asked)
+  await expect(pick).toBeEnabled({ timeout: 30_000 });
+  await pick.click();
+  await expect(page.getByTestId('capture-project-new-open')).toBeVisible({ timeout: 30_000 });
+  await page.getByTestId('capture-project-new-open').click();
+  await expect(page.getByTestId('capture-project-new-create')).toBeDisabled();
+  await page.getByTestId('capture-project-new-name').fill('Brand refresh');
+  await page.getByTestId('capture-project-new-name').press('Enter');
+  await expect(pick).toContainText('Brand refresh');
+
+  // an Inbox row and the complete dialog offer it too, and can add another
+  await pick.click();
+  await page.getByTestId('capture-project-opt-none').click();
+  await page.getByTestId('activity-title').fill('Pick a typeface');
+  await page.getByTestId('activity-add').click();
+  const row = page.getByTestId('inbox').locator('li', { hasText: 'Pick a typeface' });
+  const rowPick = row.getByTestId(/^promote-target-/);
+  await rowPick.click();
+  await expect(page.getByRole('option', { name: 'Brand refresh' })).toBeVisible();
+  await page.getByTestId(/^promote-target-.*-new-open$/).click();
+  await page.getByTestId(/^promote-target-.*-new-name$/).fill('Website');
+  await page.getByTestId(/^promote-target-.*-new-create$/).click();
+  await expect(rowPick).toContainText('Website');
+  await expect(row.getByRole('button', { name: 'Assign', exact: true })).toBeEnabled();
+
+  await row.getByTestId(/^inbox-check-/).click();
+  const target = page.getByTestId('inbox-complete-target');
+  await target.click();
+  await page.getByTestId('inbox-complete-target-new-open').click();
+  await page.getByTestId('inbox-complete-target-new-name').fill('Launch plan');
+  await page.getByTestId('inbox-complete-target-new-create').click();
+  await expect(target).toContainText('Launch plan');
+  await expect(page.getByTestId('inbox-complete-promote')).toBeEnabled();
+});
+
 test('the Inbox × asks before deleting — Keep and Escape leave the item, Delete removes it', async ({ page }) => {
   await register(page, 'delete');
   await goto(page, 'tasks');

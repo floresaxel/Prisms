@@ -1488,6 +1488,17 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
 .px-ppick-none { flex: 1 1 100%; padding: 3px 4px; border: 0; border-radius: 6px; background: none; color: var(--px-faint); font: inherit; font-size: 12px; text-align: left; cursor: pointer; }
 .px-ppick-none:hover, .px-ppick-none--on { color: var(--px-text-dim); background: var(--px-surface-2); }
 .px-ppick-none:focus-visible { outline: 2px solid var(--px-blue); outline-offset: 1px; }
+/* "+ New project" row and its name form, inside the picker popover */
+.px-ppick-add { flex: 1 1 100%; display: inline-flex; align-items: center; gap: 5px; margin-top: 2px; padding: 5px 4px 2px; border: 0; border-top: 1px solid var(--px-border); border-radius: 0; background: none; color: var(--px-text-dim); font: inherit; font-size: 12px; text-align: left; cursor: pointer; }
+.px-ppick-add .px-ic { width: 12px; height: 12px; }
+.px-ppick-add:hover { color: var(--px-blue-deep); }
+.px-ppick-add:focus-visible { outline: 2px solid var(--px-blue); outline-offset: 1px; }
+.px-ppick-new { flex: 1 1 100%; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.px-ppick-new-in { font: inherit; font-size: 13px; padding: 7px 10px; border: 1px solid var(--px-border); border-radius: 8px; background: var(--px-surface); color: var(--px-text); min-width: 0; }
+.px-ppick-new-in:focus { outline: none; border-color: var(--px-blue); box-shadow: 0 0 0 3px var(--px-blue-bg); }
+.px-ppick-new-rm { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
+.px-ppick-new-lbl { font-size: 11px; color: var(--px-faint); margin-right: 2px; }
+.px-ppick-new-act { display: flex; justify-content: flex-end; gap: 6px; }
 .px-list--stack .px-day-cols { flex-direction: column; align-items: stretch; gap: 0; }
 .px-list--stack .px-day-left { flex: none; width: 100%; }
 .px-list--stack .px-day-rail { width: auto; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); align-items: start; margin-top: 18px; }
