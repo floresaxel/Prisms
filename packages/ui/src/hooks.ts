@@ -1183,6 +1183,85 @@ export function useDoneToday(now: Instant): DoneTodayItem[] {
   }, [ctx, entryRows, now]);
 }
 
+/** The parent project of a task (or of a deleted task's live parent), or null. */
+function projectAbove(tree: TreeIndex, node: Node): Node | null {
+  if (node.parent_id === null) return null;
+  const parent = tree.byId.get(node.parent_id);
+  if (!parent) return null;
+  if (parent.node_type === 'project') return parent;
+  return ancestorsOf(tree, parent.id).find((a) => a.node_type === 'project') ?? null;
+}
+
+/**
+ * Every completed task and Inbox capture, most-recent completion first —
+ * Tasks › Completed (Done today is the slice of this since the day reset).
+ * Same item shape as Done today, so both lists render with one row.
+ */
+export function useCompletedTasks(): DoneTodayItem[] {
+  const { factContext: ctx, rows } = usePrismsData();
+  const entryRows = rows.time_entries;
+  return useMemo(() => {
+    const entries = entryRows.map(toTimeEntry);
+    const out: DoneTodayItem[] = [];
+    for (const node of ctx.tree.byId.values()) {
+      if ((node.node_type !== 'task' && node.node_type !== 'activity') || node.completed_at === null) continue;
+      const progress = canonicalProgress(node, entries);
+      const project = projectAbove(ctx.tree, node);
+      out.push({
+        task: node,
+        consumedMinutes: progress.consumedMinutes,
+        progress,
+        projectId: project?.id ?? null,
+        projectTitle: project?.title ?? null,
+        unfocused: node.node_type === 'activity',
+      });
+    }
+    return out.sort((a, b) => {
+      const ca = a.task.completed_at ?? '';
+      const cb = b.task.completed_at ?? '';
+      return cb < ca ? -1 : cb > ca ? 1 : a.task.id < b.task.id ? -1 : 1;
+    });
+  }, [ctx, entryRows]);
+}
+
+export interface DeletedTaskItem {
+  task: Node;
+  /** When it was deleted (its `deleted_at`). */
+  deletedAt: string;
+  projectId: string | null;
+  projectTitle: string | null;
+}
+
+/** How far back Tasks › Recently deleted reaches. */
+export const RECENTLY_DELETED_DAYS = 30;
+
+/**
+ * Tasks and Inbox captures deleted in the last RECENTLY_DELETED_DAYS, newest
+ * first — the ones `node.restore` can bring back on their own: each sits at
+ * the Inbox (no parent) or under a parent that is still live. A task deleted
+ * along with its project is not listed; it returns with the project.
+ *
+ * Tombstones only reach this device while the lazy `history` stream is
+ * subscribed (sync-streams.yaml Tier 2) — the caller holds it open while the
+ * list shows (`subscribeHistory`); until then this is empty.
+ */
+export function useRecentlyDeleted(now: Instant): DeletedTaskItem[] {
+  const { tree, rows } = usePrismsData();
+  return useMemo(() => {
+    const since = now - RECENTLY_DELETED_DAYS * 24 * 60 * 60 * 1000;
+    const out: DeletedTaskItem[] = [];
+    for (const row of rows.nodes) {
+      const node = toNode(row);
+      if ((node.node_type !== 'task' && node.node_type !== 'activity') || node.deleted_at === null) continue;
+      if (isoToEpochMillis(node.deleted_at) < since) continue;
+      if (node.parent_id !== null && !tree.byId.has(node.parent_id)) continue; // goes back with its parent
+      const project = projectAbove(tree, node);
+      out.push({ task: node, deletedAt: node.deleted_at, projectId: project?.id ?? null, projectTitle: project?.title ?? null });
+    }
+    return out.sort((a, b) => (b.deletedAt < a.deletedAt ? -1 : b.deletedAt > a.deletedAt ? 1 : a.task.id < b.task.id ? -1 : 1));
+  }, [rows.nodes, tree, now]);
+}
+
 export interface TodayItinerary {
   /** The day bucket being shown (day-reset aware, not civil midnight). */
   today: IsoDate;

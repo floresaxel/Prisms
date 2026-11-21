@@ -31,6 +31,7 @@ import {
   checkHabitVision,
   checkNodeCreate,
   checkNodeMove,
+  checkNodeRestore,
   checkNodeRetype,
   checkRule,
   checkStepParent,
@@ -46,6 +47,7 @@ import {
   // not in alphabetical place on purpose: split focus (#36) adds MAX_OPEN_TIMERS
   // right after isCommandName, and two inserts on the same line merge as a conflict
   normalizeJournalTags,
+  restoreClosure,
   stripTrustFields,
   uploadRequestSchema,
   ROW_SCHEMA_VERSION,
@@ -164,6 +166,7 @@ const CONTEXT_WRITES: Partial<Record<CommandName, readonly ContextTable[]>> = {
   'node.reorder': ['nodes'],
   'node.uncheck': ['nodes'],
   'node.soft_delete': ['nodes'],
+  'node.restore': ['nodes'],
   'edge.create': ['edges'],
   'edge.delete': ['edges'],
   'block.create': ['schedule_blocks'],
@@ -718,6 +721,37 @@ export function createDispatcher(
               .set({ deleted_at: now, ...sys })
               .where(and(eq(task_steps.user_id, userId), inArray(task_steps.task_id, ids), isNull(task_steps.deleted_at)));
             for (const s of stepRows) rec('task_steps', s.id, 'delete');
+          }
+        }
+        return applied();
+      }
+      case 'node.restore': {
+        // The inverse of node.soft_delete: the node, the descendants its cascade
+        // took (same deleted_at stamp — restoreClosure), and those tasks' steps
+        // deleted by that same cascade. A node that is already live is a no-op.
+        const p = payload as Payload<'node.restore'>;
+        const row = await loadNodeRow(tx, p.id);
+        const own = ownershipReject('node', p.id, row, userId);
+        if (own) return own;
+        const bad = fromCheck(checkNodeRestore(await batchCtx.tree(tx, userId), p.id, row as CoreNode));
+        if (bad) return bad;
+        const stamp = row!.deleted_at;
+        if (stamp === null) return applied();
+        const sameCascade = await tx.select().from(nodes).where(and(eq(nodes.user_id, userId), eq(nodes.deleted_at, stamp)));
+        const ids = restoreClosure(sameCascade as CoreNode[], p.id);
+        if (ids.length > 0) {
+          await tx.update(nodes).set({ deleted_at: null, ...sys }).where(and(eq(nodes.user_id, userId), inArray(nodes.id, ids)));
+          for (const id of ids) rec('nodes', id, 'update', ['deleted_at']);
+          const stepRows = await tx
+            .select({ id: task_steps.id })
+            .from(task_steps)
+            .where(and(eq(task_steps.user_id, userId), inArray(task_steps.task_id, ids), eq(task_steps.deleted_at, stamp)));
+          if (stepRows.length > 0) {
+            await tx
+              .update(task_steps)
+              .set({ deleted_at: null, ...sys })
+              .where(and(eq(task_steps.user_id, userId), inArray(task_steps.id, stepRows.map((s) => s.id))));
+            for (const s of stepRows) rec('task_steps', s.id, 'update', ['deleted_at']);
           }
         }
         return applied();

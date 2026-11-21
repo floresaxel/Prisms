@@ -165,6 +165,9 @@ export {
   useMyDayAvailable,
   useProjectPriorities,
   useDoneToday,
+  useCompletedTasks,
+  useRecentlyDeleted,
+  RECENTLY_DELETED_DAYS,
   useTodayItinerary,
   useBlockedTasks,
   useHabitTasks,
@@ -212,6 +215,7 @@ export {
   type JournalDayRead,
   type SyncQueueState,
   type TodayItinerary,
+  type DeletedTaskItem,
 } from './hooks';
 export { groupWorklistBySchedule, type WorklistGroup } from './worklist-grouping';
 export {

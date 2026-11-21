@@ -84,6 +84,13 @@ describe('createCommands — updates enqueue a minimal-field overlay', () => {
     expect(commands[0]!.name).toBe('node.soft_delete');
     expect(effects[0]).toEqual({ command_id: 'cmd-1', hlc: 'hlc-1', table: 'nodes', row_id: NODE, op: 'delete', fields: {}, seq: 0 });
   });
+
+  it('restore → node.restore with an update clearing deleted_at', async () => {
+    const { store, commands, effects } = captureStore();
+    await createCommands(store, ctx, deps()).restore(NODE);
+    expect(commands[0]!.name).toBe('node.restore');
+    expect(effects[0]).toMatchObject({ table: 'nodes', row_id: NODE, op: 'update', fields: { deleted_at: null } });
+  });
 });
 
 describe('createCommands — creates mint a row id and seed an insert', () => {

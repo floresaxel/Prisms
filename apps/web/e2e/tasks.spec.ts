@@ -383,3 +383,60 @@ test('substeps: a synced step renders, and a UI-added + toggled step survives re
   await expect(panel2.getByText('Measure the runs')).toBeVisible({ timeout: 30_000 });
   await expect(panel2.locator('.px-sstep', { hasText: 'Cut tubing to length' })).toHaveClass(/px-sstep--done/);
 });
+
+test('Completed lists finished tasks (the tick reopens); Recently deleted restores a task with its steps', async ({ page }) => {
+  await register(page, 'archive');
+  const ids = { v: randomUUID(), r: randomUUID(), p: randomUUID(), done: randomUUID(), doomed: randomUUID(), step: randomUUID() };
+  const seed = await page.request.post('/sync/upload', {
+    data: {
+      device_id: 'e2e-seed',
+      commands: [
+        cmd('node.create', { id: ids.v, node_type: 'vision', title: 'Work', sort_order: 'a0' }),
+        cmd('node.create', { id: ids.r, node_type: 'roadmap', title: 'Roadmap', sort_order: 'a0', parent_id: ids.v }),
+        cmd('node.create', { id: ids.p, node_type: 'project', title: 'Garden', sort_order: 'a0', parent_id: ids.r }),
+        cmd('node.create', { id: ids.done, node_type: 'task', title: 'Order mulch', sort_order: 'a0', parent_id: ids.p }),
+        cmd('node.create', { id: ids.doomed, node_type: 'task', title: 'Lay the drip lines', sort_order: 'a1', parent_id: ids.p, estimate_minutes: 60 }),
+        cmd('step.add', { id: ids.step, task_id: ids.doomed, title: 'Measure the runs', sort_order: 'a0' }),
+        cmd('node.check_off', { id: ids.done, completed_at: new Date().toISOString() }),
+      ],
+    },
+  });
+  expect(seed.ok()).toBeTruthy();
+
+  await goto(page, 'tasks');
+  await expect(page.getByTestId(`task-row-${ids.doomed}`)).toBeVisible({ timeout: 30_000 });
+
+  // ── Completed: the finished task, under Today, with its project; the tick reopens it ──
+  await page.getByTestId('tasks-tab-completed').click();
+  const done = page.getByTestId(`completed-${ids.done}`);
+  await expect(done).toBeVisible({ timeout: 30_000 });
+  await expect(done).toContainText('Garden');
+  await expect(page.getByTestId('completed-list')).toContainText('Today');
+  await page.getByTestId(`reopen-${ids.done}`).click();
+  await expect(done).toHaveCount(0);
+
+  // ── delete a task from its card… ──
+  await page.getByTestId('tasks-tab-byproject').click();
+  await page.getByTestId(`task-row-${ids.doomed}`).locator('.px-t-meta').click();
+  await page.getByTestId('td-delete').click();
+  await page.getByTestId('td-delete-confirm').click();
+  await expect(page.getByTestId(`task-row-${ids.doomed}`)).toHaveCount(0);
+
+  // ── …it waits in Recently deleted; Restore brings it back with its step ──
+  await page.getByTestId('tasks-tab-deleted').click();
+  const gone = page.getByTestId(`deleted-${ids.doomed}`);
+  await expect(gone).toBeVisible({ timeout: 30_000 });
+  await expect(gone).toContainText('Garden');
+  await page.getByTestId(`restore-${ids.doomed}`).click();
+  await expect(gone).toHaveCount(0, { timeout: 30_000 });
+
+  await page.getByTestId('tasks-tab-byproject').click();
+  await expect(page.getByTestId(`task-row-${ids.doomed}`)).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId(`steps-toggle-${ids.doomed}`)).toHaveText('1 step', { timeout: 30_000 });
+
+  // ── and the server kept it: still there after a reload ──
+  await expect(page.getByTestId('sync-state')).toHaveAttribute('data-sync', 'synced', { timeout: 30_000 });
+  await page.reload();
+  await goto(page, 'tasks');
+  await expect(page.getByTestId(`task-row-${ids.doomed}`)).toBeVisible({ timeout: 30_000 });
+});
