@@ -620,7 +620,7 @@ function TaskDetailBody({ node, facts, ctx, onOpenTask, onClose }: { node: Node;
           {shows('deps') && <DependenciesSection node={node} facts={facts} commands={commands} run={run} onOpenTask={onOpenTask} onRemove={() => removeField('deps')} />}
         </>
       ) : (
-        <p className="px-td-hint" data-testid="td-capture-hint">Assign this capture to a project to give it steps and dependencies.</p>
+        <p className="px-td-hint" data-testid="td-capture-hint">Assign this capture to a project to give it a start date, a duration, steps and dependencies.</p>
       )}
 
       {error && <p className="px-error" role="alert" data-testid="td-error">{error}</p>}
@@ -656,8 +656,11 @@ function TaskDetailBody({ node, facts, ctx, onOpenTask, onClose }: { node: Node;
  */
 const EXTRAS = ['start', 'due', 'hours', 'location', 'steps', 'deps'] as const;
 type Extra = (typeof EXTRAS)[number];
-/** Only a task has these; an Inbox capture gets them once it is in a project. */
-const TASK_ONLY: ReadonlySet<Extra> = new Set(['steps', 'deps']);
+/**
+ * Only a task in a project has these; an Inbox capture (no project yet) gets them
+ * once it is assigned one. (A capture that already carries a value keeps showing it.)
+ */
+const TASK_ONLY: ReadonlySet<Extra> = new Set(['start', 'hours', 'steps', 'deps']);
 /** Each chip's label, and the element id focused when it is added. */
 const EXTRA_UI: Record<Extra, { label: string; focus: string }> = {
   start: { label: 'Start date', focus: 'td-start' },

@@ -510,6 +510,11 @@ describe('project', () => {
     expect(screen.queryByTestId('td-deps')).toBeNull();
     expect(screen.queryByTestId('td-add-steps')).toBeNull();
     expect(screen.queryByTestId('td-add-deps')).toBeNull();
+    // no start date or duration either — only what a project-less item can carry
+    expect(screen.queryByTestId('td-add-start')).toBeNull();
+    expect(screen.queryByTestId('td-add-hours')).toBeNull();
+    const chips = within(screen.getByTestId('td-adds')).getAllByRole('button').map((b) => b.textContent);
+    expect(chips).toEqual(['Expected by', 'Location']);
     choose(p1.id);
     expect(command('promoteActivity')).toHaveBeenCalledWith(capture.id, { parentId: p1.id });
   });
