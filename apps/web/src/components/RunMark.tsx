@@ -1,7 +1,7 @@
 /**
  * The "this timer is live" mark: a solid circle that dips and swells, shedding one
- * ring as it swells back. Used by My Day's run banner (in the running task's project
- * colour) and by the topbar timer pill (white, on the pill's blue, pulse only — no
+ * ring as it swells back. Used by My Day's run banner (blue, whichever project the
+ * task is in) and by the topbar timer pill (white, on the pill's blue, pulse only — no
  * ring, which would crowd the pill; pass `wave={false}`). Styles are
  * `.px-run-*` in theme.css; `--white` is for sitting on a blue ground.
  */
