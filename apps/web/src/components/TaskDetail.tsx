@@ -359,8 +359,10 @@ export function EditableText({
   // A span, not a <button>: a button's text can't be selected by dragging.
   // role="button" also keeps the row from treating a press here as its own.
   // The notebook mark follows the title, in every list that shows a task's title.
+  // Title and mark sit in one no-wrap group: a long title wraps its own text inside
+  // the space left, and the mark stays beside it — never dropped underneath.
   return (
-    <>
+    <span className="px-title-wrap">
       <span
         role="button"
         tabIndex={0}
@@ -386,7 +388,7 @@ export function EditableText({
         {value}
       </span>
       {after}
-    </>
+    </span>
   );
 }
 

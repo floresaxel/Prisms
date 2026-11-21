@@ -111,6 +111,8 @@ export const nodeCheckOffSchema = z.strictObject({
 });
 export const nodeUncheckSchema = idOnly;
 export const nodeSoftDeleteSchema = idOnly;
+// the inverse of node.soft_delete: brings back the node and what its cascade took
+export const nodeRestoreSchema = idOnly;
 
 export const activityPromoteSchema = z
   .strictObject({
@@ -433,6 +435,7 @@ export const COMMAND_SCHEMAS = {
   'node.check_off': nodeCheckOffSchema,
   'node.uncheck': nodeUncheckSchema,
   'node.soft_delete': nodeSoftDeleteSchema,
+  'node.restore': nodeRestoreSchema,
   'activity.promote': activityPromoteSchema,
   'edge.create': edgeCreateSchema,
   'edge.delete': edgeDeleteSchema,

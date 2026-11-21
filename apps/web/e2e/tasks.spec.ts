@@ -237,6 +237,38 @@ test('a task with details shows a notebook icon right after its title, in every 
   await expect(page.getByTestId('status-inbox').getByTestId(/^has-details-/)).toHaveCount(1);
 });
 
+test('the notebook icon stays to the right of a title that wraps onto several lines', async ({ page }) => {
+  await register(page, 'notebookwrap');
+  await goto(page, 'tasks');
+  const long =
+    'Prepare the full quarterly offsite agenda, book the venue and the catering, confirm travel for every attendee, ' +
+    'and circulate the pre-read packet to the whole leadership team well before the first session starts';
+  await page.getByTestId('activity-title').fill(long);
+  await page.getByTestId('activity-add').click();
+  const row = page.getByTestId('inbox').locator('li', { hasText: 'Prepare the full quarterly offsite agenda' });
+  await expect(row).toBeVisible();
+
+  // open the card from the keyboard (a long title leaves no empty spot to click) and add details
+  await row.focus();
+  await row.press('Enter');
+  await expect(page.getByTestId('td-dialog')).toBeVisible();
+  if ((await page.getByTestId('td-details').count()) === 0) await page.getByTestId('td-add-details').click();
+  await page.getByTestId('td-details').fill('Everything the offsite needs.');
+  await page.getByTestId('td-details').blur();
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('td-dialog')).toHaveCount(0);
+
+  const title = row.getByTestId(/^title-/);
+  const mark = row.getByTestId(/^has-details-/);
+  await expect(mark).toHaveCount(1);
+  const [t, m] = await Promise.all([title.boundingBox(), mark.boundingBox()]);
+  // the title really did wrap (taller than one 13px line), and the mark sits to its right, on its height
+  expect(t!.height).toBeGreaterThan(30);
+  expect(m!.x).toBeGreaterThanOrEqual(t!.x + t!.width - 1);
+  expect(m!.y).toBeGreaterThanOrEqual(t!.y - 1);
+  expect(m!.y + m!.height).toBeLessThanOrEqual(t!.y + t!.height + 1);
+});
+
 test('the Inbox × asks before deleting — Keep and Escape leave the item, Delete removes it', async ({ page }) => {
   await register(page, 'delete');
   await goto(page, 'tasks');
@@ -362,4 +394,61 @@ test('substeps: a synced step renders, and a UI-added + toggled step survives re
   await panel2.getByTestId(`step-delete-${ids.seededStep}`).click({ force: true });
   await expect(panel2.getByText('Measure the runs twice')).toHaveCount(0);
   await expect(panel2.getByText('Cut tubing to length')).toBeVisible();
+});
+
+test('Completed lists finished tasks (the tick reopens); Recently deleted restores a task with its steps', async ({ page }) => {
+  await register(page, 'archive');
+  const ids = { v: randomUUID(), r: randomUUID(), p: randomUUID(), done: randomUUID(), doomed: randomUUID(), step: randomUUID() };
+  const seed = await page.request.post('/sync/upload', {
+    data: {
+      device_id: 'e2e-seed',
+      commands: [
+        cmd('node.create', { id: ids.v, node_type: 'vision', title: 'Work', sort_order: 'a0' }),
+        cmd('node.create', { id: ids.r, node_type: 'roadmap', title: 'Roadmap', sort_order: 'a0', parent_id: ids.v }),
+        cmd('node.create', { id: ids.p, node_type: 'project', title: 'Garden', sort_order: 'a0', parent_id: ids.r }),
+        cmd('node.create', { id: ids.done, node_type: 'task', title: 'Order mulch', sort_order: 'a0', parent_id: ids.p }),
+        cmd('node.create', { id: ids.doomed, node_type: 'task', title: 'Lay the drip lines', sort_order: 'a1', parent_id: ids.p, estimate_minutes: 60 }),
+        cmd('step.add', { id: ids.step, task_id: ids.doomed, title: 'Measure the runs', sort_order: 'a0' }),
+        cmd('node.check_off', { id: ids.done, completed_at: new Date().toISOString() }),
+      ],
+    },
+  });
+  expect(seed.ok()).toBeTruthy();
+
+  await goto(page, 'tasks');
+  await expect(page.getByTestId(`task-row-${ids.doomed}`)).toBeVisible({ timeout: 30_000 });
+
+  // ── Completed: the finished task, under Today, with its project; the tick reopens it ──
+  await page.getByTestId('tasks-tab-completed').click();
+  const done = page.getByTestId(`completed-${ids.done}`);
+  await expect(done).toBeVisible({ timeout: 30_000 });
+  await expect(done).toContainText('Garden');
+  await expect(page.getByTestId('completed-list')).toContainText('Today');
+  await page.getByTestId(`reopen-${ids.done}`).click();
+  await expect(done).toHaveCount(0);
+
+  // ── delete a task from its card… ──
+  await page.getByTestId('tasks-tab-byproject').click();
+  await page.getByTestId(`task-row-${ids.doomed}`).locator('.px-t-meta').click();
+  await page.getByTestId('td-delete').click();
+  await page.getByTestId('td-delete-confirm').click();
+  await expect(page.getByTestId(`task-row-${ids.doomed}`)).toHaveCount(0);
+
+  // ── …it waits in Recently deleted; Restore brings it back with its step ──
+  await page.getByTestId('tasks-tab-deleted').click();
+  const gone = page.getByTestId(`deleted-${ids.doomed}`);
+  await expect(gone).toBeVisible({ timeout: 30_000 });
+  await expect(gone).toContainText('Garden');
+  await page.getByTestId(`restore-${ids.doomed}`).click();
+  await expect(gone).toHaveCount(0, { timeout: 30_000 });
+
+  await page.getByTestId('tasks-tab-byproject').click();
+  await expect(page.getByTestId(`task-row-${ids.doomed}`)).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId(`steps-toggle-${ids.doomed}`)).toHaveText('1 step', { timeout: 30_000 });
+
+  // ── and the server kept it: still there after a reload ──
+  await expect(page.getByTestId('sync-state')).toHaveAttribute('data-sync', 'synced', { timeout: 30_000 });
+  await page.reload();
+  await goto(page, 'tasks');
+  await expect(page.getByTestId(`task-row-${ids.doomed}`)).toBeVisible({ timeout: 30_000 });
 });

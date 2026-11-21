@@ -111,9 +111,12 @@ export function ProjectPicker({
     if (!open || !trigger.current) return;
     const r = trigger.current.getBoundingClientRect();
     const width = Math.min(Math.max(r.width, 240), POP_MAX_W, window.innerWidth - 16);
-    const left = Math.max(8, Math.min(r.left, window.innerWidth - width - 8));
+    // A field opens under itself from its left edge; the inline picker sits at
+    // the right end of its row (by Assign), so it opens leftward from its right edge.
+    const anchor = variant === 'field' ? r.left : r.right - width;
+    const left = Math.max(8, Math.min(anchor, window.innerWidth - width - 8));
     setPos({ left, top: r.bottom + 4, width });
-  }, [open]);
+  }, [open, variant]);
 
   useEffect(() => {
     if (!open) return;

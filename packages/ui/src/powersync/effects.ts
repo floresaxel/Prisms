@@ -127,6 +127,10 @@ export function buildOptimisticEffects(name: CommandName, payload: unknown, ctx:
       // primary effect only; execute() appends the §I10 descendant closure computed
       // over the merged tree (softDeleteEffects, S7-F7) so the whole subtree hides.
       return [del('nodes', id)];
+    case 'node.restore':
+      // patches the tombstone (present while Recently deleted holds the history
+      // stream open); the cascade's descendants come back with the server's rows.
+      return [upd('nodes', id, { deleted_at: null })];
     case 'activity.promote': {
       const f: Record<string, unknown> = { node_type: 'task' };
       if (p['habit_id'] != null) {
