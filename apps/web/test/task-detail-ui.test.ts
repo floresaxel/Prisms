@@ -385,8 +385,58 @@ describe('the card’s fields', () => {
     fireEvent.change(input('td-location'), { target: { value: '' } });
     fireEvent.blur(input('td-location'));
     expect(command('setNodeAttributes')).toHaveBeenCalledWith(task.id, { color: 'teal' });
-    fireEvent.click(screen.getByTestId('td-due-clear'));
+    fireEvent.click(screen.getByTestId('td-due-remove'));
     expect(command('setDates')).toHaveBeenCalledWith(task.id, { dueDate: null });
+  });
+
+  it('a start date or expected-by date added from its chip starts as today', () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-11-20T12:00:00Z'));
+    try {
+      mount();
+      openCard();
+      fireEvent.click(screen.getByTestId('td-add-start'));
+      expect(command('setDates')).toHaveBeenLastCalledWith(task.id, { startDate: '2026-11-20' });
+      fireEvent.click(screen.getByTestId('td-add-due'));
+      expect(command('setDates')).toHaveBeenLastCalledWith(task.id, { dueDate: '2026-11-20' });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('each added field can be removed: its value is cleared and its chip comes back', () => {
+    world({ start_date: '2026-11-20', due_date: '2026-12-01', attributes: { color: 'teal', location: 'Studio B' } });
+    mount();
+    openCard();
+
+    fireEvent.click(screen.getByTestId('td-start-remove'));
+    expect(command('setDates')).toHaveBeenCalledWith(task.id, { startDate: null });
+    expect(screen.queryByTestId('td-start')).toBeNull();
+    expect(screen.getByTestId('td-add-start')).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId('td-due-remove'));
+    expect(command('setDates')).toHaveBeenCalledWith(task.id, { dueDate: null });
+    expect(screen.queryByTestId('td-due')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('td-location-remove'));
+    expect(command('setNodeAttributes')).toHaveBeenCalledWith(task.id, { color: 'teal' });
+    expect(screen.queryByTestId('td-location')).toBeNull();
+  });
+
+  it('removing steps or dependencies asks first when they hold items, and not when empty', () => {
+    // the press release waits on "Pick a date": one dependency
+    mount();
+    openCard();
+    fireEvent.click(screen.getByTestId('td-deps-remove'));
+    expect(command('deleteEdge')).not.toHaveBeenCalled(); // asked, not done
+    fireEvent.click(screen.getByTestId('td-deps-remove-confirm'));
+    expect(command('deleteEdge')).toHaveBeenCalledWith(link.id);
+    expect(screen.queryByTestId('td-deps')).toBeNull();
+
+    // an empty steps section just goes
+    fireEvent.click(screen.getByTestId('td-add-steps'));
+    fireEvent.click(screen.getByTestId('td-steps-remove'));
+    expect(screen.queryByTestId('td-steps')).toBeNull();
   });
 
   it('warns when the expected completion comes before the start', () => {
@@ -454,12 +504,17 @@ describe('project', () => {
   it('an Inbox capture is promoted into it, and has no steps or dependencies until then', () => {
     mount([capture]);
     openCard(capture);
-    expect(card()!.textContent).toContain('Inbox capture');
+    expect(card()!.textContent).toContain('Unassigned capture');
     expect(screen.getByTestId('td-capture-hint')).toBeTruthy();
     expect(screen.queryByTestId('td-steps')).toBeNull();
     expect(screen.queryByTestId('td-deps')).toBeNull();
     expect(screen.queryByTestId('td-add-steps')).toBeNull();
     expect(screen.queryByTestId('td-add-deps')).toBeNull();
+    // no start date or duration either — only what a project-less item can carry
+    expect(screen.queryByTestId('td-add-start')).toBeNull();
+    expect(screen.queryByTestId('td-add-hours')).toBeNull();
+    const chips = within(screen.getByTestId('td-adds')).getAllByRole('button').map((b) => b.textContent);
+    expect(chips).toEqual(['Expected by', 'Location']);
     choose(p1.id);
     expect(command('promoteActivity')).toHaveBeenCalledWith(capture.id, { parentId: p1.id });
   });

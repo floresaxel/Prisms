@@ -108,7 +108,7 @@ export function Tasks({ ctx }: { ctx: CommandContext }) {
     <section ref={viewRef} className={`px-list${listLayoutClass(viewWidth)}`}>
       <div className="px-page-head">
         <h1>Tasks</h1>
-        <span className="px-page-sub">every task in one list — captures wait in Inbox until assigned</span>
+        <span className="px-page-sub">every task in one list — captures stay Unassigned until they get a project</span>
       </div>
 
       <form className="px-capture" onSubmit={capture}>
@@ -127,8 +127,8 @@ export function Tasks({ ctx }: { ctx: CommandContext }) {
             testId="capture-project"
             ariaLabel="Capture into"
             title="Where new captures go — stays selected until you leave Tasks"
-            placeholder="Inbox — assign later"
-            noneLabel="Inbox — assign later"
+            placeholder="Unassigned — assign later"
+            noneLabel="Unassigned — assign later"
             newProject={newProject}
           />
         </span>
@@ -147,9 +147,9 @@ export function Tasks({ ctx }: { ctx: CommandContext }) {
       <div ref={panelRef} role="tabpanel" style={{ maxWidth: 900 }}>
         {tab === 'byproject' ? (
           <>
-            <div className="px-sec">Inbox <span className="px-sec-cnt">· {activities.length} — no parent yet</span><span className="px-sec-ln" /></div>
+            <div className="px-sec">Unassigned <span className="px-sec-cnt">· {activities.length} — no parent yet</span><span className="px-sec-ln" /></div>
             <ul className="px-rows" data-testid="inbox">
-              {activities.length === 0 && <li className="px-trow px-muted">{hydrated ? 'Inbox is empty.' : 'Loading…'}</li>}
+              {activities.length === 0 && <li className="px-trow px-muted">{hydrated ? 'Nothing unassigned.' : 'Loading…'}</li>}
               {inboxNewestFirst.map((a) => (
                 <InboxRow key={a.id} activity={a} targets={targets} newProject={newProject} commands={commands} detail={detail} onComplete={() => setCompleting(a)} />
               ))}
@@ -194,9 +194,9 @@ export function Tasks({ ctx }: { ctx: CommandContext }) {
               </>
             )}
 
-            <div className="px-sec">Inbox <span className="px-sec-cnt">· {activities.length}</span><span className="px-sec-ln" /></div>
+            <div className="px-sec">Unassigned <span className="px-sec-cnt">· {activities.length}</span><span className="px-sec-ln" /></div>
             <ul className="px-rows" data-testid="status-inbox">
-              {activities.length === 0 && <li className="px-trow px-muted">Inbox is empty.</li>}
+              {activities.length === 0 && <li className="px-trow px-muted">Nothing unassigned.</li>}
               {inboxNewestFirst.map((a) => (
                 <li className="px-trow" key={a.id} {...detail.rowProps(a.id)}>
                   <InboxCheck activity={a} onComplete={() => setCompleting(a)} />

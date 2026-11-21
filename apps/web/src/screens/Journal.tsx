@@ -24,7 +24,6 @@ import { asEpochMillis, dayLogRefs, filterDayLog, type DayLogRef, type Instant, 
 import {
   Ic,
   isJournalContentEmpty,
-  journalTitleOf,
   truncatePlain,
   useDayLogsByDate,
   useFactContext,
@@ -36,6 +35,7 @@ import { DayJournalPanel } from '../components/DayJournal';
 import { NoteSwap } from '../components/NoteSwap';
 import { useTabSwap } from '../components/tabSwap';
 import { isJournalFilterActive, toDayLogFilter, useJournalFilter } from '../journal-filter';
+import { noteHeadingOf, useNoteTitleFormatPref } from '../note-date-format';
 
 const MONTHS_SHOWN = 12;
 const DAY_LABEL = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
@@ -77,6 +77,7 @@ const UNTAGGED = '\u0000untagged';
 
 /** A day's row in either list: date, title, and the note's tags as quiet chips. */
 function DayRow({ entry, selected, onSelect }: { entry: JournalEntry; selected: boolean; onSelect: () => void }) {
+  const titleFormat = useNoteTitleFormatPref();
   return (
     <button
       className={`px-jn-d${selected ? ' px-jn-d--sel' : ''}`}
@@ -88,7 +89,7 @@ function DayRow({ entry, selected, onSelect }: { entry: JournalEntry; selected: 
       {/* a named note shows its NAME; an untitled one still shows its first line,
           which is more use than "Note · <date>". */}
       <span className="px-jn-d-title">
-        {entry.title.trim() || noteTitle(entry.content) || journalTitleOf(entry.title, entry.entry_date)}
+        {entry.title.trim() || noteTitle(entry.content) || noteHeadingOf(entry.entry_date, titleFormat)}
       </span>
       {entry.tags.length > 0 && (
         <span className="px-jn-d-tags" data-testid={`journal-day-tags-${entry.entry_date}`}>
@@ -117,7 +118,8 @@ function TodayRow({
   selected: boolean;
   onSelect: () => void;
 }) {
-  const preview = entry ? entry.title.trim() || noteTitle(entry.content) || journalTitleOf(entry.title, date) : null;
+  const titleFormat = useNoteTitleFormatPref();
+  const preview = entry ? entry.title.trim() || noteTitle(entry.content) || noteHeadingOf(date, titleFormat) : null;
   return (
     <div className="px-jn-today-wrap">
       <button

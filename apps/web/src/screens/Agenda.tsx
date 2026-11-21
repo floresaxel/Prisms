@@ -76,7 +76,7 @@ const SPAN_KEY = 'prisms.agenda.span';
 /** Hover text for a to-do row: what it is, and what a drop would actually make. */
 function rowTitle(t: AgendaTask): string {
   const parts = [t.task.title];
-  if (t.kind === 'activity') parts.push('Inbox item — not under a project yet, so a block on it has no vision');
+  if (t.kind === 'activity') parts.push('Unassigned item — not under a project yet, so a block on it has no vision');
   if (!t.estimated) parts.push(`no estimate, drops as a ${t.schedulable.estimateMinutes}-minute event`);
   return parts.join(' — ');
 }

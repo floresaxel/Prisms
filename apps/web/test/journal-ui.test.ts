@@ -511,8 +511,8 @@ describe('DayJournalPanel — editor', () => {
   it('defaults an untitled note to "Note · <date>" once it has loaded', () => {
     state.entry = { id: 'j1', content: 'x', deleted_at: null, locked: false };
     render(createElement(DayJournalPanel, { date: '2026-08-05', ctx: CTX, actions: 'lock' }));
-    expect((screen.getByTestId('journal-title') as HTMLInputElement).value).toBe('Note · 2026-08-05');
-    expect(screen.getByTestId('journal-date').textContent).toBe('2026-08-05');
+    expect((screen.getByTestId('journal-title') as HTMLInputElement).value).toBe('Note · Wed 5 Aug 2026');
+    expect(screen.getByTestId('journal-date').textContent).toBe('Wed 5 Aug 2026');
   });
 
   it('is BLANK while the day is still loading — the default must not flash first', () => {
@@ -523,7 +523,7 @@ describe('DayJournalPanel — editor', () => {
     const input = screen.getByTestId('journal-title') as HTMLInputElement;
     expect(input.value).toBe('');
     expect(input.placeholder).toBe(''); // nothing claimed about a note we do not have
-    expect(screen.getByTestId('journal-date').textContent).toBe('2026-08-05'); // the day IS known
+    expect(screen.getByTestId('journal-date').textContent).toBe('Wed 5 Aug 2026'); // the day IS known
   });
 
   it('is BLANK for an unsettled read — the default must not be assumed from stale rows', () => {
@@ -566,7 +566,7 @@ describe('DayJournalPanel — editor', () => {
     state.entry = null;
     render(createElement(DayJournalPanel, { date: '2026-08-05', ctx: CTX, actions: 'lock' }));
     const input = screen.getByTestId('journal-title') as HTMLInputElement;
-    expect(input.value).toBe('Note · 2026-08-05');
+    expect(input.value).toBe('Note · Wed 5 Aug 2026');
     expect(input.disabled).toBe(true);
   });
 
@@ -574,7 +574,20 @@ describe('DayJournalPanel — editor', () => {
     state.entry = { id: 'j1', content: 'x', deleted_at: null, locked: false, title: 'Trip planning' };
     render(createElement(DayJournalPanel, { date: '2026-08-05', ctx: CTX, actions: 'lock' }));
     expect((screen.getByTestId('journal-title') as HTMLInputElement).value).toBe('Trip planning');
-    expect(screen.getByTestId('journal-date').textContent).toBe('2026-08-05');
+    expect(screen.getByTestId('journal-date').textContent).toBe('Wed 5 Aug 2026');
+  });
+
+  it('the caption and the default title have their own per-device formats (Settings)', () => {
+    const prefs: Record<string, string> = { 'prisms.noteDate.format': 'dd-mmm-yyyy', 'prisms.noteTitle.format': 'iso' };
+    vi.stubGlobal('localStorage', { getItem: (k: string) => prefs[k] ?? null, setItem() {}, removeItem() {} });
+    try {
+      state.entry = { id: 'j1', content: 'x', deleted_at: null, locked: false };
+      render(createElement(DayJournalPanel, { date: '2026-08-05', ctx: CTX, actions: 'lock' }));
+      expect(screen.getByTestId('journal-date').textContent).toBe('05/Aug/2026');
+      expect((screen.getByTestId('journal-title') as HTMLInputElement).value).toBe('Note · 2026-08-05');
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('renaming uploads journal.set_title on blur', () => {
@@ -590,7 +603,7 @@ describe('DayJournalPanel — editor', () => {
     state.entry = { id: 'j1', content: 'x', deleted_at: null, locked: false, title: 'Trip planning' };
     render(createElement(DayJournalPanel, { date: '2026-08-05', ctx: CTX, actions: 'lock' }));
     const input = screen.getByTestId('journal-title');
-    fireEvent.change(input, { target: { value: 'Note · 2026-08-05' } });
+    fireEvent.change(input, { target: { value: 'Note · Wed 5 Aug 2026' } });
     fireEvent.blur(input);
     expect(command('setJournalTitle')).toHaveBeenCalledWith('j1', '');
   });

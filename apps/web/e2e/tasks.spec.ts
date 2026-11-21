@@ -119,7 +119,7 @@ test('the capture bar can preselect a project; it sticks until you leave Tasks',
     await page.getByTestId(`capture-project-opt-${id === '' ? 'none' : id}`).click();
   };
   await expect(pick).toHaveAttribute('data-value', ''); // Inbox by default
-  await expect(pick).toContainText('Inbox — assign later');
+  await expect(pick).toContainText('Unassigned — assign later');
   await pick.click();
   await expect(page.getByTestId(`capture-project-opt-${ids.p}`)).toBeVisible({ timeout: 30_000 });
   await page.getByTestId(`capture-project-opt-${ids.p}`).click();

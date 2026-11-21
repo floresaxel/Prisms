@@ -123,6 +123,14 @@ describe('the Shape card', () => {
     expect(onNavigate).toHaveBeenCalledWith(`/roadmap#${ids.r1.id}`);
   });
 
+  it("opens a task's details card when its block is clicked", () => {
+    const onOpenTask = vi.fn();
+    render(createElement(VisionShape, { tree, visionId: ids.v.id, color: '#4f46e5', onNavigate: vi.fn(), onOpenTask }));
+    fireEvent.click(cell(ids.t2.id)!);
+    expect(onOpenTask).toHaveBeenCalledTimes(1);
+    expect(onOpenTask).toHaveBeenCalledWith(ids.t2.id);
+  });
+
   it('shows what is hovered over the pinned task, and falls back when it leaves', () => {
     mount();
     fireEvent.click(cell(ids.t2.id)!);

@@ -13,7 +13,11 @@
  * The card is compact: beyond the title and project, a field shows only when
  * the task has a value for it or once it is added from the "+" chips under the
  * project (td-add-<start|due|hours|location|details|steps|deps>), which focus
- * the new field.
+ * the new field; a new start / expected-by date starts as today. Start date,
+ * expected by, location, steps and dependencies carry a remove button
+ * (td-<start|due|location>-remove, td-<steps|deps>-remove) that clears the value
+ * and takes the field off the card; steps and dependencies ask first when they
+ * hold items.
  *
  * Fields save when they lose focus (Enter too, for one-line fields), and closing
  * the card blurs the focused field first so an edit in progress is kept. Escape
@@ -472,7 +476,7 @@ function TaskDetailBody({ node, facts, ctx, onOpenTask, onClose }: { node: Node;
   const trail = ancestorsOf(facts.tree, node.id).reverse();
   const project = trail.find((n) => n.node_type === 'project') ?? null;
   const status = isTask ? taskStatus(node, facts, asEpochMillis(Date.now())) : null;
-  const kind = isCapture ? 'Inbox capture' : node.habit_id !== null ? 'Habit task' : 'Task';
+  const kind = isCapture ? 'Unassigned capture' : node.habit_id !== null ? 'Habit task' : 'Task';
 
   // ── title ──
   const title = useDraft(node.title);
@@ -503,10 +507,13 @@ function TaskDetailBody({ node, facts, ctx, onOpenTask, onClose }: { node: Node;
     steps: isTask && steps.length > 0,
     deps: isTask && (incomingEdges(facts.edgeIndex, node.id).length > 0 || outgoingEdges(facts.edgeIndex, node.id).length > 0),
   };
-  // A field that showed once stays while the card is open, so clearing it does
-  // not yank it away mid-edit. (The body is keyed by task: a new task starts over.)
+  // A field that showed once stays while the card is open, so clearing its VALUE does
+  // not yank it away mid-edit; only its own remove button takes it off the card.
+  // (The body is keyed by task: a new task starts over.)
   const [added, setAdded] = useState<ReadonlySet<Extra>>(() => new Set(EXTRAS.filter((k) => has[k])));
-  const shows = (k: Extra) => has[k] || added.has(k);
+  // A removed field is off the card at once, without waiting for its cleared value to sync back.
+  const [removed, setRemoved] = useState<ReadonlySet<Extra>>(() => new Set());
+  const shows = (k: Extra) => !removed.has(k) && (has[k] || added.has(k));
   const offer = EXTRAS.filter((k) => !shows(k) && (isTask || !TASK_ONLY.has(k)) && !(k === 'steps' && frozen));
   /** The field just added: focused once it is on screen. */
   const [focusNext, setFocusNext] = useState<string | null>(null);
@@ -516,8 +523,44 @@ function TaskDetailBody({ node, facts, ctx, onOpenTask, onClose }: { node: Node;
     setFocusNext(null);
   }, [focusNext]);
   function add(k: Extra) {
+    setRemoved((s) => {
+      const next = new Set(s);
+      next.delete(k);
+      return next;
+    });
     setAdded((s) => new Set(s).add(k));
     setFocusNext(EXTRA_UI[k].focus);
+    // A date added from its chip starts as today rather than blank.
+    if (k === 'start' || k === 'due') {
+      const today = facts.today(asEpochMillis(Date.now()));
+      void run(() => commands.setDates(node.id, k === 'start' ? { startDate: today } : { dueDate: today }));
+    }
+  }
+  /**
+   * Take a field off the card: its value is cleared (so it is gone from the task,
+   * not just hidden) and its chip comes back.
+   */
+  function removeField(k: Extra) {
+    setRemoved((s) => new Set(s).add(k));
+    setAdded((s) => {
+      const next = new Set(s);
+      next.delete(k);
+      return next;
+    });
+    if (k === 'start' && node.start_date !== null) void run(() => commands.setDates(node.id, { startDate: null }));
+    else if (k === 'due' && node.due_date !== null) void run(() => commands.setDates(node.id, { dueDate: null }));
+    else if (k === 'location' && locationOf(node) !== '') {
+      // node.set_attributes REPLACES the bag: carry every other key over.
+      const next: Record<string, unknown> = { ...node.attributes };
+      delete next['location'];
+      void run(() => commands.setNodeAttributes(node.id, next));
+    } else if (k === 'steps') {
+      for (const s of steps) void run(() => commands.removeStep(s.id));
+    } else if (k === 'deps') {
+      for (const e of [...incomingEdges(facts.edgeIndex, node.id), ...outgoingEdges(facts.edgeIndex, node.id)]) {
+        void run(() => commands.deleteEdge(e.id));
+      }
+    }
   }
 
   return (
@@ -554,9 +597,9 @@ function TaskDetailBody({ node, facts, ctx, onOpenTask, onClose }: { node: Node;
 
       <div className="px-td-props">
         <ProjectField node={node} facts={facts} targets={targets} commands={commands} run={run} />
-        <DateRow node={node} start={shows('start')} due={shows('due')} commands={commands} run={run} />
+        <DateRow node={node} start={shows('start')} due={shows('due')} commands={commands} run={run} onRemove={removeField} />
         {shows('hours') && <BudgetField node={node} commands={commands} run={run} />}
-        {shows('location') && <LocationField node={node} commands={commands} run={run} />}
+        {shows('location') && <LocationField node={node} commands={commands} run={run} onRemove={() => removeField('location')} />}
       </div>
 
       {offer.length > 0 && (
@@ -575,11 +618,11 @@ function TaskDetailBody({ node, facts, ctx, onOpenTask, onClose }: { node: Node;
 
       {isTask ? (
         <>
-          {shows('steps') && <StepsSection node={node} commands={commands} run={run} />}
-          {shows('deps') && <DependenciesSection node={node} facts={facts} commands={commands} run={run} onOpenTask={onOpenTask} />}
+          {shows('steps') && <StepsSection node={node} commands={commands} run={run} onRemove={() => removeField('steps')} />}
+          {shows('deps') && <DependenciesSection node={node} facts={facts} commands={commands} run={run} onOpenTask={onOpenTask} onRemove={() => removeField('deps')} />}
         </>
       ) : (
-        <p className="px-td-hint" data-testid="td-capture-hint">Assign this capture to a project to give it steps and dependencies.</p>
+        <p className="px-td-hint" data-testid="td-capture-hint">Assign this capture to a project to give it a start date, a duration, steps and dependencies.</p>
       )}
 
       {error && <p className="px-error" role="alert" data-testid="td-error">{error}</p>}
@@ -615,8 +658,11 @@ function TaskDetailBody({ node, facts, ctx, onOpenTask, onClose }: { node: Node;
  */
 const EXTRAS = ['start', 'due', 'hours', 'location', 'steps', 'deps'] as const;
 type Extra = (typeof EXTRAS)[number];
-/** Only a task has these; an Inbox capture gets them once it is in a project. */
-const TASK_ONLY: ReadonlySet<Extra> = new Set(['steps', 'deps']);
+/**
+ * Only a task in a project has these; an Inbox capture (no project yet) gets them
+ * once it is assigned one. (A capture that already carries a value keeps showing it.)
+ */
+const TASK_ONLY: ReadonlySet<Extra> = new Set(['start', 'hours', 'steps', 'deps']);
 /** Each chip's label, and the element id focused when it is added. */
 const EXTRA_UI: Record<Extra, { label: string; focus: string }> = {
   start: { label: 'Start date', focus: 'td-start' },
@@ -634,12 +680,42 @@ interface FieldProps {
   run: Run;
 }
 
-function Prop({ icon, label, htmlFor, children }: { icon: Parameters<typeof Ic>[0]['name']; label: string; htmlFor?: string; children: ReactNode }) {
+function Prop({ icon, label, htmlFor, onRemove, removeId, children }: { icon: Parameters<typeof Ic>[0]['name']; label: string; htmlFor?: string; onRemove?: () => void; removeId?: string; children: ReactNode }) {
   return (
     <>
       <label className="px-td-k" htmlFor={htmlFor}><Ic name={icon} />{label}</label>
-      <div className="px-td-v">{children}</div>
+      <div className="px-td-v">
+        {children}
+        {onRemove && (
+          <button type="button" className="px-td-ib px-td-ib--danger px-td-rm" aria-label={`Remove ${label.toLowerCase()}`} title={`Remove ${label.toLowerCase()}`} data-testid={removeId} onClick={onRemove}>
+            <Ic name="x" />
+          </button>
+        )}
+      </div>
     </>
+  );
+}
+
+/**
+ * The remove control in a Steps / Dependencies heading. With nothing in the
+ * section it just takes it off the card; with items it asks first, since it
+ * deletes all of them.
+ */
+function SectionRemove({ count, noun, testId, onRemove }: { count: number; noun: string; testId: string; onRemove: () => void }) {
+  const [confirm, setConfirm] = useState(false);
+  if (confirm) {
+    return (
+      <span className="px-td-rm-confirm">
+        Remove {count} {noun}{count === 1 ? '' : 's'}?
+        <button type="button" className="px-btn px-btn--sm px-btn--danger" data-testid={`${testId}-confirm`} onClick={onRemove}>Remove</button>
+        <button type="button" className="px-btn px-btn--sm" onClick={() => setConfirm(false)}>Keep</button>
+      </span>
+    );
+  }
+  return (
+    <button type="button" className="px-td-ib px-td-ib--danger px-td-rm" aria-label={`Remove ${noun}s`} title={`Remove ${noun}s`} data-testid={testId} onClick={() => (count === 0 ? onRemove() : setConfirm(true))}>
+      <Ic name="x" />
+    </button>
   );
 }
 
@@ -687,7 +763,7 @@ function ProjectField({ node, facts, targets, commands, run }: FieldProps & { fa
         value={current}
         onChange={choose}
         labelOf={label}
-        placeholder="Inbox — not in a project yet"
+        placeholder="Unassigned — not in a project yet"
         newProject={newProjectFor(facts.tree, commands)}
       />
     </Prop>
@@ -719,26 +795,21 @@ function DateInput({ id, testId, value, onSave }: { id: string; testId: string; 
         onBlur={() => save(d.release())}
         onKeyDown={(e) => escapeReverts(e, d)}
       />
-      {value !== null && (
-        <button type="button" className="px-td-clear" aria-label="Clear date" data-testid={`${testId}-clear`} onClick={() => onSave(null)}>
-          <Ic name="x" />
-        </button>
-      )}
     </span>
   );
 }
 
-function DateRow({ node, start, due, commands, run }: FieldProps & { start: boolean; due: boolean }) {
+function DateRow({ node, start, due, commands, run, onRemove }: FieldProps & { start: boolean; due: boolean; onRemove: (k: 'start' | 'due') => void }) {
   const backwards = node.start_date !== null && node.due_date !== null && node.start_date > node.due_date;
   return (
     <>
       {start && (
-        <Prop icon="play" label="Start date" htmlFor="td-start">
+        <Prop icon="play" label="Start date" htmlFor="td-start" removeId="td-start-remove" onRemove={() => onRemove('start')}>
           <DateInput id="td-start" testId="td-start" value={node.start_date} onSave={(v) => void run(() => commands.setDates(node.id, { startDate: v }))} />
         </Prop>
       )}
       {due && (
-        <Prop icon="cal" label="Expected by" htmlFor="td-due">
+        <Prop icon="cal" label="Expected by" htmlFor="td-due" removeId="td-due-remove" onRemove={() => onRemove('due')}>
           <DateInput id="td-due" testId="td-due" value={node.due_date} onSave={(v) => void run(() => commands.setDates(node.id, { dueDate: v }))} />
           {backwards && <span className="px-td-note px-td-note--warn" data-testid="td-dates-warn">ends before it starts</span>}
         </Prop>
@@ -810,7 +881,7 @@ function BudgetField({ node, commands, run }: FieldProps) {
   );
 }
 
-function LocationField({ node, commands, run }: FieldProps) {
+function LocationField({ node, commands, run, onRemove }: FieldProps & { onRemove: () => void }) {
   const stored = locationOf(node);
   const d = useDraft(stored);
   function save() {
@@ -826,7 +897,7 @@ function LocationField({ node, commands, run }: FieldProps) {
     void run(() => commands.setNodeAttributes(node.id, next));
   }
   return (
-    <Prop icon="pin" label="Location" htmlFor="td-location">
+    <Prop icon="pin" label="Location" htmlFor="td-location" removeId="td-location-remove" onRemove={onRemove}>
       <input
         id="td-location"
         className="px-td-in px-td-in--grow"
@@ -881,7 +952,7 @@ function DetailsField({ node, commands, run }: FieldProps) {
 
 // --- steps ----------------------------------------------------------------------------
 
-function StepsSection({ node, commands, run }: FieldProps) {
+function StepsSection({ node, commands, run, onRemove }: FieldProps & { onRemove: () => void }) {
   const steps = useTaskSteps(node.id);
   const frozen = node.completed_at !== null; // I8 spirit: a done task's checklist is frozen
   const [draft, setDraft] = useState('');
@@ -912,6 +983,7 @@ function StepsSection({ node, commands, run }: FieldProps) {
       <div className="px-td-sec-h">
         <Ic name="tasklist" />Steps
         {steps.length > 0 && <span className="px-td-count">{doneCount}/{steps.length}</span>}
+        {!frozen && <SectionRemove count={steps.length} noun="step" testId="td-steps-remove" onRemove={onRemove} />}
       </div>
       {steps.length === 0 && frozen && <p className="px-td-hint">No steps.</p>}
       <div className="px-td-steps">
@@ -1052,7 +1124,7 @@ function dependencyCandidates(node: Node, facts: FactContext, side: 'before' | '
   return new Map([...groups.entries()].sort(([a], [b]) => a.localeCompare(b)));
 }
 
-function DependenciesSection({ node, facts, commands, run, onOpenTask }: FieldProps & { facts: FactContext; onOpenTask: (id: string) => void }) {
+function DependenciesSection({ node, facts, commands, run, onOpenTask, onRemove }: FieldProps & { facts: FactContext; onOpenTask: (id: string) => void; onRemove: () => void }) {
   const waitsOn = incomingEdges(facts.edgeIndex, node.id);
   const blocks = outgoingEdges(facts.edgeIndex, node.id);
   const before = useMemo(() => dependencyCandidates(node, facts, 'before'), [node, facts]);
@@ -1060,7 +1132,10 @@ function DependenciesSection({ node, facts, commands, run, onOpenTask }: FieldPr
 
   return (
     <div className="px-td-sec" data-testid="td-deps">
-      <div className="px-td-sec-h"><Ic name="net" />Dependencies</div>
+      <div className="px-td-sec-h">
+        <Ic name="net" />Dependencies
+        <SectionRemove count={waitsOn.length + blocks.length} noun="dependency" testId="td-deps-remove" onRemove={onRemove} />
+      </div>
       <div className="px-td-deps">
         <DepList
           heading="Waits on"
