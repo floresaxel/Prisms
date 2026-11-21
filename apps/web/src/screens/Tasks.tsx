@@ -19,14 +19,13 @@
  * Load-bearing testids preserved from the old Inbox: activity-title, activity-add,
  * inbox (with <li> rows), promote-target-*, promote-* (D8).
  */
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useMemo, useState, type FormEvent } from 'react';
 
 import { usePowerSync, useStatus } from '@powersync/react';
 
 import { asEpochMillis, initialSortOrder, sortOrderBetween, type Instant, type Node, type TaskStatus, type TaskStep } from '@prisms/core';
 import {
   Ic,
-  HISTORY_STREAM,
   Modal,
   RECENTLY_DELETED_DAYS,
   useActivityInbox,
@@ -43,7 +42,6 @@ import {
   useTasksByProject,
   type PrismsCommands,
   type StreamSubscriber,
-  type StreamSubscription,
   type CommandContext,
   type MyDayItem,
   type PromoteTarget,
@@ -56,6 +54,7 @@ import { StepsToggle, SubstepPanel } from '../components/Substeps';
 import { EditableTitle, locationOf, useTaskDetail, type TaskDetailApi } from '../components/TaskDetail';
 import { useTabSwap } from '../components/tabSwap';
 import { UnfocusedTag } from '../components/UnfocusedTag';
+import { historyNotice, useHistoryStream } from '../components/useHistoryStream';
 import { useNewProject, type NewProjectApi } from '../components/useNewProject';
 import { formatMinutes, projectTone } from '../format';
 import { listLayoutClass } from '../list-layout';
@@ -320,47 +319,13 @@ function CompletedPanel({ commands, detail }: { commands: PrismsCommands; detail
  * Tasks › Recently deleted: what was deleted in the last RECENTLY_DELETED_DAYS,
  * newest first, each with Restore. Deleted rows only reach this device through
  * the lazy `history` stream, so the panel holds it open while it shows (and lets
- * it go — PowerSync's TTL evicts the rows later — when you leave).
- *
- * Offline-first: whatever deleted rows are already on the device show at once.
- * The first sync of the stream is awaited only to tell "nothing deleted" from
- * "not here yet", and never for longer than HISTORY_WAIT_MS — when sync is down
- * (offline, or the server refusing this device's sign-in) it would never end,
- * and a permanent "Loading…" says nothing. Then the panel says what it knows.
+ * it go — PowerSync's TTL evicts the rows later — when you leave). Rows already
+ * on the device show at once; useHistoryStream says when more can't arrive.
  */
-const HISTORY_WAIT_MS = 6000;
-
-type HistoryState = 'waiting' | 'synced' | 'stalled';
-
 function DeletedPanel({ commands, now }: { commands: PrismsCommands; now: Instant }) {
   const db = usePowerSync();
   const status = useStatus();
-  const [history, setHistory] = useState<HistoryState>('waiting');
-  useEffect(() => {
-    const abort = new AbortController();
-    let sub: StreamSubscription | null = null;
-    const stall = setTimeout(() => setHistory((h) => (h === 'waiting' ? 'stalled' : h)), HISTORY_WAIT_MS);
-    (db as unknown as StreamSubscriber)
-      .syncStream(HISTORY_STREAM)
-      .subscribe({ ttl: 3600, priority: 3 })
-      .then(async (s) => {
-        if (abort.signal.aborted) {
-          s.unsubscribe();
-          return;
-        }
-        sub = s; // held from here, so leaving the tab releases it even mid-wait
-        await s.waitForFirstSync(abort.signal);
-        if (!abort.signal.aborted) setHistory('synced');
-      })
-      .catch(() => {
-        if (!abort.signal.aborted) setHistory('stalled');
-      });
-    return () => {
-      abort.abort();
-      clearTimeout(stall);
-      sub?.unsubscribe();
-    };
-  }, [db]);
+  const history = useHistoryStream(db as unknown as StreamSubscriber);
 
   const deleted = useRecentlyDeleted(now);
   const [failed, setFailed] = useState<string | null>(null);
@@ -374,16 +339,7 @@ function DeletedPanel({ commands, now }: { commands: PrismsCommands; now: Instan
   }
 
   const nowMs = Date.now();
-  // Why the list may be incomplete. Offline is known at once; anything else
-  // shows once the first sync has had HISTORY_WAIT_MS and not arrived.
-  const notice =
-    history === 'synced'
-      ? null
-      : !status.connected
-        ? "The app isn't connected to the sync server, so deleted tasks can't load. They'll appear once it reconnects."
-        : history === 'stalled'
-          ? "Deleted tasks haven't arrived from the server. If this lasts, the app isn't syncing right now; check the sync status at the top."
-          : null;
+  const notice = historyNotice(history, status.connected);
   const emptyText = history === 'synced' ? 'Nothing deleted recently.' : notice !== null ? 'Nothing deleted on this device.' : 'Loading…';
   return (
     <div data-testid="deleted-list" data-history={history}>
