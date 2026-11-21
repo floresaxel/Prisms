@@ -452,3 +452,31 @@ test('Completed lists finished tasks (the tick reopens); Recently deleted restor
   await goto(page, 'tasks');
   await expect(page.getByTestId(`task-row-${ids.doomed}`)).toBeVisible({ timeout: 30_000 });
 });
+
+test('a project group’s pentagon wears the colour of its vision', async ({ page }) => {
+  await register(page, 'vcolour');
+  const ids = { v1: randomUUID(), r1: randomUUID(), p1: randomUUID(), t1: randomUUID(), v2: randomUUID(), r2: randomUUID(), p2: randomUUID(), t2: randomUUID() };
+  const seed = await page.request.post('/sync/upload', {
+    data: {
+      device_id: 'e2e-seed',
+      commands: [
+        cmd('node.create', { id: ids.v1, node_type: 'vision', title: 'Work', sort_order: 'a0', attributes: { color: 'red' } }),
+        cmd('node.create', { id: ids.r1, node_type: 'roadmap', title: 'Plan A', sort_order: 'a0', parent_id: ids.v1 }),
+        cmd('node.create', { id: ids.p1, node_type: 'project', title: 'Launch', sort_order: 'a0', parent_id: ids.r1 }),
+        cmd('node.create', { id: ids.t1, node_type: 'task', title: 'Write the note', sort_order: 'a0', parent_id: ids.p1 }),
+        cmd('node.create', { id: ids.v2, node_type: 'vision', title: 'Home', sort_order: 'a1', attributes: { color: 'teal' } }),
+        cmd('node.create', { id: ids.r2, node_type: 'roadmap', title: 'Plan B', sort_order: 'a0', parent_id: ids.v2 }),
+        cmd('node.create', { id: ids.p2, node_type: 'project', title: 'Garden', sort_order: 'a0', parent_id: ids.r2 }),
+        cmd('node.create', { id: ids.t2, node_type: 'task', title: 'Order mulch', sort_order: 'a0', parent_id: ids.p2 }),
+      ],
+    },
+  });
+  expect(seed.ok()).toBeTruthy();
+
+  await goto(page, 'tasks');
+  await expect(page.getByTestId(`task-row-${ids.t2}`)).toBeVisible({ timeout: 30_000 });
+  const bg = (testId: string) => page.getByTestId(testId).evaluate((el) => getComputedStyle(el).backgroundColor);
+  // #dc2626 (red) and #0d9488 (teal), as the browser reports them
+  expect(await bg(`project-dot-${ids.p1}`)).toBe('rgb(220, 38, 38)');
+  expect(await bg(`project-dot-${ids.p2}`)).toBe('rgb(13, 148, 136)');
+});
