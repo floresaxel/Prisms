@@ -162,6 +162,18 @@ describe.skipIf(!adminUrl)('S11 command dispatcher (§8 pipeline, full catalog)'
     expect(in3!.result).toBe('applied');
   });
 
+  it('clock-out is idempotent: stopping an already-stopped timer is applied and keeps the first end', async () => {
+    const ids = await seedTree();
+    const e1 = randomUUID();
+    await results([cmd('timer.clock_in', { entry_id: e1, task_id: ids.task, started_at: '2026-06-13T10:00:00.000Z' })], ids.user);
+    const [first] = await results([cmd('timer.clock_out', { entry_id: e1, ended_at: '2026-06-13T11:00:00.000Z' })], ids.user);
+    expect(first!.result).toBe('applied');
+    const [again] = await results([cmd('timer.clock_out', { entry_id: e1, ended_at: '2026-06-13T12:30:00.000Z' })], ids.user);
+    expect(again!.result).toBe('applied');
+    const rows = await sql`SELECT ended_at FROM time_entries WHERE id = ${e1}`;
+    expect(new Date(rows[0]!['ended_at'] as string).toISOString()).toBe('2026-06-13T11:00:00.000Z');
+  });
+
   it('I5 split focus: other tasks run alongside, up to MAX_OPEN_TIMERS; one more is E_TIMER_LIMIT', async () => {
     const ids = await seedTree();
     const tasks = [ids.task];

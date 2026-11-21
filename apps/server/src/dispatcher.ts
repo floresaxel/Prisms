@@ -1007,6 +1007,10 @@ export function createDispatcher(
         const entry = await one(tx.select().from(time_entries).where(eq(time_entries.id, p.entry_id)).limit(1));
         const own = ownershipReject('time entry', p.entry_id, entry, userId);
         if (own) return own;
+        // Idempotent: stopping a timer that is already stopped keeps the first end.
+        // A device whose view lagged (sync not down yet, a clock that jumped) would
+        // otherwise be told "not running" for a timer it just stopped, and be stuck.
+        if (entry && entry.ended_at !== null) return applied();
         const bad = fromCheck(checkClockOut(entry, p.entry_id, p));
         if (bad) return bad;
         await tx.update(time_entries).set({ ended_at: p.ended_at, ...sys }).where(eq(time_entries.id, p.entry_id));
