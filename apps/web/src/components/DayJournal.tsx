@@ -24,7 +24,6 @@ import {
   Ic,
   isJournalContentEmpty,
   journalDayFilename,
-  journalTitleOf,
   useCommands,
   useDayLog,
   useJournalDay,
@@ -33,7 +32,7 @@ import {
 } from '@prisms/ui';
 
 import { readJournalLocked, writeJournalLocked } from '../journal-lock-cache';
-import { formatNoteDate, noteHeadingOf, useNoteDateFormatPref } from '../note-date-format';
+import { formatNoteDate, isDefaultNoteHeading, noteHeadingOf, useNoteDateFormatPref, useNoteTitleFormatPref } from '../note-date-format';
 
 import { DayLogSection } from './DayLogSection';
 import { NoteTags } from './NoteTags';
@@ -145,7 +144,8 @@ export function DayJournalPanel({
    * than an editable value that has been filled in for you.
    */
   const dateFormat = useNoteDateFormatPref();
-  const heading = storedTitle || (isSettled ? noteHeadingOf(date, dateFormat) : '');
+  const titleFormat = useNoteTitleFormatPref();
+  const heading = storedTitle || (isSettled ? noteHeadingOf(date, titleFormat) : '');
   /**
    * The LOCKED (read-only) state of THIS day, surfaced as "Lock edit" ⇄ "Edit".
    * It is a SYNCED field on the day's row (`journal_entries.locked`), not local
@@ -238,7 +238,7 @@ export function DayJournalPanel({
     // typing the default back is the same as clearing it — stay untitled so the
     // heading keeps tracking the date.
     const typed = titleDraft.trim();
-    const next = typed === noteHeadingOf(date, dateFormat) || typed === journalTitleOf('', date) ? '' : typed;
+    const next = isDefaultNoteHeading(typed, date) ? '' : typed;
     setTitleDraft(null);
     if (!existingId || next === (entry?.title ?? '')) return;
     void commands.setJournalTitle(existingId, next);

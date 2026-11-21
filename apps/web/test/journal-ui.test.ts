@@ -577,13 +577,14 @@ describe('DayJournalPanel — editor', () => {
     expect(screen.getByTestId('journal-date').textContent).toBe('Wed 5 Aug 2026');
   });
 
-  it('the date format is a per-device preference (Settings › Note date)', () => {
-    vi.stubGlobal('localStorage', { getItem: (k: string) => (k === 'prisms.noteDate.format' ? 'dd-mmm-yyyy' : null), setItem() {}, removeItem() {} });
+  it('the caption and the default title have their own per-device formats (Settings)', () => {
+    const prefs: Record<string, string> = { 'prisms.noteDate.format': 'dd-mmm-yyyy', 'prisms.noteTitle.format': 'iso' };
+    vi.stubGlobal('localStorage', { getItem: (k: string) => prefs[k] ?? null, setItem() {}, removeItem() {} });
     try {
       state.entry = { id: 'j1', content: 'x', deleted_at: null, locked: false };
       render(createElement(DayJournalPanel, { date: '2026-08-05', ctx: CTX, actions: 'lock' }));
       expect(screen.getByTestId('journal-date').textContent).toBe('05/Aug/2026');
-      expect((screen.getByTestId('journal-title') as HTMLInputElement).value).toBe('Note · 05/Aug/2026');
+      expect((screen.getByTestId('journal-title') as HTMLInputElement).value).toBe('Note · 2026-08-05');
     } finally {
       vi.unstubAllGlobals();
     }

@@ -18,7 +18,15 @@ import { Ic, subscribeHistory, useCommands, useUserSettings, type CommandContext
 
 import { DEFAULT_SPAN } from '../agenda-layout';
 import { DUE_DATE_FORMATS, formatDueDate, setDueDateFormatPref, useDueDateFormatPref } from '../due-date-format';
-import { formatNoteDate, NOTE_DATE_FORMATS, setNoteDateFormatPref, useNoteDateFormatPref } from '../note-date-format';
+import {
+  formatNoteDate,
+  NOTE_DATE_FORMATS,
+  noteHeadingOf,
+  setNoteDateFormatPref,
+  setNoteTitleFormatPref,
+  useNoteDateFormatPref,
+  useNoteTitleFormatPref,
+} from '../note-date-format';
 import { formatAgendaRange, RANGE_FORMATS, setRangeFormatPref, useRangeFormatPref } from '../agenda-range';
 import { setSnapPref, SNAP_OPTIONS, useSnapPref } from '../agenda-snap';
 import { useTabSwap } from '../components/tabSwap';
@@ -37,6 +45,7 @@ export function Settings({ ctx }: { ctx: CommandContext }) {
   const rangeFormat = useRangeFormatPref();
   const dueFormat = useDueDateFormatPref();
   const noteFormat = useNoteDateFormatPref();
+  const noteTitleFormat = useNoteTitleFormatPref();
   /**
    * The options are labelled with what they would ACTUALLY say, over the days
    * the Agenda would open on — today, forward by the default span. A live
@@ -208,10 +217,10 @@ export function Settings({ ctx }: { ctx: CommandContext }) {
             </div>
             <div className="px-set-row">
               <div className="px-set-lbl">
-                <b>Note date</b>
+                <b>Note date display</b>
                 <span>
-                  How a note&rsquo;s day is written under its title and in the default &ldquo;Note · date&rdquo; heading. This device
-                  only — it applies straight away. Each option is shown with today&rsquo;s date.
+                  How a note&rsquo;s day is written in the caption under its title. This device only — it applies straight away.
+                  Each option is shown with today&rsquo;s date.
                 </span>
               </div>
               <div className="px-set-ctl">
@@ -225,6 +234,30 @@ export function Settings({ ctx }: { ctx: CommandContext }) {
                   {NOTE_DATE_FORMATS.map((o) => (
                     <option key={o.value} value={o.value}>
                       {o.label} — {formatNoteDate(sample.from, o.value)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="px-set-row">
+              <div className="px-set-lbl">
+                <b>Default note title</b>
+                <span>
+                  The date in the title an untitled note gets (&ldquo;Note · date&rdquo;). A note you have renamed keeps its own
+                  title. This device only — it applies straight away.
+                </span>
+              </div>
+              <div className="px-set-ctl">
+                <select
+                  className="px-select"
+                  data-testid="settings-note-title-format"
+                  aria-label="default note title date format"
+                  value={noteTitleFormat}
+                  onChange={(e) => setNoteTitleFormatPref(e.target.value)}
+                >
+                  {NOTE_DATE_FORMATS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label} — {noteHeadingOf(sample.from, o.value)}
                     </option>
                   ))}
                 </select>
