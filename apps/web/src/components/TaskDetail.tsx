@@ -474,7 +474,7 @@ function TaskDetailBody({ node, facts, ctx, onOpenTask, onClose }: { node: Node;
   const trail = ancestorsOf(facts.tree, node.id).reverse();
   const project = trail.find((n) => n.node_type === 'project') ?? null;
   const status = isTask ? taskStatus(node, facts, asEpochMillis(Date.now())) : null;
-  const kind = isCapture ? 'Inbox capture' : node.habit_id !== null ? 'Habit task' : 'Task';
+  const kind = isCapture ? 'Unassigned capture' : node.habit_id !== null ? 'Habit task' : 'Task';
 
   // ── title ──
   const title = useDraft(node.title);
@@ -761,7 +761,7 @@ function ProjectField({ node, facts, targets, commands, run }: FieldProps & { fa
         value={current}
         onChange={choose}
         labelOf={label}
-        placeholder="Inbox — not in a project yet"
+        placeholder="Unassigned — not in a project yet"
         newProject={newProjectFor(facts.tree, commands)}
       />
     </Prop>

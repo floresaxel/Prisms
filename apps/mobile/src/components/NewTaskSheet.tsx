@@ -133,7 +133,7 @@ export function NewTaskSheet({
   const openProjectPicker = () =>
     setPicker({
       title: 'Which project?',
-      message: 'A project gives the task a “why”. Without one it waits in the Inbox.',
+      message: 'A project gives the task a “why”. Without one it stays Unassigned.',
       actions: [
         ...projects.map((p) => ({
           label: `${p.title}${p.type === 'milestone' ? ' (milestone)' : ''}`,
@@ -232,7 +232,7 @@ export function NewTaskSheet({
           <View style={s.footer}>
             <Text style={s.hint}>
               {project === null && habit === null
-                ? 'No “why” yet — this waits in the Inbox. Pick a Project or Habit to put it in the worklist.'
+                ? 'No “why” yet — this stays Unassigned. Pick a Project or Habit to put it in the worklist.'
                 : 'Adds it to All Tasks.'}
             </Text>
             {/* The mock files on ↵, and that still works — but Android IMEs do not

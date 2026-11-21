@@ -504,7 +504,7 @@ describe('project', () => {
   it('an Inbox capture is promoted into it, and has no steps or dependencies until then', () => {
     mount([capture]);
     openCard(capture);
-    expect(card()!.textContent).toContain('Inbox capture');
+    expect(card()!.textContent).toContain('Unassigned capture');
     expect(screen.getByTestId('td-capture-hint')).toBeTruthy();
     expect(screen.queryByTestId('td-steps')).toBeNull();
     expect(screen.queryByTestId('td-deps')).toBeNull();

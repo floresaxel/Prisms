@@ -4,7 +4,7 @@
  */
 export function UnfocusedTag() {
   return (
-    <span className="px-tag px-tag--grey" title="Completed from the Inbox without a project — no vision behind it" data-testid="unfocused-tag">
+    <span className="px-tag px-tag--grey" title="Completed while unassigned, without a project — no vision behind it" data-testid="unfocused-tag">
       unfocused
     </span>
   );
