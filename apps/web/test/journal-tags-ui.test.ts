@@ -352,6 +352,72 @@ describe('Journal screen — sort by tag and filters', () => {
     expect(screen.getByTestId('journal-day-2026-06-18')).toBeTruthy();
   });
 
+  describe('a day with activity is a note even with no text', () => {
+    const busy = (): DayLogEntries => ({
+      v: 2,
+      scheduled: [],
+      clocked: [
+        {
+          entry_id: 'c1',
+          task_id: 't',
+          title: 'work',
+          project: { id: 'p1', title: 'Marathon' },
+          vision: null,
+          started_at: '2026-06-12T08:00:00.000Z',
+          ended_at: '2026-06-12T09:00:00.000Z',
+          minutes: 60,
+        },
+      ],
+      clocked_minutes: 60,
+      completed: [],
+    });
+
+    it('lists a day that has time clocked on it but no note row', () => {
+      load();
+      state.logs = new Map([['2026-06-12', busy()]]);
+      mount();
+      const row = screen.getByTestId('journal-day-2026-06-12');
+      expect(row.textContent).toContain('Note · Fri 12 Jun 2026'); // untitled: the default heading
+      expect(screen.queryByTestId('journal-day-tags-2026-06-12')).toBeNull();
+    });
+
+    it('lists a day whose row has no text, once it is active or titled', () => {
+      load();
+      state.months = [
+        { ...note('2026-06-10', [], ''), title: 'Rest day' },
+        note('2026-06-11', [], ''), // blank, untitled, quiet: not a note
+        note('2026-06-12', [], ''), // blank, but something happened
+        ...state.months,
+      ];
+      state.logs = new Map([['2026-06-12', busy()]]);
+      mount();
+      expect(screen.getByTestId('journal-day-2026-06-10').textContent).toContain('Rest day');
+      expect(screen.getByTestId('journal-day-2026-06-12')).toBeTruthy();
+      expect(screen.queryByTestId('journal-day-2026-06-11')).toBeNull();
+    });
+
+    it('a quiet day with nothing written is still not listed', () => {
+      load();
+      mount();
+      expect(screen.queryByTestId('journal-day-2026-06-12')).toBeNull();
+    });
+
+    it('Today names itself instead of saying "No note yet" once something happened today', () => {
+      load();
+      state.logs = new Map([['2026-06-20', busy()]]);
+      mount();
+      expect(screen.queryByTestId('journal-today-empty')).toBeNull();
+      expect(screen.getByTestId('journal-today').textContent).toContain('Note · Sat 20 Jun 2026');
+    });
+
+    it('a collapsed or older month does not pull in its activity-only days', () => {
+      load();
+      state.logs = new Map([['2026-02-03', busy()]]); // outside the held months
+      mount();
+      expect(screen.queryByTestId('journal-day-2026-02-03')).toBeNull();
+    });
+  });
+
   it('a project filter keeps only days whose day log touches that project', () => {
     load();
     const entries = (project: { id: string; title: string }): DayLogEntries => ({

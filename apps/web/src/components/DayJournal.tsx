@@ -19,7 +19,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
-import { composeDayMarkdown } from '@prisms/core';
+import { asEpochMillis, bucketDate, composeDayMarkdown, isDayLogEmpty } from '@prisms/core';
 import {
   Ic,
   isJournalContentEmpty,
@@ -122,6 +122,16 @@ export function DayJournalPanel({
   /** Title and lock belong to a note that EXISTS; a blank day has neither. */
   const hasNote = existingId !== undefined && !isJournalContentEmpty(draft);
   const storedTitle = (entry?.title ?? '').trim();
+  /**
+   * A day that recorded something — work scheduled, completed or clocked — is a
+   * note even with no text written, so it can be titled (and a title keeps its row
+   * when the text is cleared). Today is titleable too: it is the note you open
+   * first, whether or not anything has happened yet. A day with none of these
+   * stays an empty day, which is not saved.
+   */
+  const dayActive = !isDayLogEmpty(dayLog);
+  const today = useMemo(() => bucketDate(asEpochMillis(Date.now()), dayResetHour, timezone), [dayResetHour, timezone]);
+  const titleable = hasNote || dayActive || storedTitle !== '' || date === today;
   /**
    * The heading: the stored title, else "Note · <date>" — but the two are NOT
    * equally safe to render early, so they are gated differently.
@@ -240,8 +250,20 @@ export function DayJournalPanel({
     const typed = titleDraft.trim();
     const next = isDefaultNoteHeading(typed, date) ? '' : typed;
     setTitleDraft(null);
-    if (!existingId || next === (entry?.title ?? '')) return;
-    void commands.setJournalTitle(existingId, next);
+    if (next === (entry?.title ?? '')) return;
+    if (existingId) {
+      void commands.setJournalTitle(existingId, next);
+      return;
+    }
+    if (next === '') return;
+    // A day with no row yet (today before anything is written, or a day that only
+    // has activity): a title needs a row to belong to, so mint it — with whatever
+    // text is already drafted, usually none — and title it. Queued in order.
+    const id = crypto.randomUUID();
+    void (async () => {
+      await commands.writeJournal({ existingId: id, entryDate: date, content: draft });
+      await commands.setJournalTitle(id, next);
+    })();
   }
 
   /**
@@ -340,7 +362,14 @@ export function DayJournalPanel({
   const write = (content: string) => {
     if (lockedRef.current) return;
     if (isJournalContentEmpty(content)) {
-      if (existingId) void commands.deleteJournal(existingId);
+      if (!existingId) return;
+      // A day with activity, or a title of its own, is still a note: keep its row
+      // (text cleared) instead of deleting it. Nothing to write if it is already blank.
+      if (dayActive || storedTitle !== '') {
+        if (!isJournalContentEmpty(entry?.content ?? '')) void commands.writeJournal({ existingId, entryDate: date, content: '' });
+      } else {
+        void commands.deleteJournal(existingId);
+      }
       return;
     }
     void commands.writeJournal({ existingId, entryDate: date, content });
@@ -425,8 +454,8 @@ export function DayJournalPanel({
             data-testid="journal-title"
             aria-label="note title"
             value={titleDraft ?? heading}
-            disabled={!hasNote || preview}
-            title={hasNote ? heading || undefined : 'Write something first — an empty day is not saved'}
+            disabled={!titleable || preview}
+            title={titleable ? heading || undefined : 'Write something first — an empty day is not saved'}
             onChange={(e) => setTitleDraft(e.target.value)}
             onBlur={commitTitle}
             onKeyDown={(e) => {

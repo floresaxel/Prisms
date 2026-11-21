@@ -72,28 +72,43 @@ function noteTitle(content: string): string {
   return truncatePlain(clean, 42);
 }
 
+/** A stored row counts as a note on its own when it has text or a title. */
+const isNoteRow = (e: JournalEntry): boolean => !isJournalContentEmpty(e.content) || e.title.trim() !== '';
+
 type View = 'date' | 'tag';
 const UNTAGGED = '\u0000untagged';
 
+/**
+ * One day in the list. `entry` is the day's row, or null for a day that is a note
+ * only because something was scheduled, completed or clocked on it (no row yet —
+ * it is created the first time the day is titled or written).
+ */
+interface JournalItem {
+  date: string;
+  entry: JournalEntry | null;
+}
+
 /** A day's row in either list: date, title, and the note's tags as quiet chips. */
-function DayRow({ entry, selected, onSelect }: { entry: JournalEntry; selected: boolean; onSelect: () => void }) {
+function DayRow({ item, selected, onSelect }: { item: JournalItem; selected: boolean; onSelect: () => void }) {
   const titleFormat = useNoteTitleFormatPref();
+  const { date, entry } = item;
+  const tags = entry?.tags ?? [];
   return (
     <button
       className={`px-jn-d${selected ? ' px-jn-d--sel' : ''}`}
-      data-testid={`journal-day-${entry.entry_date}`}
+      data-testid={`journal-day-${date}`}
       aria-current={selected}
       onClick={onSelect}
     >
-      <span className="px-jn-d-date">{dayLabel(entry.entry_date)}</span>
+      <span className="px-jn-d-date">{dayLabel(date)}</span>
       {/* a named note shows its NAME; an untitled one still shows its first line,
           which is more use than "Note · <date>". */}
       <span className="px-jn-d-title">
-        {entry.title.trim() || noteTitle(entry.content) || noteHeadingOf(entry.entry_date, titleFormat)}
+        {entry?.title.trim() || (entry ? noteTitle(entry.content) : '') || noteHeadingOf(date, titleFormat)}
       </span>
-      {entry.tags.length > 0 && (
-        <span className="px-jn-d-tags" data-testid={`journal-day-tags-${entry.entry_date}`}>
-          {entry.tags.map((t) => (
+      {tags.length > 0 && (
+        <span className="px-jn-d-tags" data-testid={`journal-day-tags-${date}`}>
+          {tags.map((t) => (
             <span key={t} className="px-jn-d-tag">#{t}</span>
           ))}
         </span>
@@ -110,16 +125,19 @@ function DayRow({ entry, selected, onSelect }: { entry: JournalEntry; selected: 
 function TodayRow({
   date,
   entry,
+  active,
   selected,
   onSelect,
 }: {
   date: string;
   entry: JournalEntry | null;
+  /** Something was scheduled, completed or clocked today: a note even with no text. */
+  active: boolean;
   selected: boolean;
   onSelect: () => void;
 }) {
   const titleFormat = useNoteTitleFormatPref();
-  const preview = entry ? entry.title.trim() || noteTitle(entry.content) || noteHeadingOf(date, titleFormat) : null;
+  const preview = entry ? entry.title.trim() || noteTitle(entry.content) || noteHeadingOf(date, titleFormat) : active ? noteHeadingOf(date, titleFormat) : null;
   return (
     <div className="px-jn-today-wrap">
       <button
@@ -173,7 +191,7 @@ export function Journal({ ctx }: { ctx: CommandContext }) {
   );
   const { entries } = useJournalMonths(heldMonths);
   const todayNote = useMemo(
-    () => entries.find((e) => e.entry_date === today && !isJournalContentEmpty(e.content)) ?? null,
+    () => entries.find((e) => e.entry_date === today && isNoteRow(e)) ?? null,
     [entries, today],
   );
 
@@ -196,13 +214,24 @@ export function Journal({ ctx }: { ctx: CommandContext }) {
     return { projects: [...projects.values()].sort(byTitle), visions: [...visions.values()].sort(byTitle) };
   }, [dayLogs, filter.project, filter.vision]);
 
-  // Notes that exist (an empty note is not a note), before any filter.
-  const notes = useMemo(() => entries.filter((e) => !isJournalContentEmpty(e.content)), [entries]);
+  // Notes that exist, before any filter. A day is a note when it has text or a title
+  // of its own — or when something was scheduled, completed or clocked on it, even
+  // with no text (the generated day log says so). An empty, untitled, quiet day is not.
+  const notes = useMemo<JournalItem[]>(() => {
+    const held = new Set(heldMonths);
+    const rowOf = new Map(entries.map((e) => [e.entry_date, e] as const));
+    const byDate = new Map<string, JournalItem>();
+    for (const e of entries) if (isNoteRow(e)) byDate.set(e.entry_date, { date: e.entry_date, entry: e });
+    for (const date of dayLogs.keys()) {
+      if (!byDate.has(date) && held.has(date.slice(0, 7))) byDate.set(date, { date, entry: rowOf.get(date) ?? null });
+    }
+    return [...byDate.values()];
+  }, [entries, dayLogs, heldMonths]);
 
   // Tags available to pick = tags on the notes currently held, with counts.
   const tagCounts = useMemo(() => {
     const counts = new Map<string, number>();
-    for (const n of notes) for (const t of n.tags) counts.set(t, (counts.get(t) ?? 0) + 1);
+    for (const n of notes) for (const t of n.entry?.tags ?? []) counts.set(t, (counts.get(t) ?? 0) + 1);
     if (filter.tag && !counts.has(filter.tag)) counts.set(filter.tag, 0);
     return [...counts.entries()].sort((a, b) => a[0].localeCompare(b[0]));
   }, [notes, filter.tag]);
@@ -210,37 +239,38 @@ export function Journal({ ctx }: { ctx: CommandContext }) {
   const visible = useMemo(
     () =>
       notes.filter((n) => {
-        if (filter.tag !== null && !n.tags.includes(filter.tag)) return false;
-        if (dayFilterOn && filterDayLog(dayLogs.get(n.entry_date), { project_id, vision_id }) === null) return false;
+        if (filter.tag !== null && !(n.entry?.tags ?? []).includes(filter.tag)) return false;
+        if (dayFilterOn && filterDayLog(dayLogs.get(n.date), { project_id, vision_id }) === null) return false;
         return true;
       }),
     [notes, filter.tag, dayFilterOn, dayLogs, project_id, vision_id],
   );
 
   const daysByMonth = useMemo(() => {
-    const m = new Map<string, JournalEntry[]>();
+    const m = new Map<string, JournalItem[]>();
     for (const e of visible) {
-      const k = e.entry_date.slice(0, 7);
+      const k = e.date.slice(0, 7);
       let list = m.get(k);
       if (!list) { list = []; m.set(k, list); }
       list.push(e);
     }
-    for (const list of m.values()) list.sort((a, b) => (a.entry_date < b.entry_date ? 1 : -1)); // newest day first
+    for (const list of m.values()) list.sort((a, b) => (a.date < b.date ? 1 : -1)); // newest day first
     return m;
   }, [visible]);
 
   // By tag: one group per tag, A–Z, then the untagged. A note with two tags is
   // listed under both — that is what "sort by the tag it has" means for a set.
   const tagGroups = useMemo(() => {
-    const groups = new Map<string, JournalEntry[]>();
+    const groups = new Map<string, JournalItem[]>();
     for (const n of visible) {
-      for (const t of n.tags.length > 0 ? n.tags : [UNTAGGED]) {
+      const tags = n.entry?.tags ?? [];
+      for (const t of tags.length > 0 ? tags : [UNTAGGED]) {
         let list = groups.get(t);
         if (!list) { list = []; groups.set(t, list); }
         list.push(n);
       }
     }
-    for (const list of groups.values()) list.sort((a, b) => (a.entry_date < b.entry_date ? 1 : -1));
+    for (const list of groups.values()) list.sort((a, b) => (a.date < b.date ? 1 : -1));
     return [...groups.entries()].sort(([a], [b]) => (a === UNTAGGED ? 1 : b === UNTAGGED ? -1 : a.localeCompare(b)));
   }, [visible]);
 
@@ -336,7 +366,7 @@ export function Journal({ ctx }: { ctx: CommandContext }) {
           {/* Pinned to the top of the list in both views, and independent of the
               filters: it is a way BACK, not a note, so it stays even when today has
               nothing written and no note row exists. */}
-          <TodayRow date={today} entry={todayNote} selected={selectedDay === today} onSelect={goToday} />
+          <TodayRow date={today} entry={todayNote} active={dayLogs.has(today)} selected={selectedDay === today} onSelect={goToday} />
           {view === 'tag' ? (
             <div data-testid="journal-tag-groups">
               <p className="px-muted px-jn-empty">Notes from the last {MONTHS_SHOWN} months.</p>
@@ -353,7 +383,7 @@ export function Journal({ ctx }: { ctx: CommandContext }) {
                   </div>
                   <div className="px-jn-days">
                     {list.map((e) => (
-                      <DayRow key={e.entry_date} entry={e} selected={selectedDay === e.entry_date} onSelect={() => setSelectedDay(e.entry_date)} />
+                      <DayRow key={e.date} item={e} selected={selectedDay === e.date} onSelect={() => setSelectedDay(e.date)} />
                     ))}
                   </div>
                 </div>
@@ -381,7 +411,7 @@ export function Journal({ ctx }: { ctx: CommandContext }) {
                         <p className="px-muted px-jn-empty">{filterOn ? 'No notes match these filters.' : 'No notes this month.'}</p>
                       )}
                       {days.map((e) => (
-                        <DayRow key={e.entry_date} entry={e} selected={selectedDay === e.entry_date} onSelect={() => setSelectedDay(e.entry_date)} />
+                        <DayRow key={e.date} item={e} selected={selectedDay === e.date} onSelect={() => setSelectedDay(e.date)} />
                       ))}
                     </div>
                   )}

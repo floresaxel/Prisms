@@ -21,7 +21,11 @@ const state = {
   loading: false,
   /** Has the day's row actually been READ (vs. cached/in-flight rows standing in)? */
   settled: true,
+  /** The generated day log for the open day; null = nothing was scheduled, completed or clocked. */
+  dayLog: null as null | { scheduled: unknown[]; clocked: unknown[]; completed: unknown[] },
 };
+/** A day on which one task was completed — activity with no text written. */
+const ACTIVE_DAY = { scheduled: [], clocked: [], completed: [{ title: 'Ship it' }] };
 const commandFns = new Map<string, ReturnType<typeof vi.fn>>();
 const command = (name: string) => {
   if (!commandFns.has(name)) commandFns.set(name, vi.fn(async () => undefined));
@@ -50,7 +54,7 @@ vi.mock('@prisms/ui', async (importOriginal) => {
     // Annex L: the panel now also reads the derived day log + the timezone. Off
     // here, so these cases stay about the editor — the footer has its own suite
     // (test/daylog-ui.test.ts).
-    useDayLog: () => null,
+    useDayLog: () => state.dayLog,
     useUserSettings: () => ({ hasRow: true, dayResetHour: 0, timezone: 'UTC', weatherLocation: null, journalDayLog: false }),
   };
 });
@@ -117,6 +121,7 @@ afterEach(() => {
   state.months = [];
   state.loading = false;
   state.settled = true;
+  state.dayLog = null;
   commandFns.clear();
   store.clear(); // per-day lock state persists across mounts by design
 });
@@ -504,6 +509,65 @@ describe('DayJournalPanel — editor', () => {
     unmount();
     expect(command('deleteJournal')).toHaveBeenCalledWith('j1');
     expect(command('writeJournal')).not.toHaveBeenCalled();
+  });
+
+  // --- a day with activity is a note, written or not -----------------------
+
+  it('a day with activity but no text can be titled; the title mints its row first', async () => {
+    state.entry = null;
+    state.dayLog = ACTIVE_DAY;
+    render(createElement(DayJournalPanel, { date: '2026-08-11', ctx: CTX, actions: 'lock' }));
+    const input = screen.getByTestId('journal-title') as HTMLInputElement;
+    expect(input.disabled).toBe(false);
+    fireEvent.change(input, { target: { value: 'Launch day' } });
+    fireEvent.blur(input);
+    const write = command('writeJournal');
+    expect(write).toHaveBeenCalledTimes(1);
+    const arg = write.mock.calls[0]![0] as { existingId: string; entryDate: string; content: string };
+    expect(arg).toMatchObject({ entryDate: '2026-08-11', content: '' });
+    await new Promise((r) => setTimeout(r)); // the title is queued behind the write
+    expect(command('setJournalTitle')).toHaveBeenCalledWith(arg.existingId, 'Launch day');
+  });
+
+  it("today's title is editable even before anything happens or is written", async () => {
+    const today = new Date().toISOString().slice(0, 10); // the mocked zone is UTC, day-reset 0
+    state.entry = null;
+    render(createElement(DayJournalPanel, { date: today, ctx: CTX, actions: 'lock' }));
+    const input = screen.getByTestId('journal-title') as HTMLInputElement;
+    expect(input.disabled).toBe(false);
+    fireEvent.change(input, { target: { value: 'Fresh start' } });
+    fireEvent.blur(input);
+    expect(command('writeJournal')).toHaveBeenCalledTimes(1);
+    await new Promise((r) => setTimeout(r)); // the title is queued behind the write
+    expect(command('setJournalTitle')).toHaveBeenCalledWith(expect.any(String), 'Fresh start');
+  });
+
+  it('clearing the text of an activity day keeps the note (blank) instead of deleting it', () => {
+    state.entry = { id: 'j1', content: 'had words', deleted_at: null, locked: false };
+    state.dayLog = ACTIVE_DAY;
+    const { unmount } = render(createElement(DayJournalPanel, { date: '2026-08-11', ctx: CTX }));
+    fireEvent.change(screen.getByTestId('journal-rich'), { target: { value: '' } });
+    unmount();
+    expect(command('deleteJournal')).not.toHaveBeenCalled();
+    expect(command('writeJournal')).toHaveBeenCalledWith({ existingId: 'j1', entryDate: '2026-08-11', content: '' });
+  });
+
+  it('clearing the text of a TITLED note keeps the note too — the title is not thrown away', () => {
+    state.entry = { id: 'j1', content: 'had words', deleted_at: null, locked: false, title: 'Trip planning' };
+    const { unmount } = render(createElement(DayJournalPanel, { date: '2026-08-11', ctx: CTX }));
+    fireEvent.change(screen.getByTestId('journal-rich'), { target: { value: '' } });
+    unmount();
+    expect(command('deleteJournal')).not.toHaveBeenCalled();
+    expect(command('writeJournal')).toHaveBeenCalledWith({ existingId: 'j1', entryDate: '2026-08-11', content: '' });
+  });
+
+  it('an already-blank activity day writes nothing on blur', () => {
+    state.entry = { id: 'j1', content: '', deleted_at: null, locked: false };
+    state.dayLog = ACTIVE_DAY;
+    render(createElement(DayJournalPanel, { date: '2026-08-11', ctx: CTX }));
+    fireEvent.blur(screen.getByTestId('journal-rich'), { target: { value: '' } });
+    expect(command('writeJournal')).not.toHaveBeenCalled();
+    expect(command('deleteJournal')).not.toHaveBeenCalled();
   });
 
   // --- the editable title ---------------------------------------------------
