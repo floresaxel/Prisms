@@ -78,8 +78,9 @@ import {
 } from '@prisms/ui';
 
 import { useSnapPref } from '../agenda-snap';
-import { formatMinutes, projectTone, rejectionMessage } from '../format';
+import { formatMinutes, rejectionMessage } from '../format';
 import { DetailsMark } from './DetailsMark';
+import { ProjectDot } from './ProjectDot';
 import { ProjectPicker } from './ProjectPicker';
 import { newProjectFor } from './useNewProject';
 
@@ -604,7 +605,7 @@ function TaskDetailBody({ node, facts, ctx, onOpenTask, onClose }: { node: Node;
         <span className="px-td-kind">{kind}</span>
         {trail.length > 0 && (
           <span className="px-td-crumb" title={trail.map((n) => n.title).join(' › ')}>
-            {project && <span className={`px-pdot px-pdot--${projectTone(project.id)}`} />}
+            {project && <ProjectDot tree={facts.tree} projectId={project.id} />}
             {trail.map((n) => n.title).join(' › ')}
           </span>
         )}

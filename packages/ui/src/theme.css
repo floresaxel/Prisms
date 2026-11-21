@@ -1986,6 +1986,13 @@ input.px-rb-title:focus { outline: none; border-color: var(--px-focus); backgrou
 .px-rf-door--ready polygon { fill: var(--px-surface); stroke: var(--px-rf-ink); }
 .px-rf-door--wait polygon { fill: var(--px-surface); stroke: var(--px-faint); stroke-dasharray: 26 20; }
 .px-rf-door--done polygon { fill: var(--px-ok); stroke: var(--px-ok); }
+/* On a roadmap whose vision has a colour (--px-rf-vc, set on .px-rb) a project's
+   pentagon wears it, like the project pentagons on Tasks and My Day: filled when
+   in progress, outlined when ready, a fainter dashed outline when waiting. The
+   state still reads from fill / outline / dashes; "done" stays the green tick. */
+.px-rb--vc .px-rf-door--now polygon { fill: var(--px-rf-vc); stroke: var(--px-rf-vc); }
+.px-rb--vc .px-rf-door--ready polygon { stroke: var(--px-rf-vc); }
+.px-rb--vc .px-rf-door--wait polygon { stroke: color-mix(in srgb, var(--px-rf-vc) 55%, transparent); }
 .px-rf-tick { display: none; fill: none; stroke: #fff; stroke-width: 24; stroke-linecap: round; stroke-linejoin: round; }
 .px-rf-door--done .px-rf-tick { display: inline; }
 .px-rf-mark-frame { fill: none; stroke: var(--px-rf-ink); stroke-width: 16; stroke-linejoin: round; }
@@ -2240,7 +2247,10 @@ button.px-rf-dep-kind:hover { border-color: var(--px-border-2); color: var(--px-
 /* a colour another vision already wears: struck through and not selectable */
 .px-swatch:disabled { cursor: not-allowed; opacity: 0.28; }
 .px-swatch:disabled::after { content: ''; position: absolute; inset: 0; margin: auto; width: 130%; height: 2px; background: var(--px-text); transform: rotate(-45deg); transform-origin: center; }
-.px-swatch--sm { width: 12px; height: 12px; aspect-ratio: auto; border-radius: 4px; border: none; flex: none; cursor: inherit; box-shadow: none; }
+/* The small vision-colour chip is a regular pentagon, point up — the same shape (and
+   1.05 : 1 proportions) as a project's `.px-pdot`, just a little larger. The big
+   picker swatches above stay squares: they carry a selected ring and a strike. */
+.px-swatch--sm { width: 12.6px; height: 12px; aspect-ratio: auto; border-radius: 0; border: none; flex: none; cursor: inherit; box-shadow: none; clip-path: polygon(50% 0, 100% 38.2%, 80.9% 100%, 19.1% 100%, 0 38.2%); }
 .px-swatch-name { font-size: 12px; color: var(--px-text-dim); }
 
 /* create-a-vision dialog: description + the dateless expected timeline */
