@@ -422,8 +422,27 @@ export const overlay_effects = new Table(
   { localOnly: true },
 );
 
+/**
+ * Tasks › Recently deleted, kept on THIS device (local-first): a snapshot of
+ * every task or capture deleted here, taken at delete time — the deleted rows
+ * of one cascade and their checklist steps, as they were. The server's
+ * tombstones only reach a device through the lazy `history` stream, so without
+ * this a deletion made here could not be listed, or restored on screen, while
+ * sync is down. `id` = the deleted root node's id. Pruned after 30 days; a
+ * snapshot whose node is live again (restored here or elsewhere) is just not
+ * listed. Cleared with the rest of the local data on sign-out.
+ */
+export const deleted_snapshots = new Table(
+  {
+    deleted_at: column.text, // ISO, when it was deleted on this device
+    nodes: column.text, // JSON: the deleted node rows, root first, then its cascade
+    steps: column.text, // JSON: those tasks' live checklist step rows
+  },
+  { localOnly: true },
+);
+
 /** The local-only overlay table names — asserted absent from `appSchema`. */
-export const LOCAL_ONLY_TABLE_NAMES = ['client_commands', 'overlay_effects'] as const;
+export const LOCAL_ONLY_TABLE_NAMES = ['client_commands', 'overlay_effects', 'deleted_snapshots'] as const;
 
 /**
  * The full on-device schema: the synced replica PLUS the local-only overlay
@@ -434,6 +453,7 @@ export const clientSchema = new Schema({
   ...syncedTables,
   client_commands,
   overlay_effects,
+  deleted_snapshots,
 });
 
 /** Every table the device has, by name — what a watched query can be reading. */

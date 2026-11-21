@@ -57,7 +57,7 @@ export function useHistoryStream(db: StreamSubscriber): HistoryState {
  */
 export function historyNotice(state: HistoryState, connected: boolean): string | null {
   if (state === 'synced') return null;
-  if (!connected) return "The app isn't connected to the sync server, so deleted tasks can't load. They'll appear once it reconnects.";
-  if (state === 'stalled') return "Deleted tasks haven't arrived from the server. If this lasts, the app isn't syncing right now; check the sync status at the top.";
+  if (!connected) return "The app isn't connected to the sync server. Tasks deleted on this device are listed; ones deleted on your other devices appear once it reconnects.";
+  if (state === 'stalled') return "Deletions from your other devices haven't arrived from the server. Tasks deleted on this device are listed. If this lasts, the app isn't syncing; check the sync status at the top.";
   return null;
 }
