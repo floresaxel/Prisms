@@ -6,7 +6,7 @@
 export const UI_PACKAGE = '@prisms/ui' as const;
 
 // data layer
-export { appSchema, clientSchema, client_commands, overlay_effects, sync_review_items, CLIENT_TABLE_NAMES, LOCAL_ONLY_TABLE_NAMES } from './powersync/schema';
+export { appSchema, clientSchema, client_commands, overlay_effects, deleted_snapshots, sync_review_items, CLIENT_TABLE_NAMES, LOCAL_ONLY_TABLE_NAMES } from './powersync/schema';
 export {
   CONFIRM_SETTLE_MS,
   createConnector,
@@ -167,7 +167,6 @@ export {
   useDoneToday,
   useCompletedTasks,
   useRecentlyDeleted,
-  RECENTLY_DELETED_DAYS,
   useTodayItinerary,
   useBlockedTasks,
   useHabitTasks,
@@ -215,8 +214,18 @@ export {
   type JournalDayRead,
   type SyncQueueState,
   type TodayItinerary,
-  type DeletedTaskItem,
 } from './hooks';
+export {
+  RECENTLY_DELETED_DAYS,
+  buildSnapshot,
+  createSqlDeletedSnapshots,
+  listRecentlyDeleted,
+  restoreEffects,
+  toDeletedSnapshot,
+  type DeletedSnapshot,
+  type DeletedSnapshotStore,
+  type DeletedTaskItem,
+} from './powersync/deleted-snapshots';
 export { groupWorklistBySchedule, type WorklistGroup } from './worklist-grouping';
 export {
   blocksForDay,

@@ -74,6 +74,7 @@ import {
 } from '@prisms/core';
 
 import { createCommands, type CommandContext } from './powersync/commands';
+import { createSqlDeletedSnapshots, listRecentlyDeleted, projectAbove, toDeletedSnapshot, type DeletedTaskItem } from './powersync/deleted-snapshots';
 import { usePrismsData } from './powersync/data-provider';
 import { createSqlOverlayStore, type SqlExecutor } from './powersync/overlay-store';
 import { createJournalMonthSubscriptions, type JournalMonthSubscriptions, type StreamSubscriber } from './powersync/streams';
@@ -1183,15 +1184,6 @@ export function useDoneToday(now: Instant): DoneTodayItem[] {
   }, [ctx, entryRows, now]);
 }
 
-/** The parent project of a task (or of a deleted task's live parent), or null. */
-function projectAbove(tree: TreeIndex, node: Node): Node | null {
-  if (node.parent_id === null) return null;
-  const parent = tree.byId.get(node.parent_id);
-  if (!parent) return null;
-  if (parent.node_type === 'project') return parent;
-  return ancestorsOf(tree, parent.id).find((a) => a.node_type === 'project') ?? null;
-}
-
 /**
  * Every completed task and Inbox capture, most-recent completion first —
  * Tasks › Completed (Done today is the slice of this since the day reset).
@@ -1224,42 +1216,19 @@ export function useCompletedTasks(): DoneTodayItem[] {
   }, [ctx, entryRows]);
 }
 
-export interface DeletedTaskItem {
-  task: Node;
-  /** When it was deleted (its `deleted_at`). */
-  deletedAt: string;
-  projectId: string | null;
-  projectTitle: string | null;
-}
-
-/** How far back Tasks › Recently deleted reaches. */
-export const RECENTLY_DELETED_DAYS = 30;
-
 /**
- * Tasks and Inbox captures deleted in the last RECENTLY_DELETED_DAYS, newest
- * first — the ones `node.restore` can bring back on their own: each sits at
- * the Inbox (no parent) or under a parent that is still live. A task deleted
- * along with its project is not listed; it returns with the project.
- *
- * Tombstones only reach this device while the lazy `history` stream is
- * subscribed (sync-streams.yaml Tier 2) — the caller holds it open while the
- * list shows (`subscribeHistory`); until then this is empty.
+ * Tasks › Recently deleted (`listRecentlyDeleted`): what THIS device deleted
+ * (its local snapshots — there at once, offline or not) merged with the
+ * server's tombstones from every device (only while the caller holds the lazy
+ * `history` stream open — `useHistoryStream` in the web app).
  */
 export function useRecentlyDeleted(now: Instant): DeletedTaskItem[] {
   const { tree, rows } = usePrismsData();
-  return useMemo(() => {
-    const since = now - RECENTLY_DELETED_DAYS * 24 * 60 * 60 * 1000;
-    const out: DeletedTaskItem[] = [];
-    for (const row of rows.nodes) {
-      const node = toNode(row);
-      if ((node.node_type !== 'task' && node.node_type !== 'activity') || node.deleted_at === null) continue;
-      if (isoToEpochMillis(node.deleted_at) < since) continue;
-      if (node.parent_id !== null && !tree.byId.has(node.parent_id)) continue; // goes back with its parent
-      const project = projectAbove(tree, node);
-      out.push({ task: node, deletedAt: node.deleted_at, projectId: project?.id ?? null, projectTitle: project?.title ?? null });
-    }
-    return out.sort((a, b) => (b.deletedAt < a.deletedAt ? -1 : b.deletedAt > a.deletedAt ? 1 : a.task.id < b.task.id ? -1 : 1));
-  }, [rows.nodes, tree, now]);
+  const snapshotRows = useRows('SELECT * FROM deleted_snapshots');
+  return useMemo(
+    () => listRecentlyDeleted({ tree, nodeRows: rows.nodes, snapshots: snapshotRows.map(toDeletedSnapshot), now }),
+    [rows.nodes, tree, snapshotRows, now],
+  );
 }
 
 export interface TodayItinerary {
@@ -1753,7 +1722,8 @@ export function useCommands(ctx: CommandContext) {
   const db = usePowerSync();
   // The two-layer overlay store over PowerSync's SQLite (execute/getAll/writeTransaction).
   return useMemo(() => {
-    const base = createCommands(createSqlOverlayStore(db as unknown as SqlExecutor), ctx);
+    const sql = db as unknown as SqlExecutor;
+    const base = createCommands(createSqlOverlayStore(sql), ctx, {}, { snapshots: createSqlDeletedSnapshots(sql) });
     // Wrapped so EVERY command is counted while in flight, not just the ones a
     // screen happens to remember to report. Behaviour is untouched: the same
     // promise is returned, rejections included.

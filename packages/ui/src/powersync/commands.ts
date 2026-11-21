@@ -16,6 +16,7 @@ import { normalizeJournalTags } from '@prisms/core';
 
 import type { VisionColor, VisionHorizon } from '../format';
 import { newId } from './client-runtime';
+import { buildSnapshot, restoreEffects, type DeletedSnapshotStore } from './deleted-snapshots';
 import { buildAcceptSuggestionEffects, type AcceptSuggestionBlock, type EffectSpec } from './effects';
 import { createExecuteCommand, type ExecuteDeps } from './execute';
 import { readMergedRows, type OverlayStore } from './overlay-store';
@@ -29,7 +30,13 @@ export interface CommandContext {
 
 const iso = (ctx: CommandContext) => (ctx.now ? ctx.now() : new Date().toISOString());
 
-export function createCommands(store: OverlayStore, ctx: CommandContext, deps: ExecuteDeps = {}) {
+/** Device-local stores some commands keep alongside the overlay (none in tests that don't need them). */
+export interface LocalStores {
+  /** Tasks › Recently deleted: what this device deleted (deleted-snapshots.ts). */
+  snapshots?: DeletedSnapshotStore;
+}
+
+export function createCommands(store: OverlayStore, ctx: CommandContext, deps: ExecuteDeps = {}, local: LocalStores = {}) {
   const exec = createExecuteCommand(store, { userId: ctx.userId, deviceId: ctx.deviceId }, deps);
   const run = (name: Parameters<typeof exec.execute>[0], payload: Record<string, unknown>, opts?: Parameters<typeof exec.execute>[2]) =>
     exec.execute(name, payload, opts);
@@ -69,18 +76,30 @@ export function createCommands(store: OverlayStore, ctx: CommandContext, deps: E
       await run('node.move', { id: nodeId, new_parent_id: newParentId, sort_order: sortOrder });
     },
     async softDelete(taskId: string): Promise<void> {
+      // Local-first Recently deleted: read what the delete is about to hide
+      // BEFORE it hides it, and keep that on this device once the delete is queued.
+      const deletedAt = iso(ctx);
+      const snapshot = local.snapshots
+        ? buildSnapshot(await readMergedRows(store, 'nodes'), await readMergedRows(store, 'task_steps'), taskId, deletedAt)
+        : null;
       // execute() computes the §I10 descendant closure over the merged tree and
       // hides the whole subtree optimistically (S7-F7); the server re-cascades
       // authoritatively and the descendants reconcile tombstoned.
       await run('node.soft_delete', { id: taskId });
+      if (snapshot && local.snapshots) await local.snapshots.save(snapshot);
     },
     /**
-     * Bring back a soft-deleted node (Tasks › Recently deleted). The row shows
-     * live again at once; the server also restores whatever its delete cascade
-     * took (descendants, steps), which syncs down after.
+     * Bring back a soft-deleted node (Tasks › Recently deleted). It is back on
+     * screen at once — from this device's snapshot when it was deleted here (so
+     * offline, or with sync down, too), else from the synced tombstones — and
+     * the server restores it with whatever its delete cascade took (descendants,
+     * steps). The snapshot is kept: a restored node is simply not listed, and a
+     * rejected restore lists it again.
      */
     async restore(nodeId: string): Promise<void> {
-      await run('node.restore', { id: nodeId });
+      const snapshot = local.snapshots ? await local.snapshots.get(nodeId) : null;
+      const extraEffects = restoreEffects(nodeId, snapshot, await readMergedRows(store, 'nodes'));
+      await run('node.restore', { id: nodeId }, { extraEffects });
     },
     /**
      * A vision, optionally with a colour and an expected (dateless) timeline.
