@@ -80,6 +80,26 @@ export function checkNodeMove(
   });
 }
 
+/**
+ * Restoring a soft-deleted node (`node.restore`). `node` is the RAW row (a
+ * TreeIndex holds only live nodes, so the caller looks it up itself). A node
+ * that is already live is a no-op, not an error. It must land under a LIVE
+ * parent — a node whose parent is also deleted comes back with that parent's
+ * own restore — and a vision still counts against I2.
+ */
+export function checkNodeRestore(tree: TreeIndex, id: Uuid, node: Node | undefined): Result<void> {
+  if (!node) return notFound('node', id);
+  if (node.deleted_at === null) return ok(undefined);
+  if (node.parent_id !== null && !getNode(tree, node.parent_id)) {
+    return err(domainError('E_HIERARCHY', `node ${id} sits under a deleted ${node.parent_id}; restore that first`));
+  }
+  if (node.node_type === 'vision') {
+    const limit = validateVisionLimit(tree);
+    if (!limit.ok) return limit;
+  }
+  return ok(undefined);
+}
+
 export function checkNodeRetype(
   tree: TreeIndex,
   payload: { id: Uuid; node_type: NodeType },

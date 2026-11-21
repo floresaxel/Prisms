@@ -75,6 +75,14 @@ export function createCommands(store: OverlayStore, ctx: CommandContext, deps: E
       await run('node.soft_delete', { id: taskId });
     },
     /**
+     * Bring back a soft-deleted node (Tasks › Recently deleted). The row shows
+     * live again at once; the server also restores whatever its delete cascade
+     * took (descendants, steps), which syncs down after.
+     */
+    async restore(nodeId: string): Promise<void> {
+      await run('node.restore', { id: nodeId });
+    },
+    /**
      * A vision, optionally with a colour and an expected (dateless) timeline.
      * Both ride in `attributes` — a type-specific extra the node schema already
      * carries, so no new column and no new verb — and are read back through

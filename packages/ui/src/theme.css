@@ -396,11 +396,17 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
 .px-timer-stop:focus-visible { outline-color: #fff; }
 
 /* hub tabs (Projects / Automations shells) */
-.px-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--px-border); margin: 0 0 18px; }
-.px-tab { display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px 9px; font: inherit; font-size: 12.5px; font-weight: 520; color: var(--px-text-dim); background: none; border: none; border-bottom: 2px solid transparent; margin-bottom: -1px; cursor: pointer; }
+/* A row of tabs that scrolls sideways when it outgrows the screen (a phone's
+   Tasks has four) instead of wrapping labels or running off the edge. The rule
+   under it is an inset shadow, not a border, so the active tab's underline can
+   sit on it without the scroll box clipping a negative margin. */
+.px-tabs { display: flex; gap: 2px; box-shadow: inset 0 -1px 0 var(--px-border); margin: 0 0 18px; overflow-x: auto; scrollbar-width: none; }
+.px-tabs::-webkit-scrollbar { display: none; }
+.px-tab { flex: none; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px 9px; font: inherit; font-size: 12.5px; font-weight: 520; color: var(--px-text-dim); background: none; border: none; border-bottom: 2px solid transparent; cursor: pointer; }
 .px-tab .px-ic { width: 14px; height: 14px; }
 .px-tab:hover { color: var(--px-text); }
 .px-tab--on { color: var(--px-blue-deep); border-bottom-color: var(--px-blue); font-weight: 600; }
+.px-tabs .px-tab:focus-visible { outline-offset: -2px; } /* inside the scroll box, which would clip it */
 
 /* Tab switch: a very quick blur out / blur in on the panel being replaced
    (apps/web/src/components/tabSwap.ts). `.px-vt-tab` sits on <html> only while
@@ -1125,6 +1131,12 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
 .px-t-title { font-size: 13px; font-weight: 530; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .px-t-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 2px 10px; margin-top: 3px; font-size: 11.5px; color: var(--px-faint); }
 .px-trow--done .px-t-title { color: var(--px-faint); text-decoration: line-through; }
+/* Tasks › Recently deleted: a dimmed row with a Restore button, no tick */
+.px-trow--deleted .px-t-title { color: var(--px-text-dim); }
+.px-deleted-ic { width: 17px; height: 17px; flex: none; display: flex; align-items: center; justify-content: center; color: var(--px-faint); }
+.px-deleted-ic .px-ic { width: 13px; height: 13px; }
+.px-deleted-note { margin: 0 0 4px; font-size: 12px; color: var(--px-text-dim); }
+.px-deleted-warn { margin: 8px 0 4px; padding: 8px 12px; font-size: 12px; color: var(--px-amber); background: var(--px-amber-bg); border-radius: 8px; }
 .px-proj { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--px-text-dim); }
 /* The project colour chip is a REGULAR pentagon (five equal sides), point up. The
    box is 1.902 : 1.809 (width : height) — the exact bounding box of a regular

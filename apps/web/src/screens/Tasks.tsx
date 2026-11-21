@@ -5,6 +5,9 @@
  *     project walking the tree, each task row carrying its checklist substeps
  *     (W3 task_steps: expand, add-on-Enter, toggle, inline rename).
  *   • By status — Available (priority order) / Blocked / Inbox / Done today.
+ *   • Completed — every finished task, newest first by day; the tick reopens.
+ *   • Recently deleted — the last 30 days' deletions, each with Restore
+ *     (`node.restore`); it holds the lazy `history` stream open while shown.
  * An Inbox row can be checked off without promoting it first: a dialog asks
  * whether to add it to a project and complete it, or complete it as an
  * unfocused task (no project behind it; Done today marks it so).
@@ -18,21 +21,27 @@
  */
 import { useMemo, useState, type FormEvent } from 'react';
 
+import { usePowerSync, useStatus } from '@powersync/react';
+
 import { asEpochMillis, initialSortOrder, sortOrderBetween, type Instant, type Node, type TaskStatus, type TaskStep } from '@prisms/core';
 import {
   Ic,
   Modal,
+  RECENTLY_DELETED_DAYS,
   useActivityInbox,
   useBlockedTasks,
   useCommands,
+  useCompletedTasks,
   useDoneToday,
   useIsHydrated,
   useMyDayAvailable,
   useNodeTree,
   usePromoteTargets,
+  useRecentlyDeleted,
   useTaskStepsByTask,
   useTasksByProject,
   type PrismsCommands,
+  type StreamSubscriber,
   type CommandContext,
   type MyDayItem,
   type PromoteTarget,
@@ -45,6 +54,7 @@ import { StepsToggle, SubstepPanel } from '../components/Substeps';
 import { EditableTitle, locationOf, useTaskDetail, type TaskDetailApi } from '../components/TaskDetail';
 import { useTabSwap } from '../components/tabSwap';
 import { UnfocusedTag } from '../components/UnfocusedTag';
+import { historyNotice, useHistoryStream } from '../components/useHistoryStream';
 import { useNewProject, type NewProjectApi } from '../components/useNewProject';
 import { formatMinutes, projectTone } from '../format';
 import { listLayoutClass } from '../list-layout';
@@ -58,7 +68,7 @@ export function Tasks({ ctx }: { ctx: CommandContext }) {
   const commands = useCommands(ctx);
   const detail = useTaskDetail();
   const hydrated = useIsHydrated();
-  const [tab, setTab] = useState<'byproject' | 'bystatus'>('byproject');
+  const [tab, setTab] = useState<'byproject' | 'bystatus' | 'completed' | 'deleted'>('byproject');
   const [panelRef, swap] = useTabSwap();
   const pickTab = (key: typeof tab) => { if (key !== tab) swap(() => setTab(key)); };
   const [title, setTitle] = useState('');
@@ -142,10 +152,20 @@ export function Tasks({ ctx }: { ctx: CommandContext }) {
         <button role="tab" aria-selected={tab === 'bystatus'} data-testid="tasks-tab-bystatus" className={`px-tab${tab === 'bystatus' ? ' px-tab--on' : ''}`} onClick={() => pickTab('bystatus')}>
           <Ic name="cols" /> By status
         </button>
+        <button role="tab" aria-selected={tab === 'completed'} data-testid="tasks-tab-completed" className={`px-tab${tab === 'completed' ? ' px-tab--on' : ''}`} onClick={() => pickTab('completed')}>
+          <Ic name="check" /> Completed
+        </button>
+        <button role="tab" aria-selected={tab === 'deleted'} data-testid="tasks-tab-deleted" className={`px-tab${tab === 'deleted' ? ' px-tab--on' : ''}`} onClick={() => pickTab('deleted')}>
+          <Ic name="trash" /> Recently deleted
+        </button>
       </div>
 
       <div ref={panelRef} role="tabpanel" style={{ maxWidth: 900 }}>
-        {tab === 'byproject' ? (
+        {tab === 'completed' ? (
+          <CompletedPanel commands={commands} detail={detail} />
+        ) : tab === 'deleted' ? (
+          <DeletedPanel commands={commands} now={now} />
+        ) : tab === 'byproject' ? (
           <>
             <div className="px-sec">Unassigned <span className="px-sec-cnt">· {activities.length} — no parent yet</span><span className="px-sec-ln" /></div>
             <ul className="px-rows" data-testid="inbox">
@@ -225,6 +245,140 @@ export function Tasks({ ctx }: { ctx: CommandContext }) {
 
       <CompleteInboxDialog activity={completing} targets={targets} newProject={newProject} commands={commands} onClose={() => setCompleting(null)} />
     </section>
+  );
+}
+
+/** A day heading for an ISO instant, in local time: "Today", "Yesterday", else "Mon 17 Nov". */
+function dayLabel(iso: string, nowMs: number): string {
+  const d = new Date(iso);
+  const key = (x: Date) => `${x.getFullYear()}-${x.getMonth()}-${x.getDate()}`;
+  const today = new Date(nowMs);
+  const yesterday = new Date(nowMs - 24 * 60 * 60 * 1000);
+  if (key(d) === key(today)) return 'Today';
+  if (key(d) === key(yesterday)) return 'Yesterday';
+  return d.toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short', ...(d.getFullYear() !== today.getFullYear() ? { year: 'numeric' } : {}) });
+}
+
+/** Consecutive runs of `items` sharing a day label, in order. */
+function byDay<T>(items: readonly T[], isoOf: (item: T) => string, nowMs: number): { label: string; items: T[] }[] {
+  const out: { label: string; items: T[] }[] = [];
+  for (const item of items) {
+    const label = dayLabel(isoOf(item), nowMs);
+    const last = out.at(-1);
+    if (last && last.label === label) last.items.push(item);
+    else out.push({ label, items: [item] });
+  }
+  return out;
+}
+
+/**
+ * Tasks › Completed: every finished task and capture, newest first, under a
+ * heading per day. The green tick reopens one; the rest of the row opens its
+ * details card, like everywhere else.
+ */
+function CompletedPanel({ commands, detail }: { commands: PrismsCommands; detail: TaskDetailApi }) {
+  const completed = useCompletedTasks();
+  const hydrated = useIsHydrated();
+  const nowMs = Date.now();
+  if (completed.length === 0) {
+    return (
+      <ul className="px-rows" data-testid="completed-list">
+        <li className="px-trow px-muted">{hydrated ? 'Nothing completed yet.' : 'Loading…'}</li>
+      </ul>
+    );
+  }
+  return (
+    <div data-testid="completed-list">
+      {byDay(completed, (d) => d.task.completed_at ?? '', nowMs).map((day) => (
+        <div key={day.label}>
+          <div className="px-sec">{day.label} <span className="px-sec-cnt">· {day.items.length}</span><span className="px-sec-ln" /></div>
+          <ul className="px-rows px-rows--muted">
+            {day.items.map((d) => (
+              <li className="px-trow px-trow--done" key={d.task.id} data-testid={`completed-${d.task.id}`} {...detail.rowProps(d.task.id)}>
+                <button className="px-ckb px-ckb--done" data-testid={`reopen-${d.task.id}`} aria-label="Reopen" title="Reopen" onClick={() => void commands.uncheck(d.task.id)}><Ic name="check" /></button>
+                <div className="px-t-main">
+                  <div className="px-t-title"><EditableTitle node={d.task} commands={commands} /></div>
+                  {d.projectTitle && (
+                    <div className="px-t-meta">
+                      <span className="px-proj"><span className={`px-pdot px-pdot--${projectTone(d.projectId)}`} />{d.projectTitle}</span>
+                    </div>
+                  )}
+                </div>
+                {d.task.completion_disposition === 'obsolete' && <span className="px-tag px-tag--grey">obsolete</span>}
+                {d.unfocused && <UnfocusedTag />}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Tasks › Recently deleted: what was deleted in the last RECENTLY_DELETED_DAYS,
+ * newest first, each with Restore. Deleted rows only reach this device through
+ * the lazy `history` stream, so the panel holds it open while it shows (and lets
+ * it go — PowerSync's TTL evicts the rows later — when you leave). Rows already
+ * on the device show at once; useHistoryStream says when more can't arrive.
+ */
+function DeletedPanel({ commands, now }: { commands: PrismsCommands; now: Instant }) {
+  const db = usePowerSync();
+  const status = useStatus();
+  const history = useHistoryStream(db as unknown as StreamSubscriber);
+
+  const deleted = useRecentlyDeleted(now);
+  const [failed, setFailed] = useState<string | null>(null);
+  async function restore(id: string) {
+    setFailed(null);
+    try {
+      await commands.restore(id);
+    } catch (e) {
+      setFailed(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  const nowMs = Date.now();
+  const notice = historyNotice(history, status.connected);
+  const emptyText = history === 'synced' ? 'Nothing deleted recently.' : notice !== null ? 'Nothing deleted on this device.' : 'Loading…';
+  return (
+    <div data-testid="deleted-list" data-history={history}>
+      <p className="px-deleted-note">Tasks and captures deleted in the last {RECENTLY_DELETED_DAYS} days. Restore puts one back where it was, with its steps.</p>
+      {notice && <p className="px-deleted-warn" role="status" data-testid="deleted-notice">{notice}</p>}
+      {failed && <p className="px-error" role="alert">{failed}</p>}
+      {deleted.length === 0 ? (
+        <ul className="px-rows">
+          <li className="px-trow px-muted">{emptyText}</li>
+        </ul>
+      ) : (
+        byDay(deleted, (d) => d.deletedAt, nowMs).map((day) => (
+          <div key={day.label}>
+            <div className="px-sec">{day.label} <span className="px-sec-cnt">· {day.items.length}</span><span className="px-sec-ln" /></div>
+            <ul className="px-rows px-rows--muted">
+              {day.items.map((d) => (
+                <li className="px-trow px-trow--deleted" key={d.task.id} data-testid={`deleted-${d.task.id}`}>
+                  <span className="px-deleted-ic"><Ic name="trash" /></span>
+                  <div className="px-t-main">
+                    <div className="px-t-title">{d.task.title}</div>
+                    <div className="px-t-meta">
+                      {d.projectTitle ? (
+                        <span className="px-proj"><span className={`px-pdot px-pdot--${projectTone(d.projectId)}`} />{d.projectTitle}</span>
+                      ) : (
+                        <span>Inbox</span>
+                      )}
+                      {d.task.completed_at !== null && <span>done</span>}
+                    </div>
+                  </div>
+                  <button className="px-btn px-btn--sm" data-testid={`restore-${d.task.id}`} onClick={() => void restore(d.task.id)}>
+                    Restore
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))
+      )}
+    </div>
   );
 }
 

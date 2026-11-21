@@ -531,6 +531,30 @@ describe.skipIf(!adminUrl)('S11 command dispatcher (§8 pipeline, full catalog)'
     expect(visionStill[0]!['deleted_at']).toBeNull(); // ancestor untouched
   });
 
+  it('node.restore undoes one soft_delete cascade — nodes and their steps — and needs a live parent', async () => {
+    const ids = await seedTree();
+    const step = randomUUID();
+    await results([cmd('step.add', { id: step, task_id: ids.task, title: 'a step', sort_order: 'a0' })], ids.user);
+    await results([cmd('node.soft_delete', { id: ids.project })], ids.user);
+
+    // the task alone can't come back while its project is deleted
+    const [early] = await results([cmd('node.restore', { id: ids.task })], ids.user);
+    expect(early).toMatchObject({ result: 'rejected', reject_code: 'E_HIERARCHY' });
+
+    const [back] = await results([cmd('node.restore', { id: ids.project })], ids.user);
+    expect(back!.result).toBe('applied');
+    const live = await sql`
+      SELECT count(*)::int AS n FROM nodes
+      WHERE user_id = ${ids.user} AND id IN (${ids.project}, ${ids.milestone}, ${ids.task}) AND deleted_at IS NULL`;
+    expect(live[0]!['n']).toBe(3);
+    const [s] = await sql`SELECT deleted_at FROM task_steps WHERE id = ${step}`;
+    expect(s!['deleted_at']).toBeNull();
+
+    // restoring a live node is a no-op, not an error
+    const [again] = await results([cmd('node.restore', { id: ids.project })], ids.user);
+    expect(again!.result).toBe('applied');
+  });
+
   async function seedBlock(ids: Awaited<ReturnType<typeof seedTree>>) {
     const block = randomUUID();
     await results(
