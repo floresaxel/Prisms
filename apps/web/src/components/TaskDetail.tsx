@@ -249,8 +249,43 @@ function fitHeight(el: HTMLTextAreaElement): void {
  * clicks still open the details card.
  */
 export function EditableTitle({ node, commands }: { node: Node; commands: PrismsCommands }) {
+  return (
+    <EditableText
+      value={node.title}
+      onSave={(t) => void commands.rename(node.id, t)}
+      label="Task title"
+      testId={`title-${node.id}`}
+      inputTestId={`title-input-${node.id}`}
+      after={<DetailsMark node={node} />}
+    />
+  );
+}
+
+/**
+ * The click-to-edit text behind a row's title and a step's title: reads as
+ * text (selectable by dragging), a plain click opens a wrapping editor with the
+ * caret at the click. Enter or blurring saves a changed, non-empty text through
+ * `onSave`; Escape puts it back. `after` shows next to the text, not the editor.
+ */
+export function EditableText({
+  value,
+  onSave,
+  label,
+  testId,
+  inputTestId,
+  className = '',
+  after = null,
+}: {
+  value: string;
+  onSave: (text: string) => void;
+  label: string;
+  testId: string;
+  inputTestId: string;
+  className?: string;
+  after?: ReactNode;
+}) {
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(node.title);
+  const [draft, setDraft] = useState(value);
   /** Where the click that started the edit landed in the title text. */
   const caretAt = useRef<number | null>(null);
   /** The press on the title text, to tell a click from a drag or a hold. */
@@ -277,23 +312,23 @@ export function EditableTitle({ node, commands }: { node: Node; commands: Prisms
 
   function startEditing(at: number | null) {
     caretAt.current = at;
-    setDraft(node.title);
+    setDraft(value);
     setEditing(true);
   }
 
   function commit() {
     setEditing(false);
     const t = draft.trim();
-    if (t !== '' && t !== node.title) void commands.rename(node.id, t);
+    if (t !== '' && t !== value) onSave(t);
   }
 
   if (editing) {
     return (
       <textarea
         ref={box}
-        className="px-title-input"
-        data-testid={`title-input-${node.id}`}
-        aria-label="Task title"
+        className={`px-title-input ${className}`.trim()}
+        data-testid={inputTestId}
+        aria-label={label}
         rows={1}
         value={draft}
         maxLength={MAX_TITLE_LENGTH}
@@ -314,7 +349,7 @@ export function EditableTitle({ node, commands }: { node: Node; commands: Prisms
           } else if (e.key === 'Escape') {
             // a rename in progress is cancelled, not any dialog around it
             e.stopPropagation();
-            setDraft(node.title);
+            setDraft(value);
             setEditing(false);
           }
         }}
@@ -329,8 +364,8 @@ export function EditableTitle({ node, commands }: { node: Node; commands: Prisms
       <span
         role="button"
         tabIndex={0}
-        className="px-title-btn"
-        data-testid={`title-${node.id}`}
+        className={`px-title-btn ${className}`.trim()}
+        data-testid={testId}
         onMouseDown={(e) => {
           press.current = pressAt(e);
         }}
@@ -348,9 +383,9 @@ export function EditableTitle({ node, commands }: { node: Node; commands: Prisms
           }
         }}
       >
-        {node.title}
+        {value}
       </span>
-      <DetailsMark node={node} />
+      {after}
     </>
   );
 }

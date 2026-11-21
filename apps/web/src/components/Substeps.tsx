@@ -1,16 +1,20 @@
 /**
  * A task's checklist steps under its row (W3 task_steps): the row's bubble
  * toggle ("+ Step" / "2/3 steps") expands and collapses the panel, where steps
- * are added on Enter, ticked and renamed in place. Tasks shows the toggle on
- * every unblocked task; My Day only on tasks that already have steps.
+ * are added on Enter, ticked, deleted (hover button) and renamed in place by
+ * clicking their text, like a task's title. Tasks shows the toggle on every
+ * unblocked task; My Day only on tasks that already have steps.
  *
  * Testids: steps-toggle-<taskId>, substeps-<taskId>, step-add-<taskId>,
- * step-toggle-<stepId>, step-rename-<stepId>, step-rename-input-<stepId>.
+ * step-toggle-<stepId>, step-title-<stepId>, step-rename-input-<stepId>,
+ * step-delete-<stepId>.
  */
 import { useState } from 'react';
 
 import { initialSortOrder, sortOrderBetween, type TaskStep } from '@prisms/core';
 import { Ic, type PrismsCommands } from '@prisms/ui';
+
+import { EditableText } from './TaskDetail';
 
 export function stepsLabel(steps: readonly TaskStep[]): string {
   if (steps.length === 0) return '+ Step';
@@ -70,14 +74,6 @@ export function SubstepPanel({ taskId, steps, commands }: { taskId: string; step
 }
 
 function SubstepRow({ step, commands }: { step: TaskStep; commands: PrismsCommands }) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(step.title);
-  async function commit() {
-    setEditing(false);
-    const t = draft.trim();
-    if (t !== '' && t !== step.title) await commands.renameStep(step.id, t);
-    else setDraft(step.title);
-  }
   return (
     <div className={`px-sstep${step.done ? ' px-sstep--done' : ''}`}>
       <button
@@ -88,29 +84,24 @@ function SubstepRow({ step, commands }: { step: TaskStep; commands: PrismsComman
       >
         <Ic name="check" />
       </button>
-      {editing ? (
-        <input
-          className="px-sstep-input"
-          data-testid={`step-rename-input-${step.id}`}
-          value={draft}
-          autoFocus
-          onChange={(e) => setDraft(e.target.value)}
-          onBlur={() => void commit()}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault();
-              void commit();
-            } else if (e.key === 'Escape') {
-              setDraft(step.title);
-              setEditing(false);
-            }
-          }}
-        />
-      ) : (
-        <span className="px-sstep-txt">{step.title}</span>
-      )}
-      <button className="px-sstep-ed" data-testid={`step-rename-${step.id}`} title="Rename step" onClick={() => { setDraft(step.title); setEditing(true); }}>
-        <Ic name="pen" />
+      {/* click the text to rename it in place, as with a task's title */}
+      <EditableText
+        value={step.title}
+        onSave={(t) => void commands.renameStep(step.id, t)}
+        label="Step title"
+        testId={`step-title-${step.id}`}
+        inputTestId={`step-rename-input-${step.id}`}
+        className="px-sstep-txt"
+      />
+      <button
+        type="button"
+        className="px-sstep-ed px-sstep-del"
+        data-testid={`step-delete-${step.id}`}
+        aria-label={`Delete step “${step.title}”`}
+        title="Delete step"
+        onClick={() => void commands.removeStep(step.id)}
+      >
+        <Ic name="x" />
       </button>
     </div>
   );

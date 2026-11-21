@@ -343,11 +343,23 @@ test('substeps: a synced step renders, and a UI-added + toggled step survives re
   await added.getByRole('button', { name: 'toggle step' }).click();
   await expect(added).toHaveClass(/px-sstep--done/);
 
+  // click a step's text → rename it in place (Enter saves)
+  await panel.getByTestId(`step-title-${ids.seededStep}`).click();
+  const editor = panel.getByTestId(`step-rename-input-${ids.seededStep}`);
+  await editor.fill('Measure the runs twice');
+  await editor.press('Enter');
+  await expect(panel.getByText('Measure the runs twice')).toBeVisible();
+
   // reload → both steps survive, the toggled one is still done
   await page.reload();
   await goto(page, 'tasks');
   await page.getByTestId(`steps-toggle-${ids.task}`).click();
   const panel2 = page.getByTestId(`substeps-${ids.task}`);
-  await expect(panel2.getByText('Measure the runs')).toBeVisible({ timeout: 30_000 });
+  await expect(panel2.getByText('Measure the runs twice')).toBeVisible({ timeout: 30_000 });
   await expect(panel2.locator('.px-sstep', { hasText: 'Cut tubing to length' })).toHaveClass(/px-sstep--done/);
+
+  // the small x on a step deletes it without opening the task
+  await panel2.getByTestId(`step-delete-${ids.seededStep}`).click({ force: true });
+  await expect(panel2.getByText('Measure the runs twice')).toHaveCount(0);
+  await expect(panel2.getByText('Cut tubing to length')).toBeVisible();
 });
