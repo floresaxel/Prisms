@@ -1136,6 +1136,7 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
 .px-deleted-ic { width: 17px; height: 17px; flex: none; display: flex; align-items: center; justify-content: center; color: var(--px-faint); }
 .px-deleted-ic .px-ic { width: 13px; height: 13px; }
 .px-deleted-note { margin: 0 0 4px; font-size: 12px; color: var(--px-text-dim); }
+.px-deleted-warn { margin: 8px 0 4px; padding: 8px 12px; font-size: 12px; color: var(--px-amber); background: var(--px-amber-bg); border-radius: 8px; }
 .px-proj { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--px-text-dim); }
 /* The project colour chip is a REGULAR pentagon (five equal sides), point up. The
    box is 1.902 : 1.809 (width : height) — the exact bounding box of a regular

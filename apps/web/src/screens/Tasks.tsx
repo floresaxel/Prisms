@@ -21,14 +21,14 @@
  */
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 
-import { usePowerSync } from '@powersync/react';
+import { usePowerSync, useStatus } from '@powersync/react';
 
 import { asEpochMillis, initialSortOrder, sortOrderBetween, type Instant, type Node, type TaskStatus, type TaskStep } from '@prisms/core';
 import {
   Ic,
+  HISTORY_STREAM,
   Modal,
   RECENTLY_DELETED_DAYS,
-  subscribeHistory,
   useActivityInbox,
   useBlockedTasks,
   useCommands,
@@ -43,6 +43,7 @@ import {
   useTasksByProject,
   type PrismsCommands,
   type StreamSubscriber,
+  type StreamSubscription,
   type CommandContext,
   type MyDayItem,
   type PromoteTarget,
@@ -320,28 +321,44 @@ function CompletedPanel({ commands, detail }: { commands: PrismsCommands; detail
  * newest first, each with Restore. Deleted rows only reach this device through
  * the lazy `history` stream, so the panel holds it open while it shows (and lets
  * it go — PowerSync's TTL evicts the rows later — when you leave).
+ *
+ * Offline-first: whatever deleted rows are already on the device show at once.
+ * The first sync of the stream is awaited only to tell "nothing deleted" from
+ * "not here yet", and never for longer than HISTORY_WAIT_MS — when sync is down
+ * (offline, or the server refusing this device's sign-in) it would never end,
+ * and a permanent "Loading…" says nothing. Then the panel says what it knows.
  */
+const HISTORY_WAIT_MS = 6000;
+
+type HistoryState = 'waiting' | 'synced' | 'stalled';
+
 function DeletedPanel({ commands, now }: { commands: PrismsCommands; now: Instant }) {
   const db = usePowerSync();
-  const [loaded, setLoaded] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const status = useStatus();
+  const [history, setHistory] = useState<HistoryState>('waiting');
   useEffect(() => {
-    let release: (() => void) | null = null;
-    let gone = false;
-    subscribeHistory(db as unknown as StreamSubscriber, { waitForFirstSync: true })
-      .then((stop) => {
-        if (gone) stop();
-        else {
-          release = stop;
-          setLoaded(true);
+    const abort = new AbortController();
+    let sub: StreamSubscription | null = null;
+    const stall = setTimeout(() => setHistory((h) => (h === 'waiting' ? 'stalled' : h)), HISTORY_WAIT_MS);
+    (db as unknown as StreamSubscriber)
+      .syncStream(HISTORY_STREAM)
+      .subscribe({ ttl: 3600, priority: 3 })
+      .then(async (s) => {
+        if (abort.signal.aborted) {
+          s.unsubscribe();
+          return;
         }
+        sub = s; // held from here, so leaving the tab releases it even mid-wait
+        await s.waitForFirstSync(abort.signal);
+        if (!abort.signal.aborted) setHistory('synced');
       })
-      .catch((e: unknown) => {
-        if (!gone) setError(e instanceof Error ? e.message : 'could not load deleted tasks');
+      .catch(() => {
+        if (!abort.signal.aborted) setHistory('stalled');
       });
     return () => {
-      gone = true;
-      release?.();
+      abort.abort();
+      clearTimeout(stall);
+      sub?.unsubscribe();
     };
   }, [db]);
 
@@ -357,13 +374,25 @@ function DeletedPanel({ commands, now }: { commands: PrismsCommands; now: Instan
   }
 
   const nowMs = Date.now();
+  // Why the list may be incomplete. Offline is known at once; anything else
+  // shows once the first sync has had HISTORY_WAIT_MS and not arrived.
+  const notice =
+    history === 'synced'
+      ? null
+      : !status.connected
+        ? "The app isn't connected to the sync server, so deleted tasks can't load. They'll appear once it reconnects."
+        : history === 'stalled'
+          ? "Deleted tasks haven't arrived from the server. If this lasts, the app isn't syncing right now; check the sync status at the top."
+          : null;
+  const emptyText = history === 'synced' ? 'Nothing deleted recently.' : notice !== null ? 'Nothing deleted on this device.' : 'Loading…';
   return (
-    <div data-testid="deleted-list">
+    <div data-testid="deleted-list" data-history={history}>
       <p className="px-deleted-note">Tasks and captures deleted in the last {RECENTLY_DELETED_DAYS} days. Restore puts one back where it was, with its steps.</p>
-      {(error ?? failed) && <p className="px-error" role="alert">{error ?? failed}</p>}
+      {notice && <p className="px-deleted-warn" role="status" data-testid="deleted-notice">{notice}</p>}
+      {failed && <p className="px-error" role="alert">{failed}</p>}
       {deleted.length === 0 ? (
         <ul className="px-rows">
-          <li className="px-trow px-muted">{loaded || error ? 'Nothing deleted recently.' : 'Loading…'}</li>
+          <li className="px-trow px-muted">{emptyText}</li>
         </ul>
       ) : (
         byDay(deleted, (d) => d.deletedAt, nowMs).map((day) => (

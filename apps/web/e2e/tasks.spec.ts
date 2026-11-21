@@ -434,6 +434,17 @@ test('Completed lists finished tasks (the tick reopens); Recently deleted restor
   await expect(page.getByTestId(`task-row-${ids.doomed}`)).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId(`steps-toggle-${ids.doomed}`)).toHaveText('1 step', { timeout: 30_000 });
 
+  // ── when the deleted rows can't arrive (offline here), it says so instead of "Loading…" forever ──
+  await page.reload();
+  await goto(page, 'tasks');
+  await expect(page.getByTestId(`task-row-${ids.doomed}`)).toBeVisible({ timeout: 30_000 });
+  await page.context().setOffline(true);
+  await page.getByTestId('tasks-tab-deleted').click();
+  await expect(page.getByTestId('deleted-notice')).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId('deleted-list')).not.toContainText('Loading…');
+  await page.context().setOffline(false);
+  await page.getByTestId('tasks-tab-byproject').click();
+
   // ── and the server kept it: still there after a reload ──
   await expect(page.getByTestId('sync-state')).toHaveAttribute('data-sync', 'synced', { timeout: 30_000 });
   await page.reload();
