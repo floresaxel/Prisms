@@ -18,6 +18,7 @@ import { Ic, subscribeHistory, useCommands, useUserSettings, type CommandContext
 
 import { DEFAULT_SPAN } from '../agenda-layout';
 import { DUE_DATE_FORMATS, formatDueDate, setDueDateFormatPref, useDueDateFormatPref } from '../due-date-format';
+import { formatNoteDate, NOTE_DATE_FORMATS, setNoteDateFormatPref, useNoteDateFormatPref } from '../note-date-format';
 import { formatAgendaRange, RANGE_FORMATS, setRangeFormatPref, useRangeFormatPref } from '../agenda-range';
 import { setSnapPref, SNAP_OPTIONS, useSnapPref } from '../agenda-snap';
 import { useTabSwap } from '../components/tabSwap';
@@ -35,6 +36,7 @@ export function Settings({ ctx }: { ctx: CommandContext }) {
   const snap = useSnapPref();
   const rangeFormat = useRangeFormatPref();
   const dueFormat = useDueDateFormatPref();
+  const noteFormat = useNoteDateFormatPref();
   /**
    * The options are labelled with what they would ACTUALLY say, over the days
    * the Agenda would open on — today, forward by the default span. A live
@@ -199,6 +201,30 @@ export function Settings({ ctx }: { ctx: CommandContext }) {
                   {DUE_DATE_FORMATS.map((o) => (
                     <option key={o.value} value={o.value}>
                       {o.label} — {formatDueDate(sample.from, o.value)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="px-set-row">
+              <div className="px-set-lbl">
+                <b>Note date</b>
+                <span>
+                  How a note&rsquo;s day is written under its title and in the default &ldquo;Note · date&rdquo; heading. This device
+                  only — it applies straight away. Each option is shown with today&rsquo;s date.
+                </span>
+              </div>
+              <div className="px-set-ctl">
+                <select
+                  className="px-select"
+                  data-testid="settings-note-date-format"
+                  aria-label="note date format"
+                  value={noteFormat}
+                  onChange={(e) => setNoteDateFormatPref(e.target.value)}
+                >
+                  {NOTE_DATE_FORMATS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label} — {formatNoteDate(sample.from, o.value)}
                     </option>
                   ))}
                 </select>

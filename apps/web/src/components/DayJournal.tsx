@@ -33,6 +33,7 @@ import {
 } from '@prisms/ui';
 
 import { readJournalLocked, writeJournalLocked } from '../journal-lock-cache';
+import { formatNoteDate, noteHeadingOf, useNoteDateFormatPref } from '../note-date-format';
 
 import { DayLogSection } from './DayLogSection';
 import { NoteTags } from './NoteTags';
@@ -143,7 +144,8 @@ export function DayJournalPanel({
    * headerless box. The input stays disabled, so this reads as a heading rather
    * than an editable value that has been filled in for you.
    */
-  const heading = storedTitle || (isSettled ? journalTitleOf('', date) : '');
+  const dateFormat = useNoteDateFormatPref();
+  const heading = storedTitle || (isSettled ? noteHeadingOf(date, dateFormat) : '');
   /**
    * The LOCKED (read-only) state of THIS day, surfaced as "Lock edit" ⇄ "Edit".
    * It is a SYNCED field on the day's row (`journal_entries.locked`), not local
@@ -236,7 +238,7 @@ export function DayJournalPanel({
     // typing the default back is the same as clearing it — stay untitled so the
     // heading keeps tracking the date.
     const typed = titleDraft.trim();
-    const next = typed === journalTitleOf('', date) ? '' : typed;
+    const next = typed === noteHeadingOf(date, dateFormat) || typed === journalTitleOf('', date) ? '' : typed;
     setTitleDraft(null);
     if (!existingId || next === (entry?.title ?? '')) return;
     void commands.setJournalTitle(existingId, next);
@@ -531,7 +533,7 @@ export function DayJournalPanel({
         </div>
           )}
         </div>
-        <span className="px-jn-date" data-testid="journal-date">{date}</span>
+        <span className="px-jn-date" data-testid="journal-date">{formatNoteDate(date, dateFormat)}</span>
         {/* Tags belong to a note that exists (an empty day has no row to tag), and
             go read-only with the lock like everything else about the note. */}
         {hasNote && (
