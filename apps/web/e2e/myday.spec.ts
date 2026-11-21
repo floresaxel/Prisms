@@ -313,3 +313,49 @@ test('My Day: a task with steps expands and collapses them, on its row and in it
   await banner.getByTestId(`steps-toggle-${ids.withSteps}`).click();
   await expect(panel).toHaveCount(0);
 });
+
+test('My Day: project pentagons (and the run mark) wear the colour of their vision', async ({ page }) => {
+  await register(page, 'vcolour');
+  const ids = { v1: randomUUID(), r1: randomUUID(), p1: randomUUID(), a: randomUUID(), done: randomUUID(), v2: randomUUID(), r2: randomUUID(), p2: randomUUID(), b: randomUUID() };
+  const seed = await page.request.post('/sync/upload', {
+    data: {
+      device_id: 'e2e-seed',
+      commands: [
+        cmd('node.create', { id: ids.v1, node_type: 'vision', title: 'Work', sort_order: 'a0', attributes: { color: 'red' } }),
+        cmd('node.create', { id: ids.r1, node_type: 'roadmap', title: 'Plan A', sort_order: 'a0', parent_id: ids.v1 }),
+        cmd('node.create', { id: ids.p1, node_type: 'project', title: 'Launch', sort_order: 'a0', parent_id: ids.r1 }),
+        cmd('node.create', { id: ids.a, node_type: 'task', title: 'Write the note', sort_order: 'a0', parent_id: ids.p1, estimate_minutes: 30 }),
+        cmd('node.create', { id: ids.done, node_type: 'task', title: 'Already done', sort_order: 'a1', parent_id: ids.p1, estimate_minutes: 30 }),
+        cmd('node.create', { id: ids.v2, node_type: 'vision', title: 'Home', sort_order: 'a1', attributes: { color: 'teal' } }),
+        cmd('node.create', { id: ids.r2, node_type: 'roadmap', title: 'Plan B', sort_order: 'a0', parent_id: ids.v2 }),
+        cmd('node.create', { id: ids.p2, node_type: 'project', title: 'Garden', sort_order: 'a0', parent_id: ids.r2 }),
+        cmd('node.create', { id: ids.b, node_type: 'task', title: 'Order mulch', sort_order: 'a0', parent_id: ids.p2, estimate_minutes: 30 }),
+        cmd('node.check_off', { id: ids.done, completed_at: new Date().toISOString() }),
+      ],
+    },
+  });
+  expect(seed.ok()).toBeTruthy();
+
+  const RED = 'rgb(220, 38, 38)';
+  const TEAL = 'rgb(13, 148, 136)';
+  const bg = (loc: ReturnType<Page['locator']>) => loc.evaluate((el) => getComputedStyle(el).backgroundColor);
+  const row = (id: string) => page.getByTestId(`myday-row-${id}`);
+  await expect(row(ids.b)).toBeVisible({ timeout: 30_000 });
+
+  // available rows, and the project filter chips
+  expect(await bg(row(ids.a).locator('.px-pdot'))).toBe(RED);
+  expect(await bg(row(ids.b).locator('.px-pdot'))).toBe(TEAL);
+  expect(await bg(page.getByTestId(`filter-${ids.p1}`).locator('.px-pdot'))).toBe(RED);
+  expect(await bg(page.getByTestId(`filter-${ids.p2}`).locator('.px-pdot'))).toBe(TEAL);
+
+  // a done row (the Done-today section starts collapsed)
+  if ((await page.getByTestId('sec-done').getAttribute('aria-expanded')) !== 'true') await page.getByTestId('sec-done').click();
+  expect(await bg(page.getByTestId(`myday-done-${ids.done}`).locator('.px-pdot'))).toBe(RED);
+
+  // clocked in: the card's pentagon AND its run mark take the vision colour
+  await page.getByTestId(`clock-in-${ids.b}`).click();
+  const banner = page.getByTestId('run-banner');
+  await expect(banner).toContainText('Order mulch');
+  expect(await bg(banner.locator('.px-pdot'))).toBe(TEAL);
+  expect(await bg(page.getByTestId('run-mark-core'))).toBe(TEAL);
+});

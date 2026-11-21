@@ -13,14 +13,18 @@ export function projectVisionHex(tree: TreeIndex, projectId: string): string | n
   return vision ? visionHex(visionColorOf(vision)) : null;
 }
 
-export function ProjectDot({ tree, projectId }: { tree: TreeIndex; projectId: string }) {
-  const hex = projectVisionHex(tree, projectId);
+/**
+ * `projectId` may be null (a row whose project is unknown): that keeps the old
+ * neutral tone, like every other pentagon that has no vision to take a colour from.
+ */
+export function ProjectDot({ tree, projectId }: { tree: TreeIndex; projectId: string | null }) {
+  const hex = projectId === null ? null : projectVisionHex(tree, projectId);
   return (
     <span
       className={`px-pdot${hex ? '' : ` px-pdot--${projectTone(projectId)}`}`}
       style={hex ? { background: hex } : undefined}
       data-vision-colour={hex ?? undefined}
-      data-testid={`project-dot-${projectId}`}
+      data-testid={projectId === null ? undefined : `project-dot-${projectId}`}
     />
   );
 }

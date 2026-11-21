@@ -56,6 +56,7 @@ import {
 
 import { DueDate } from '../components/DueDate';
 import { InboxDelete } from '../components/InboxDelete';
+import { ProjectDot, projectVisionHex } from '../components/ProjectDot';
 import { ProjectPicker } from '../components/ProjectPicker';
 import { RunMark } from '../components/RunMark';
 import { StepsToggle, SubstepPanel } from '../components/Substeps';
@@ -153,7 +154,7 @@ const NO_STEPS: readonly TaskStep[] = [];
  * a bare task gets its first one). Clicking it expands the checklist under the
  * row; the same open state follows the task into its run card when clocked in.
  */
-function AvailableRow({ item, atLimit, todayDate, commands, detail, steps, stepsOpen, onToggleSteps, onCheck, onClockIn }: { item: MyDayItem; atLimit: boolean; todayDate: string; commands: PrismsCommands; detail: TaskDetailApi; steps: readonly TaskStep[]; stepsOpen: boolean; onToggleSteps: () => void; onCheck: () => void; onClockIn: () => void }) {
+function AvailableRow({ item, tree, atLimit, todayDate, commands, detail, steps, stepsOpen, onToggleSteps, onCheck, onClockIn }: { item: MyDayItem; tree: TreeIndex; atLimit: boolean; todayDate: string; commands: PrismsCommands; detail: TaskDetailApi; steps: readonly TaskStep[]; stepsOpen: boolean; onToggleSteps: () => void; onCheck: () => void; onClockIn: () => void }) {
   const id = item.task.id;
   const hasSteps = steps.length > 0;
   return (
@@ -167,7 +168,7 @@ function AvailableRow({ item, atLimit, todayDate, commands, detail, steps, steps
         </div>
         <div className="px-t-meta">
           {item.projectTitle && (
-            <span className="px-proj"><span className={`px-pdot px-pdot--${projectTone(item.projectId)}`} />{item.projectTitle}</span>
+            <span className="px-proj"><ProjectDot tree={tree} projectId={item.projectId} />{item.projectTitle}</span>
           )}
           {item.progress.estimateMinutes !== null && <span>est {formatMinutes(item.progress.estimateMinutes)}</span>}
           {item.priority !== null && <span className="px-prio" title="Parent-project priority — Projects › Decisions">prio {item.priority.toFixed(1)}</span>}
@@ -192,7 +193,7 @@ function AvailableRow({ item, atLimit, todayDate, commands, detail, steps, steps
  * project / estimate line, same logged-vs-estimate cell) so the two lists read
  * as one: the filled green tick and the struck-through title are what say "done".
  */
-function DoneRow({ item, commands, detail }: { item: DoneTodayItem; commands: PrismsCommands; detail: TaskDetailApi }) {
+function DoneRow({ item, tree, commands, detail }: { item: DoneTodayItem; tree: TreeIndex; commands: PrismsCommands; detail: TaskDetailApi }) {
   const id = item.task.id;
   return (
     <li className="px-trow px-trow--done" data-testid={`myday-done-${id}`} data-project={item.projectId ?? ''} {...detail.rowProps(id)}>
@@ -201,7 +202,7 @@ function DoneRow({ item, commands, detail }: { item: DoneTodayItem; commands: Pr
         <div className="px-t-title"><EditableTitle node={item.task} commands={commands} /></div>
         <div className="px-t-meta">
           {item.projectTitle && (
-            <span className="px-proj"><span className={`px-pdot px-pdot--${projectTone(item.projectId)}`} />{item.projectTitle}</span>
+            <span className="px-proj"><ProjectDot tree={tree} projectId={item.projectId} />{item.projectTitle}</span>
           )}
           {item.progress.estimateMinutes !== null && <span>est {formatMinutes(item.progress.estimateMinutes)}</span>}
         </div>
@@ -346,13 +347,13 @@ export function MyDay({ ctx, onNavigate }:{ ctx: CommandContext; onNavigate?: (h
             return (
               <Fragment key={t.entry.id}>
               <div className="px-run-banner" data-testid="run-banner" data-task={taskId} {...detail.rowProps(taskId)}>
-                <RunMark tone={projectTone(item?.projectId ?? null)} testId="run-mark" />
+                <RunMark tone={projectTone(item?.projectId ?? null)} color={item?.projectId ? projectVisionHex(ctxFacts.tree, item.projectId) : null} testId="run-mark" />
                 <div className="px-run-main">
                   <div className="px-run-title">{t.task?.title ?? 'Running task'}</div>
                   <div className="px-run-sub">
                     {item?.projectTitle && (
                       <>
-                        <span className="px-proj"><span className={`px-pdot px-pdot--${projectTone(item.projectId)}`} />{item.projectTitle}</span>
+                        <span className="px-proj"><ProjectDot tree={ctxFacts.tree} projectId={item.projectId} />{item.projectTitle}</span>
                         {' · '}
                       </>
                     )}
@@ -388,7 +389,7 @@ export function MyDay({ ctx, onNavigate }:{ ctx: CommandContext; onNavigate?: (h
                 <button className={`px-fchip${projectFilter === null ? ' px-fchip--on' : ''}`} data-testid="filter-all" onClick={() => setProjectFilter(null)}>All</button>
                 {projectChips.map(([pid, title]) => (
                   <button key={pid} className={`px-fchip${projectFilter === pid ? ' px-fchip--on' : ''}`} data-testid={`filter-${pid}`} onClick={() => setProjectFilter(pid)}>
-                    <span className={`px-pdot px-pdot--${projectTone(pid)}`} />{title}
+                    <ProjectDot tree={ctxFacts.tree} projectId={pid} />{title}
                   </button>
                 ))}
               </span>
@@ -407,6 +408,7 @@ export function MyDay({ ctx, onNavigate }:{ ctx: CommandContext; onNavigate?: (h
               <AvailableRow
                 key={item.task.id}
                 item={item}
+                tree={ctxFacts.tree}
                 atLimit={atLimit}
                 todayDate={todayDate}
                 commands={commands}
@@ -479,7 +481,7 @@ export function MyDay({ ctx, onNavigate }:{ ctx: CommandContext; onNavigate?: (h
               </button>
               <ul className={`px-rows${doneCollapsed ? ' px-hide' : ''}`} data-testid="done-list">
                 {done.map((d) => (
-                  <DoneRow key={d.task.id} item={d} commands={commands} detail={detail} />
+                  <DoneRow key={d.task.id} item={d} tree={ctxFacts.tree} commands={commands} detail={detail} />
                 ))}
               </ul>
             </>
