@@ -49,6 +49,7 @@ import {
 
 import { DueDate } from '../components/DueDate';
 import { InboxDelete } from '../components/InboxDelete';
+import { ProjectDot } from '../components/ProjectDot';
 import { ProjectPicker } from '../components/ProjectPicker';
 import { StepsToggle, SubstepPanel } from '../components/Substeps';
 import { EditableTitle, locationOf, useTaskDetail, type TaskDetailApi } from '../components/TaskDetail';
@@ -178,7 +179,7 @@ export function Tasks({ ctx }: { ctx: CommandContext }) {
             {groups.map((g) => (
               <div key={g.project.id}>
                 <div className="px-sec">
-                  <span className={`px-pdot px-pdot--${projectTone(g.project.id)}`} />
+                  <ProjectDot tree={tree} projectId={g.project.id} />
                   {g.project.title} <span className="px-sec-cnt">· {g.tasks.length}</span><span className="px-sec-ln" />
                 </div>
                 <ul className="px-rows" data-testid={`project-group-${g.project.id}`}>
