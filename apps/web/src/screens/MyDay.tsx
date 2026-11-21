@@ -56,7 +56,7 @@ import {
 
 import { DueDate } from '../components/DueDate';
 import { InboxDelete } from '../components/InboxDelete';
-import { ProjectDot, projectVisionHex } from '../components/ProjectDot';
+import { ProjectDot } from '../components/ProjectDot';
 import { ProjectPicker } from '../components/ProjectPicker';
 import { RunMark } from '../components/RunMark';
 import { StepsToggle, SubstepPanel } from '../components/Substeps';
@@ -65,7 +65,7 @@ import { useTimers } from '../components/Timers';
 import { UnfocusedTag } from '../components/UnfocusedTag';
 import { useNewProject, type NewProjectApi } from '../components/useNewProject';
 import { AutomatedMark } from '../components/Why';
-import { formatElapsed, formatMinutes, projectTone } from '../format';
+import { formatElapsed, formatMinutes } from '../format';
 import { listLayoutClass } from '../list-layout';
 import { useMeasuredWidth } from '../use-measured-width';
 
@@ -347,7 +347,7 @@ export function MyDay({ ctx, onNavigate }:{ ctx: CommandContext; onNavigate?: (h
             return (
               <Fragment key={t.entry.id}>
               <div className="px-run-banner" data-testid="run-banner" data-task={taskId} {...detail.rowProps(taskId)}>
-                <RunMark tone={projectTone(item?.projectId ?? null)} color={item?.projectId ? projectVisionHex(ctxFacts.tree, item.projectId) : null} testId="run-mark" />
+                <RunMark tone="blue" testId="run-mark" />
                 <div className="px-run-main">
                   <div className="px-run-title">{t.task?.title ?? 'Running task'}</div>
                   <div className="px-run-sub">
