@@ -10,7 +10,7 @@
  *
  * Interaction: click a block to zoom into it (it becomes the full-width top
  * row), click the top row or press Esc to go back up, and click a task to pin
- * its details. The width toggle changes what a block's size stands for; the bar
+ * its details and open its details card. The width toggle changes what a block's size stands for; the bar
  * along each block's bottom edge is always "% done".
  */
 import { useCallback, useMemo, useState, type CSSProperties, type KeyboardEvent } from 'react';
@@ -55,12 +55,15 @@ export function VisionShape({
   visionId,
   color,
   onNavigate,
+  onOpenTask,
 }: {
   tree: TreeIndex;
   visionId: string;
   /** The vision's solid colour (hex). Every block is a tint of it. */
   color: string;
   onNavigate: (href: string) => void;
+  /** Open a task's details card; clicking a task block also does this. */
+  onOpenTask?: (taskId: string) => void;
 }) {
   const shape = useMemo(() => buildShape(tree, visionId), [tree, visionId]);
   const [metric, setMetricState] = useState<ShapeMetric>('open');
@@ -114,6 +117,7 @@ export function VisionShape({
       zoomTo(item);
     } else {
       setPinnedId(pinnedId === item.node.id ? null : item.node.id);
+      if (item.node.node_type === 'task') onOpenTask?.(item.node.id);
     }
   };
 

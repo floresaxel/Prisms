@@ -46,6 +46,7 @@ import {
 } from '@prisms/ui';
 
 import { NewVisionDialog, type NewVisionValues } from '../components/NewVisionDialog';
+import { useTaskDetail } from '../components/TaskDetail';
 import { VisionShape } from '../components/VisionShape';
 
 const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
@@ -297,6 +298,7 @@ function VisionDetail({
 }) {
   const color = visionColorOf(vision);
   const horizon = readVisionHorizon(vision.attributes);
+  const detail = useTaskDetail();
 
   const [title, setTitle] = useState(vision.title);
   // The name can also change from the Edit dialog (or another device): adopt it,
@@ -361,7 +363,13 @@ function VisionDetail({
 
       {/* Where the work under this vision sits. Read-only: edits stay on the
           screen that owns each level, which the detail line links to. */}
-      <VisionShape tree={tree} visionId={vision.id} color={solid(color)} onNavigate={onNavigate} />
+      <VisionShape
+        tree={tree}
+        visionId={vision.id}
+        color={solid(color)}
+        onNavigate={onNavigate}
+        onOpenTask={detail.open}
+      />
 
       <div className="px-mgr-card">
         <div className="px-mgr-head" style={{ marginBottom: 10 }}>
