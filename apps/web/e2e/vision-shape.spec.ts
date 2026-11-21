@@ -147,6 +147,10 @@ test('Plan › Vision charts where the work sits, and zooms into it', async ({ p
   // --- pin a task, then open the roadmap it sits under ---
   await cell(id.t2).click();
   await expect(shape.getByTestId('shape-detail')).toContainText('Write ch. 11');
+  // a task block also opens its details card; it sits over the chart until closed
+  await expect(page.getByTestId('td-dialog')).toHaveAttribute('data-task', id.t2);
+  await page.getByTestId('td-done').click();
+  await expect(page.getByTestId('td-dialog')).toHaveCount(0);
   await shape.getByTestId('shape-open-roadmap').click();
   await expect(page).toHaveURL(new RegExp(`/roadmap#${id.r1}$`));
 });
