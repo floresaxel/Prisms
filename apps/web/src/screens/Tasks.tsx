@@ -3,7 +3,8 @@
  * Inbox. A capture bar mints a parentless `activity`; two grouping tabs follow:
  *   • By project — the Inbox group FIRST (promote-to-parent), then one group per
  *     project walking the tree, each task row carrying its checklist substeps
- *     (W3 task_steps: expand, add-on-Enter, toggle, inline rename).
+ *     (W3 task_steps: expand, add-on-Enter, toggle, inline rename). A project's
+ *     heading folds its group away; folds are remembered per device.
  *   • By status — Available (priority order) / Blocked / Inbox / Done today.
  *   • Completed — every finished task, newest first by day; the tick reopens.
  *   • Recently deleted — the last 30 days' deletions, each with Restore
@@ -56,6 +57,7 @@ import { EditableTitle, locationOf, useTaskDetail, type TaskDetailApi } from '..
 import { useTabSwap } from '../components/tabSwap';
 import { UnfocusedTag } from '../components/UnfocusedTag';
 import { historyNotice, useHistoryStream } from '../components/useHistoryStream';
+import { useCollapsedSet } from '../components/useCollapsedSet';
 import { useNewProject, type NewProjectApi } from '../components/useNewProject';
 import { formatMinutes, projectTone } from '../format';
 import { listLayoutClass } from '../list-layout';
@@ -97,6 +99,8 @@ export function Tasks({ ctx }: { ctx: CommandContext }) {
   // when you leave Tasks. A project that has since gone away falls back to Inbox.
   const [captureTo, setCaptureTo] = useState('');
   const captureTarget = targets.find((t) => t.id === captureTo) ?? null;
+  // Which project groups are folded on By project — remembered on this device.
+  const projectFolds = useCollapsedSet('prisms.tasks.collapsed-projects');
 
   async function capture(e: FormEvent) {
     e.preventDefault();
@@ -107,6 +111,7 @@ export function Tasks({ ctx }: { ctx: CommandContext }) {
       const last = tree.childrenByParent.get(captureTarget.id)?.at(-1)?.sort_order ?? null;
       const sortOrder = last === null ? initialSortOrder() : sortOrderBetween(last, null);
       await commands.createTask({ parentId: captureTarget.id, title: t, sortOrder });
+      projectFolds.expand(captureTarget.id); // a task added to a folded project must not vanish
     } else {
       const last = activities.at(-1)?.sort_order ?? null;
       const sortOrder = last === null ? initialSortOrder() : sortOrderBetween(last, null);
@@ -176,19 +181,31 @@ export function Tasks({ ctx }: { ctx: CommandContext }) {
               ))}
             </ul>
 
-            {groups.map((g) => (
-              <div key={g.project.id}>
-                <div className="px-sec">
-                  <ProjectDot tree={tree} projectId={g.project.id} />
-                  {g.project.title} <span className="px-sec-cnt">· {g.tasks.length}</span><span className="px-sec-ln" />
+            {groups.map((g) => {
+              const collapsed = projectFolds.isCollapsed(g.project.id);
+              return (
+                <div key={g.project.id}>
+                  <button
+                    type="button"
+                    className="px-sec px-sec--clps"
+                    data-testid={`project-toggle-${g.project.id}`}
+                    aria-expanded={!collapsed}
+                    aria-controls={`project-group-${g.project.id}`}
+                    title={collapsed ? 'Show this project’s tasks' : 'Hide this project’s tasks'}
+                    onClick={() => projectFolds.toggle(g.project.id)}
+                  >
+                    <Ic name="chevd" className="px-ic px-sec-cv" />
+                    <ProjectDot tree={tree} projectId={g.project.id} />
+                    {g.project.title} <span className="px-sec-cnt">· {g.tasks.length}</span><span className="px-sec-ln" />
+                  </button>
+                  <ul className={`px-rows${collapsed ? ' px-hide' : ''}`} id={`project-group-${g.project.id}`} data-testid={`project-group-${g.project.id}`}>
+                    {g.tasks.map((t) => (
+                      <TaskRow key={t.task.id} task={t.task} status={t.status} blockedBy={t.blockedBy} steps={stepsByTask.get(t.task.id) ?? []} commands={commands} detail={detail} />
+                    ))}
+                  </ul>
                 </div>
-                <ul className="px-rows" data-testid={`project-group-${g.project.id}`}>
-                  {g.tasks.map((t) => (
-                    <TaskRow key={t.task.id} task={t.task} status={t.status} blockedBy={t.blockedBy} steps={stepsByTask.get(t.task.id) ?? []} commands={commands} detail={detail} />
-                  ))}
-                </ul>
-              </div>
-            ))}
+              );
+            })}
           </>
         ) : (
           <>
