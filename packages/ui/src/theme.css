@@ -394,6 +394,23 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
 .px-timer-stop { display: inline-flex; align-items: center; gap: 4px; border: 1px solid rgba(255,255,255,.38); background: rgba(255,255,255,.14); border-radius: 999px; padding: 3px 10px; font-size: 11.5px; font-weight: 560; color: #fff; cursor: pointer; }
 .px-timer-stop:hover { background: rgba(255,255,255,.26); }
 .px-timer-stop:focus-visible { outline-color: #fff; }
+/* the pill's lead part (mark · task · +N · counter); a button once several timers run */
+.px-timer-wrap { position: relative; display: flex; }
+.px-timer-lead { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.px-timer-lead--btn { border: none; background: none; font: inherit; color: inherit; padding: 0; margin: 0; cursor: pointer; border-radius: 999px; }
+.px-timer-lead--btn:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+.px-timer-caret { width: 12px; height: 12px; opacity: 0.85; }
+.px-timer-lead--btn[aria-expanded='true'] .px-timer-caret { transform: rotate(180deg); }
+/* the small drop-down under the pill: every running timer, with its own stop */
+.px-timer-menu { right: 0; min-width: 260px; max-width: 340px; padding: 4px; color: var(--px-text); }
+.px-timer-menu-row { display: flex; align-items: center; gap: 10px; padding: 6px 6px 6px 9px; border-radius: 6px; font-size: 12.5px; }
+.px-timer-menu-row:hover { background: var(--px-surface-2); }
+.px-timer-menu-open { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; background: none; border: none; font: inherit; color: inherit; text-align: left; padding: 0; margin: 0; cursor: pointer; }
+.px-timer-menu-title { flex: 1; min-width: 0; font-weight: 540; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.px-timer-menu-elapsed { font-family: var(--px-font-mono); font-size: 12px; color: var(--px-blue-deep); font-variant-numeric: tabular-nums; }
+.px-timer-menu-stop { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border: 1px solid var(--px-border); background: var(--px-surface); color: var(--px-text-dim); border-radius: 999px; cursor: pointer; padding: 0; }
+.px-timer-menu-stop:hover { background: var(--px-surface-2); color: var(--px-danger); }
+.px-timer-menu-stop svg { width: 11px; height: 11px; fill: currentColor; }
 
 /* hub tabs (Projects / Automations shells) */
 /* A row of tabs that scrolls sideways when it outgrows the screen (a phone's
@@ -804,8 +821,13 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
 .px-scrim--soft { padding: 24px 16px; }
 .px-modal--card { width: min(620px, 100%); max-height: 100%; overflow-y: auto; padding: 24px 26px 22px; border-radius: 14px; }
 .px-modal--card .px-modal-title { font-size: 19px; margin-bottom: 6px; }
+/* Every boxed dialog — card and compact panel alike (clock-in, session review,
+   confirmations) — opens the same way: it rises a few px as it fades in. The
+   full-screen form animates its inner column instead (above). `:where()` keeps
+   this at one class of specificity so the exit (`.px-scrim--out > .px-modal`)
+   still wins while a dialog closes. */
 @media (prefers-reduced-motion: no-preference) {
-  .px-modal--card { animation: px-rise 160ms ease-out; }
+  .px-modal:where(:not(.px-modal--full)) { animation: px-rise 160ms ease-out; }
 }
 
 .px-auth { max-width: 360px; margin: 12vh auto; padding: 28px; background: var(--px-surface); border: 1px solid var(--px-border); border-radius: var(--px-radius); }
@@ -1216,8 +1238,8 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
 .px-run-core, .px-run-wave { position: absolute; inset: 0; border-radius: 50%; }
 /* on the topbar pill's blue the mark is white */
 .px-run-mark--white .px-run-core, .px-run-mark--white .px-run-wave { background: #fff; }
-.px-run-core { animation: px-run-pulse 1.8s ease-in-out infinite; }
-.px-run-wave { opacity: 0; animation: px-run-wave 1.8s ease-out infinite; }
+.px-run-core { animation: px-run-pulse 1.8s ease-in-out var(--px-run-phase, 0ms) infinite; }
+.px-run-wave { opacity: 0; animation: px-run-wave 1.8s ease-out var(--px-run-phase, 0ms) infinite; }
 @keyframes px-run-pulse { 50% { opacity: 0.55; transform: scale(0.8); } }
 @keyframes px-run-wave {
   0%, 45% { opacity: 0; transform: scale(0.8); }
