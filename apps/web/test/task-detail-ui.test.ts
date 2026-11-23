@@ -318,6 +318,33 @@ describe('clocking in and out from the card', () => {
   });
 });
 
+describe('completing from the card', () => {
+  it('an open task has Complete, which checks it off', () => {
+    mount([other]);
+    openCard(other);
+    fireEvent.click(screen.getByTestId('td-complete'));
+    expect(command('checkOff')).toHaveBeenCalledWith(other.id);
+  });
+
+  it('a blocked task cannot be completed until what it waits on is', () => {
+    mount();
+    openCard(); // `task` waits on an unfinished task
+    expect((screen.getByTestId('td-complete') as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('an Inbox capture completes as it is; a done task offers Reopen instead', () => {
+    mount([other, finished, capture]);
+    openCard(capture);
+    fireEvent.click(screen.getByTestId('td-complete'));
+    expect(command('checkOff')).toHaveBeenCalledWith(capture.id);
+    cleanup();
+    mount([other, finished, capture]);
+    openCard(finished);
+    expect(screen.queryByTestId('td-complete')).toBeNull();
+    expect(screen.getByTestId('td-reopen')).toBeTruthy();
+  });
+});
+
 describe('the card’s fields', () => {
   it('shows where the task lives, its budget and the time logged against it', () => {
     mount();

@@ -29,7 +29,7 @@
  *
  * Testids: td-dialog, td-title, td-project, td-start, td-due, td-hours,
  * td-logged, td-location, td-details, td-step-add, td-step-<id>, td-dep-add-before,
- * td-dep-add-after, td-dep-<edgeId>, td-delete, td-done, td-clock-in, td-clock-out,
+ * td-dep-add-after, td-dep-<edgeId>, td-delete, td-done, td-complete, td-clock-in, td-clock-out,
  * td-running; rows' titles are
  * title-<taskId> (button) / title-input-<taskId> (inline rename).
  */
@@ -682,6 +682,20 @@ function TaskDetailBody({ node, facts, ctx, onOpenTask, onClose }: { node: Node;
         )}
         <span className="px-grow" />
         {isTask && !done && <ClockControl taskId={node.id} blocked={status === 'blocked'} />}
+        {/* Complete, like a row's tick: a blocked task waits for its blocker; an Inbox
+            capture completes as it is (the Project field above files it first, if wanted) */}
+        {!done && (
+          <button
+            type="button"
+            className="px-btn"
+            data-testid="td-complete"
+            disabled={status === 'blocked'}
+            title={status === 'blocked' ? 'Blocked — finish what it waits on first' : undefined}
+            onClick={() => void run(() => commands.checkOff(node.id))}
+          >
+            <Ic name="check" /> Complete
+          </button>
+        )}
         {done && (
           <button type="button" className="px-btn" data-testid="td-reopen" onClick={() => void run(() => commands.uncheck(node.id))}>
             Reopen
