@@ -1,8 +1,10 @@
 /**
- * Review tab › clock-in log e2e (Playwright): recent sessions are listed, each
- * with a focus multiple that steps with arrows like the task card's Duration,
- * is saved at once, and survives a reload; a session closed with "Later" in the
- * clock-out review turns up there as not yet reviewed.
+ * Review tab e2e (Playwright). A session closed with "Review later" is a regular
+ * review item at the top of the tab: set its focus multiple (kept in the row), then
+ * Clear — which saves it and moves the session into the clock-in log below, whose
+ * rows hold each REVIEWED session's multiple, step with arrows like the task card's
+ * Duration, are saved at once, and survive a reload. The nav badge and the tab's
+ * count include the pending sessions.
  *
  * Requires the live stack (see playwright.config.ts).
  */
@@ -45,7 +47,7 @@ async function seedWorld(page: Page, titles: string[]): Promise<{ tasks: string[
   return { tasks, commands };
 }
 
-test('the Review tab logs recent sessions and steps each one’s focus multiple', async ({ page }) => {
+test('a session put off with "Review later" is a review item; Clear moves it into the log', async ({ page }) => {
   await register(page);
   const world = await seedWorld(page, ['Deep Work', 'Meetings']);
   const entries = { a: randomUUID(), b: randomUUID() };
@@ -55,7 +57,7 @@ test('the Review tab logs recent sessions and steps each one’s focus multiple'
       device_id: 'e2e-seed',
       commands: [
         ...world.commands,
-        // 60 minutes on Deep Work, never reviewed
+        // 60 minutes on Deep Work, never reviewed (it was put off)
         cmd('timer.clock_in', { entry_id: entries.a, task_id: world.tasks[0], started_at: new Date(end - 60 * 60_000).toISOString() }),
         cmd('timer.clock_out', { entry_id: entries.a, ended_at: new Date(end).toISOString() }),
         // 30 minutes on Meetings, reviewed at ×0.8 an hour earlier
@@ -68,31 +70,63 @@ test('the Review tab logs recent sessions and steps each one’s focus multiple'
   expect(seed.ok()).toBeTruthy();
 
   await goto(page, 'review');
-  const a = page.getByTestId(`log-row-${entries.a}`);
-  const b = page.getByTestId(`log-row-${entries.b}`);
-  await expect(a).toBeVisible({ timeout: 30_000 });
-  await expect(page.getByTestId('clock-log-count')).toHaveText('(2)');
-  await expect(a).toContainText('Deep Work');
-  await expect(a).toContainText('1h 0m logged');
-  // newest first
-  expect(await a.evaluate((el, other) => !!(el.compareDocumentPosition(other!) & Node.DOCUMENT_POSITION_FOLLOWING), await b.elementHandle())).toBe(true);
+  const item = page.getByTestId(`session-review-${entries.a}`);
+  await expect(item).toBeVisible({ timeout: 30_000 });
+  await expect(item).toContainText('Deep Work');
+  await expect(item).toContainText('1h 0m logged');
+  await expect(item).toContainText('Session review');
+  // a regular review item: counted in the tab's total and the nav badge
+  await expect(page.getByTestId('review-count')).toHaveText('(1)');
+  await expect(page.getByTestId('nav-review')).toContainText('1');
+  // and filed under Info
+  await page.getByTestId('review-filter-info').click();
+  await expect(item).toBeVisible();
+  await page.getByTestId('review-filter-error').click();
+  await expect(item).toHaveCount(0);
+  await page.getByTestId('review-filter-all').click();
+  await expect(item).toBeVisible();
 
-  // never reviewed: it counts in full until a multiple is set
-  await expect(page.getByTestId(`log-pending-${entries.a}`)).toBeVisible();
-  await expect(page.getByTestId(`log-focus-${entries.a}`)).toHaveValue('1.0');
-  await expect(page.getByTestId(`log-counted-${entries.a}`)).toHaveText('1h 0m counted');
-  await expect(page.getByTestId(`log-pending-${entries.b}`)).toHaveCount(0);
+  // the log holds only the REVIEWED session — the pending one waits above
+  await expect(page.getByTestId('clock-log-count')).toHaveText('(1)');
+  await expect(page.getByTestId(`log-row-${entries.b}`)).toBeVisible();
+  await expect(page.getByTestId(`log-row-${entries.a}`)).toHaveCount(0);
   await expect(page.getByTestId(`log-focus-${entries.b}`)).toHaveValue('0.8');
 
-  // ── the arrows step by a tenth and save at once ──
-  await expect(page.getByTestId(`log-up-${entries.a}`)).toBeDisabled(); // already at 1.0
-  await page.getByTestId(`log-down-${entries.a}`).click();
+  // ── set the multiple in the item: it counts at 1.0 until then, and stepping does NOT clear it ──
+  await expect(page.getByTestId(`sr-focus-${entries.a}`)).toHaveValue('1.0');
+  await expect(page.getByTestId(`sr-counted-${entries.a}`)).toHaveText('1h 0m counted');
+  await expect(page.getByTestId(`sr-up-${entries.a}`)).toBeDisabled(); // already at 1.0
+  await page.getByTestId(`sr-down-${entries.a}`).click();
+  await expect(page.getByTestId(`sr-focus-${entries.a}`)).toHaveValue('0.9');
+  await expect(page.getByTestId(`sr-counted-${entries.a}`)).toHaveText('54m counted');
+  const sf = page.getByTestId(`sr-focus-${entries.a}`);
+  await sf.focus();
+  await sf.press('ArrowDown');
+  await expect(sf).toHaveValue('0.8');
+  await sf.fill('lots'); // junk puts the last good value back
+  await sf.press('Enter');
+  await expect(sf).toHaveValue('0.8');
+  await sf.fill('0.9');
+  await sf.press('Enter');
+  await expect(sf).toHaveValue('0.9');
+  await page.waitForTimeout(500);
+  await expect(item).toBeVisible(); // still an item, still in the list
+  await expect(page.getByTestId(`log-row-${entries.a}`)).toHaveCount(0);
+
+  // ── Clear: the item goes, the session joins the log at the chosen multiple ──
+  await page.getByTestId(`sr-clear-${entries.a}`).click();
+  await expect(item).toHaveCount(0);
+  await expect(page.getByTestId('review-count')).toHaveText('(0)');
+  await expect(page.getByTestId('review-empty')).toBeVisible();
+  await expect(page.getByTestId('clock-log-count')).toHaveText('(2)');
   await expect(page.getByTestId(`log-focus-${entries.a}`)).toHaveValue('0.9');
   await expect(page.getByTestId(`log-counted-${entries.a}`)).toHaveText('54m counted');
-  await expect(page.getByTestId(`log-pending-${entries.a}`)).toHaveCount(0);
-  await expect(page.getByTestId('clock-log')).not.toContainText('not reviewed yet'); // nothing left to review
+  // newest first
+  const a = page.getByTestId(`log-row-${entries.a}`);
+  const b = page.getByTestId(`log-row-${entries.b}`);
+  expect(await a.evaluate((el, other) => !!(el.compareDocumentPosition(other!) & Node.DOCUMENT_POSITION_FOLLOWING), await b.elementHandle())).toBe(true);
 
-  // ── ↓ in the field, a typed value, and the floor ──
+  // ── the log still steps a reviewed session: ↓ in the field, a typed value, and the floor ──
   const f = page.getByTestId(`log-focus-${entries.b}`);
   await f.focus();
   await f.press('ArrowDown');
@@ -115,10 +149,10 @@ test('the Review tab logs recent sessions and steps each one’s focus multiple'
   await page.reload();
   await expect(page.getByTestId(`log-focus-${entries.a}`)).toHaveValue('0.9', { timeout: 30_000 });
   await expect(page.getByTestId(`log-focus-${entries.b}`)).toHaveValue('0.5');
-  await expect(page.getByTestId(`log-pending-${entries.a}`)).toHaveCount(0);
+  await expect(page.getByTestId(`session-review-${entries.a}`)).toHaveCount(0);
 });
 
-test('a session closed with "Later" shows up in the log, not yet reviewed', async ({ page }) => {
+test('a session closed with "Review later" shows up as a review item, and clearing it files it in the log', async ({ page }) => {
   await register(page);
   const world = await seedWorld(page, ['Later Task']);
   const seed = await page.request.post('/sync/upload', { data: { device_id: 'e2e-seed', commands: world.commands } });
@@ -132,13 +166,18 @@ test('a session closed with "Later" shows up in the log, not yet reviewed', asyn
   await expect(page.getByTestId('run-banner')).toHaveCount(0);
 
   await goto(page, 'review');
-  const row = page.getByTestId('clock-log').locator('[data-testid^="log-row-"]');
-  await expect(row).toHaveCount(1, { timeout: 30_000 });
-  await expect(row).toContainText('Later Task');
-  await expect(row.locator('[data-testid^="log-pending-"]')).toBeVisible();
+  const item = page.locator('[data-testid^="session-review-"]');
+  await expect(item).toHaveCount(1, { timeout: 30_000 });
+  await expect(item).toContainText('Later Task');
+  await expect(page.getByTestId('clock-log-empty')).toBeVisible(); // nothing reviewed yet
 
-  // setting its multiple from there marks it reviewed
-  await row.locator('[data-testid^="log-down-"]').click();
+  // review it (×0.9) and clear it: it leaves the list and lands in the log
+  await item.locator('[data-testid^="sr-down-"]').click();
+  await expect(item.locator('[data-testid^="sr-focus-"]')).toHaveValue('0.9');
+  await item.locator('[data-testid^="sr-clear-"]').click();
+  await expect(item).toHaveCount(0);
+  const row = page.getByTestId('clock-log').locator('[data-testid^="log-row-"]');
+  await expect(row).toHaveCount(1);
+  await expect(row).toContainText('Later Task');
   await expect(row.locator('[data-testid^="log-focus-"]')).toHaveValue('0.9');
-  await expect(row.locator('[data-testid^="log-pending-"]')).toHaveCount(0);
 });

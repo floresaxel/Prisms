@@ -7,8 +7,10 @@
  * `review.resolve`/`review.dismiss` commands — optimistic, so a closed item
  * leaves the list instantly and reconciles when the server confirms.
  *
- * Below the inbox sits the clock-in log (`ClockLog`): recent sessions, each with
- * a focus multiple to set — where a clock-out closed with "Later" gets its review.
+ * A session clocked out with "Review later" is a regular (info) item here too —
+ * set its focus multiple, then Clear (`SessionReviewRow`) — counted with the rest.
+ * Below sits the clock-in log (`ClockLog`): the reviewed sessions, whose multiple
+ * can still be changed.
  */
 import { useState } from 'react';
 
@@ -26,6 +28,8 @@ import {
 
 import { ClockLog } from '../components/ClockLog';
 import { LongSessionRow } from '../components/LongSessionRow';
+import { SessionReviewRow } from '../components/SessionReviewRow';
+import { usePendingSessionReviews } from '../session-reviews';
 
 type SeverityFilter = 'all' | 'error' | 'warning' | 'info';
 
@@ -88,12 +92,16 @@ export function Review({ ctx }: { ctx: CommandContext }) {
   const [filter, setFilter] = useState<SeverityFilter>('all');
   const longSessions = useLongSessions(items);
   const { timezone } = useUserSettings();
+  // sessions closed with "Review later": regular (info) review items until cleared
+  const pendingSessions = usePendingSessionReviews();
+  const total = items.length + pendingSessions.length;
 
-  const counts = { error: 0, warning: 0, info: 0 };
+  const counts = { error: 0, warning: 0, info: pendingSessions.length };
   for (const it of items) if (it.severity in counts) counts[it.severity as keyof typeof counts] += 1;
   const shown = filter === 'all' ? items : items.filter((it) => it.severity === filter);
+  const shownSessions = filter === 'all' || filter === 'info' ? pendingSessions : [];
   const pills: { key: SeverityFilter; label: string; n: number }[] = [
-    { key: 'all', label: 'All', n: items.length },
+    { key: 'all', label: 'All', n: total },
     { key: 'error', label: 'Errors', n: counts.error },
     { key: 'warning', label: 'Warnings', n: counts.warning },
     { key: 'info', label: 'Info', n: counts.info },
@@ -102,7 +110,7 @@ export function Review({ ctx }: { ctx: CommandContext }) {
   return (
     <section data-testid="review-inbox">
       <div className="px-page-head">
-        <h1>Review <span className="px-muted" data-testid="review-count">({items.length})</span></h1>
+        <h1>Review <span className="px-muted" data-testid="review-count">({total})</span></h1>
         <span className="px-page-sub">everything that needs a human decision — conflicts, rejections, automation notices</span>
       </div>
 
@@ -114,7 +122,7 @@ export function Review({ ctx }: { ctx: CommandContext }) {
         ))}
       </div>
 
-      {items.length === 0 ? (
+      {total === 0 ? (
         hydrated ? (
           <div className="px-list-empty" data-testid="review-empty">Nothing to review — you&rsquo;re all caught up.</div>
         ) : (
@@ -144,6 +152,9 @@ export function Review({ ctx }: { ctx: CommandContext }) {
               />
             );
           })}
+          {shownSessions.map((s) => (
+            <SessionReviewRow key={s.entry.id} s={s} timezone={timezone} ctx={ctx} />
+          ))}
         </ul>
       )}
 

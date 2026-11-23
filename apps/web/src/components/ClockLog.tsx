@@ -1,25 +1,29 @@
 /**
- * The clock-in log on the Review tab: every session clocked out in the last
- * two weeks, newest first, each with its FOCUS MULTIPLE — the share of the
- * logged time that really counted (0.5–1.0, §1.2). It is where a session closed
- * with "Later" in the clock-out review gets its multiple, and where any earlier
- * one can be changed. The field steps like the task card's Duration: ▲/▼ (and
- * ↑/↓ in the field) move it by a tenth; a typed value is kept on blur; Escape
- * puts the stored one back. Each change is saved at once through `timer.review`.
+ * The clock-in log on the Review tab: every REVIEWED session clocked out in the
+ * last two weeks, newest first, each with its FOCUS MULTIPLE — the share of the
+ * logged time that really counted (0.5–1.0, §1.2). Where any session's multiple
+ * can be changed afterwards. A session closed with "Review later" is not here
+ * yet: it waits above as a regular review item (`SessionReviewRow`) until it is
+ * reviewed and cleared, and then joins this log. The field steps like the task
+ * card's Duration: ▲/▼ (and ↑/↓ in the field) move it by a tenth; a typed value
+ * is kept on blur; Escape puts the stored one back. Each change is saved at once
+ * through `timer.review`.
  *
  * Testids: clock-log, clock-log-count, log-row-<entryId>, log-focus-<entryId>,
  * log-up-<entryId>, log-down-<entryId>, log-counted-<entryId>,
- * log-pending-<entryId>, log-error-<entryId>, clock-log-empty.
+ * log-error-<entryId>, clock-log-empty.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { asEpochMillis, isoToEpochMillis } from '@prisms/core';
-import { CLOCK_LOG_DAYS, Ic, useCommands, useRecentSessions, useUserSettings, type CommandContext, type LoggedSession } from '@prisms/ui';
+import { CLOCK_LOG_DAYS, useCommands, useRecentSessions, useUserSettings, type CommandContext, type LoggedSession } from '@prisms/ui';
 
-import { FOCUS_MAX, FOCUS_MIN, focusText, parseFocus, stepFocus } from '../focus-factor';
+import { focusText, parseFocus, stepFocus } from '../focus-factor';
 import { formatMinutes } from '../format';
+import { FocusStepper } from './FocusStepper';
 
-function stamp(iso: string, tz: string): string {
+/** "Mon, Nov 23, 2:05 PM" — when a session started, in the user's timezone. */
+export function sessionStamp(iso: string, tz: string): string {
   return new Intl.DateTimeFormat(undefined, { timeZone: tz, weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(isoToEpochMillis(iso));
 }
 
@@ -34,7 +38,6 @@ function SessionRow({ s, timezone, ctx }: { s: LoggedSession; timezone: string; 
   const shown = parseFocus(draft) ?? stored;
 
   async function save(next: number) {
-    // a never-reviewed session counts as 1.0, but saving 1.0 still marks it reviewed
     if (next === s.entry.focus_factor) return;
     setError(null);
     try {
@@ -69,45 +72,22 @@ function SessionRow({ s, timezone, ctx }: { s: LoggedSession; timezone: string; 
       <div className="px-t-main">
         <div className="px-t-title">{s.taskTitle}</div>
         <div className="px-t-meta">
-          <span>{stamp(s.entry.started_at, timezone)}</span>
+          <span>{sessionStamp(s.entry.started_at, timezone)}</span>
           <span>{formatMinutes(s.minutes)} logged</span>
-          {!s.reviewed && <span className="px-tag px-tag--amber" data-testid={`log-pending-${s.entry.id}`}>not reviewed</span>}
         </div>
         {error && <div className="px-error" role="alert" data-testid={`log-error-${s.entry.id}`}>{error}</div>}
       </div>
-      <span className="px-cl-focus">
-        <span className="px-cl-x" aria-hidden="true">×</span>
-        <input
-          className="px-td-in px-cl-in"
-          data-testid={`log-focus-${s.entry.id}`}
-          aria-label={`Focus multiple for ${s.taskTitle}`}
-          inputMode="decimal"
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onBlur={commit}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault();
-              e.currentTarget.blur();
-            } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
-              e.preventDefault();
-              step(e.key === 'ArrowUp' ? 1 : -1);
-            } else if (e.key === 'Escape' && draft !== focusText(stored)) {
-              e.preventDefault();
-              e.stopPropagation();
-              setDraft(focusText(stored));
-            }
-          }}
-        />
-        <span className="px-td-spin">
-          <button type="button" tabIndex={-1} aria-label="Raise the focus multiple by 0.1" data-testid={`log-up-${s.entry.id}`} disabled={shown >= FOCUS_MAX} onClick={() => step(1)}>
-            <Ic name="chevd" />
-          </button>
-          <button type="button" tabIndex={-1} aria-label="Lower the focus multiple by 0.1" data-testid={`log-down-${s.entry.id}`} disabled={shown <= FOCUS_MIN} onClick={() => step(-1)}>
-            <Ic name="chevd" />
-          </button>
-        </span>
-      </span>
+      <FocusStepper
+        prefix="log"
+        id={s.entry.id}
+        label={`Focus multiple for ${s.taskTitle}`}
+        draft={draft}
+        setDraft={setDraft}
+        shown={shown}
+        stored={stored}
+        onStep={step}
+        onCommit={commit}
+      />
       <span className="px-cl-counted px-num" data-testid={`log-counted-${s.entry.id}`} title="Logged time × focus multiple">
         {formatMinutes(counted)} counted
       </span>
@@ -122,9 +102,10 @@ export function ClockLog({ ctx }: { ctx: CommandContext }) {
     const t = setInterval(() => setNow(asEpochMillis(Date.now())), 60_000);
     return () => clearInterval(t);
   }, []);
-  const sessions = useRecentSessions(now);
+  const all = useRecentSessions(now);
+  // sessions still waiting for a review are review items above, not log rows
+  const sessions = useMemo(() => all.filter((s) => s.reviewed), [all]);
   const { timezone } = useUserSettings();
-  const pending = sessions.filter((s) => !s.reviewed).length;
 
   return (
     <section className="px-cl" data-testid="clock-log">
@@ -132,13 +113,10 @@ export function ClockLog({ ctx }: { ctx: CommandContext }) {
         <h2>
           Clock-in log <span className="px-muted" data-testid="clock-log-count">({sessions.length})</span>
         </h2>
-        <span className="px-page-sub">
-          the last {CLOCK_LOG_DAYS} days — set how much of each session&rsquo;s time was truly focused
-          {pending > 0 && ` · ${pending} not reviewed yet`}
-        </span>
+        <span className="px-page-sub">the last {CLOCK_LOG_DAYS} days — change how much of each reviewed session&rsquo;s time was truly focused</span>
       </div>
       {sessions.length === 0 ? (
-        <div className="px-list-empty" data-testid="clock-log-empty">No clocked sessions in the last {CLOCK_LOG_DAYS} days.</div>
+        <div className="px-list-empty" data-testid="clock-log-empty">No reviewed sessions in the last {CLOCK_LOG_DAYS} days.</div>
       ) : (
         <ul className="px-rows" style={{ maxWidth: 920 }}>
           {sessions.map((s) => (
