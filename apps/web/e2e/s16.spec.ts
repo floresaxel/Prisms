@@ -99,7 +99,8 @@ test('inbox → promote → clock in/out → review, offline then synced; double
   await page.getByTestId('timer-clock-out').click();
   await expect(page.getByTestId('review-save')).toBeVisible();
   await page.getByTestId('review-focus').fill('0.8');
-  await page.getByTestId('review-completed').check();
+  await page.getByTestId('review-completed').click();
+  await expect(page.getByTestId('review-completed')).toHaveAttribute('aria-pressed', 'true');
   await page.getByTestId('review-save').click();
 
   // status transition: completed → leaves the worklist; timer is gone

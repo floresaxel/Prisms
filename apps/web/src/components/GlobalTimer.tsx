@@ -149,7 +149,7 @@ function BreakPill({ now }: { now: number }) {
     <div className="px-timer-wrap">
       <div className={`px-timer-pill px-break-pill${over ? ' px-break-pill--over' : ''}`} data-testid="break-pill" title={`Break until ${ends} · then back to ${back}`}>
         <span className="px-timer-lead">
-          <span className="px-break-cup" aria-hidden="true">☕</span>
+          <Ic name="coffee" className="px-ic px-break-cup" />
           <span className="px-timer-pill-task">On break</span>
           <span className="px-timer-pill-elapsed" data-testid="break-countdown">{formatCountdown(left)}</span>
         </span>
