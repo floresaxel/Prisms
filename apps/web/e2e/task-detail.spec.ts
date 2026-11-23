@@ -244,7 +244,7 @@ test('the task card clocks the task in and out', async ({ page }) => {
   await expect(page.getByTestId('td-running')).toHaveCount(0);
 });
 
-test('a done task reopens from its green tick or from its card', async ({ page }) => {
+test('a done task reopens from its green tick or from its card, and the card completes it again', async ({ page }) => {
   await register(page);
   const ids = { v: randomUUID(), r: randomUUID(), p: randomUUID(), task: randomUUID() };
   const seed = await page.request.post('/sync/upload', {
@@ -287,4 +287,14 @@ test('a done task reopens from its green tick or from its card', async ({ page }
   await page.getByTestId('td-done').click();
   await expect(row).toBeVisible();
   await expect(doneRow).toHaveCount(0);
+
+  // ── and complete it from the card: it stays open, marked done, with Reopen ──
+  await row.locator('.px-t-meta').click();
+  await page.getByTestId('td-complete').click();
+  await expect(page.getByTestId('td-status')).toContainText('done');
+  await expect(page.getByTestId('td-complete')).toHaveCount(0);
+  await expect(page.getByTestId('td-reopen')).toBeVisible();
+  await page.getByTestId('td-done').click();
+  await expect(doneRow).toBeVisible();
+  await expect(row).toHaveCount(0);
 });
