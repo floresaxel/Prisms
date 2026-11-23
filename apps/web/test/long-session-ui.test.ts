@@ -32,6 +32,8 @@ vi.mock('@prisms/ui', async (importOriginal) => {
     useReviewInbox: () => state.items,
     useReviewInboxHydrated: () => true,
     useLongSessions: () => state.sessions,
+    useRecentSessions: () => [], // the Review tab's clock-in log is covered by clock-log.spec.ts
+
     useUserSettings: () => ({ hasRow: true, dayResetHour: 4, timezone: 'UTC', weatherLocation: null, journalDayLog: true }),
   };
 });

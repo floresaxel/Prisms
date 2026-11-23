@@ -1370,6 +1370,13 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
 .px-td-spin button:first-child .px-ic { transform: rotate(180deg); }
 .px-td-spin button:hover:not(:disabled) { background: #e9ecf1; color: var(--px-text); }
 .px-td-spin button:disabled { opacity: 0.3; cursor: default; }
+/* Review tab › clock-in log: one session per row, its focus multiple stepping like Duration */
+.px-cl { margin-top: 34px; }
+.px-page-head h2 { font-family: var(--px-font-display); font-size: 17px; font-weight: 500; letter-spacing: -0.01em; margin: 0; }
+.px-cl-focus { display: inline-flex; align-items: center; gap: 5px; flex: none; }
+.px-cl-x { color: var(--px-text-dim); font-size: 13px; }
+.px-cl-in { width: 58px; text-align: right; font-variant-numeric: tabular-nums; }
+.px-cl-counted { flex: none; min-width: 104px; text-align: right; font-size: 12px; color: var(--px-text-dim); }
 .px-td-date { display: inline-flex; align-items: center; gap: 2px; }
 /* a field's remove button: pushed to the far end of its row / heading */
 .px-td-rm { margin-left: auto; }
