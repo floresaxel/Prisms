@@ -1832,7 +1832,7 @@ export function useLongSessions(items: readonly ReviewItemView[]): Map<string, L
   }, [items, rows.time_entries, tree]);
 }
 
-/** How far back the Review tab's clock-in log reaches. */
+/** How far back the Review tab looks for sessions waiting on a review. */
 export const CLOCK_LOG_DAYS = 14;
 
 /** One closed clock-in, as the Review tab's log shows it. */
@@ -1850,9 +1850,9 @@ export interface LoggedSession {
 
 /**
  * The closed clock-ins of the last `CLOCK_LOG_DAYS` days, newest first — the
- * Review tab's log, where each session's focus multiple (§1.2) is assigned or
- * changed. Sessions never reviewed (closed with "Later") come with
- * `reviewed: false`; the multiple they count at meanwhile is 1.0.
+ * Review tab's source of sessions: those never reviewed (closed with "Review
+ * later") come with `reviewed: false` and are its review items, where the focus
+ * multiple (§1.2) is assigned; until then they count at 1.0.
  */
 export function useRecentSessions(now: Instant): LoggedSession[] {
   const { rows, tree } = usePrismsData();

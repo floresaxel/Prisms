@@ -64,6 +64,7 @@ import {
 // Not split: it is the first thing a signed-out browser sees, and small.
 import { Login } from './screens/Login';
 import { forgetCachedUser, readCachedUser, rememberUser, settleBootSession } from './session-boot';
+import { usePendingSessionReviews } from './session-reviews';
 
 const ROUTES = new Set<Route>(['/', '/tasks', '/agenda', '/habits', '/journal', '/vision', '/roadmap', '/projects', '/dashboard', '/automations', '/review', '/settings']);
 
@@ -225,7 +226,8 @@ function Shell({
   onSignOut: () => void;
 }) {
   const inboxCount = useActivityInbox().length;
-  const reviewCount = useReviewInbox().length;
+  // the inbox plus the sessions put off with "Review later"
+  const reviewCount = useReviewInbox().length + usePendingSessionReviews().length;
   const pageRef = useBootReveal(route);
 
   const groups: NavGroupSpec[] = [
