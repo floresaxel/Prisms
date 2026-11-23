@@ -11,6 +11,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { asEpochMillis, type Instant } from '@prisms/core';
 import { Ic, List, ListItem, Modal, useCommands, useFactContext, useHabits, useHabitsHydrated, useHabitTasks, useIsHydrated, useNodeTree, type CommandContext, type HabitView } from '@prisms/ui';
 
+import { usePersistedText } from '../drafts';
 import { formatMinutes } from '../format';
 
 type StreakMode = 'perfect_planned' | 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'yearly';
@@ -93,7 +94,7 @@ export function Habits({ ctx }: { ctx: CommandContext }) {
     [tree],
   );
 
-  const [title, setTitle] = useState('');
+  const [title, setTitle] = usePersistedText('habits.new-title');
   const [visionId, setVisionId] = useState('');
   const [mode, setMode] = useState<StreakMode>('daily');
   const [dailyTarget, setDailyTarget] = useState('');

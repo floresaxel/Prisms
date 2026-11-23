@@ -67,6 +67,7 @@ import { breakEndsAt, breakRemainingMs, formatCountdown, ON_BREAK_TITLE } from '
 import { UnfocusedTag } from '../components/UnfocusedTag';
 import { useNewProject, type NewProjectApi } from '../components/useNewProject';
 import { AutomatedMark } from '../components/Why';
+import { usePersistedText } from '../drafts';
 import { formatElapsed, formatMinutes } from '../format';
 import { listLayoutClass } from '../list-layout';
 import { useMeasuredWidth } from '../use-measured-width';
@@ -313,7 +314,7 @@ export function MyDay({ ctx, onNavigate }:{ ctx: CommandContext; onNavigate?: (h
   const newProject = useNewProject(commands);
   const todayDate = ctxFacts.today(nowMin);
   const capturedToday = activities.filter((a) => a.due_date === todayDate);
-  const [captureTitle, setCaptureTitle] = useState('');
+  const [captureTitle, setCaptureTitle] = usePersistedText('myday.capture');
   async function capture(e: FormEvent) {
     e.preventDefault();
     const t = captureTitle.trim();

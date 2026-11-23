@@ -569,3 +569,28 @@ test('an Unassigned task: pick a project, Assign takes focus, Enter assigns it',
   await expect(row).toHaveCount(0);
   await expect(page.getByTestId(`project-group-${ids.p}`)).toContainText('Call the plumber');
 });
+
+test('a half-typed capture is still there after switching to another page and back', async ({ page }) => {
+  await register(page, 'draft');
+
+  // Tasks capture bar
+  await goto(page, 'tasks');
+  await page.getByTestId('activity-title').fill('Call the plumber');
+  await goto(page, 'agenda');
+  await goto(page, 'tasks');
+  await expect(page.getByTestId('activity-title')).toHaveValue('Call the plumber');
+
+  // My Day capture bar is its own field
+  await goto(page, 'myday');
+  await expect(page.getByTestId('myday-capture-title')).toHaveValue('');
+  await page.getByTestId('myday-capture-title').fill('Water the ficus');
+  await goto(page, 'tasks');
+  await goto(page, 'myday');
+  await expect(page.getByTestId('myday-capture-title')).toHaveValue('Water the ficus');
+
+  // capturing it empties the field for good
+  await page.getByTestId('myday-capture-add').click();
+  await goto(page, 'tasks');
+  await goto(page, 'myday');
+  await expect(page.getByTestId('myday-capture-title')).toHaveValue('');
+});

@@ -81,6 +81,7 @@ import {
 } from '@prisms/ui';
 
 import { useSnapPref } from '../agenda-snap';
+import { keepDraft, peekDraft, usePersistedText } from '../drafts';
 import { formatMinutes, rejectionMessage } from '../format';
 import { DetailsMark } from './DetailsMark';
 import { ProjectDot } from './ProjectDot';
@@ -424,13 +425,33 @@ function TaskDetailDialog({ taskId, ctx, onOpenTask, onClose }: { taskId: string
  * A field's local draft. It follows the stored value while the field is not
  * being edited, so a change from another device (or this card's own save)
  * shows up, but never overwrites what the user is typing.
+ *
+ * With a `key`, text that differs from the stored value is also kept in
+ * `drafts.ts`: close the card (or switch page) mid-sentence and it is back,
+ * unsaved, the next time the field shows. Saving or reverting drops it. Such a
+ * restored draft counts as "being edited", so it is not overwritten by the
+ * stored value on the way in.
  */
-function useDraft(stored: string) {
-  const [draft, setDraft] = useState(stored);
-  const editing = useRef(false);
+function useDraft(stored: string, key?: string) {
+  const [restored] = useState(() => {
+    const kept = key === undefined ? undefined : peekDraft(key);
+    return kept !== undefined && kept !== stored ? kept : undefined;
+  });
+  const [draft, setDraftState] = useState(restored ?? stored);
+  const editing = useRef(restored !== undefined);
+  const setDraft = useCallback(
+    (text: string) => {
+      setDraftState(text);
+      if (key !== undefined) keepDraft(key, text, stored);
+    },
+    [key, stored],
+  );
   useEffect(() => {
-    if (!editing.current) setDraft(stored);
-  }, [stored]);
+    if (!editing.current) setDraftState(stored);
+    // the stored value caught up with the kept text (a save landed), or moved away
+    // under it: whatever is kept no longer differs in a way worth restoring
+    if (key !== undefined && !editing.current) keepDraft(key, stored, stored);
+  }, [stored, key]);
   return {
     draft,
     setDraft,
@@ -563,8 +584,9 @@ function TaskDetailBody({ node, facts, ctx, onOpenTask, onClose }: { node: Node;
     due: node.due_date !== null,
     // the budget row also reports time logged, so it shows once any is
     hours: node.estimate_minutes !== null || (progress?.consumedMinutes ?? 0) >= 1,
-    location: locationOf(node) !== '',
-    steps: isTask && steps.length > 0,
+    // a field with half-typed text kept from an earlier visit shows, so the text is not hidden
+    location: locationOf(node) !== '' || peekDraft(`task.${node.id}.location`) !== undefined,
+    steps: isTask && (steps.length > 0 || peekDraft(`step-draft.${node.id}`) !== undefined),
     deps: isTask && (incomingEdges(facts.edgeIndex, node.id).length > 0 || outgoingEdges(facts.edgeIndex, node.id).length > 0),
   };
   // A field that showed once stays while the card is open, so clearing its VALUE does
@@ -949,7 +971,7 @@ function DateRow({ node, start, due, commands, run, onRemove }: FieldProps & { s
 
 /** Hours budget (the task's estimate) with the time logged against it so far. */
 function BudgetField({ node, commands, run }: FieldProps) {
-  const d = useDraft(hoursText(node.estimate_minutes));
+  const d = useDraft(hoursText(node.estimate_minutes), `task.${node.id}.hours`);
   const progress = useTaskProgress(node.id);
   function save() {
     const minutes = parseHours(d.release());
@@ -1012,7 +1034,7 @@ function BudgetField({ node, commands, run }: FieldProps) {
 
 function LocationField({ node, commands, run, onRemove }: FieldProps & { onRemove: () => void }) {
   const stored = locationOf(node);
-  const d = useDraft(stored);
+  const d = useDraft(stored, `task.${node.id}.location`);
   function save() {
     const t = d.release().trim();
     if (t === stored) {
@@ -1049,7 +1071,7 @@ function LocationField({ node, commands, run, onRemove }: FieldProps & { onRemov
 }
 
 function DetailsField({ node, commands, run }: FieldProps) {
-  const d = useDraft(node.description);
+  const d = useDraft(node.description, `task.${node.id}.details`);
   function save() {
     const text = d.release().trimEnd();
     if (text === node.description) {
@@ -1084,7 +1106,7 @@ function DetailsField({ node, commands, run }: FieldProps) {
 function StepsSection({ node, commands, run, onRemove }: FieldProps & { onRemove: () => void }) {
   const steps = useTaskSteps(node.id);
   const frozen = node.completed_at !== null; // I8 spirit: a done task's checklist is frozen
-  const [draft, setDraft] = useState('');
+  const [draft, setDraft] = usePersistedText(`step-draft.${node.id}`);
   const doneCount = steps.filter((s) => s.done).length;
 
   function add() {
