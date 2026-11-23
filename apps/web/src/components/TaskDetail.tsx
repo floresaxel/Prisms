@@ -29,7 +29,8 @@
  *
  * Testids: td-dialog, td-title, td-project, td-start, td-due, td-hours,
  * td-logged, td-location, td-details, td-step-add, td-step-<id>, td-dep-add-before,
- * td-dep-add-after, td-dep-<edgeId>, td-delete, td-done; rows' titles are
+ * td-dep-add-after, td-dep-<edgeId>, td-delete, td-done, td-clock-in, td-clock-out,
+ * td-running; rows' titles are
  * title-<taskId> (button) / title-input-<taskId> (inline rename).
  */
 import {
@@ -54,6 +55,7 @@ import {
   initialSortOrder,
   MAX_DESCRIPTION_LENGTH,
   MAX_LABEL_LENGTH,
+  MAX_OPEN_TIMERS,
   MAX_TITLE_LENGTH,
   outgoingEdges,
   sortOrderBetween,
@@ -70,6 +72,7 @@ import {
   useCommands,
   useFactContext,
   usePromoteTargets,
+  useRunningTimers,
   useTaskProgress,
   useTaskSteps,
   type CommandContext,
@@ -82,6 +85,8 @@ import { formatMinutes, rejectionMessage } from '../format';
 import { DetailsMark } from './DetailsMark';
 import { ProjectDot } from './ProjectDot';
 import { ProjectPicker } from './ProjectPicker';
+import { RunMark } from './RunMark';
+import { useTimers } from './Timers';
 import { newProjectFor } from './useNewProject';
 
 // --- the shared controller ------------------------------------------------------
@@ -676,6 +681,7 @@ function TaskDetailBody({ node, facts, ctx, onOpenTask, onClose }: { node: Node;
           </button>
         )}
         <span className="px-grow" />
+        {isTask && !done && <ClockControl taskId={node.id} blocked={status === 'blocked'} />}
         {done && (
           <button type="button" className="px-btn" data-testid="td-reopen" onClick={() => void run(() => commands.uncheck(node.id))}>
             Reopen
@@ -684,6 +690,46 @@ function TaskDetailBody({ node, facts, ctx, onOpenTask, onClose }: { node: Node;
         <button type="button" className="px-btn px-btn--primary" data-testid="td-done" onClick={onClose}>Done</button>
       </div>
     </div>
+  );
+}
+
+/**
+ * Clock in / out from the card, through the same `TimersProvider` the My Day rows
+ * use — so a second timer still asks switch-or-split, a clock-out still opens the
+ * focus review, and a blocked task needs the explicit force override. Shows the
+ * running mark while this task's timer is live.
+ */
+function ClockControl({ taskId, blocked }: { taskId: string; blocked: boolean }) {
+  const timersApi = useTimers();
+  // only the running SET matters here (which entries exist), not their elapsed time
+  const [at] = useState(() => asEpochMillis(Date.now()));
+  const { timers } = useRunningTimers(at);
+  const mine = timers.find((t) => t.entry.task_id === taskId);
+  if (mine) {
+    return (
+      <>
+        <span className="px-td-running" data-testid="td-running">
+          <RunMark tone="blue" size={10} wave={false} />
+          Clocked in
+        </span>
+        <button type="button" className="px-btn px-clockin-btn" data-testid="td-clock-out" onClick={() => void timersApi.clockOut([mine])}>
+          <Ic name="stop" className="px-ic px-ic--solid" /> Clock out
+        </button>
+      </>
+    );
+  }
+  const atLimit = timers.length >= MAX_OPEN_TIMERS;
+  return (
+    <button
+      type="button"
+      className={`px-btn px-clockin-btn${blocked ? ' px-btn--danger' : ''}`}
+      data-testid="td-clock-in"
+      disabled={atLimit}
+      title={atLimit ? `${MAX_OPEN_TIMERS} timers are already running — clock out of one first` : blocked ? 'This task is blocked — override the blocker and start the timer' : undefined}
+      onClick={() => timersApi.requestClockIn(taskId, blocked ? { force: true } : undefined)}
+    >
+      <Ic name="play" className="px-ic px-ic--solid" /> {blocked ? 'Force clock in' : 'Clock in'}
+    </button>
   );
 }
 

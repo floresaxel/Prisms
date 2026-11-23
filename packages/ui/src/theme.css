@@ -1394,6 +1394,8 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
 .px-td-foot { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 22px; padding-top: 14px; border-top: 1px solid var(--px-border); }
 .px-td-foot .px-grow { flex: 1; }
 .px-tag--green { background: var(--px-green-bg); color: var(--px-green); }
+/* "Clocked in" beside the card's Clock out: the running mark in the present's blue */
+.px-td-running { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; font-weight: 560; color: var(--px-blue-deep); margin-right: 4px; }
 .px-td-del { color: var(--px-text-dim); }
 .px-td-del:hover { color: var(--px-danger); }
 .px-td-confirm { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12.5px; color: var(--px-text-dim); }
