@@ -37,6 +37,7 @@ vi.mock('@prisms/ui', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@prisms/ui')>();
   return {
     ...actual,
+    useRunningTimers: () => ({ timers: [], splitWays: 0 }), // the lists' running dot reads the open timers
     useCommands: () => commands,
     useJournalDay: () => ({ entry: state.entry, isLoading: state.loading, isSettled: state.settled }),
     useJournalMonths: () => ({ entries: state.months, isLoading: false, isSettled: true }),
