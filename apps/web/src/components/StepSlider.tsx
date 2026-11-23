@@ -1,13 +1,14 @@
 /**
- * A range slider with a tick at every step, whose fill runs the whole way to the
- * right at its maximum.
+ * A range slider with a tick at every step: a little fill at the minimum, and the
+ * fill runs the whole way to the right at its maximum.
  *
  * It is still a real `<input type="range">` (keyboard, screen readers, `fill()` in
  * tests) — only the picture is drawn here. The native one leaves the thumb inset
  * from the track's ends, so a full slider never looked full. The track is drawn
  * edge to edge instead, the ticks sit where the thumb's CENTRE lands at each step
  * (half a thumb in from each end), and at the maximum the thumb sits flush against
- * the right end with the fill running up to it.
+ * the right end with the fill running up to it. The fill leads the thumb a little
+ * (a short stub past the dot at the minimum), so an empty slider is not a bare dot.
  *
  * `labels` prints a number under chosen steps (by index into the steps).
  */

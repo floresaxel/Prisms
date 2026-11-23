@@ -1231,14 +1231,15 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
 .px-break-pick .px-muted { margin: 0; font-size: 12px; }
 .px-break-pick > .px-btn { justify-self: end; }
 
-/* ── step slider (StepSlider.tsx): a tick at every step; the fill and the thumb run to the far right at max ──
-   The rail is drawn edge to edge; the thumb's CENTRE travels half a thumb in from each end, so the ticks
-   and captions sit in a box inset by the same amount, and at the maximum the thumb lies flush at the end. */
-.px-steps { --px-steps-c: var(--px-accent); --px-steps-thumb: 18px; position: relative; display: block; width: 100%; }
+/* ── step slider (StepSlider.tsx): a tick at every step; a little fill at the start, all the way to the right at max ──
+   The rail is drawn edge to edge; the thumb's CENTRE travels half a thumb in from each end, so the ticks and
+   captions sit in a box inset by the same amount. The fill leads the thumb: at the minimum it shows a short stub
+   (--px-steps-stub) past the dot, at the maximum it runs to the end of the rail, under the thumb lying flush there. */
+.px-steps { --px-steps-c: var(--px-accent); --px-steps-thumb: 14px; --px-steps-stub: 10px; position: relative; display: block; width: 100%; }
 .px-steps-body { position: relative; height: var(--px-steps-thumb); }
 .px-steps-rail {
   position: absolute; left: 0; right: 0; top: 50%; height: 6px; transform: translateY(-50%); border-radius: 3px;
-  --px-steps-x: calc(var(--px-steps-thumb) / 2 + var(--px-steps-pct) * (100% - var(--px-steps-thumb)));
+  --px-steps-x: calc(var(--px-steps-thumb) + var(--px-steps-stub) + var(--px-steps-pct) * (100% - var(--px-steps-thumb) - var(--px-steps-stub)));
   background: linear-gradient(to right, var(--px-steps-c) 0, var(--px-steps-c) var(--px-steps-x), var(--px-border) var(--px-steps-x), var(--px-border) 100%);
 }
 .px-steps-ticks { position: absolute; left: calc(var(--px-steps-thumb) / 2); right: calc(var(--px-steps-thumb) / 2); top: 0; bottom: 0; pointer-events: none; }
@@ -1249,16 +1250,17 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
 }
 .px-steps input[type='range']::-webkit-slider-runnable-track { height: var(--px-steps-thumb); background: transparent; border: 0; }
 .px-steps input[type='range']::-moz-range-track { height: var(--px-steps-thumb); background: transparent; border: 0; }
+/* the handle is a plain dot in the slider's own colour — no outline, no shadow (the focus ring below is for keyboard users) */
 .px-steps input[type='range']::-webkit-slider-thumb {
   -webkit-appearance: none; appearance: none; box-sizing: border-box; width: var(--px-steps-thumb); height: var(--px-steps-thumb); border-radius: 50%;
-  background: var(--px-steps-c); border: 3px solid #fff; box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.2), 0 1px 3px rgba(15, 23, 42, 0.25);
+  background: var(--px-steps-c); border: 0; box-shadow: none;
 }
 .px-steps input[type='range']::-moz-range-thumb {
   box-sizing: border-box; width: var(--px-steps-thumb); height: var(--px-steps-thumb); border-radius: 50%;
-  background: var(--px-steps-c); border: 3px solid #fff; box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.2), 0 1px 3px rgba(15, 23, 42, 0.25);
+  background: var(--px-steps-c); border: 0; box-shadow: none;
 }
-.px-steps input[type='range']:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.2), 0 0 0 5px color-mix(in srgb, var(--px-steps-c) 35%, transparent); }
-.px-steps input[type='range']:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.2), 0 0 0 5px color-mix(in srgb, var(--px-steps-c) 35%, transparent); }
+.px-steps input[type='range']:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px color-mix(in srgb, var(--px-steps-c) 30%, transparent); }
+.px-steps input[type='range']:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 4px color-mix(in srgb, var(--px-steps-c) 30%, transparent); }
 .px-steps-labels { position: relative; display: block; height: 14px; margin: 3px calc(var(--px-steps-thumb) / 2) 0; font-size: 10.5px; color: var(--px-text-dim); font-variant-numeric: tabular-nums; }
 .px-steps-labels > span { position: absolute; top: 0; transform: translateX(-50%); }
 .px-break-count { font-family: var(--px-font-mono); font-size: 40px; font-weight: 500; text-align: center; color: var(--px-amber); font-variant-numeric: tabular-nums; margin: 4px 0 6px; }
