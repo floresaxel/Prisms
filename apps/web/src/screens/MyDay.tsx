@@ -162,7 +162,7 @@ function BreakCard({ now }: { now: number }) {
   const over = left <= -1000;
   return (
     <div className={`px-run-banner px-break-banner${over ? ' px-break-banner--over' : ''}`} data-testid="myday-break">
-      <span className="px-break-cup px-break-cup--lg" aria-hidden="true">☕</span>
+      <Ic name="coffee" className="px-ic px-break-cup px-break-cup--lg" />
       <div className="px-run-main">
         <div className="px-run-title">On a break · {activeBreak.minutes} min</div>
         <div className="px-run-sub">

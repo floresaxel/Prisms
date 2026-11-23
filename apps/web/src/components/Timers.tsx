@@ -24,7 +24,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import { asEpochMillis, bucketDate, MAX_OPEN_TIMERS } from '@prisms/core';
-import { Modal, useCommands, useNodeTree, useRunningTimers, useUserSettings, type CommandContext, type RunningTimer } from '@prisms/ui';
+import { Ic, Modal, useCommands, useNodeTree, useRunningTimers, useUserSettings, type CommandContext, type RunningTimer } from '@prisms/ui';
 
 import {
   BREAK_DEFAULT_MINUTES,
@@ -42,7 +42,11 @@ import {
   type BreakTask,
 } from '../break';
 import { formatElapsed } from '../format';
+import { StepSlider } from './StepSlider';
 import { useSecondClock } from './useSecondClock';
+
+/** The numbers printed under the break slider, one per step (5, 10 … 30). */
+const BREAK_SCALE = Array.from({ length: (BREAK_MAX_MINUTES - BREAK_MIN_MINUTES) / BREAK_STEP_MINUTES + 1 }, (_, i) => String(BREAK_MIN_MINUTES + i * BREAK_STEP_MINUTES));
 
 
 interface ReviewTarget {
@@ -329,7 +333,7 @@ export function TimersProvider({ ctx, children }: { ctx: CommandContext; childre
         </p>
         <label className="px-field">
           Focus factor: ×{focus.toFixed(1)}
-          <input type="range" min={0.5} max={1.0} step={0.1} value={focus} data-testid="review-focus" onChange={(e) => setFocus(Number(e.target.value))} />
+          <StepSlider min={0.5} max={1.0} step={0.1} value={focus} onChange={setFocus} testId="review-focus" ariaLabel="Focus factor" />
         </label>
         <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <input type="checkbox" checked={completed} data-testid="review-completed" onChange={(e) => setCompleted(e.target.checked)} />
@@ -343,7 +347,7 @@ export function TimersProvider({ ctx, children }: { ctx: CommandContext; childre
           title="Clock out of everything for a while, then pick back up"
           onClick={() => setBreakPicker((o) => !o)}
         >
-          <span aria-hidden="true">☕</span> Take a break
+          <Ic name="coffee" /> Take a break
         </button>
         {breakPicker && (
           <div className="px-break-pick" data-testid="break-picker">
@@ -351,19 +355,16 @@ export function TimersProvider({ ctx, children }: { ctx: CommandContext; childre
               <span>
                 Break for <b data-testid="break-minutes-label">{breakMinutes} min</b>
               </span>
-              <input
-                type="range"
+              <StepSlider
                 min={BREAK_MIN_MINUTES}
                 max={BREAK_MAX_MINUTES}
                 step={BREAK_STEP_MINUTES}
                 value={breakMinutes}
-                data-testid="break-minutes"
-                aria-label="Break length in minutes"
-                onChange={(e) => setBreakMinutes(Number(e.target.value))}
+                onChange={setBreakMinutes}
+                testId="break-minutes"
+                ariaLabel="Break length in minutes"
+                labels={BREAK_SCALE}
               />
-              <span className="px-break-scale" aria-hidden="true">
-                {[5, 10, 15, 20, 25, 30].map((m) => <span key={m}>{m}</span>)}
-              </span>
             </label>
             <p className="px-muted">
               Clocks out of {breakTasks.map((t) => `“${t.title}”`).join(', ')}. With a minute left you'll be asked to clock back in.
