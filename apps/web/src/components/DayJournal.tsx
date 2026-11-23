@@ -16,9 +16,6 @@
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-
 import { asEpochMillis, bucketDate, composeDayMarkdown, isDayLogEmpty } from '@prisms/core';
 import {
   Ic,
@@ -35,6 +32,7 @@ import { readJournalLocked, writeJournalLocked } from '../journal-lock-cache';
 import { formatNoteDate, isDefaultNoteHeading, noteHeadingOf, useNoteDateFormatPref, useNoteTitleFormatPref } from '../note-date-format';
 
 import { DayLogSection } from './DayLogSection';
+import { MarkdownView } from './MarkdownView';
 import { NoteTags } from './NoteTags';
 import { RichJournalEditor } from './RichJournalEditor';
 
@@ -65,23 +63,8 @@ const LOCK_ANIM_MS = 194;
  */
 const LOCK_HINT_MS = 600;
 
-/** Allow only these link schemes; everything else (javascript:, data:, …) is dropped. */
-const SAFE_URL = /^(https?:|mailto:)/i;
-const urlTransform = (url: string): string => (SAFE_URL.test(url) ? url : '');
-
-/**
- * Sanitized markdown renderer (D2). No raw-HTML path (no rehype-raw), href scheme
- * allowlist, task checkboxes disabled. Exported so tests can assert inertness.
- */
-export function MarkdownView({ markdown }: { markdown: string }) {
-  return (
-    <div className="px-md" data-testid="journal-preview">
-      <ReactMarkdown remarkPlugins={[remarkGfm]} urlTransform={urlTransform}>
-        {markdown}
-      </ReactMarkdown>
-    </div>
-  );
-}
+/** The sanitized renderer (D2) lives in its own module now; re-exported so tests can assert inertness. */
+export { MarkdownView };
 
 /**
  * Editor for one day. Mounted with `key={date}` by the Agenda so it re-initializes

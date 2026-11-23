@@ -164,7 +164,22 @@ test('rename a task in place, then edit every detail in its card — all of it s
   await expect(back).toContainText('Write the launch note', { timeout: 30_000 });
   await back.locator('.px-t-meta').click();
   await expect(page.getByTestId('td-dialog')).toBeVisible();
+  // the saved details show rendered; a click opens the raw text
+  await expect(page.getByTestId('td-details-view')).toContainText('Quote the mayor. Embargo until 9am.');
+  await page.getByTestId('td-details-view').click();
+  await expect(page.getByTestId('td-details')).toBeFocused();
   await expect(page.getByTestId('td-details')).toHaveValue('Quote the mayor. Embargo until 9am.');
+  // markdown typed there is recognized and displayed when the box is left
+  await page.getByTestId('td-details').fill('# Brief\n\n- **Quote** the mayor\n- Embargo until 9am');
+  await page.getByTestId('td-title').click();
+  const rendered = page.getByTestId('td-details-view');
+  await expect(rendered.locator('h1')).toHaveText('Brief');
+  await expect(rendered.locator('li')).toHaveCount(2);
+  await expect(rendered.locator('strong')).toHaveText('Quote');
+  // …and it saved as the markdown source
+  await page.getByTestId('td-details-view').click();
+  await expect(page.getByTestId('td-details')).toHaveValue('# Brief\n\n- **Quote** the mayor\n- Embargo until 9am');
+  await page.getByTestId('td-title').click();
   await expect(page.getByTestId('td-due')).toHaveValue('2026-12-01');
   await expect(page.getByTestId('td-hours')).toHaveValue('2.5');
   await expect(page.getByTestId('td-location')).toHaveValue('Studio B');

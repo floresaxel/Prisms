@@ -366,6 +366,79 @@ describe('completing from the card', () => {
   });
 });
 
+describe('Details render markdown', () => {
+  const MD = '# Plan\n\nShip **fast**.\n\n- one\n- two\n\n[docs](https://example.test/x) and [bad](javascript:alert(1))\n\n<script>alert(1)</script>';
+  const view = () => screen.getByTestId('td-details-view');
+  /** The renderer loads on demand: wait for it to replace the plain-text stand-in. */
+  const rendered = () => screen.findByTestId('td-details-md');
+
+  it('shows saved details rendered — headings, bold, lists, links — and never raw HTML', async () => {
+    world({ description: MD });
+    mount();
+    openCard();
+    await rendered();
+    expect(view().querySelector('h1')?.textContent).toBe('Plan');
+    expect(view().querySelector('strong')?.textContent).toBe('fast');
+    expect(view().querySelectorAll('li')).toHaveLength(2);
+    expect(view().querySelector('script')).toBeNull();
+    const links = [...view().querySelectorAll('a')];
+    const ok = links.find((a) => a.textContent === 'docs')!;
+    expect(ok.getAttribute('href')).toBe('https://example.test/x');
+    expect(ok.getAttribute('target')).toBe('_blank'); // following a link never leaves the card
+    expect(links.find((a) => a.textContent === 'bad')?.getAttribute('href') ?? '').toBe(''); // javascript: dropped
+    expect(screen.queryByTestId('td-details')).toBeNull();
+  });
+
+  it('a click edits the raw markdown; leaving the box saves it and renders it again', async () => {
+    world({ description: '**bold** note' });
+    mount();
+    openCard();
+    await rendered();
+    fireEvent.mouseDown(view());
+    fireEvent.click(view());
+    const box = input('td-details');
+    expect(box.value).toBe('**bold** note'); // the source, not the rendering
+    expect(document.activeElement).toBe(box);
+    fireEvent.change(box, { target: { value: '## New\n\n*made* _it_' } });
+    await act(async () => fireEvent.blur(box));
+    expect(command('setDescription')).toHaveBeenCalledWith(task.id, '## New\n\n*made* _it_');
+    expect(screen.queryByTestId('td-details')).toBeNull();
+    await rendered();
+    expect(view().querySelector('h2')?.textContent).toBe('New'); // rendered at once
+  });
+
+  it('Enter on the focused text edits it; a click on a link or after selecting text does not', async () => {
+    world({ description: 'See [docs](https://example.test/x) for **more**' });
+    mount();
+    openCard();
+    await rendered();
+    // a link follows itself
+    fireEvent.mouseDown(view().querySelector('a')!);
+    fireEvent.click(view().querySelector('a')!);
+    expect(screen.queryByTestId('td-details')).toBeNull();
+    // a selection made by dragging is not a click to edit
+    const range = document.createRange();
+    range.selectNodeContents(view().querySelector('strong')!);
+    window.getSelection()?.removeAllRanges();
+    window.getSelection()?.addRange(range);
+    fireEvent.mouseDown(view());
+    fireEvent.click(view());
+    expect(screen.queryByTestId('td-details')).toBeNull();
+    window.getSelection()?.removeAllRanges();
+    // the keyboard gets in
+    fireEvent.keyDown(view(), { key: 'Enter' });
+    expect(input('td-details').value).toContain('[docs]');
+  });
+
+  it('an empty Details is the editor, with a markdown hint once you are in it', () => {
+    mount();
+    openCard();
+    expect(screen.queryByTestId('td-details-view')).toBeNull();
+    expect(input('td-details').value).toBe('');
+    expect(screen.queryByText(/Markdown supported/)).toBeNull();
+  });
+});
+
 describe('the card’s fields', () => {
   it('shows where the task lives, its budget and the time logged against it', () => {
     mount();
@@ -401,7 +474,8 @@ describe('the card’s fields', () => {
     mount();
     openCard();
     expect(input('td-start').value).toBe('2026-11-20');
-    expect(input('td-details').value).toBe('Quote the mayor.');
+    expect(screen.getByTestId('td-details-view').textContent).toBe('Quote the mayor.'); // rendered, not the editor
+    expect(screen.queryByTestId('td-details')).toBeNull();
     expect(input('td-location').value).toBe('Studio B');
     expect(screen.getByTestId('td-deps')).toBeTruthy(); // it waits on "Pick a date"
     const chips = within(screen.getByTestId('td-adds')).getAllByRole('button').map((b) => b.textContent);
@@ -778,13 +852,13 @@ describe('closing', () => {
     world({ description: 'Same as stored later' });
     mount();
     openCard();
-    expect(input('td-details').value).toBe('Same as stored later');
+    expect(screen.getByTestId('td-details-view').textContent).toBe('Same as stored later');
     cleanup();
     // …so it is no longer a draft: a later change from elsewhere shows, not the old text
     world({ description: 'Edited on another device' });
     mount();
     openCard();
-    expect(input('td-details').value).toBe('Edited on another device');
+    expect(screen.getByTestId('td-details-view').textContent).toBe('Edited on another device');
   });
 
   it('Delete asks once, then soft-deletes and closes', async () => {
