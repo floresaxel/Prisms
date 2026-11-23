@@ -387,6 +387,17 @@ describe('the card’s fields', () => {
     expect(chips).toEqual(['Expected by', 'Steps']);
   });
 
+  it('the title is a wrapping box but stays one line: a pasted line break becomes a space', () => {
+    mount();
+    openCard();
+    expect(input('td-title').tagName).toBe('TEXTAREA');
+    fireEvent.focus(input('td-title'));
+    fireEvent.change(input('td-title'), { target: { value: 'Press release\r\nfor the mayor' } });
+    expect(input('td-title').value).toBe('Press release for the mayor');
+    fireEvent.blur(input('td-title'));
+    expect(command('rename')).toHaveBeenCalledWith(task.id, 'Press release for the mayor');
+  });
+
   it('title, details, dates, budget and location save through their verbs', () => {
     mount();
     openCard();

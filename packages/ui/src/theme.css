@@ -1349,7 +1349,9 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
 .px-td-x { margin-left: auto; display: flex; padding: 5px; border: 0; border-radius: 6px; background: none; color: var(--px-faint); cursor: pointer; }
 .px-td-x:hover { background: var(--px-surface-2); color: var(--px-text); }
 .px-td-x .px-ic { width: 16px; height: 16px; }
-.px-td-title { display: block; width: calc(100% + 18px); margin: 0 -9px 12px; padding: 5px 8px; border: 1px solid transparent; border-radius: 8px; background: none; color: var(--px-text); font: inherit; font-size: 20px; font-weight: 620; letter-spacing: -0.2px; }
+/* a textarea one row tall that grows to fit (TaskDetail.tsx sets its height), so a long
+   title wraps onto as many lines as it needs instead of scrolling out of view */
+.px-td-title { display: block; box-sizing: border-box; width: calc(100% + 18px); margin: 0 -9px 12px; padding: 5px 8px; border: 1px solid transparent; border-radius: 8px; background: none; color: var(--px-text); font: inherit; font-size: 20px; font-weight: 620; line-height: 1.3; letter-spacing: -0.2px; resize: none; overflow: hidden; overflow-wrap: anywhere; }
 .px-td-title:hover { border-color: var(--px-border); }
 .px-td-title:focus { outline: none; border-color: var(--px-focus); background: var(--px-surface); box-shadow: none; }
 .px-td-props { display: grid; grid-template-columns: 168px minmax(0, 1fr); gap: 8px 14px; align-items: center; padding: 14px 0; border-top: 1px solid var(--px-border); border-bottom: 1px solid var(--px-border); }
