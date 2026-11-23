@@ -6,7 +6,7 @@
  *
  * Derived from the time entries themselves (a session is pending until a
  * `timer.review` gives it a multiple), so it follows the user across devices with
- * nothing extra to sync. Reaches back as far as the clock-in log does.
+ * nothing extra to sync. Looks back CLOCK_LOG_DAYS days (two weeks).
  */
 import { useEffect, useMemo, useState } from 'react';
 

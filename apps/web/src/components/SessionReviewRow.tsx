@@ -2,21 +2,26 @@
  * A session closed with "Review later" as a regular review item on the Review
  * tab: the task, when it ran and for how long, the focus multiple to set
  * (counting at 1.0 until then) — and Clear, which saves that multiple through
- * `timer.review` and so takes the item off the list (the session then lives in
- * the clock-in log below). Changing the multiple does NOT clear the item: it is
- * kept in the row until Clear, so the review can be taken a step at a time.
+ * `timer.review` and so takes the item off the list. Changing the multiple does
+ * NOT clear the item: it is kept in the row until Clear, so the review can be
+ * taken a step at a time.
  *
  * Testids: session-review-<entryId>, sr-focus-<entryId>, sr-up-<entryId>,
  * sr-down-<entryId>, sr-counted-<entryId>, sr-clear-<entryId>, sr-error-<entryId>.
  */
 import { useState } from 'react';
 
+import { isoToEpochMillis } from '@prisms/core';
 import { Ic, useCommands, type CommandContext, type LoggedSession } from '@prisms/ui';
 
 import { focusText, parseFocus, stepFocus } from '../focus-factor';
 import { formatMinutes } from '../format';
-import { sessionStamp } from './ClockLog';
 import { FocusStepper } from './FocusStepper';
+
+/** "Mon, Nov 23, 2:05 PM" — when a session started, in the user's timezone. */
+function sessionStamp(iso: string, tz: string): string {
+  return new Intl.DateTimeFormat(undefined, { timeZone: tz, weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(isoToEpochMillis(iso));
+}
 
 export function SessionReviewRow({ s, timezone, ctx }: { s: LoggedSession; timezone: string; ctx: CommandContext }) {
   const commands = useCommands(ctx);

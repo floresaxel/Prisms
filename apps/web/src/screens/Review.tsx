@@ -9,8 +9,6 @@
  *
  * A session clocked out with "Review later" is a regular (info) item here too —
  * set its focus multiple, then Clear (`SessionReviewRow`) — counted with the rest.
- * Below sits the clock-in log (`ClockLog`): the reviewed sessions, whose multiple
- * can still be changed.
  */
 import { useState } from 'react';
 
@@ -26,7 +24,6 @@ import {
   type ReviewItemView,
 } from '@prisms/ui';
 
-import { ClockLog } from '../components/ClockLog';
 import { LongSessionRow } from '../components/LongSessionRow';
 import { SessionReviewRow } from '../components/SessionReviewRow';
 import { usePendingSessionReviews } from '../session-reviews';
@@ -157,8 +154,6 @@ export function Review({ ctx }: { ctx: CommandContext }) {
           ))}
         </ul>
       )}
-
-      <ClockLog ctx={ctx} />
     </section>
   );
 }

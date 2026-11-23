@@ -1,9 +1,9 @@
 /**
- * The focus-multiple field the Review tab uses for a session — in the clock-in
- * log (saves each change at once) and in a session's review item (keeps the
- * change until the item is cleared). It only draws the field: a `×` and a text
- * input that steps with ↑/↓ and the ▲/▼ buttons by a tenth, commits on Enter /
- * blur, and drops a half-typed edit on Escape. What a change DOES is the caller's.
+ * The focus-multiple field of a session's review item on the Review tab. It only
+ * draws the field: a `×` and a text input that steps with ↑/↓ and the ▲/▼
+ * buttons by a tenth, commits on Enter / blur, and drops a half-typed edit on
+ * Escape. What a change DOES (here: it is kept until the item is cleared) is the
+ * caller's.
  *
  * Testids: <prefix>-focus-<id>, <prefix>-up-<id>, <prefix>-down-<id>.
  */

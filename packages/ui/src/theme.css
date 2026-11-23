@@ -1399,8 +1399,7 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
 .px-td-spin button:first-child .px-ic { transform: rotate(180deg); }
 .px-td-spin button:hover:not(:disabled) { background: #e9ecf1; color: var(--px-text); }
 .px-td-spin button:disabled { opacity: 0.3; cursor: default; }
-/* Review tab › clock-in log: one session per row, its focus multiple stepping like Duration */
-.px-cl { margin-top: 34px; }
+/* Review tab › a session's review item: its focus multiple stepping like Duration */
 .px-page-head h2 { font-family: var(--px-font-display); font-size: 17px; font-weight: 500; letter-spacing: -0.01em; margin: 0; }
 .px-cl-focus { display: inline-flex; align-items: center; gap: 5px; flex: none; }
 .px-cl-x { color: var(--px-text-dim); font-size: 13px; }
