@@ -31,6 +31,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, 
 import type { Node } from '@prisms/core';
 import { Ic } from '@prisms/ui';
 
+import { loggedText } from '../format';
 import {
   boxOf,
   buildFlow,
@@ -144,6 +145,7 @@ export function RoadmapFlow({
   menuSlot,
   visionColor,
   renderView,
+  logged,
 }: {
   model: RoadmapModel;
   roadmap: Node;
@@ -161,6 +163,8 @@ export function RoadmapFlow({
   visionColor?: { name: string; hex: string };
   /** The other views' bodies (Outline, List, Order, Mind map). Without it, Flow is the only view. */
   renderView?: (view: OtherView, ctx: { selectedId: string | null; onPick: (id: string) => void }) => ReactNode;
+  /** Minutes logged inside each project (project id → minutes), for the details column. */
+  logged?: ReadonlyMap<string, number>;
 }) {
   const outcomes = useMemo(() => readOutcomes(roadmap.attributes), [roadmap.attributes]);
   const flow = useMemo(() => buildFlow(model, outcomes), [model, outcomes]);
@@ -1502,6 +1506,7 @@ export function RoadmapFlow({
             flow={flow}
             outcomes={outcomes}
             maxStep={flow.maxStep}
+            loggedMinutes={logged?.get(selP.id) ?? 0}
             onPick={pick}
             onClose={clearSel}
             onRename={(t) => void safe('rename it', () => actions.rename(selP.id, t))}
@@ -1724,6 +1729,7 @@ function ProjectPanel({
   flow,
   outcomes,
   maxStep,
+  loggedMinutes,
   onPick,
   onClose,
   onRename,
@@ -1741,6 +1747,7 @@ function ProjectPanel({
   flow: FlowModel;
   outcomes: readonly FlowOutcome[];
   maxStep: number;
+  loggedMinutes: number;
   onPick: (id: string) => void;
   onClose: () => void;
   onRename: (t: string) => void;
@@ -1821,6 +1828,12 @@ function ProjectPanel({
             </button>
           ))}
         </div>
+      </div>
+      <div className="px-rf-field">
+        <span className="px-rf-label">Time logged</span>
+        <span className="px-rf-logged" data-testid="rf-p-logged">
+          {loggedText(loggedMinutes, p.node.estimate_minutes)}
+        </span>
       </div>
       <div className="px-rf-sec">
         <div className="px-rf-sec-head">

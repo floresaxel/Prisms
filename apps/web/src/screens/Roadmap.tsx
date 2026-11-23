@@ -36,6 +36,7 @@ import {
   useFlowchart,
   useIsHydrated,
   useNodeTree,
+  useProjectLoggedMinutes,
   visionColorOf,
   visionHex,
   type CommandContext,
@@ -288,6 +289,7 @@ function RoadmapDetail({
   const vision = roadmap.parent_id ? tree.byId.get(roadmap.parent_id) : undefined;
   const color = visionColorOf(vision);
   const model = useMemo(() => buildRoadmapModel(tree, edges, roadmap.id), [tree, edges, roadmap.id]);
+  const logged = useProjectLoggedMinutes();
 
   // Flow's free-flow spots: diagram_layouts rows with this roadmap as the diagram.
   const chart = useFlowchart(roadmap.id);
@@ -370,6 +372,7 @@ function RoadmapDetail({
         onNavigate={onNavigate}
         top={top}
         visionColor={{ name: color, hex: solid(color) }}
+        logged={logged}
         titleSlot={
           <input
             className="px-rb-title"

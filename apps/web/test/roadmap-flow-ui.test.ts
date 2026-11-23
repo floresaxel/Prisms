@@ -195,6 +195,38 @@ describe('the details panel', () => {
     expect(actions.setAttributes).toHaveBeenLastCalledWith(ids.p1.id, { outcome_id: 'o-draft', note: 'x', done_when: 'Notes filed', size: 'L' });
   });
 
+  it('totals the time logged inside a project, against its duration when it has one', () => {
+    // the fixture's ids are the same on every build, so the project is known before setup
+    const { ids } = setup({ logged: new Map([[roadmapFixture().ids.p1.id, 95]]) });
+    fireEvent.click(body(ids.p1.id));
+    expect(screen.getByTestId('rf-p-logged').textContent).toBe('1h 35m logged');
+    // a project nothing was logged in says so
+    fireEvent.click(body(ids.p2.id));
+    expect(screen.getByTestId('rf-p-logged').textContent).toBe('nothing logged yet');
+  });
+
+  it('shows it against the project’s duration budget, and follows time as it is logged', () => {
+    const fx = roadmapFixture();
+    const budgeted = fx.rows.map((r) => (r.id === fx.ids.p1.id ? { ...r, estimate_minutes: 240 } : r));
+    const tree = buildTreeIndex(budgeted);
+    const model = buildRoadmapModel(tree, fx.edges, fx.ids.r.id)!;
+    const props = (logged: ReadonlyMap<string, number>) => ({
+      model,
+      roadmap: tree.byId.get(fx.ids.r.id)!,
+      vision: tree.byId.get(fx.ids.v.id)!,
+      layouts: new Map(),
+      actions: {} as FlowActions,
+      onNavigate: vi.fn(),
+      logged,
+    });
+    const { rerender } = render(createElement(RoadmapFlow, props(new Map([[fx.ids.p1.id, 60]]))));
+    fireEvent.click(body(fx.ids.p1.id));
+    expect(screen.getByTestId('rf-p-logged').textContent).toBe('1h 0m logged · 25% of duration');
+    // a session clocked out elsewhere lands: the same open panel updates
+    rerender(createElement(RoadmapFlow, props(new Map([[fx.ids.p1.id, 150]]))));
+    expect(screen.getByTestId('rf-p-logged').textContent).toBe('2h 30m logged · 63% of duration');
+  });
+
   it('switches a drawn link to start-together, and only offers links that make no loop', async () => {
     const { ids, fx, actions } = setup();
     fireEvent.click(body(ids.p3.id)); // Revise act one waits on Research by a project edge

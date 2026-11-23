@@ -162,6 +162,7 @@ export {
   useTaskSteps,
   useTaskStepsByTask,
   useTaskProgress,
+  useProjectLoggedMinutes,
   useTasksByProject,
   useGroupedWorklist,
   useMyDayAvailable,
