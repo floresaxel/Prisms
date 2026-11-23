@@ -20,7 +20,7 @@
  * Load-bearing testids preserved from the old Inbox: activity-title, activity-add,
  * inbox (with <li> rows), promote-target-*, promote-* (D8).
  */
-import { useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 
 import { usePowerSync, useStatus } from '@powersync/react';
 
@@ -482,13 +482,33 @@ function InboxRow({ activity, targets, newProject, commands, detail, onComplete 
   // and Assign stays off. A choice whose project has since gone counts as none.
   const [parentId, setParentId] = useState('');
   const selected = targets.some((t) => t.id === parentId) ? parentId : '';
+  // Picking a project moves focus on to Assign, so pick + Enter assigns. Assign is
+  // disabled until the choice has re-rendered, so focus follows that render (the
+  // picker itself hands focus back to its own button first, in the click).
+  const assign = useRef<HTMLButtonElement>(null);
+  const [focusAssign, setFocusAssign] = useState(false);
+  useEffect(() => {
+    if (!focusAssign) return;
+    setFocusAssign(false);
+    assign.current?.focus();
+  }, [focusAssign]);
   return (
     <li className="px-trow px-trow--inbox" {...detail.rowProps(activity.id)}>
       <InboxCheck activity={activity} onComplete={onComplete} />
       <div className="px-t-main"><div className="px-t-title"><EditableTitle node={activity} commands={commands} /></div></div>
       <span className="px-promote">
-        <ProjectPicker targets={targets} value={selected} onChange={setParentId} testId={`promote-target-${activity.id}`} newProject={newProject} />
+        <ProjectPicker
+          targets={targets}
+          value={selected}
+          onChange={(id) => {
+            setParentId(id);
+            if (id !== '') setFocusAssign(true);
+          }}
+          testId={`promote-target-${activity.id}`}
+          newProject={newProject}
+        />
         <button
+          ref={assign}
           className="px-btn px-btn--sm px-btn--primary"
           data-testid={`promote-${activity.id}`}
           disabled={selected === ''}

@@ -533,3 +533,39 @@ test('a project heading folds its tasks away, and the fold survives a reload', a
   await page.getByTestId(`project-toggle-${ids.p2}`).click();
   await expect(page.getByTestId(`task-row-${ids.b}`)).toBeVisible();
 });
+
+test('an Unassigned task: pick a project, Assign takes focus, Enter assigns it', async ({ page }) => {
+  await register(page, 'assignfocus');
+  const ids = { v: randomUUID(), r: randomUUID(), p: randomUUID(), a: randomUUID() };
+  const seed = await page.request.post('/sync/upload', {
+    data: {
+      device_id: 'e2e-seed',
+      commands: [
+        cmd('node.create', { id: ids.v, node_type: 'vision', title: 'Work', sort_order: 'a0' }),
+        cmd('node.create', { id: ids.r, node_type: 'roadmap', title: 'Plan', sort_order: 'a0', parent_id: ids.v }),
+        cmd('node.create', { id: ids.p, node_type: 'project', title: 'Launch', sort_order: 'a0', parent_id: ids.r }),
+        cmd('node.create', { id: ids.a, node_type: 'activity', title: 'Call the plumber', sort_order: 'a0' }),
+      ],
+    },
+  });
+  expect(seed.ok()).toBeTruthy();
+
+  await goto(page, 'tasks');
+  const row = page.getByTestId('inbox').locator('li', { hasText: 'Call the plumber' });
+  await expect(row).toBeVisible({ timeout: 30_000 });
+  const picker = row.getByTestId(/^promote-target-/);
+  const assign = row.getByRole('button', { name: 'Assign', exact: true });
+  await expect(picker).toBeEnabled({ timeout: 30_000 });
+  await expect(assign).toBeDisabled();
+
+  // choose a project: focus moves on to Assign (enabled by the choice)
+  await picker.click();
+  await page.getByTestId(`promote-target-${await picker.getAttribute('data-testid').then((t) => t!.replace('promote-target-', ''))}-opt-${ids.p}`).click();
+  await expect(assign).toBeEnabled();
+  await expect(assign).toBeFocused();
+
+  // Enter assigns: the task leaves Unassigned and appears under its project
+  await page.keyboard.press('Enter');
+  await expect(row).toHaveCount(0);
+  await expect(page.getByTestId(`project-group-${ids.p}`)).toContainText('Call the plumber');
+});
