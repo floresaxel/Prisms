@@ -4,7 +4,9 @@
  * leads with the most recently started one and counts the rest ("+2"); clicking
  * the lead part opens a small menu of every running timer (each with its own
  * Clock out), and the pill's button stops all of them (each gets its focus
- * review — `TimersProvider`). My Day shows every running timer as its own card.
+ * review — `TimersProvider`). Clicking the task — the pill's own when one timer
+ * runs, a row of the menu when several — opens that task's details card.
+ * My Day shows every running timer as its own card.
  *
  * The pulsing mark and the counter are the same as My Day's run card: the same
  * `RunMark` (same size, ring and phase) and the shared `useSecondClock`, so both
@@ -19,6 +21,7 @@ import { Ic, useRunningTimers } from '@prisms/ui';
 
 import { formatElapsed } from '../format';
 import { RunMark } from './RunMark';
+import { useTaskDetail } from './TaskDetail';
 import { useTimers } from './Timers';
 import { useSecondClock } from './useSecondClock';
 
@@ -26,7 +29,13 @@ export function GlobalTimer() {
   const now = useSecondClock();
   const { timers } = useRunningTimers(now);
   const { clockOut } = useTimers();
+  const detail = useTaskDetail();
   const [open, setOpen] = useState(false);
+  /** Open a running task's details card (closing the menu if it was open). */
+  const openTask = (taskId: string) => {
+    setOpen(false);
+    detail.open(taskId);
+  };
   const wrap = useRef<HTMLDivElement>(null);
   const lead = timers.at(-1);
   const others = timers.length - 1;
@@ -76,7 +85,16 @@ export function GlobalTimer() {
             {leadBody}
           </button>
         ) : (
-          <div className="px-timer-lead">{leadBody}</div>
+          // one timer: the pill's task opens that task's card
+          <button
+            className="px-timer-lead px-timer-lead--btn"
+            data-testid="timer-open-task"
+            aria-haspopup="dialog"
+            title="Open task details"
+            onClick={() => openTask(lead.entry.task_id)}
+          >
+            {leadBody}
+          </button>
         )}
         <button className="px-timer-stop" data-testid="timer-clock-out" onClick={() => void clockOut(timers)}>
           <Ic name="stop" /> {others > 0 ? 'Clock out all' : 'Clock out'}
@@ -85,9 +103,17 @@ export function GlobalTimer() {
       {menuOpen && (
         <div className="px-menu-pop px-timer-menu" role="menu" data-testid="timer-menu">
           {[...timers].reverse().map((t) => (
-            <div className="px-timer-menu-row" role="menuitem" key={t.entry.id} data-testid={`timer-menu-row-${t.entry.task_id}`}>
-              <span className="px-timer-menu-title">{t.task?.title ?? 'Unknown task'}</span>
-              <span className="px-timer-menu-elapsed" data-testid={`timer-menu-elapsed-${t.entry.task_id}`}>{formatElapsed(t.elapsedMs)}</span>
+            <div className="px-timer-menu-row" key={t.entry.id} data-testid={`timer-menu-row-${t.entry.task_id}`}>
+              <button
+                className="px-timer-menu-open"
+                role="menuitem"
+                data-testid={`timer-menu-open-${t.entry.task_id}`}
+                title="Open task details"
+                onClick={() => openTask(t.entry.task_id)}
+              >
+                <span className="px-timer-menu-title">{t.task?.title ?? 'Unknown task'}</span>
+                <span className="px-timer-menu-elapsed" data-testid={`timer-menu-elapsed-${t.entry.task_id}`}>{formatElapsed(t.elapsedMs)}</span>
+              </button>
               <button
                 className="px-timer-menu-stop"
                 data-testid={`timer-menu-stop-${t.entry.task_id}`}

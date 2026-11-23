@@ -176,6 +176,15 @@ test('My Day: split focus — run two timers together, clock out of one, then sw
   await page.keyboard.press('Escape');
   await expect(page.getByTestId('timer-menu')).toHaveCount(0);
 
+  // ── clicking a task in the menu opens THAT task's details card (and closes the menu) ──
+  await page.getByTestId('timer-menu-toggle').click();
+  await page.getByTestId(`timer-menu-open-${ids.a}`).click();
+  await expect(page.getByTestId('td-dialog')).toBeVisible();
+  await expect(page.getByTestId('td-title')).toHaveValue('Alpha Task');
+  await expect(page.getByTestId('timer-menu')).toHaveCount(0);
+  await page.getByTestId('td-done').click();
+  await expect(page.getByTestId('td-dialog')).toHaveCount(0);
+
   // ── clock out of ONE from its own card: its review, the other keeps running ──
   await page.getByTestId(`run-clock-out-${ids.a}`).click();
   await expect(page.getByTestId('review-save')).toBeVisible();
@@ -269,6 +278,13 @@ test('My Day: the running task has its own Clock out, which opens the session re
     .poll(async () => (await page.getByTestId('timer-elapsed').innerText()) === (await page.locator('.px-run-clock').innerText()))
     .toBe(true);
   await expect(page.getByTestId('running-timer').locator('svg')).toHaveCount(1); // only the stop icon
+
+  // with one timer, the pill's task opens that task's details card
+  await page.getByTestId('timer-open-task').click();
+  await expect(page.getByTestId('td-dialog')).toBeVisible();
+  await expect(page.getByTestId('td-title')).toHaveValue('Own Clock Out Task');
+  await page.getByTestId('td-done').click();
+  await expect(page.getByTestId('td-dialog')).toHaveCount(0);
 
   // the task's own banner stops the timer — no need to reach for the topbar pill
   await page.getByTestId(`run-clock-out-${ids.t}`).click();
