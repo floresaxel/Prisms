@@ -2199,6 +2199,7 @@ button.px-rf-dep-kind:hover { border-color: var(--px-border-2); color: var(--px-
 .px-rf-addbtn .px-ic { width: 12px; height: 12px; }
 .px-rf-empty { margin: 0; font-size: 12.5px; color: var(--px-text-dim); }
 .px-rf-hint { margin: 0; font-size: 11.5px; line-height: 16px; color: var(--px-text-dim); }
+.px-rf-logged { font-size: 13px; line-height: 19px; color: var(--px-text); font-variant-numeric: tabular-nums; }
 .px-rf-ms { display: flex; align-items: center; gap: 9px; padding: 2px 0; font-size: 13px; }
 .px-rf-ms-box { flex: none; width: 13px; height: 13px; box-sizing: border-box; border: 1.5px solid var(--px-border-2); border-radius: 4px; }
 .px-rf-ms--done { color: var(--px-text-dim); text-decoration: line-through; text-decoration-color: var(--px-border-2); }

@@ -16,6 +16,7 @@ import {
   canonicalPractice,
   canonicalProgress,
   canonicalStreak,
+  loggedMinutesByProject,
   childrenOf,
   computeDayLog,
   computeDayLogsByDate,
@@ -502,6 +503,18 @@ export function useTaskProgress(taskId: string | null): ProgressValue | null {
     if (!task) return null;
     return canonicalProgress(task, entryRows.map(toTimeEntry));
   }, [ctx, entryRows, taskId]);
+}
+
+/**
+ * Minutes logged inside each project — the sum of what `useTaskProgress` reports
+ * for every task under it (milestones' tasks and finished ones included). A
+ * project with nothing logged has no entry. Reads the user's FULL entry list
+ * (split-focus shares depend on what else ran) and updates as time is logged.
+ */
+export function useProjectLoggedMinutes(): ReadonlyMap<string, number> {
+  const { factContext: ctx, rows } = usePrismsData();
+  const entryRows = rows.time_entries;
+  return useMemo(() => loggedMinutesByProject(ctx.tree, entryRows.map(toTimeEntry)), [ctx, entryRows]);
 }
 
 export interface ProjectTasksGroup {

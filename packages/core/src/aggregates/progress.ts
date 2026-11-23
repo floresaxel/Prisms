@@ -6,6 +6,8 @@
  * as an aggregation path here.
  */
 import type { Node, TimeEntry } from '../domain/entities';
+import type { Uuid } from '../domain/primitives';
+import { ancestorsOf, type TreeIndex } from '../graph/tree';
 
 import { splitConcurrent } from '../merge/split-focus';
 import { mergeTimeEntries } from '../merge/time-entries';
@@ -40,4 +42,34 @@ function withDerived(consumedMinutes: number, estimateMinutes: number | null): P
 export function canonicalProgress(task: Node, entries: readonly TimeEntry[]): ProgressValue {
   const own = splitConcurrent(entries).filter((e) => e.task_id === task.id);
   return withDerived(mergeTimeEntries(own).rawMinutes, task.estimate_minutes);
+}
+
+/**
+ * The time counted in each PROJECT: for every live task anywhere under it (direct
+ * children, tasks inside milestones, finished ones too) the same minutes
+ * `canonicalProgress` reports for that task, added up. Projects with nothing
+ * logged are absent from the map. Entries whose task is deleted or unknown count
+ * nowhere.
+ *
+ * Built from the split-focus fragments (like `canonicalProgress`), so timers
+ * that overlapped share their wall-clock time and no minute is counted twice
+ * across the tasks of a project; `entries` must be the user's FULL list.
+ */
+export function loggedMinutesByProject(tree: TreeIndex, entries: readonly TimeEntry[]): Map<Uuid, number> {
+  const byTask = new Map<Uuid, ReturnType<typeof splitConcurrent>>();
+  for (const frag of splitConcurrent(entries)) {
+    const list = byTask.get(frag.task_id);
+    if (list) list.push(frag);
+    else byTask.set(frag.task_id, [frag]);
+  }
+  const totals = new Map<Uuid, number>();
+  for (const [taskId, own] of byTask) {
+    if (!tree.byId.has(taskId)) continue;
+    const minutes = mergeTimeEntries(own).rawMinutes;
+    if (minutes <= 0) continue;
+    for (const above of ancestorsOf(tree, taskId)) {
+      if (above.node_type === 'project') totals.set(above.id, (totals.get(above.id) ?? 0) + minutes);
+    }
+  }
+  return totals;
 }

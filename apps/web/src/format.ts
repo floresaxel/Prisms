@@ -39,6 +39,17 @@ export function rejectionMessage(code: string | undefined): string {
   }
 }
 
+/**
+ * The "time logged" note shown for a task or a project: `1h 30m logged`, with
+ * `· 75% of duration` when it has a duration budget, else `nothing logged yet`.
+ */
+export function loggedText(loggedMinutes: number, budgetMinutes: number | null): string {
+  const logged = Math.round(loggedMinutes);
+  if (logged <= 0) return 'nothing logged yet';
+  const base = `${formatMinutes(logged)} logged`;
+  return budgetMinutes !== null && budgetMinutes > 0 ? `${base} · ${Math.round((logged / budgetMinutes) * 100)}% of duration` : base;
+}
+
 /** A signed minute count → human duration, e.g. `1h 30m`, `45m`, `−20m` (over). */
 export function formatMinutes(min: number): string {
   const sign = min < 0 ? '−' : '';
