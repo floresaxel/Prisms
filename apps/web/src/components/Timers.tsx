@@ -8,7 +8,7 @@
  *    together and split the logged time equally (`splitConcurrent`). At the
  *    limit, "run together" is off: something has to stop first.
  *  - REVIEW: every clock-out queues the focus review (§1.2) — one at a time,
- *    with "Skip all" when several stopped together.
+ *    with "Later for all" when several stopped together.
  *
  * Testids: clockin-dialog, clockin-stop-<taskId>, clockin-switch, clockin-split,
  * plus the review's review-focus / review-completed / review-save (from D7).
@@ -26,7 +26,7 @@ interface ReviewTarget {
   taskTitle: string;
   /**
    * When the user pressed Clock out, while the timer is still running underneath
-   * the review (Save / Skip stops it then, at THIS time; Cancel leaves it running
+   * the review (Save / Later stops it then, at THIS time; Cancel leaves it running
    * as if nothing happened). null once the timer is already stopped — the
    * clock-out-and-switch path — where there is nothing left to cancel.
    */
@@ -43,7 +43,7 @@ export interface TimersApi {
   requestClockIn: (taskId: string, opts?: { force?: boolean }) => void;
   /**
    * Clock out of these timers: each gets its focus review first, and the timer
-   * stops (at the moment of the call) when the review is saved or skipped — its
+   * stops (at the moment of the call) when the review is saved or put off with Later — its
    * Cancel button leaves the timer running.
    */
   clockOut: (timers: readonly RunningTimer[]) => Promise<void>;
@@ -75,7 +75,7 @@ export function TimersProvider({ ctx, children }: { ctx: CommandContext; childre
       const targets: ReviewTarget[] = [];
       const pressedAt = new Date().toISOString();
       for (const t of stopping) {
-        // The review decides: the timer keeps running until Save / Skip stops it (at the
+        // The review decides: the timer keeps running until Save / Later stops it (at the
         // moment of this click), so Cancel can leave it running. A switch stops it now —
         // the new clock-in must not count against the timer limit while this one lingers.
         if (opts?.immediate) await commands.clockOut(t.entry.id);
@@ -124,8 +124,8 @@ export function TimersProvider({ ctx, children }: { ctx: CommandContext; childre
   /** Stop a timer the review was holding open, at the moment Clock out was pressed. */
   const stopHeld = useCallback((t: ReviewTarget) => (t.endedAt === null ? Promise.resolve() : commands.clockOut(t.entryId, t.endedAt)), [commands]);
 
-  /** Save / Skip stop the timer (if still running) and take the next review; Cancel leaves it running. */
-  async function finishReview(action: 'save' | 'skip' | 'cancel') {
+  /** Save / Later stop the timer (if still running) and take the next review; Cancel leaves it running. */
+  async function finishReview(action: 'save' | 'later' | 'cancel') {
     const head = reviews[0];
     if (!head) return;
     if (action !== 'cancel') await stopHeld(head);
@@ -135,7 +135,7 @@ export function TimersProvider({ ctx, children }: { ctx: CommandContext; childre
     setReviews((q) => q.slice(1));
   }
 
-  async function skipAll() {
+  async function laterForAll() {
     const all = reviews;
     setReviews([]);
     for (const t of all) await stopHeld(t);
@@ -209,8 +209,8 @@ export function TimersProvider({ ctx, children }: { ctx: CommandContext; childre
       <Modal
         open={request === null && review !== null}
         title="Session review"
-        // Esc / backdrop: back out when the timer can still be kept, otherwise it is a Skip
-        onClose={() => void finishReview(review?.endedAt != null ? 'cancel' : 'skip')}
+        // Esc / backdrop: back out when the timer can still be kept, otherwise it is a Later
+        onClose={() => void finishReview(review?.endedAt != null ? 'cancel' : 'later')}
         actions={
           <>
             {review?.endedAt != null && (
@@ -218,8 +218,8 @@ export function TimersProvider({ ctx, children }: { ctx: CommandContext; childre
                 Cancel
               </button>
             )}
-            {reviews.length > 1 && <button className="px-btn" onClick={() => void skipAll()}>Skip all</button>}
-            <button className="px-btn" data-testid="review-skip" onClick={() => void finishReview('skip')}>Skip</button>
+            {reviews.length > 1 && <button className="px-btn" onClick={() => void laterForAll()}>Later for all</button>}
+            <button className="px-btn" data-testid="review-later" onClick={() => void finishReview('later')}>Later</button>
             <button className="px-btn px-btn--primary" data-testid="review-save" onClick={() => void finishReview('save')}>Save</button>
           </>
         }
@@ -227,7 +227,7 @@ export function TimersProvider({ ctx, children }: { ctx: CommandContext; childre
         <p className="px-muted">
           {review?.taskTitle}
           {reviews.length > 1 && ` · 1 of ${reviews.length}`}
-          {review?.endedAt != null && ' · still clocked in until you save or skip'}
+          {review?.endedAt != null && ' · still clocked in until you save or pick Later'}
         </p>
         <label className="px-field">
           Focus factor: ×{focus.toFixed(1)}
