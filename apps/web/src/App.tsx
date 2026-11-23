@@ -38,6 +38,7 @@ import { ReviewBanner } from './components/ReviewBanner';
 import { SyncChip } from './components/SyncChip';
 import { TimezoneClock } from './components/TimezoneClock';
 import { isDesktop, osNotify } from './desktop';
+import { clearDrafts } from './drafts';
 import { rejectionMessage } from './format';
 import { ScreenBoundary } from './components/ScreenBoundary';
 import { holdPage, revealPage, swapPage } from './components/pageSwap';
@@ -478,6 +479,7 @@ export function App() {
         if (!remembered) return;
         forgetDb(remembered.id);
         clearReadCaches();
+        clearDrafts();
       };
       switch (outcome.action) {
         case 'keep':
@@ -517,6 +519,7 @@ export function App() {
     authEpoch.current += 1;
     await signOut();
     forgetCachedUser();
+    clearDrafts(); // what was typed belongs to the account that just left
     // its database was just cleared: the next sign-in gets a fresh instance
     if (userRef.current) forgetDb(userRef.current.id);
     setUser(null);

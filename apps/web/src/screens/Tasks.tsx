@@ -61,6 +61,7 @@ import { historyNotice, useHistoryStream } from '../components/useHistoryStream'
 import { useCollapsedSet } from '../components/useCollapsedSet';
 import { useNewProject, type NewProjectApi } from '../components/useNewProject';
 import { formatMinutes, projectTone } from '../format';
+import { usePersistedText } from '../drafts';
 import { listLayoutClass } from '../list-layout';
 import { useMeasuredWidth } from '../use-measured-width';
 
@@ -75,7 +76,8 @@ export function Tasks({ ctx }: { ctx: CommandContext }) {
   const [tab, setTab] = useState<'byproject' | 'bystatus' | 'completed' | 'deleted'>('byproject');
   const [panelRef, swap] = useTabSwap();
   const pickTab = (key: typeof tab) => { if (key !== tab) swap(() => setTab(key)); };
-  const [title, setTitle] = useState('');
+  // kept when you leave Tasks mid-sentence (see drafts.ts)
+  const [title, setTitle] = usePersistedText('tasks.capture');
 
   const activities = useActivityInbox();
   // Shown newest-first. The hook's sort_order stays oldest-first because capture()

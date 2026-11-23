@@ -16,6 +16,7 @@ import { buildFactContext, sortOrderBetween, SYNC_ROW_DEFAULTS, type Edge, type 
 import type { PromoteTarget } from '@prisms/ui';
 
 import type { ActiveBreak } from '../src/break';
+import { clearDrafts } from '../src/drafts';
 
 const T0 = '2026-11-01T00:00:00.000Z';
 const uuid = (n: number) => `00000000-0000-4000-8000-${n.toString().padStart(12, '0')}`;
@@ -140,6 +141,7 @@ const openCard = (n: Node = task) => fireEvent.click(screen.getByTestId(`meta-${
 const input = (testId: string) => screen.getByTestId(testId) as HTMLInputElement;
 
 beforeEach(() => {
+  clearDrafts(); // kept field text outlives a card; each test starts from a clean page load
   commandFns.clear();
   state.timers = [];
   timersApi.requestClockIn.mockClear();
@@ -737,6 +739,52 @@ describe('closing', () => {
     fireEvent.keyDown(loc, { key: 'Escape' });
     expect(card()).toBeNull();
     expect(command('setNodeAttributes')).not.toHaveBeenCalled();
+  });
+
+  it('half-typed text is still there when the card is opened again', () => {
+    world({ estimate_minutes: null });
+    mount([other]);
+    openCard(other);
+    // a step not yet added, and details not yet blurred out of their field
+    fireEvent.click(screen.getByTestId('td-add-steps'));
+    fireEvent.change(input('td-step-add'), { target: { value: 'Proofre' } });
+    const details = input('td-details');
+    act(() => details.focus());
+    fireEvent.change(details, { target: { value: 'Quote the may' } });
+    // the card goes away without a blur reaching the fields (as when the page is left)
+    cleanup();
+    expect(command('setDescription')).not.toHaveBeenCalled();
+
+    world({ estimate_minutes: null });
+    mount([other]);
+    openCard(other);
+    expect(input('td-details').value).toBe('Quote the may');
+    // the Steps section is open on its own, so the half-typed step is not hidden behind a chip
+    expect(input('td-step-add').value).toBe('Proofre');
+    // finishing the sentence saves it as any edit does
+    act(() => input('td-details').focus());
+    fireEvent.change(input('td-details'), { target: { value: 'Quote the mayor.' } });
+    fireEvent.blur(input('td-details'));
+    expect(command('setDescription')).toHaveBeenCalledWith(other.id, 'Quote the mayor.');
+  });
+
+  it('a draft the stored text has caught up with is not restored over later changes', () => {
+    mount();
+    openCard();
+    act(() => input('td-details').focus());
+    fireEvent.change(input('td-details'), { target: { value: 'Same as stored later' } });
+    cleanup();
+    // the text reached the task by another route (or a save landed after the card went)
+    world({ description: 'Same as stored later' });
+    mount();
+    openCard();
+    expect(input('td-details').value).toBe('Same as stored later');
+    cleanup();
+    // …so it is no longer a draft: a later change from elsewhere shows, not the old text
+    world({ description: 'Edited on another device' });
+    mount();
+    openCard();
+    expect(input('td-details').value).toBe('Edited on another device');
   });
 
   it('Delete asks once, then soft-deletes and closes', async () => {

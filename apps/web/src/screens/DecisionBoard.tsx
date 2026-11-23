@@ -6,11 +6,13 @@
  */
 import { useState } from 'react';
 
+import { usePersistedText } from '../drafts';
+
 import { Skeleton, useCommands, useDecisionBoards, useDecisionsHydrated, type CommandContext, type DecisionBoardView } from '@prisms/ui';
 
 function BoardGrid({ view, ctx }: { view: DecisionBoardView; ctx: CommandContext }) {
   const commands = useCommands(ctx);
-  const [label, setLabel] = useState('');
+  const [label, setLabel] = usePersistedText(`decisions.new-criterion.${view.board.id}`);
   const [weight, setWeight] = useState('1');
 
   async function addCriterion(e: React.FormEvent) {

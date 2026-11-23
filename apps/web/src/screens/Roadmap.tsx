@@ -44,6 +44,7 @@ import {
 
 import { RoadmapFlow, type FlowActions, type SavedSpot } from '../components/RoadmapFlow';
 import { RoadmapViews } from '../components/RoadmapViews';
+import { usePersistedText } from '../drafts';
 import { buildRoadmapModel } from '../roadmap-model';
 
 const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
@@ -102,7 +103,7 @@ export function Roadmap({ ctx, onNavigate }: { ctx: CommandContext; onNavigate: 
   const [busy, setBusy] = useState(false);
   /** The vision a new roadmap is being made under; null = the form is closed. */
   const [creatingIn, setCreatingIn] = useState<string | null>(null);
-  const [rmTitle, setRmTitle] = useState('');
+  const [rmTitle, setRmTitle] = usePersistedText('roadmap.new-title');
 
   async function addRoadmap(visionId: string) {
     const t = rmTitle.trim();

@@ -9,11 +9,10 @@
  * step-toggle-<stepId>, step-title-<stepId>, step-rename-input-<stepId>,
  * step-delete-<stepId>.
  */
-import { useState } from 'react';
-
 import { initialSortOrder, sortOrderBetween, type TaskStep } from '@prisms/core';
 import { Ic, type PrismsCommands } from '@prisms/ui';
 
+import { usePersistedText } from '../drafts';
 import { EditableText } from './TaskDetail';
 
 export function stepsLabel(steps: readonly TaskStep[]): string {
@@ -41,7 +40,7 @@ export function StepsToggle({ taskId, steps, open, onToggle }: { taskId: string;
 }
 
 export function SubstepPanel({ taskId, steps, commands }: { taskId: string; steps: readonly TaskStep[]; commands: PrismsCommands }) {
-  const [draft, setDraft] = useState('');
+  const [draft, setDraft] = usePersistedText(`step-draft.${taskId}`);
   async function add() {
     const t = draft.trim();
     if (t === '') return;

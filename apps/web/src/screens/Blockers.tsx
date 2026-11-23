@@ -5,6 +5,8 @@
  */
 import { useState } from 'react';
 
+import { usePersistedText } from '../drafts';
+
 import { asEpochMillis, type Instant } from '@prisms/core';
 import { useBlockedTasks, useBlockers, useCommands, useIsHydrated, type CommandContext } from '@prisms/ui';
 
@@ -22,7 +24,7 @@ export function Blockers({ ctx }: { ctx: CommandContext }) {
   const commands = useCommands(ctx);
   const hydrated = useIsHydrated();
 
-  const [label, setLabel] = useState('');
+  const [label, setLabel] = usePersistedText('blockers.new-label');
   const [factIdx, setFactIdx] = useState(0);
   const [value, setValue] = useState<string>(FACTS[0].value);
 

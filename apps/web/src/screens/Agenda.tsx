@@ -62,6 +62,7 @@ import { RunningDot, useRunningTaskIds } from '../components/RunningDot';
 import { NoteSwap } from '../components/NoteSwap';
 import { useTabSwap } from '../components/tabSwap';
 import { WhyButton } from '../components/Why';
+import { usePersistedText } from '../drafts';
 import { useMeasuredWidth } from '../use-measured-width';
 
 const GRID_START_HOUR = 6;
@@ -128,7 +129,7 @@ function BlockTagsPanel({ blockId, title, ctx }: { blockId: string; title: strin
   const tags = useBlockTags(blockId);
   const catalog = useTagCatalog();
   const commands = useCommands(ctx);
-  const [newLabel, setNewLabel] = useState('');
+  const [newLabel, setNewLabel] = usePersistedText(`agenda.new-tag.${blockId}`);
 
   const placed = new Set(tags.map((t) => t.tag.id));
   const available = catalog.filter((t) => !placed.has(t.id));
