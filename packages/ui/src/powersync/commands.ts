@@ -188,7 +188,15 @@ export function createCommands(store: OverlayStore, ctx: CommandContext, deps: E
     },
     /** Clock out now, or at a chosen past time (`endedAt`, long-session review). */
     async clockOut(entryId: string, endedAt?: string): Promise<void> {
-      await run('timer.clock_out', { entry_id: entryId, ended_at: endedAt ?? iso(ctx) });
+      let end = endedAt ?? iso(ctx);
+      // The computer's clock can move while a timer runs (a time resync, a manual
+      // change, DST mistakes). An end at or before the start breaks I6 and the
+      // server would refuse it — leaving the timer impossible to stop. The session
+      // can't have ended before it began, so floor the end at start + 1 s.
+      const entry = (await readMergedRows(store, 'time_entries')).find((r) => r['id'] === entryId);
+      const started = entry ? Date.parse(String(entry['started_at'])) : NaN;
+      if (Number.isFinite(started) && !(Date.parse(end) > started)) end = new Date(started + 1000).toISOString();
+      await run('timer.clock_out', { entry_id: entryId, ended_at: end });
     },
     /** Correct when a CLOSED session ended (long-session review). */
     async adjustEntryEnd(entryId: string, endedAt: string): Promise<void> {
