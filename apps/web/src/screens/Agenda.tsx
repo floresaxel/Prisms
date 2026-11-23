@@ -58,6 +58,7 @@ import { formatAgendaRange, useRangeFormatPref } from '../agenda-range';
 import { fmtGridClock, pointerMinutes, snapMinutes, useSnapPref } from '../agenda-snap';
 import { DayJournalPanel } from '../components/DayJournal';
 import { DetailsMark } from '../components/DetailsMark';
+import { RunningDot, useRunningTaskIds } from '../components/RunningDot';
 import { NoteSwap } from '../components/NoteSwap';
 import { useTabSwap } from '../components/tabSwap';
 import { WhyButton } from '../components/Why';
@@ -247,6 +248,7 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
   const agenda = useAgenda(now);
   const commands = useCommands(ctx);
   const hydrated = useIsHydrated();
+  const running = useRunningTaskIds(); // tasks with a live timer: a pulsing dot before the title in the lists
   const tz = agenda.input.timezone;
   const selectedBlock = agenda.blocks.find((b) => b.id === selectedBlockId) ?? null;
 
@@ -810,6 +812,7 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
                   startTaskDrag(t.schedulable, t.task.title, e);
                 }}
               >
+                <RunningDot running={running.has(t.task.id)} />
                 <span className="px-todo-title">{t.task.title}</span>
                 <DetailsMark node={t.task} />
                 <span className="px-todo-sub">
@@ -840,6 +843,7 @@ export function Agenda({ ctx }: { ctx: CommandContext }) {
                     startTaskDrag(t.schedulable, t.task.title, e);
                   }}
                 >
+                  <RunningDot running={running.has(t.task.id)} />
                   <span className="px-todo-title">{t.task.title}</span>
                   <DetailsMark node={t.task} />
                   <span className="px-todo-sub">

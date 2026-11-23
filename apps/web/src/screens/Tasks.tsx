@@ -51,6 +51,7 @@ import {
 import { DueDate } from '../components/DueDate';
 import { InboxDelete } from '../components/InboxDelete';
 import { ProjectDot } from '../components/ProjectDot';
+import { RunningDot, useRunningTaskIds } from '../components/RunningDot';
 import { ProjectPicker } from '../components/ProjectPicker';
 import { StepsToggle, SubstepPanel } from '../components/Substeps';
 import { EditableTitle, locationOf, useTaskDetail, type TaskDetailApi } from '../components/TaskDetail';
@@ -101,6 +102,8 @@ export function Tasks({ ctx }: { ctx: CommandContext }) {
   const captureTarget = targets.find((t) => t.id === captureTo) ?? null;
   // Which project groups are folded on By project — remembered on this device.
   const projectFolds = useCollapsedSet('prisms.tasks.collapsed-projects');
+  // tasks with a live timer wear the pulsing dot in front of their title
+  const running = useRunningTaskIds();
 
   async function capture(e: FormEvent) {
     e.preventDefault();
@@ -200,7 +203,7 @@ export function Tasks({ ctx }: { ctx: CommandContext }) {
                   </button>
                   <ul className={`px-rows${collapsed ? ' px-hide' : ''}`} id={`project-group-${g.project.id}`} data-testid={`project-group-${g.project.id}`}>
                     {g.tasks.map((t) => (
-                      <TaskRow key={t.task.id} task={t.task} status={t.status} blockedBy={t.blockedBy} steps={stepsByTask.get(t.task.id) ?? []} commands={commands} detail={detail} />
+                      <TaskRow key={t.task.id} task={t.task} status={t.status} blockedBy={t.blockedBy} steps={stepsByTask.get(t.task.id) ?? []} running={running.has(t.task.id)} commands={commands} detail={detail} />
                     ))}
                   </ul>
                 </div>
@@ -213,7 +216,7 @@ export function Tasks({ ctx }: { ctx: CommandContext }) {
             <ul className="px-rows" data-testid="status-available">
               {available.length === 0 && <li className="px-trow px-muted">Nothing available.</li>}
               {available.map((it) => (
-                <AvailableStatusRow key={it.task.id} item={it} commands={commands} detail={detail} onCheck={() => void commands.checkOff(it.task.id)} />
+                <AvailableStatusRow key={it.task.id} item={it} running={running.has(it.task.id)} commands={commands} detail={detail} onCheck={() => void commands.checkOff(it.task.id)} />
               ))}
             </ul>
 
@@ -224,7 +227,7 @@ export function Tasks({ ctx }: { ctx: CommandContext }) {
                   {blocked.map((b) => (
                     <li className="px-trow" key={b.task.id} {...detail.rowProps(b.task.id)}>
                       <span className="px-ckb" style={{ opacity: 0.4 }}><Ic name="check" /></span>
-                      <div className="px-t-main"><div className="px-t-title" style={{ color: 'var(--px-text-dim)' }}><EditableTitle node={b.task} commands={commands} /></div></div>
+                      <div className="px-t-main"><div className="px-t-title" style={{ color: 'var(--px-text-dim)' }}><RunningDot running={running.has(b.task.id)} /><EditableTitle node={b.task} commands={commands} /></div></div>
                       <span className="px-tag px-tag--red"><Ic name="alert" />{b.blockedBy[0] ?? 'blocked'}</span>
                     </li>
                   ))}
@@ -502,12 +505,12 @@ function InboxRow({ activity, targets, newProject, commands, detail, onComplete 
   );
 }
 
-function AvailableStatusRow({ item, commands, detail, onCheck }: { item: MyDayItem; commands: PrismsCommands; detail: TaskDetailApi; onCheck: () => void }) {
+function AvailableStatusRow({ item, running, commands, detail, onCheck }: { item: MyDayItem; running: boolean; commands: PrismsCommands; detail: TaskDetailApi; onCheck: () => void }) {
   return (
     <li className="px-trow" {...detail.rowProps(item.task.id)}>
       <button className="px-ckb" data-testid={`task-check-${item.task.id}`} aria-label="check off" onClick={onCheck}><Ic name="check" /></button>
       <div className="px-t-main">
-        <div className="px-t-title"><EditableTitle node={item.task} commands={commands} /></div>
+        <div className="px-t-title"><RunningDot running={running} /><EditableTitle node={item.task} commands={commands} /></div>
         <div className="px-t-meta">
           {item.projectTitle && <span className="px-proj"><span className={`px-pdot px-pdot--${projectTone(item.projectId)}`} />{item.projectTitle}</span>}
           {item.priority !== null && <span className="px-prio">prio {item.priority.toFixed(1)}</span>}
@@ -517,7 +520,7 @@ function AvailableStatusRow({ item, commands, detail, onCheck }: { item: MyDayIt
   );
 }
 
-function TaskRow({ task, status, blockedBy, steps, commands, detail }: { task: Node; status: TaskStatus; blockedBy: string[]; steps: TaskStep[]; commands: PrismsCommands; detail: TaskDetailApi }) {
+function TaskRow({ task, status, blockedBy, steps, running, commands, detail }: { task: Node; status: TaskStatus; blockedBy: string[]; steps: TaskStep[]; running: boolean; commands: PrismsCommands; detail: TaskDetailApi }) {
   const [open, setOpen] = useState(false);
   const isBlocked = status === 'blocked';
   const location = locationOf(task);
@@ -526,7 +529,7 @@ function TaskRow({ task, status, blockedBy, steps, commands, detail }: { task: N
       <li className="px-trow" data-testid={`task-row-${task.id}`} {...detail.rowProps(task.id)}>
         <button className="px-ckb" data-testid={`task-check-${task.id}`} aria-label="check off" disabled={isBlocked} onClick={() => void commands.checkOff(task.id)}><Ic name="check" /></button>
         <div className="px-t-main">
-          <div className="px-t-title" style={isBlocked ? { color: 'var(--px-text-dim)' } : undefined}><EditableTitle node={task} commands={commands} /></div>
+          <div className="px-t-title" style={isBlocked ? { color: 'var(--px-text-dim)' } : undefined}><RunningDot running={running} /><EditableTitle node={task} commands={commands} /></div>
           <div className="px-t-meta">
             {task.estimate_minutes != null && <span>est {formatMinutes(task.estimate_minutes)}</span>}
             {task.due_date && <DueDate date={task.due_date} />}
