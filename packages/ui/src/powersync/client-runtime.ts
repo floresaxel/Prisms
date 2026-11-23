@@ -50,9 +50,45 @@ export const browserRng: Rng = {
   },
 };
 
-/** Time-ordered id for new rows and command envelopes. */
+/**
+ * Ids never go backwards, even when the computer's clock does. The overlay store
+ * reads a command's order from its UUIDv7 (`supersedes`): if the clock is set back,
+ * a later command would mint a SMALLER id, and an earlier command's overlay would
+ * wait forever for a row stamped by "an older" one. So each id is at least 1 ms
+ * past the last; the high-water is persisted so a reload keeps it too.
+ */
+const ID_LAST_MS_KEY = 'prisms.id_last_ms';
+let lastIdMs: number | null = null;
+
+function defaultIdStorage(): Pick<Storage, 'getItem' | 'setItem'> | null {
+  try {
+    return typeof localStorage !== 'undefined' ? localStorage : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The ms to mint the next id at: the wall clock, or just past the last id. */
+export function nextIdMs(nowMs: number, storage: Pick<Storage, 'getItem' | 'setItem'> | null = defaultIdStorage()): number {
+  if (lastIdMs === null) {
+    const stored = Number(storage?.getItem(ID_LAST_MS_KEY) ?? NaN);
+    lastIdMs = Number.isFinite(stored) ? stored : 0;
+  }
+  const ms = nowMs > lastIdMs ? nowMs : lastIdMs + 1;
+  lastIdMs = ms;
+  storage?.setItem(ID_LAST_MS_KEY, String(ms));
+  return ms;
+}
+
+/** Test-only: forget the in-memory high-water. */
+export function __resetIdClockForTests(): void {
+  lastIdMs = null;
+}
+
+/** Time-ordered id for new rows and command envelopes (monotonic per device). */
 export function newId(): string {
-  return uuidV7(browserClock, browserRng);
+  const ms = nextIdMs(Date.now());
+  return uuidV7({ now: () => asEpochMillis(ms) }, browserRng);
 }
 
 /** The persisted last-tick high-water — seeds a fresh clock so a restart can't regress (S7-F8). */

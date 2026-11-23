@@ -82,6 +82,15 @@ const time_entries = new Table({
   completed_session: column.integer,
   planned: column.integer,
   device_id: column.text,
+  /**
+   * The command that last wrote this row (§7.8; server-stamped, already streamed
+   * by the `SELECT *`). Without it `reconcileConfirmed` confirmed a clock-out on
+   * row PRESENCE — an open entry is always present — so the stop left the overlay
+   * the moment the server acked it and the timer showed as RUNNING again until the
+   * closed row synced down. With sync stalled (a clock change expiring the sync
+   * token) that was for good, and every retry was refused as "not running".
+   */
+  last_modified_by_command_id: column.text,
   created_at: column.text,
   updated_at: column.text,
   deleted_at: column.text,
