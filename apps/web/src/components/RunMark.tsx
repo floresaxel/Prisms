@@ -1,10 +1,10 @@
 /**
  * The "this timer is live" mark: a solid circle that dips and swells, shedding one
  * ring as it swells back. Used by My Day's run banner (blue, whichever project the
- * task is in) and by the topbar timer pill (white, on the pill's blue — 	one="white").
+ * task is in) and by the topbar timer pill (white, on the pill's blue — `tone="white"`).
  * Both are the same size and shape and run the same animation; each mark starts its
  * animation part-way in, at the point the wall clock puts it, so every mark on screen
- * pulses in lockstep no matter when it mounted. Styles are .px-run-* in theme.css.
+ * pulses in lockstep no matter when it mounted. Styles are `.px-run-*` in theme.css.
  */
 import { useState, type CSSProperties } from 'react';
 
