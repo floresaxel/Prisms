@@ -58,6 +58,7 @@ import { DueDate } from '../components/DueDate';
 import { InboxDelete } from '../components/InboxDelete';
 import { ProjectPicker } from '../components/ProjectPicker';
 import { RunMark } from '../components/RunMark';
+import { useSecondClock } from '../components/useSecondClock';
 import { StepsToggle, SubstepPanel } from '../components/Substeps';
 import { EditableTitle, useTaskDetail, type TaskDetailApi } from '../components/TaskDetail';
 import { useTimers } from '../components/Timers';
@@ -216,14 +217,11 @@ export function MyDay({ ctx, onNavigate }:{ ctx: CommandContext; onNavigate?: (h
   // The screen's own width (not the window's — the sidebar rail changes it too)
   // decides whether the right rail sits beside the list or under it.
   const [viewRef, viewWidth] = useMeasuredWidth();
-  // Two clocks: `now` (1 s) drives the live run-banner elapsed; `nowMin` (60 s)
-  // drives the heavier status/agenda/habit reads so they don't recompute per second.
-  const [now, setNow] = useState<Instant>(asEpochMillis(Date.now()));
+  // Two clocks: `now` (1 s, shared with the topbar timer so both counters tick
+  // together) drives the live run-banner elapsed; `nowMin` (60 s) drives the
+  // heavier status/agenda/habit reads so they don't recompute per second.
+  const now = useSecondClock();
   const [nowMin, setNowMin] = useState<Instant>(asEpochMillis(Date.now()));
-  useEffect(() => {
-    const t = setInterval(() => setNow(asEpochMillis(Date.now())), 1000);
-    return () => clearInterval(t);
-  }, []);
   useEffect(() => {
     const t = setInterval(() => setNowMin(asEpochMillis(Date.now())), 60_000);
     return () => clearInterval(t);

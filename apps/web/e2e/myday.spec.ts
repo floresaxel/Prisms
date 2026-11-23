@@ -166,6 +166,16 @@ test('My Day: split focus — run two timers together, clock out of one, then sw
   await expect(page.getByTestId('split-note')).toContainText('2 timers');
   await expect(page.getByTestId('timer-more')).toHaveText('+1');
 
+  // ── clicking the topbar timer lists every running timer in a small menu ──
+  await expect(page.getByTestId('timer-menu')).toHaveCount(0);
+  await page.getByTestId('timer-menu-toggle').click();
+  await expect(page.getByTestId('timer-menu')).toBeVisible();
+  await expect(page.getByTestId('timer-menu').getByRole('menuitem')).toHaveCount(2);
+  await expect(page.getByTestId(`timer-menu-row-${ids.a}`)).toContainText('Alpha Task');
+  await expect(page.getByTestId(`timer-menu-row-${ids.b}`)).toContainText('Beta Task');
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('timer-menu')).toHaveCount(0);
+
   // ── clock out of ONE from its own card: its review, the other keeps running ──
   await page.getByTestId(`run-clock-out-${ids.a}`).click();
   await expect(page.getByTestId('review-save')).toBeVisible();
@@ -249,9 +259,15 @@ test('My Day: the running task has its own Clock out, which opens the session re
   await expect(page.getByTestId('run-mark-core')).toHaveClass(/px-pdot--(teal|blue|amber|green)/);
   await expect(page.getByTestId('run-mark').locator('.px-run-wave')).toHaveCount(1); // the one trailing ring
   await expect(page.getByTestId('run-banner').locator('svg')).toHaveCount(1); // only the Clock out button's stop icon
-  // the topbar pill wears the same pulsing circle (white), pulse only — no ring
+  // the topbar pill wears the very same pulsing circle (white): same size, same ring
   await expect(page.getByTestId('timer-mark')).toBeVisible();
-  await expect(page.getByTestId('timer-mark').locator('.px-run-wave')).toHaveCount(0);
+  await expect(page.getByTestId('timer-mark').locator('.px-run-wave')).toHaveCount(1);
+  const sizeOf = (id: string) => page.getByTestId(id).evaluate((el) => `${el.getBoundingClientRect().width}x${el.getBoundingClientRect().height}`);
+  expect(await sizeOf('timer-mark')).toBe(await sizeOf('run-mark'));
+  // …and both counters read the same time
+  await expect
+    .poll(async () => (await page.getByTestId('timer-elapsed').innerText()) === (await page.locator('.px-run-clock').innerText()))
+    .toBe(true);
   await expect(page.getByTestId('running-timer').locator('svg')).toHaveCount(1); // only the stop icon
 
   // the task's own banner stops the timer — no need to reach for the topbar pill
