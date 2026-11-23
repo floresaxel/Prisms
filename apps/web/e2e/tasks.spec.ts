@@ -452,3 +452,84 @@ test('Completed lists finished tasks (the tick reopens); Recently deleted restor
   await goto(page, 'tasks');
   await expect(page.getByTestId(`task-row-${ids.doomed}`)).toBeVisible({ timeout: 30_000 });
 });
+
+test('a project group’s pentagon wears the colour of its vision', async ({ page }) => {
+  await register(page, 'vcolour');
+  const ids = { v1: randomUUID(), r1: randomUUID(), p1: randomUUID(), t1: randomUUID(), v2: randomUUID(), r2: randomUUID(), p2: randomUUID(), t2: randomUUID() };
+  const seed = await page.request.post('/sync/upload', {
+    data: {
+      device_id: 'e2e-seed',
+      commands: [
+        cmd('node.create', { id: ids.v1, node_type: 'vision', title: 'Work', sort_order: 'a0', attributes: { color: 'red' } }),
+        cmd('node.create', { id: ids.r1, node_type: 'roadmap', title: 'Plan A', sort_order: 'a0', parent_id: ids.v1 }),
+        cmd('node.create', { id: ids.p1, node_type: 'project', title: 'Launch', sort_order: 'a0', parent_id: ids.r1 }),
+        cmd('node.create', { id: ids.t1, node_type: 'task', title: 'Write the note', sort_order: 'a0', parent_id: ids.p1 }),
+        cmd('node.create', { id: ids.v2, node_type: 'vision', title: 'Home', sort_order: 'a1', attributes: { color: 'teal' } }),
+        cmd('node.create', { id: ids.r2, node_type: 'roadmap', title: 'Plan B', sort_order: 'a0', parent_id: ids.v2 }),
+        cmd('node.create', { id: ids.p2, node_type: 'project', title: 'Garden', sort_order: 'a0', parent_id: ids.r2 }),
+        cmd('node.create', { id: ids.t2, node_type: 'task', title: 'Order mulch', sort_order: 'a0', parent_id: ids.p2 }),
+      ],
+    },
+  });
+  expect(seed.ok()).toBeTruthy();
+
+  await goto(page, 'tasks');
+  await expect(page.getByTestId(`task-row-${ids.t2}`)).toBeVisible({ timeout: 30_000 });
+  const bg = (testId: string) => page.getByTestId(testId).evaluate((el) => getComputedStyle(el).backgroundColor);
+  // #dc2626 (red) and #0d9488 (teal), as the browser reports them
+  expect(await bg(`project-dot-${ids.p1}`)).toBe('rgb(220, 38, 38)');
+  expect(await bg(`project-dot-${ids.p2}`)).toBe('rgb(13, 148, 136)');
+});
+
+test('a project heading folds its tasks away, and the fold survives a reload', async ({ page }) => {
+  await register(page, 'fold');
+  const ids = { v: randomUUID(), r: randomUUID(), p1: randomUUID(), p2: randomUUID(), a: randomUUID(), b: randomUUID() };
+  const seed = await page.request.post('/sync/upload', {
+    data: {
+      device_id: 'e2e-seed',
+      commands: [
+        cmd('node.create', { id: ids.v, node_type: 'vision', title: 'Work', sort_order: 'a0' }),
+        cmd('node.create', { id: ids.r, node_type: 'roadmap', title: 'Plan', sort_order: 'a0', parent_id: ids.v }),
+        cmd('node.create', { id: ids.p1, node_type: 'project', title: 'Launch', sort_order: 'a0', parent_id: ids.r }),
+        cmd('node.create', { id: ids.p2, node_type: 'project', title: 'Garden', sort_order: 'a1', parent_id: ids.r }),
+        cmd('node.create', { id: ids.a, node_type: 'task', title: 'Write the note', sort_order: 'a0', parent_id: ids.p1 }),
+        cmd('node.create', { id: ids.b, node_type: 'task', title: 'Order mulch', sort_order: 'a0', parent_id: ids.p2 }),
+      ],
+    },
+  });
+  expect(seed.ok()).toBeTruthy();
+
+  await goto(page, 'tasks');
+  const launch = page.getByTestId(`project-toggle-${ids.p1}`);
+  await expect(page.getByTestId(`task-row-${ids.a}`)).toBeVisible({ timeout: 30_000 });
+  await expect(launch).toHaveAttribute('aria-expanded', 'true'); // open by default
+
+  // fold Launch: its task goes, the heading and its count stay, Garden is untouched
+  await launch.click();
+  await expect(launch).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.getByTestId(`task-row-${ids.a}`)).toBeHidden();
+  await expect(launch).toContainText('Launch');
+  await expect(launch).toContainText('1');
+  await expect(page.getByTestId(`task-row-${ids.b}`)).toBeVisible();
+
+  // a reload keeps it folded
+  await page.reload();
+  await goto(page, 'tasks');
+  await expect(page.getByTestId(`task-row-${ids.b}`)).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId(`project-toggle-${ids.p1}`)).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.getByTestId(`task-row-${ids.a}`)).toBeHidden();
+
+  // capturing into the folded project opens it, so the new task is not lost from view
+  await page.getByTestId('capture-project').click();
+  await page.getByTestId(`capture-project-opt-${ids.p1}`).click();
+  await page.getByTestId('activity-title').fill('Book the venue');
+  await page.getByTestId('activity-add').click();
+  await expect(page.getByTestId(`project-toggle-${ids.p1}`)).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.getByTestId(`project-group-${ids.p1}`).getByText('Book the venue')).toBeVisible();
+
+  // unfold works by click too
+  await page.getByTestId(`project-toggle-${ids.p2}`).click();
+  await expect(page.getByTestId(`task-row-${ids.b}`)).toBeHidden();
+  await page.getByTestId(`project-toggle-${ids.p2}`).click();
+  await expect(page.getByTestId(`task-row-${ids.b}`)).toBeVisible();
+});

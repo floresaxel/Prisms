@@ -1272,7 +1272,12 @@ export function RoadmapFlow({
   const zoomIn = () => setZoom((z) => Math.min(1.5, +(z + 0.1).toFixed(2)));
 
   return (
-    <div className="px-rb" data-testid="rf" data-layout={layout}>
+    <div
+      className={`px-rb${visionColor ? ' px-rb--vc' : ''}`}
+      data-testid="rf"
+      data-layout={layout}
+      style={visionColor ? ({ '--px-rf-vc': visionColor.hex } as CSSProperties) : undefined}
+    >
       <div className="px-rb-main">
         {top}
 

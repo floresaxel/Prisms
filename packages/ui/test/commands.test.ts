@@ -110,6 +110,21 @@ describe('createCommands — creates mint a row id and seed an insert', () => {
     expect(effects[0]).toMatchObject({ table: 'time_entries', row_id: entryId, op: 'insert', fields: { planned: 1, device_id: 'dev-1' } });
   });
 
+  it('clockOut floors the end at start + 1 s when the clock moved back while the timer ran', async () => {
+    const { store, commands } = captureStore();
+    store.replicaRows = async (table) => (table === 'time_entries' ? [{ id: ENTRY, started_at: '2026-06-28T05:00:00.000Z', ended_at: null }] : []);
+    // ctx.now() is 2026-06-28T00:00Z — five hours BEFORE the start (clock set back).
+    await createCommands(store, ctx, deps()).clockOut(ENTRY);
+    expect(commands[0]).toMatchObject({ name: 'timer.clock_out', payload: { entry_id: ENTRY, ended_at: '2026-06-28T05:00:01.000Z' } });
+  });
+
+  it('clockOut keeps a normal end untouched', async () => {
+    const { store, commands } = captureStore();
+    store.replicaRows = async (table) => (table === 'time_entries' ? [{ id: ENTRY, started_at: '2026-06-27T23:00:00.000Z', ended_at: null }] : []);
+    await createCommands(store, ctx, deps()).clockOut(ENTRY);
+    expect(commands[0]).toMatchObject({ payload: { ended_at: '2026-06-28T00:00:00.000Z' } });
+  });
+
   it('createRule → JSON columns land as TEXT in the effect; enabled as 0/1', async () => {
     const { store, effects } = captureStore();
     await createCommands(store, ctx, deps()).createRule({
