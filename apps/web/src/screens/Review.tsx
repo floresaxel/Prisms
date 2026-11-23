@@ -6,6 +6,9 @@
  * opens the list and CLOSES an item (resolve or dismiss) through the
  * `review.resolve`/`review.dismiss` commands — optimistic, so a closed item
  * leaves the list instantly and reconciles when the server confirms.
+ *
+ * Below the inbox sits the clock-in log (`ClockLog`): recent sessions, each with
+ * a focus multiple to set — where a clock-out closed with "Later" gets its review.
  */
 import { useState } from 'react';
 
@@ -21,6 +24,7 @@ import {
   type ReviewItemView,
 } from '@prisms/ui';
 
+import { ClockLog } from '../components/ClockLog';
 import { LongSessionRow } from '../components/LongSessionRow';
 
 type SeverityFilter = 'all' | 'error' | 'warning' | 'info';
@@ -142,6 +146,8 @@ export function Review({ ctx }: { ctx: CommandContext }) {
           })}
         </ul>
       )}
+
+      <ClockLog ctx={ctx} />
     </section>
   );
 }

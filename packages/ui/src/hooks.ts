@@ -36,6 +36,7 @@ import {
   minutesUntilNextBlock,
   parseLongSessionDetail,
   rankProjects,
+  rawMinutes,
   resolveOpenTimeEntries,
   taskStatus,
   topologicalOrder,
@@ -1829,6 +1830,51 @@ export function useLongSessions(items: readonly ReviewItemView[]): Map<string, L
     }
     return out;
   }, [items, rows.time_entries, tree]);
+}
+
+/** How far back the Review tab's clock-in log reaches. */
+export const CLOCK_LOG_DAYS = 14;
+
+/** One closed clock-in, as the Review tab's log shows it. */
+export interface LoggedSession {
+  entry: TimeEntry;
+  taskId: string;
+  taskTitle: string;
+  /** Is the task done right now? (a review that "completes" it must not re-complete a reopened task) */
+  taskDone: boolean;
+  /** Raw minutes between clock-in and clock-out, before the focus multiple. */
+  minutes: number;
+  /** Has a focus multiple been assigned (a review saved)? A session closed with "Later" has not. */
+  reviewed: boolean;
+}
+
+/**
+ * The closed clock-ins of the last `CLOCK_LOG_DAYS` days, newest first — the
+ * Review tab's log, where each session's focus multiple (§1.2) is assigned or
+ * changed. Sessions never reviewed (closed with "Later") come with
+ * `reviewed: false`; the multiple they count at meanwhile is 1.0.
+ */
+export function useRecentSessions(now: Instant): LoggedSession[] {
+  const { rows, tree } = usePrismsData();
+  return useMemo(() => {
+    const since = now - CLOCK_LOG_DAYS * 24 * 60 * 60 * 1000;
+    const out: LoggedSession[] = [];
+    for (const r of rows.time_entries) {
+      if (r['ended_at'] == null || r['deleted_at'] != null) continue;
+      const entry = toTimeEntry(r);
+      if (entry.ended_at === null || isoToEpochMillis(entry.ended_at) < since) continue;
+      const task = tree.byId.get(entry.task_id);
+      out.push({
+        entry,
+        taskId: entry.task_id,
+        taskTitle: task?.title ?? 'task',
+        taskDone: task?.completed_at != null,
+        minutes: rawMinutes(entry),
+        reviewed: entry.focus_factor !== null,
+      });
+    }
+    return out.sort((a, b) => (a.entry.started_at < b.entry.started_at ? 1 : a.entry.started_at > b.entry.started_at ? -1 : a.entry.id < b.entry.id ? 1 : -1));
+  }, [rows.time_entries, tree, now]);
 }
 
 // --- tags (confirmable event tags) ----------------------------------------
