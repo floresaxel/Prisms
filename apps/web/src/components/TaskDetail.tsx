@@ -529,6 +529,24 @@ function TaskDetailBody({ node, facts, ctx, onOpenTask, onClose }: { node: Node;
     }
     void run(() => commands.rename(node.id, t));
   }
+  // the title box is as tall as the title wraps to: as it is typed in, and when the
+  // card's width changes (the window is resized)
+  const titleBox = useRef<HTMLTextAreaElement>(null);
+  useLayoutEffect(() => {
+    if (titleBox.current) fitHeight(titleBox.current);
+  }, [title.draft]);
+  useEffect(() => {
+    const el = titleBox.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    let width = el.clientWidth;
+    const watch = new ResizeObserver(() => {
+      if (el.clientWidth === width) return;
+      width = el.clientWidth;
+      fitHeight(el);
+    });
+    watch.observe(el);
+    return () => watch.disconnect();
+  }, []);
 
   async function remove() {
     await run(() => commands.softDelete(node.id));
@@ -619,14 +637,19 @@ function TaskDetailBody({ node, facts, ctx, onOpenTask, onClose }: { node: Node;
         <button type="button" className="px-td-x" aria-label="Close" onClick={onClose}><Ic name="x" /></button>
       </div>
 
-      <input
+      {/* a one-row textarea that grows to fit, so a long title shows in full over
+          as many lines as it wraps to; it stays one line of text (Enter saves,
+          a pasted line break becomes a space) */}
+      <textarea
+        ref={titleBox}
         className="px-td-title"
         data-testid="td-title"
         aria-label="Title"
+        rows={1}
         value={title.draft}
         maxLength={MAX_TITLE_LENGTH}
         onFocus={title.onFocus}
-        onChange={(e) => title.setDraft(e.target.value)}
+        onChange={(e) => title.setDraft(e.target.value.replace(/\s*[\r\n]+\s*/g, ' '))}
         onBlur={saveTitle}
         onKeyDown={(e) => {
           if (e.key === 'Enter') {

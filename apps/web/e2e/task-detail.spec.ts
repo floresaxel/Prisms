@@ -102,6 +102,21 @@ test('rename a task in place, then edit every detail in its card — all of it s
   await expect(card).toBeVisible();
   await expect(page.getByTestId('td-title')).toHaveValue('Write the launch note');
   await expect(card).toContainText('Work › Plan › Launch');
+  // a title too long for one line wraps and shows in full: the box grows to fit,
+  // nothing is scrolled out of view; Enter still saves it (no line break)
+  const cardTitle = page.getByTestId('td-title');
+  const oneLine = (await cardTitle.boundingBox())!.height;
+  const long = 'Write the launch note for the spring release, with quotes from the mayor and the garden team';
+  await cardTitle.fill(long);
+  await cardTitle.press('Enter');
+  await expect(cardTitle).toHaveValue(long);
+  await expect.poll(async () => (await cardTitle.boundingBox())!.height).toBeGreaterThan(oneLine * 1.5);
+  expect(await cardTitle.evaluate((el: HTMLTextAreaElement) => el.scrollHeight <= el.clientHeight)).toBe(true);
+  await expect(page.getByTestId(`title-${ids.task}`)).toHaveText(long);
+  // back to the short title the rest of this test expects
+  await cardTitle.fill('Write the launch note');
+  await cardTitle.press('Enter');
+  await expect(page.getByTestId(`title-${ids.task}`)).toHaveText('Write the launch note');
   // the page behind it is blurred like every other dialog's — in the BUILT css
   // too, whose minifier once kept only `-webkit-backdrop-filter` (theme.css)
   expect(await page.locator('.px-scrim').evaluate((el) => getComputedStyle(el).backdropFilter)).toContain('blur(');
