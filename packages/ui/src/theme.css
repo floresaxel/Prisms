@@ -1216,9 +1216,15 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
 .px-break-banner--over .px-run-sub, .px-break-banner--over .px-run-clock { color: var(--px-red); }
 .px-break-pill { border-color: var(--px-amber); background: var(--px-amber); }
 .px-break-pill--over { border-color: var(--px-red); background: var(--px-red); }
-.px-break-toggle { display: inline-flex; align-items: center; gap: 6px; margin-top: 12px; padding: 5px 11px; border: 1px solid var(--px-amber-brd); background: var(--px-amber-bg); color: var(--px-amber); border-radius: 999px; font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; }
-.px-break-toggle:hover { border-color: var(--px-amber); }
-.px-break-toggle[aria-expanded='true'] { background: var(--px-amber); border-color: var(--px-amber); color: #fff; }
+/* the session review's two toggles — "Completed this task" (green) and "Take a break" (amber) — and its grey "Review later" */
+.px-review-pills { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.px-review-pill { --px-pill: var(--px-text-dim); --px-pill-bg: var(--px-sb-bg); --px-pill-brd: var(--px-border); display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px; border: 1px solid var(--px-pill-brd); background: var(--px-pill-bg); color: var(--px-pill); border-radius: 999px; font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; }
+.px-review-pill:hover { border-color: var(--px-pill); }
+.px-review-pill--done { --px-pill: var(--px-green); --px-pill-bg: var(--px-green-bg); --px-pill-brd: var(--px-green-brd); }
+.px-review-pill--break { --px-pill: var(--px-amber); --px-pill-bg: var(--px-amber-bg); --px-pill-brd: var(--px-amber-brd); }
+.px-review-pill[aria-pressed='true'], .px-review-pill[aria-expanded='true'] { background: var(--px-pill); border-color: var(--px-pill); color: #fff; }
+.px-review-later { margin-right: auto; padding: 6px 2px; border: 0; background: none; font: inherit; font-size: 13px; color: var(--px-text-dim); cursor: pointer; }
+.px-review-later:hover { color: var(--px-text); text-decoration: underline; }
 .px-break-pick { margin-top: 10px; padding: 12px 14px; border: 1px solid var(--px-amber-brd); background: var(--px-amber-bg); border-radius: 10px; display: grid; gap: 8px; }
 .px-break-pick .px-field { display: grid; gap: 6px; margin: 0; }
 .px-break-pick .px-steps { --px-steps-c: var(--px-amber); }

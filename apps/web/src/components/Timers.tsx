@@ -315,13 +315,15 @@ export function TimersProvider({ ctx, children }: { ctx: CommandContext; childre
         onClose={() => void finishReview(review?.endedAt != null ? 'cancel' : 'later')}
         actions={
           <>
+            <button type="button" className="px-review-later" data-testid="review-later" onClick={() => void finishReview('later')}>
+              Review later
+            </button>
             {review?.endedAt != null && (
               <button className="px-btn" data-testid="review-cancel" title="Don't clock out — keep timing this task" onClick={() => void finishReview('cancel')}>
                 Cancel
               </button>
             )}
             {reviews.length > 1 && <button className="px-btn" onClick={() => void laterForAll()}>Later for all</button>}
-            <button className="px-btn" data-testid="review-later" onClick={() => void finishReview('later')}>Later</button>
             <button className="px-btn px-btn--primary" data-testid="review-save" onClick={() => void finishReview('save')}>Save</button>
           </>
         }
@@ -329,26 +331,34 @@ export function TimersProvider({ ctx, children }: { ctx: CommandContext; childre
         <p className="px-muted">
           {review?.taskTitle}
           {reviews.length > 1 && ` · 1 of ${reviews.length}`}
-          {review?.endedAt != null && ' · still clocked in until you save or pick Later'}
+          {review?.endedAt != null && ' · still clocked in until you save or pick Review later'}
         </p>
         <label className="px-field">
           Focus factor: ×{focus.toFixed(1)}
           <StepSlider min={0.5} max={1.0} step={0.1} value={focus} onChange={setFocus} testId="review-focus" ariaLabel="Focus factor" />
         </label>
-        <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <input type="checkbox" checked={completed} data-testid="review-completed" onChange={(e) => setCompleted(e.target.checked)} />
-          Completed this task
-        </label>
-        <button
-          type="button"
-          className="px-break-toggle"
-          data-testid="review-break"
-          aria-expanded={breakPicker}
-          title="Clock out of everything for a while, then pick back up"
-          onClick={() => setBreakPicker((o) => !o)}
-        >
-          <Ic name="coffee" /> Take a break
-        </button>
+        <div className="px-review-pills">
+          <button
+            type="button"
+            className="px-review-pill px-review-pill--done"
+            data-testid="review-completed"
+            aria-pressed={completed}
+            title="This session finished the task — check it off when you save"
+            onClick={() => setCompleted((c) => !c)}
+          >
+            <Ic name="check" /> Completed this task
+          </button>
+          <button
+            type="button"
+            className="px-review-pill px-review-pill--break"
+            data-testid="review-break"
+            aria-expanded={breakPicker}
+            title="Clock out of everything for a while, then pick back up"
+            onClick={() => setBreakPicker((o) => !o)}
+          >
+            <Ic name="coffee" /> Take a break
+          </button>
+        </div>
         {breakPicker && (
           <div className="px-break-pick" data-testid="break-picker">
             <label className="px-field">
