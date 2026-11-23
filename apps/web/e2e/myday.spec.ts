@@ -198,6 +198,7 @@ test('My Day: split focus — run two timers together, clock out of one, then sw
   await expect(page.getByTestId(`clockin-stop-${ids.b}`)).toBeChecked();
   await page.getByTestId('clockin-switch').click();
   await expect(page.getByTestId('review-save')).toBeVisible(); // Beta's review
+  await expect(page.getByTestId('review-cancel')).toHaveCount(0); // already stopped by the switch: nothing to cancel
   await page.getByTestId('review-save').click();
   await expect(page.getByTestId('run-banner')).toHaveCount(1);
   await expect(page.getByTestId('run-banner')).toContainText('Alpha Task');
@@ -240,6 +241,7 @@ test('My Day: the running task walks back to its vision, one door per layer', as
   await expect(page.getByTestId('why-this-matters').locator('[aria-current]')).toHaveCount(1);
 
   await page.getByTestId('timer-clock-out').click();
+  await page.getByTestId('review-save').click(); // the timer stops once the review is saved
   await expect(page.getByTestId('why-this-matters')).toHaveCount(0);
 });
 
