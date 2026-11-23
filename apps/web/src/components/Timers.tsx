@@ -24,6 +24,13 @@ interface ReviewTarget {
   entryId: string;
   taskId: string;
   taskTitle: string;
+  /**
+   * When the user pressed Clock out, while the timer is still running underneath
+   * the review (Save / Skip stops it then, at THIS time; Cancel leaves it running
+   * as if nothing happened). null once the timer is already stopped — the
+   * clock-out-and-switch path — where there is nothing left to cancel.
+   */
+  endedAt: string | null;
 }
 
 interface ClockInRequest {
@@ -34,7 +41,11 @@ interface ClockInRequest {
 export interface TimersApi {
   /** Start a timer — directly when none runs, otherwise via the split-or-switch question. */
   requestClockIn: (taskId: string, opts?: { force?: boolean }) => void;
-  /** Stop these timers; each one then gets its focus review. */
+  /**
+   * Clock out of these timers: each gets its focus review first, and the timer
+   * stops (at the moment of the call) when the review is saved or skipped — its
+   * Cancel button leaves the timer running.
+   */
   clockOut: (timers: readonly RunningTimer[]) => Promise<void>;
 }
 
@@ -60,11 +71,15 @@ export function TimersProvider({ ctx, children }: { ctx: CommandContext; childre
   const [completed, setCompleted] = useState(false);
 
   const clockOut = useCallback(
-    async (stopping: readonly RunningTimer[]) => {
+    async (stopping: readonly RunningTimer[], opts?: { immediate?: boolean }) => {
       const targets: ReviewTarget[] = [];
+      const pressedAt = new Date().toISOString();
       for (const t of stopping) {
-        await commands.clockOut(t.entry.id);
-        targets.push({ entryId: t.entry.id, taskId: t.entry.task_id, taskTitle: t.task?.title ?? 'task' });
+        // The review decides: the timer keeps running until Save / Skip stops it (at the
+        // moment of this click), so Cancel can leave it running. A switch stops it now —
+        // the new clock-in must not count against the timer limit while this one lingers.
+        if (opts?.immediate) await commands.clockOut(t.entry.id);
+        targets.push({ entryId: t.entry.id, taskId: t.entry.task_id, taskTitle: t.task?.title ?? 'task', endedAt: opts?.immediate ? null : pressedAt });
       }
       if (targets.length === 0) return;
       setReviews((q) => {
@@ -102,17 +117,28 @@ export function TimersProvider({ ctx, children }: { ctx: CommandContext; childre
     if (!request) return;
     const req = request;
     setRequest(null);
-    if (mode === 'switch') await clockOut(timers.filter((t) => toStop.has(t.entry.id)));
+    if (mode === 'switch') await clockOut(timers.filter((t) => toStop.has(t.entry.id)), { immediate: true });
     await start(req.taskId, req.force);
   }
 
-  async function finishReview(save: boolean) {
+  /** Stop a timer the review was holding open, at the moment Clock out was pressed. */
+  const stopHeld = useCallback((t: ReviewTarget) => (t.endedAt === null ? Promise.resolve() : commands.clockOut(t.entryId, t.endedAt)), [commands]);
+
+  /** Save / Skip stop the timer (if still running) and take the next review; Cancel leaves it running. */
+  async function finishReview(action: 'save' | 'skip' | 'cancel') {
     const head = reviews[0];
     if (!head) return;
-    if (save) await commands.review({ entryId: head.entryId, focusFactor: focus, completedSession: completed, taskId: head.taskId });
+    if (action !== 'cancel') await stopHeld(head);
+    if (action === 'save') await commands.review({ entryId: head.entryId, focusFactor: focus, completedSession: completed, taskId: head.taskId });
     setFocus(1.0);
     setCompleted(false);
     setReviews((q) => q.slice(1));
+  }
+
+  async function skipAll() {
+    const all = reviews;
+    setReviews([]);
+    for (const t of all) await stopHeld(t);
   }
 
   const api = useMemo<TimersApi>(() => ({ requestClockIn, clockOut }), [requestClockIn, clockOut]);
@@ -183,18 +209,25 @@ export function TimersProvider({ ctx, children }: { ctx: CommandContext; childre
       <Modal
         open={request === null && review !== null}
         title="Session review"
-        onClose={() => void finishReview(false)}
+        // Esc / backdrop: back out when the timer can still be kept, otherwise it is a Skip
+        onClose={() => void finishReview(review?.endedAt != null ? 'cancel' : 'skip')}
         actions={
           <>
-            {reviews.length > 1 && <button className="px-btn" onClick={() => setReviews([])}>Skip all</button>}
-            <button className="px-btn" onClick={() => void finishReview(false)}>Skip</button>
-            <button className="px-btn px-btn--primary" data-testid="review-save" onClick={() => void finishReview(true)}>Save</button>
+            {review?.endedAt != null && (
+              <button className="px-btn" data-testid="review-cancel" title="Don't clock out — keep timing this task" onClick={() => void finishReview('cancel')}>
+                Cancel
+              </button>
+            )}
+            {reviews.length > 1 && <button className="px-btn" onClick={() => void skipAll()}>Skip all</button>}
+            <button className="px-btn" data-testid="review-skip" onClick={() => void finishReview('skip')}>Skip</button>
+            <button className="px-btn px-btn--primary" data-testid="review-save" onClick={() => void finishReview('save')}>Save</button>
           </>
         }
       >
         <p className="px-muted">
           {review?.taskTitle}
           {reviews.length > 1 && ` · 1 of ${reviews.length}`}
+          {review?.endedAt != null && ' · still clocked in until you save or skip'}
         </p>
         <label className="px-field">
           Focus factor: ×{focus.toFixed(1)}

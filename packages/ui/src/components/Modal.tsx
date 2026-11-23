@@ -38,6 +38,9 @@ function skipExit(): boolean {
   return typeof window.matchMedia !== 'function' || window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 
+/** The open modals, oldest first — the last one owns Escape. */
+const openModals: symbol[] = [];
+
 export function Modal(props: ModalProps) {
   const { open, onClose } = props;
 
@@ -61,14 +64,26 @@ export function Modal(props: ModalProps) {
     return () => window.clearTimeout(t);
   }, [open]);
 
+  // Escape belongs to the topmost open modal only: a dialog opened over another
+  // (a session review over the task card) must not close the one behind it too.
+  // (`onClose` rides a ref so a new callback each render doesn't re-push this modal on top.)
+  const token = useRef<symbol>(Symbol('modal'));
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
   useEffect(() => {
     if (!open) return;
+    const me = token.current;
+    openModals.push(me);
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape' && openModals[openModals.length - 1] === me) onCloseRef.current();
     };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [open, onClose]);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      const i = openModals.indexOf(me);
+      if (i >= 0) openModals.splice(i, 1);
+    };
+  }, [open]);
 
   const size = last.current.size ?? 'panel';
   // A full-screen or card dialog owns the viewport: stop the page behind it scrolling.

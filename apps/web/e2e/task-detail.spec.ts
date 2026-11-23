@@ -184,8 +184,10 @@ test('My Day: clicking the running-timer banner opens that task’s card; Clock 
   await page.keyboard.press('Escape');
   await expect(page.getByTestId('td-dialog')).toHaveCount(0);
 
-  // the Clock out button keeps its own click
+  // the Clock out button keeps its own click (the review's Save then stops the timer)
   await page.getByTestId(`run-clock-out-${ids.task}`).click();
+  await expect(page.getByTestId('review-save')).toBeVisible();
+  await page.getByTestId('review-save').click();
   await expect(banner).toHaveCount(0);
   await expect(page.getByTestId('td-dialog')).toHaveCount(0);
 });
@@ -218,6 +220,20 @@ test('the task card clocks the task in and out', async ({ page }) => {
   await expect(page.getByTestId('td-clock-in')).toHaveCount(0);
   await expect(page.getByTestId('running-timer')).toContainText('Card clocked task');
   await expect(page.getByTestId('td-dialog')).toBeVisible();
+
+  // ── Cancel in the clock-out review keeps the user clocked in ──
+  await page.getByTestId('td-clock-out').click();
+  await expect(page.getByTestId('review-save')).toBeVisible();
+  await page.getByTestId('review-cancel').click();
+  await expect(page.getByTestId('review-save')).toHaveCount(0);
+  await expect(page.getByTestId('running-timer')).toContainText('Card clocked task');
+  await expect(page.getByTestId('td-running')).toBeVisible();
+  // …and so does Escape
+  await page.getByTestId('td-clock-out').click();
+  await expect(page.getByTestId('review-save')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('review-save')).toHaveCount(0);
+  await expect(page.getByTestId('running-timer')).toContainText('Card clocked task');
 
   // ── clock out from the card: the usual session review, then the card offers Clock in again ──
   await page.getByTestId('td-clock-out').click();
