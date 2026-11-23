@@ -275,6 +275,10 @@ export function buildOptimisticEffects(name: CommandName, payload: unknown, ctx:
       const entryDate = String(p['entry_date'] ?? '');
       return [ins('journal_entries', p['id'], { entry_date: entryDate, month_key: entryDate.slice(0, 7), content: p['content'] ?? '' })];
     }
+    case 'journal.append':
+      // The appended content depends on the note as this device holds it, which is
+      // not in the payload — the live writer (commands.appendJournal) supplies it.
+      return [];
     case 'journal.set_locked':
       // patches an existing row (a lock never mints one — see the payload doc).
       return [upd('journal_entries', id, { locked: b(p['locked']) })];

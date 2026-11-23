@@ -17,6 +17,7 @@
  */
 import {
   COMMAND_SCHEMAS,
+  appendJournalText,
   asEpochMillis,
   buildEdgeIndex,
   buildFactContext,
@@ -51,6 +52,7 @@ import {
   stripTrustFields,
   uploadRequestSchema,
   ROW_SCHEMA_VERSION,
+  MAX_JOURNAL_CONTENT_LENGTH,
   type AutomationRule,
   type CommandName,
   type CommandOutcome,
@@ -1354,6 +1356,54 @@ export function createDispatcher(
           // (the optimistic insert of a losing duplicate) and reconciles it away (D5).
           rec('journal_entries', live.id, 'update', []);
         }
+        return applied();
+      }
+      case 'journal.append': {
+        // A log line (a finished break) added to the END of the day's note, on the
+        // note as the SERVER holds it — so prose this device has not synced yet is
+        // kept, never replaced. Mints the row (with `p.id`) when the day has none.
+        const p = payload as Payload<'journal.append'>;
+        const month_key = p.entry_date.slice(0, 7);
+        const byId = await one(tx.select().from(journal_entries).where(eq(journal_entries.id, p.id)).limit(1));
+        const ownById = byId ? ownershipReject('journal entry', p.id, byId, userId) : null;
+        if (ownById) return ownById;
+        if (byId && byId.entry_date !== p.entry_date) return reject('E_DUPLICATE', 'journal.append id already belongs to a different day');
+        const liveDay = () =>
+          one(
+            tx
+              .select()
+              .from(journal_entries)
+              .where(and(eq(journal_entries.user_id, userId), eq(journal_entries.entry_date, p.entry_date), isNull(journal_entries.deleted_at)))
+              .limit(1),
+          );
+        let row = byId && byId.deleted_at === null ? byId : await liveDay();
+        if (!row) {
+          const inserted = await tx
+            .insert(journal_entries)
+            .values({ id: p.id, user_id: userId, entry_date: p.entry_date, month_key, content: p.text, ...born })
+            .onConflictDoNothing({ target: [journal_entries.user_id, journal_entries.entry_date], where: isNull(journal_entries.deleted_at) })
+            .returning({ id: journal_entries.id });
+          if (inserted.length > 0) {
+            await lwwFields(tx, hlc, userId, 'journal_entries', p.id, { content: p.text });
+            rec('journal_entries', p.id, 'insert');
+            return applied();
+          }
+          row = await liveDay(); // a concurrent write created the day — append to it
+          if (!row) return applied();
+        }
+        const next = appendJournalText(row.content, p.text);
+        if (next.length > MAX_JOURNAL_CONTENT_LENGTH) return reject('E_TOO_LONG', 'the note is full — the line was not added');
+        // An append is never "older" than the text it extends: it always lands, and
+        // the content's version moves forward only (a later edit still wins after it).
+        await tx.update(journal_entries).set({ content: next, ...sys }).where(eq(journal_entries.id, row.id));
+        await tx
+          .insert(command_field_versions)
+          .values({ user_id: userId, table_name: 'journal_entries', row_id: row.id, field: 'content', hlc })
+          .onConflictDoUpdate({
+            target: [command_field_versions.table_name, command_field_versions.row_id, command_field_versions.field],
+            set: { hlc: sql`GREATEST(${command_field_versions.hlc}, ${hlc})` },
+          });
+        rec('journal_entries', row.id, 'update', ['content']);
         return applied();
       }
       case 'journal.set_locked': {

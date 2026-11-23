@@ -76,6 +76,7 @@ export * from './aggregates/today';
 export * from './aggregates/decision';
 export * from './journal/day-log';
 export * from './journal/tags';
+export * from './journal/append';
 export * from './rules/actions';
 export * from './rules/engine';
 export * from './rules/validate';

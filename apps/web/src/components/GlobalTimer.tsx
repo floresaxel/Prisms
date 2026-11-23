@@ -19,6 +19,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import { Ic, useRunningTimers } from '@prisms/ui';
 
+import { breakEndsAt, breakRemainingMs, formatCountdown } from '../break';
 import { formatElapsed } from '../format';
 import { RunMark } from './RunMark';
 import { useTaskDetail } from './TaskDetail';
@@ -28,7 +29,7 @@ import { useSecondClock } from './useSecondClock';
 export function GlobalTimer() {
   const now = useSecondClock();
   const { timers } = useRunningTimers(now);
-  const { clockOut } = useTimers();
+  const { clockOut, activeBreak } = useTimers();
   const detail = useTaskDetail();
   const [open, setOpen] = useState(false);
   /** Open a running task's details card (closing the menu if it was open). */
@@ -58,6 +59,8 @@ export function GlobalTimer() {
     };
   }, [menuOpen]);
 
+  // On a break nothing runs (here): the pill counts the break down instead.
+  if (activeBreak && !lead) return <BreakPill now={now} />;
   if (!lead) return null;
 
   const leadBody = (
@@ -126,6 +129,34 @@ export function GlobalTimer() {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * The topbar while on a break: "On break", the time left (negative once it has
+ * run over, in red), and Resume — which ends the break and clocks back in to the
+ * tasks it stopped.
+ */
+function BreakPill({ now }: { now: number }) {
+  const { activeBreak, resumeFromBreak } = useTimers();
+  if (!activeBreak) return null;
+  const left = breakRemainingMs(activeBreak, now);
+  const over = left <= -1000;
+  const ends = new Date(breakEndsAt(activeBreak)).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  const back = activeBreak.tasks.map((t) => t.title).join(', ');
+  return (
+    <div className="px-timer-wrap">
+      <div className={`px-timer-pill px-break-pill${over ? ' px-break-pill--over' : ''}`} data-testid="break-pill" title={`Break until ${ends} · then back to ${back}`}>
+        <span className="px-timer-lead">
+          <span className="px-break-cup" aria-hidden="true">☕</span>
+          <span className="px-timer-pill-task">On break</span>
+          <span className="px-timer-pill-elapsed" data-testid="break-countdown">{formatCountdown(left)}</span>
+        </span>
+        <button className="px-timer-stop" data-testid="break-resume" title={`End the break and clock back in to ${back}`} onClick={() => void resumeFromBreak()}>
+          <Ic name="play" /> Resume
+        </button>
+      </div>
     </div>
   );
 }

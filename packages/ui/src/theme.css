@@ -1204,6 +1204,30 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
 .px-run-sub { font-size: 11.5px; color: var(--px-blue-deep); margin-top: 2px; }
 .px-run-clock { margin-left: auto; font-family: var(--px-font-mono); font-size: 20px; font-weight: 500; color: var(--px-blue-deep); font-variant-numeric: tabular-nums; }
 .px-run-stop { flex: none; }
+
+/* ── breaks: amber while on one, red once it has run over ── */
+.px-break-cup { flex: none; line-height: 1; }
+.px-break-cup--lg { font-size: 20px; }
+.px-break-banner { border-color: var(--px-amber-brd); background: var(--px-amber-bg); }
+.px-break-banner .px-run-sub, .px-break-banner .px-run-clock { color: var(--px-amber); }
+.px-break-banner > .px-btn { flex: none; }
+.px-break-banner--over { border-color: var(--px-red-brd); background: var(--px-red-bg); }
+.px-break-banner--over .px-run-sub, .px-break-banner--over .px-run-clock { color: var(--px-red); }
+.px-break-pill { border-color: var(--px-amber); background: var(--px-amber); }
+.px-break-pill--over { border-color: var(--px-red); background: var(--px-red); }
+.px-break-toggle { display: inline-flex; align-items: center; gap: 6px; margin-top: 12px; padding: 5px 11px; border: 1px solid var(--px-amber-brd); background: var(--px-amber-bg); color: var(--px-amber); border-radius: 999px; font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; }
+.px-break-toggle:hover { border-color: var(--px-amber); }
+.px-break-toggle[aria-expanded='true'] { background: var(--px-amber); border-color: var(--px-amber); color: #fff; }
+.px-break-pick { margin-top: 10px; padding: 12px 14px; border: 1px solid var(--px-amber-brd); background: var(--px-amber-bg); border-radius: 10px; display: grid; gap: 8px; }
+.px-break-pick .px-field { display: grid; gap: 6px; margin: 0; }
+.px-break-pick input[type='range'] { width: 100%; accent-color: var(--px-amber); }
+.px-break-pick .px-muted { margin: 0; font-size: 12px; }
+.px-break-pick > .px-btn { justify-self: end; }
+.px-break-scale { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--px-text-dim); font-variant-numeric: tabular-nums; }
+.px-break-count { font-family: var(--px-font-mono); font-size: 40px; font-weight: 500; text-align: center; color: var(--px-amber); font-variant-numeric: tabular-nums; margin: 4px 0 6px; }
+.px-break-count--over { color: var(--px-red); }
+.px-break-back { margin: 12px 0 4px; font-size: 12.5px; font-weight: 600; }
+.px-break-tasks { margin: 0; padding-left: 18px; font-size: 13px; display: grid; gap: 2px; }
 /* several running at once: one quiet line above the cards says how time is shared */
 .px-split-note { font-size: 12px; color: var(--px-blue-deep); background: var(--px-blue-bg); border: 1px solid var(--px-blue-brd); border-radius: 8px; padding: 6px 11px; margin: 6px 0 2px; }
 /* Clock in / Clock out glyphs are SOLID (the draft's ▶): the shared play/stop

@@ -86,6 +86,7 @@ import { DetailsMark } from './DetailsMark';
 import { ProjectDot } from './ProjectDot';
 import { ProjectPicker } from './ProjectPicker';
 import { RunMark } from './RunMark';
+import { ON_BREAK_TITLE } from '../break';
 import { useTimers } from './Timers';
 import { newProjectFor } from './useNewProject';
 
@@ -756,13 +757,22 @@ function ClockControl({ taskId, blocked }: { taskId: string; blocked: boolean })
     );
   }
   const atLimit = timers.length >= MAX_OPEN_TIMERS;
+  const onBreak = Boolean(timersApi.activeBreak);
   return (
     <button
       type="button"
       className={`px-btn px-clockin-btn${blocked ? ' px-btn--danger' : ''}`}
       data-testid="td-clock-in"
-      disabled={atLimit}
-      title={atLimit ? `${MAX_OPEN_TIMERS} timers are already running — clock out of one first` : blocked ? 'This task is blocked — override the blocker and start the timer' : undefined}
+      disabled={atLimit || onBreak}
+      title={
+        onBreak
+          ? ON_BREAK_TITLE
+          : atLimit
+            ? `${MAX_OPEN_TIMERS} timers are already running — clock out of one first`
+            : blocked
+              ? 'This task is blocked — override the blocker and start the timer'
+              : undefined
+      }
       onClick={() => timersApi.requestClockIn(taskId, blocked ? { force: true } : undefined)}
     >
       <Ic name="play" className="px-ic px-ic--solid" /> {blocked ? 'Force clock in' : 'Clock in'}

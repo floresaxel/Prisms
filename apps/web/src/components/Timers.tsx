@@ -10,15 +10,40 @@
  *  - REVIEW: every clock-out queues the focus review (§1.2) — one at a time,
  *    with "Later for all" when several stopped together.
  *
+ *  - BREAK: the review's "Take a break" clocks out of EVERY running timer for
+ *    5–30 minutes (`break.ts`). Clock-in is off until it ends; with a minute left
+ *    a prompt (once) offers to clock back in to those tasks, its countdown runs
+ *    negative for up to 10 minutes past the end, and then the break closes by
+ *    itself with the tasks left clocked out. Every break is logged in the day's
+ *    journal note.
+ *
  * Testids: clockin-dialog, clockin-stop-<taskId>, clockin-switch, clockin-split,
- * plus the review's review-focus / review-completed / review-save (from D7).
+ * plus the review's review-focus / review-completed / review-save (from D7), and
+ * review-break, break-minutes, break-start, break-prompt(-countdown|-resume|-end).
  */
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
-import { asEpochMillis, MAX_OPEN_TIMERS } from '@prisms/core';
-import { Modal, useCommands, useNodeTree, useRunningTimers, type CommandContext, type RunningTimer } from '@prisms/ui';
+import { asEpochMillis, bucketDate, MAX_OPEN_TIMERS } from '@prisms/core';
+import { Modal, useCommands, useNodeTree, useRunningTimers, useUserSettings, type CommandContext, type RunningTimer } from '@prisms/ui';
 
+import {
+  BREAK_DEFAULT_MINUTES,
+  BREAK_MAX_MINUTES,
+  BREAK_MIN_MINUTES,
+  BREAK_STEP_MINUTES,
+  breakJournalLine,
+  breakPhase,
+  breakRemainingMs,
+  formatCountdown,
+  saveBreak,
+  takeBreak,
+  useActiveBreak,
+  type ActiveBreak,
+  type BreakTask,
+} from '../break';
 import { formatElapsed } from '../format';
+import { useSecondClock } from './useSecondClock';
+
 
 interface ReviewTarget {
   entryId: string;
@@ -47,6 +72,12 @@ export interface TimersApi {
    * Cancel button leaves the timer running.
    */
   clockOut: (timers: readonly RunningTimer[]) => Promise<void>;
+  /** The break this device is on, or null. Clock-in is refused while there is one. */
+  activeBreak: ActiveBreak | null;
+  /** End the break now and clock back in to the tasks it clocked out of. */
+  resumeFromBreak: () => Promise<void>;
+  /** End the break now and stay clocked out. */
+  endBreak: () => Promise<void>;
 }
 
 const TimersContext = createContext<TimersApi | null>(null);
@@ -69,6 +100,38 @@ export function TimersProvider({ ctx, children }: { ctx: CommandContext; childre
   const [reviews, setReviews] = useState<ReviewTarget[]>([]);
   const [focus, setFocus] = useState(1.0);
   const [completed, setCompleted] = useState(false);
+
+  // ── breaks ──
+  const activeBreak = useActiveBreak(ctx.userId);
+  const { timezone, dayResetHour } = useUserSettings();
+  /** The review's break picker is showing (after "Take a break"). */
+  const [breakPicker, setBreakPicker] = useState(false);
+  const [breakMinutes, setBreakMinutes] = useState(BREAK_DEFAULT_MINUTES);
+
+  /**
+   * Close the break `b` (once — a second tab or click finds it gone), log it in
+   * the journal note of the day it STARTED, and clock back in when asked to.
+   */
+  const closeBreak = useCallback(
+    async (b: ActiveBreak, resume: boolean) => {
+      const endAt = Date.now();
+      const closed = takeBreak(ctx.userId, b.id);
+      if (!closed) return;
+      const entryDate = bucketDate(asEpochMillis(closed.startedAt), dayResetHour, timezone);
+      await commands.appendJournal({ entryDate, text: breakJournalLine(closed, endAt, timezone) }).catch(() => undefined);
+      if (!resume) return;
+      // They were running before the break: a task that has since become blocked
+      // is taken back up as it was (force); one that is done or gone is skipped.
+      for (const t of closed.tasks) await commands.clockIn(t.taskId, { force: true }).catch(() => undefined);
+    },
+    [commands, ctx.userId, dayResetHour, timezone],
+  );
+  const resumeFromBreak = useCallback(async () => {
+    if (activeBreak) await closeBreak(activeBreak, true);
+  }, [activeBreak, closeBreak]);
+  const endBreak = useCallback(async () => {
+    if (activeBreak) await closeBreak(activeBreak, false);
+  }, [activeBreak, closeBreak]);
 
   const clockOut = useCallback(
     async (stopping: readonly RunningTimer[], opts?: { immediate?: boolean }) => {
@@ -100,6 +163,8 @@ export function TimersProvider({ ctx, children }: { ctx: CommandContext; childre
 
   const requestClockIn = useCallback(
     (taskId: string, opts?: { force?: boolean }) => {
+      // no clocking in on a break (the buttons say so; this is the backstop)
+      if (activeBreak) return;
       const at = asEpochMillis(Date.now());
       setNow(at);
       // `timers` is from the last render; a clock-in only happens on a click, after one
@@ -110,7 +175,7 @@ export function TimersProvider({ ctx, children }: { ctx: CommandContext; childre
       setToStop(new Set(timers.map((t) => t.entry.id))); // all ticked by default
       setRequest({ taskId, force: opts?.force === true });
     },
-    [timers, start],
+    [timers, start, activeBreak],
   );
 
   async function confirm(mode: 'switch' | 'split') {
@@ -132,16 +197,49 @@ export function TimersProvider({ ctx, children }: { ctx: CommandContext; childre
     if (action === 'save') await commands.review({ entryId: head.entryId, focusFactor: focus, completedSession: completed, taskId: head.taskId });
     setFocus(1.0);
     setCompleted(false);
+    setBreakPicker(false);
     setReviews((q) => q.slice(1));
   }
 
   async function laterForAll() {
     const all = reviews;
     setReviews([]);
+    setBreakPicker(false);
     for (const t of all) await stopHeld(t);
   }
 
-  const api = useMemo<TimersApi>(() => ({ requestClockIn, clockOut }), [requestClockIn, clockOut]);
+  /**
+   * Everything a break would clock out of: the tasks under review, then every
+   * other timer still running — a break is a break from all of it.
+   */
+  const breakTasks = useMemo<BreakTask[]>(() => {
+    const out = new Map<string, string>();
+    for (const r of reviews) out.set(r.taskId, r.taskTitle);
+    for (const t of timers) if (!out.has(t.entry.task_id)) out.set(t.entry.task_id, t.task?.title ?? 'task');
+    return [...out].map(([taskId, title]) => ({ taskId, title }));
+  }, [reviews, timers]);
+
+  /**
+   * Start a break of `breakMinutes`: the reviewed timers stop at the moment Clock
+   * out was pressed (their reviews are put off, like Later), every other running
+   * timer stops now, and the break begins.
+   */
+  async function startBreak() {
+    const held = reviews;
+    const tasks = breakTasks;
+    const minutes = breakMinutes;
+    setReviews([]);
+    setBreakPicker(false);
+    const heldEntries = new Set(held.map((r) => r.entryId));
+    for (const r of held) await stopHeld(r);
+    for (const t of timers) if (!heldEntries.has(t.entry.id)) await commands.clockOut(t.entry.id).catch(() => undefined);
+    saveBreak(ctx.userId, { id: crypto.randomUUID(), startedAt: Date.now(), minutes, tasks, prompted: false });
+  }
+
+  const api = useMemo<TimersApi>(
+    () => ({ requestClockIn, clockOut, activeBreak, resumeFromBreak, endBreak }),
+    [requestClockIn, clockOut, activeBreak, resumeFromBreak, endBreak],
+  );
   const atLimit = timers.length >= MAX_OPEN_TIMERS;
   const ticked = timers.filter((t) => toStop.has(t.entry.id)).length;
   const newTitle = request ? (tree.byId.get(request.taskId)?.title ?? 'this task') : '';
@@ -237,7 +335,116 @@ export function TimersProvider({ ctx, children }: { ctx: CommandContext; childre
           <input type="checkbox" checked={completed} data-testid="review-completed" onChange={(e) => setCompleted(e.target.checked)} />
           Completed this task
         </label>
+        <button
+          type="button"
+          className="px-break-toggle"
+          data-testid="review-break"
+          aria-expanded={breakPicker}
+          title="Clock out of everything for a while, then pick back up"
+          onClick={() => setBreakPicker((o) => !o)}
+        >
+          <span aria-hidden="true">☕</span> Take a break
+        </button>
+        {breakPicker && (
+          <div className="px-break-pick" data-testid="break-picker">
+            <label className="px-field">
+              <span>
+                Break for <b data-testid="break-minutes-label">{breakMinutes} min</b>
+              </span>
+              <input
+                type="range"
+                min={BREAK_MIN_MINUTES}
+                max={BREAK_MAX_MINUTES}
+                step={BREAK_STEP_MINUTES}
+                value={breakMinutes}
+                data-testid="break-minutes"
+                aria-label="Break length in minutes"
+                onChange={(e) => setBreakMinutes(Number(e.target.value))}
+              />
+              <span className="px-break-scale" aria-hidden="true">
+                {[5, 10, 15, 20, 25, 30].map((m) => <span key={m}>{m}</span>)}
+              </span>
+            </label>
+            <p className="px-muted">
+              Clocks out of {breakTasks.map((t) => `“${t.title}”`).join(', ')}. With a minute left you'll be asked to clock back in.
+            </p>
+            <button className="px-btn px-btn--primary" data-testid="break-start" onClick={() => void startBreak()}>
+              Start {breakMinutes}-min break
+            </button>
+          </div>
+        )}
       </Modal>
+
+      {activeBreak && (
+        <BreakWatcher
+          key={activeBreak.id}
+          userId={ctx.userId}
+          brk={activeBreak}
+          close={closeBreak}
+        />
+      )}
     </TimersContext.Provider>
+  );
+}
+
+/**
+ * Watches the running break once a second: with a minute left it opens the
+ * "clock back in?" prompt (once per break — the flag is saved with the break, so
+ * a reload or another tab does not ask again); the prompt's countdown goes
+ * negative past the end; 10 minutes past the end the prompt goes away and the
+ * break closes by itself, leaving the tasks clocked out.
+ */
+function BreakWatcher({ userId, brk, close }: { userId: string; brk: ActiveBreak; close: (b: ActiveBreak, resume: boolean) => Promise<void> }) {
+  const now = useSecondClock();
+  const phase = breakPhase(brk, now);
+  const [promptOpen, setPromptOpen] = useState(false);
+  const onResume = () => void close(brk, true);
+  const onEnd = () => void close(brk, false);
+
+  useEffect(() => {
+    if (phase === 'expired') {
+      setPromptOpen(false);
+      void close(brk, false);
+      return;
+    }
+    if ((phase === 'ending' || phase === 'over') && !brk.prompted) {
+      saveBreak(userId, { ...brk, prompted: true });
+      setPromptOpen(true);
+    }
+  }, [phase, brk, userId, close]);
+
+  const left = breakRemainingMs(brk, now);
+  const over = left <= -1000;
+  return (
+    <Modal
+      open={promptOpen && phase !== 'expired'}
+      title={over ? 'Your break is over' : 'Your break is almost over'}
+      onClose={() => setPromptOpen(false)}
+      actions={
+        <>
+          <button className="px-btn" data-testid="break-prompt-end" onClick={() => { setPromptOpen(false); onEnd(); }}>
+            Stay clocked out
+          </button>
+          <button className="px-btn px-btn--primary" data-testid="break-prompt-resume" onClick={() => { setPromptOpen(false); onResume(); }}>
+            Clock back in
+          </button>
+        </>
+      }
+    >
+      <div data-testid="break-prompt">
+        <div className={`px-break-count${over ? ' px-break-count--over' : ''}`} data-testid="break-prompt-countdown" aria-live="off">
+          {formatCountdown(left)}
+        </div>
+        <p className="px-muted">
+          {over ? 'Past the break you planned' : 'Left on your break'} · it closes by itself 10 min after the end, with nothing clocked in.
+        </p>
+        <p className="px-break-back">Clock back in to:</p>
+        <ul className="px-break-tasks">
+          {brk.tasks.map((t) => (
+            <li key={t.taskId} data-testid={`break-prompt-task-${t.taskId}`}>{t.title}</li>
+          ))}
+        </ul>
+      </div>
+    </Modal>
   );
 }

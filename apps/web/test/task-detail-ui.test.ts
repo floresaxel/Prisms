@@ -15,6 +15,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildFactContext, sortOrderBetween, SYNC_ROW_DEFAULTS, type Edge, type FactContext, type Node, type NodeType, type TaskStep } from '@prisms/core';
 import type { PromoteTarget } from '@prisms/ui';
 
+import type { ActiveBreak } from '../src/break';
+
 const T0 = '2026-11-01T00:00:00.000Z';
 const uuid = (n: number) => `00000000-0000-4000-8000-${n.toString().padStart(12, '0')}`;
 
@@ -80,7 +82,11 @@ vi.mock('@prisms/ui', async (importOriginal) => {
 });
 
 // the card's Clock in / out go through the app's TimersProvider — stood in for here
-const timersApi = { requestClockIn: vi.fn(), clockOut: vi.fn(async () => undefined) };
+const timersApi: { requestClockIn: ReturnType<typeof vi.fn>; clockOut: ReturnType<typeof vi.fn>; activeBreak: ActiveBreak | null } = {
+  requestClockIn: vi.fn(),
+  clockOut: vi.fn(async () => undefined),
+  activeBreak: null,
+};
 vi.mock('../src/components/Timers', () => ({ useTimers: () => timersApi }));
 
 const { EditableTitle, TaskDetailProvider, useTaskDetail, hoursText, parseHours, stepMinutes } = await import('../src/components/TaskDetail');
@@ -315,6 +321,19 @@ describe('clocking in and out from the card', () => {
     mount([other, finished, capture]);
     openCard(capture);
     expect(screen.queryByTestId('td-clock-in')).toBeNull();
+  });
+
+  it('Clock in is off on a break, and says why', () => {
+    timersApi.activeBreak = { id: 'b', startedAt: Date.now(), minutes: 15, tasks: [], prompted: false };
+    try {
+      mount([other]);
+      openCard(other);
+      const btn = screen.getByTestId('td-clock-in') as HTMLButtonElement;
+      expect(btn.disabled).toBe(true);
+      expect(btn.title).toMatch(/on a break/);
+    } finally {
+      timersApi.activeBreak = null;
+    }
   });
 });
 
