@@ -57,6 +57,7 @@ const state = {
   facts: null as unknown as FactContext,
   targets: [] as PromoteTarget[],
   steps: [] as TaskStep[],
+  timers: [] as { entry: { id: string; task_id: string }; task: Node | undefined; elapsedMs: number }[],
 };
 const commandFns = new Map<string, ReturnType<typeof vi.fn>>();
 const command = (name: string) => {
@@ -74,8 +75,13 @@ vi.mock('@prisms/ui', async (importOriginal) => {
     usePromoteTargets: () => state.targets,
     useTaskSteps: (taskId: string) => state.steps.filter((s) => s.task_id === taskId),
     useTaskProgress: () => ({ consumedMinutes: 45, estimateMinutes: 60, ratio: 0.75, percent: 75 }),
+    useRunningTimers: () => ({ timers: state.timers, splitWays: state.timers.length }),
   };
 });
+
+// the card's Clock in / out go through the app's TimersProvider — stood in for here
+const timersApi = { requestClockIn: vi.fn(), clockOut: vi.fn(async () => undefined) };
+vi.mock('../src/components/Timers', () => ({ useTimers: () => timersApi }));
 
 const { EditableTitle, TaskDetailProvider, useTaskDetail, hoursText, parseHours, stepMinutes } = await import('../src/components/TaskDetail');
 
@@ -129,6 +135,9 @@ const input = (testId: string) => screen.getByTestId(testId) as HTMLInputElement
 
 beforeEach(() => {
   commandFns.clear();
+  state.timers = [];
+  timersApi.requestClockIn.mockClear();
+  timersApi.clockOut.mockClear();
   world();
 });
 afterEach(cleanup);
@@ -260,6 +269,52 @@ describe('rows', () => {
     expect(row.getAttribute('tabindex')).toBe('0');
     fireEvent.keyDown(row, { key: 'Enter' });
     expect(card()).not.toBeNull();
+  });
+});
+
+describe('clocking in and out from the card', () => {
+  const runningOn = (n: Node) => ({ entry: { id: `entry-${n.id}`, task_id: n.id }, task: n, elapsedMs: 5000 });
+
+  it('an open task offers Clock in, which asks the timers for it', () => {
+    mount([other]);
+    openCard(other);
+    expect(screen.queryByTestId('td-running')).toBeNull();
+    fireEvent.click(screen.getByTestId('td-clock-in'));
+    expect(timersApi.requestClockIn).toHaveBeenCalledWith(other.id, undefined);
+  });
+
+  it('a blocked task offers a forced clock in instead', () => {
+    mount();
+    openCard(); // `task` waits on an unfinished task
+    expect(screen.getByTestId('td-clock-in').textContent).toContain('Force clock in');
+    fireEvent.click(screen.getByTestId('td-clock-in'));
+    expect(timersApi.requestClockIn).toHaveBeenCalledWith(task.id, { force: true });
+  });
+
+  it('a task that is clocked in shows it, with a Clock out that stops that timer', () => {
+    state.timers = [runningOn(other)];
+    mount([other]);
+    openCard(other);
+    expect(screen.getByTestId('td-running')).toBeTruthy();
+    expect(screen.queryByTestId('td-clock-in')).toBeNull();
+    fireEvent.click(screen.getByTestId('td-clock-out'));
+    expect(timersApi.clockOut).toHaveBeenCalledWith([state.timers[0]]);
+  });
+
+  it('Clock in is off at the timer limit; a done task and a capture have no clock at all', () => {
+    state.timers = Array.from({ length: 5 }, (_, i) => runningOn(node('task', `Busy ${i}`, p1)));
+    mount([other, finished, capture]);
+    openCard(other);
+    expect((screen.getByTestId('td-clock-in') as HTMLButtonElement).disabled).toBe(true);
+    cleanup();
+    state.timers = [];
+    mount([other, finished, capture]);
+    openCard(finished);
+    expect(screen.queryByTestId('td-clock-in')).toBeNull();
+    cleanup();
+    mount([other, finished, capture]);
+    openCard(capture);
+    expect(screen.queryByTestId('td-clock-in')).toBeNull();
   });
 });
 
