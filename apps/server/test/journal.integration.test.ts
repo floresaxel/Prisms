@@ -102,6 +102,61 @@ describe.skipIf(!adminUrl)('J2 journal dispatcher + export', () => {
     await admin.end();
   });
 
+  describe('journal.append (a break logged at the end of the day note)', () => {
+    const append = (userId: string, id: string, entry_date: string, text: string, hlc: string, device = 'deva') =>
+      dispatcher.handleUpload(userId, {
+        device_id: device,
+        commands: [{ id: randomUUID(), name: 'journal.append', hlc, payload: { id, entry_date, text }, schema_version: 1 }],
+      });
+
+    it('creates the note when the day has none', async () => {
+      const user = randomUUID();
+      const id = randomUUID();
+      const [r] = ok(await append(user, id, '2026-11-22', '☕ Break — 15 min', hlcOf(1)));
+      expect(r!.result).toBe('applied');
+      const rows = await liveRows(user, '2026-11-22');
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({ id, content: '☕ Break — 15 min', month_key: '2026-11' });
+    });
+
+    it('appends to prose the appending device never saw (another id, written elsewhere) — nothing replaced', async () => {
+      const user = randomUUID();
+      const noteId = randomUUID();
+      ok(await write(user, noteId, '2026-11-22', 'Morning notes from the laptop.\n', hlcOf(5, 'laptop'), 'laptop'));
+      // the phone has no row for the day, so it mints its own id — and an OLDER hlc
+      const [r] = ok(await append(user, randomUUID(), '2026-11-22', '☕ Break — 10 min', hlcOf(2, 'phone'), 'phone'));
+      expect(r!.result).toBe('applied');
+      const rows = await liveRows(user, '2026-11-22');
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({ id: noteId, content: 'Morning notes from the laptop.\n\n☕ Break — 10 min' });
+      expect(await conflicts(user)).toHaveLength(0);
+      // two breaks in a day: both lines kept, in order
+      ok(await append(user, noteId, '2026-11-22', '☕ Break — 5 min', hlcOf(6)));
+      expect((await liveRows(user, '2026-11-22'))[0]!['content']).toBe('Morning notes from the laptop.\n\n☕ Break — 10 min\n\n☕ Break — 5 min');
+    });
+
+    it('a later edit still wins over the appended text (the content version moved forward)', async () => {
+      const user = randomUUID();
+      const noteId = randomUUID();
+      ok(await write(user, noteId, '2026-11-23', 'draft', hlcOf(1)));
+      ok(await append(user, noteId, '2026-11-23', '☕ Break — 5 min', hlcOf(3)));
+      // an edit made BEFORE the append (older hlc) arriving late must not wipe the log line
+      ok(await write(user, noteId, '2026-11-23', 'draft edited', hlcOf(2)));
+      expect((await liveRows(user, '2026-11-23'))[0]!['content']).toBe('draft\n\n☕ Break — 5 min');
+      // a newer edit (the editor now holds the line) wins as usual
+      ok(await write(user, noteId, '2026-11-23', 'draft\n\n☕ Break — 5 min\n\nback to work', hlcOf(4)));
+      expect((await liveRows(user, '2026-11-23'))[0]!['content']).toBe('draft\n\n☕ Break — 5 min\n\nback to work');
+    });
+
+    it('rejects an id that belongs to a different day', async () => {
+      const user = randomUUID();
+      const id = randomUUID();
+      ok(await write(user, id, '2026-11-20', 'x', hlcOf(1)));
+      const [r] = ok(await append(user, id, '2026-11-21', 'y', hlcOf(2)));
+      expect(r).toMatchObject({ result: 'rejected', reject_code: 'E_DUPLICATE' });
+    });
+  });
+
   it('cross-device same day, winner arrives LAST (out of order): one row, HLC winner, loser recoverable', async () => {
     const user = randomUUID();
     const idA = randomUUID();

@@ -63,6 +63,7 @@ import { useSecondClock } from '../components/useSecondClock';
 import { StepsToggle, SubstepPanel } from '../components/Substeps';
 import { EditableTitle, useTaskDetail, type TaskDetailApi } from '../components/TaskDetail';
 import { useTimers } from '../components/Timers';
+import { breakEndsAt, breakRemainingMs, formatCountdown, ON_BREAK_TITLE } from '../break';
 import { UnfocusedTag } from '../components/UnfocusedTag';
 import { useNewProject, type NewProjectApi } from '../components/useNewProject';
 import { AutomatedMark } from '../components/Why';
@@ -148,6 +149,37 @@ function ClockInButton({ testId, disabled, title, danger, label = 'Clock in', on
 }
 
 const LIMIT_TITLE = `${MAX_OPEN_TIMERS} timers are already running — clock out of one first`;
+
+/**
+ * The break, in place of the run cards: what it will take you back to, when it
+ * ends, and the time left (negative and red once it has run over). Clock back in
+ * ends it and restarts those tasks; End break ends it and leaves them stopped.
+ */
+function BreakCard({ now }: { now: number }) {
+  const { activeBreak, resumeFromBreak, endBreak } = useTimers();
+  if (!activeBreak) return null;
+  const left = breakRemainingMs(activeBreak, now);
+  const over = left <= -1000;
+  return (
+    <div className={`px-run-banner px-break-banner${over ? ' px-break-banner--over' : ''}`} data-testid="myday-break">
+      <span className="px-break-cup px-break-cup--lg" aria-hidden="true">☕</span>
+      <div className="px-run-main">
+        <div className="px-run-title">On a break · {activeBreak.minutes} min</div>
+        <div className="px-run-sub">
+          {over ? 'ran over · ' : `until ${fmtClock(new Date(breakEndsAt(activeBreak)).toISOString())} · `}
+          back to {activeBreak.tasks.map((t) => t.title).join(', ')}
+        </div>
+      </div>
+      <div className="px-run-clock" data-testid="myday-break-countdown">{formatCountdown(left)}</div>
+      <button className="px-btn px-btn--sm" data-testid="myday-break-end" onClick={() => void endBreak()}>
+        End break
+      </button>
+      <button className="px-btn px-btn--sm px-btn--primary" data-testid="myday-break-resume" onClick={() => void resumeFromBreak()}>
+        <Ic name="play" className="px-ic px-ic--solid" /> <span className="px-btn-lbl">Clock back in</span>
+      </button>
+    </div>
+  );
+}
 const NO_STEPS: readonly TaskStep[] = [];
 
 /**
@@ -155,7 +187,7 @@ const NO_STEPS: readonly TaskStep[] = [];
  * a bare task gets its first one). Clicking it expands the checklist under the
  * row; the same open state follows the task into its run card when clocked in.
  */
-function AvailableRow({ item, tree, atLimit, todayDate, commands, detail, steps, stepsOpen, onToggleSteps, onCheck, onClockIn }: { item: MyDayItem; tree: TreeIndex; atLimit: boolean; todayDate: string; commands: PrismsCommands; detail: TaskDetailApi; steps: readonly TaskStep[]; stepsOpen: boolean; onToggleSteps: () => void; onCheck: () => void; onClockIn: () => void }) {
+function AvailableRow({ item, tree, clockInLock, todayDate, commands, detail, steps, stepsOpen, onToggleSteps, onCheck, onClockIn }: { item: MyDayItem; tree: TreeIndex; clockInLock: string | null; todayDate: string; commands: PrismsCommands; detail: TaskDetailApi; steps: readonly TaskStep[]; stepsOpen: boolean; onToggleSteps: () => void; onCheck: () => void; onClockIn: () => void }) {
   const id = item.task.id;
   const hasSteps = steps.length > 0;
   return (
@@ -178,7 +210,7 @@ function AvailableRow({ item, tree, atLimit, todayDate, commands, detail, steps,
       {hasSteps && <StepsToggle taskId={id} steps={steps} open={stepsOpen} onToggle={onToggleSteps} />}
       <ProgressCell id={id} progress={item.progress} />
       {item.task.due_date && <DueDate chip date={item.task.due_date} todayDate={todayDate} />}
-      <ClockInButton testId={`clock-in-${id}`} disabled={atLimit} title={atLimit ? LIMIT_TITLE : undefined} onClick={onClockIn} />
+      <ClockInButton testId={`clock-in-${id}`} disabled={clockInLock !== null} title={clockInLock ?? undefined} onClick={onClockIn} />
     </li>
     {hasSteps && stepsOpen && (
       <li className="px-sub-wrap">
@@ -237,6 +269,9 @@ export function MyDay({ ctx, onNavigate }:{ ctx: CommandContext; onNavigate?: (h
   const running = runningTimers.at(-1) ?? null; // the latest — "Why this matters" follows it
   const timersApi = useTimers();
   const atLimit = runningTimers.length >= MAX_OPEN_TIMERS;
+  const onBreak = timersApi.activeBreak;
+  /** Why Clock in is off right now (a break, or the timer limit), or null when it is on. */
+  const clockInLock = onBreak ? ON_BREAK_TITLE : atLimit ? LIMIT_TITLE : null;
 
   const allActionable = useMyDayAvailable(nowMin);
   const blocked = useBlockedTasks(nowMin);
@@ -337,6 +372,7 @@ export function MyDay({ ctx, onNavigate }:{ ctx: CommandContext; onNavigate?: (h
               {atLimit && ` · ${MAX_OPEN_TIMERS} is the most at once`}
             </div>
           )}
+          {onBreak && <BreakCard now={now} />}
           {runningTimers.map((t) => {
             const item = allActionable.find((it) => it.openEntryId === t.entry.id) ?? null;
             const taskId = t.entry.task_id;
@@ -407,7 +443,7 @@ export function MyDay({ ctx, onNavigate }:{ ctx: CommandContext; onNavigate?: (h
                 key={item.task.id}
                 item={item}
                 tree={ctxFacts.tree}
-                atLimit={atLimit}
+                clockInLock={clockInLock}
                 todayDate={todayDate}
                 commands={commands}
                 detail={detail}
@@ -438,8 +474,8 @@ export function MyDay({ ctx, onNavigate }:{ ctx: CommandContext; onNavigate?: (h
                       testId={`force-clock-in-${b.task.id}`}
                       danger
                       label="Force clock in"
-                      disabled={atLimit}
-                      title={atLimit ? LIMIT_TITLE : 'Override the blocker and start the timer'}
+                      disabled={clockInLock !== null}
+                      title={clockInLock ?? 'Override the blocker and start the timer'}
                       onClick={() => timersApi.requestClockIn(b.task.id, { force: true })}
                     />
                   </li>

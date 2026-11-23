@@ -33,8 +33,9 @@ import { buildTreeIndex } from '../../src/graph/tree';
 import { idOf, makeEdge, makeEntry, makeNode } from '../helpers/fixtures';
 
 describe('catalog completeness + strictness (DoD schema test)', () => {
-  it('registers all 50 §8.1 verbs (incl. layout.renormalize_order) + 7 tag + 2 review + 5 journal + 5 step verbs + timer.adjust + node.restore and resolves names', () => {
-    expect(COMMAND_NAMES.length).toBe(72);
+  it('registers all 50 §8.1 verbs (incl. layout.renormalize_order) + 7 tag + 2 review + 6 journal + 5 step verbs + timer.adjust + node.restore and resolves names', () => {
+    expect(COMMAND_NAMES.length).toBe(73);
+    expect(isCommandName('journal.append')).toBe(true); // a break's log line, appended server-side
     expect(isCommandName('node.restore')).toBe(true); // Tasks › Recently deleted
     expect(isCommandName('timer.adjust')).toBe(true); // long-session review: fix a closed session's end
     expect(isCommandName('node.create')).toBe(true);

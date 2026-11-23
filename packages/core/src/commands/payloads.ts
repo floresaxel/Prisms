@@ -274,6 +274,18 @@ export const journalWriteSchema = z.strictObject({
   entry_date: isoDateSchema,
   content: z.string().max(100_000),
 });
+/**
+ * Add a line to the end of a day's note — an automatic log entry (a finished
+ * break), not an edit. Its own verb because the SERVER appends to whatever the
+ * note holds: a `journal.write` of "local text + line" from a device that has not
+ * synced that day yet would replace prose written elsewhere. `id` mints the row
+ * when the day has no note; an existing note keeps its own id.
+ */
+export const journalAppendSchema = z.strictObject({
+  id: uuidSchema,
+  entry_date: isoDateSchema,
+  text: z.string().min(1).max(2_000),
+});
 export const journalDeleteSchema = idOnly; // journal entry row id
 /**
  * Lock/unlock a day's note (read-only). Same upsert-by-day shape as
@@ -469,6 +481,7 @@ export const COMMAND_SCHEMAS = {
   'tag.answer': tagAnswerPayloadSchema,
   'tag.clear_answer': tagClearAnswerSchema,
   'journal.write': journalWriteSchema,
+  'journal.append': journalAppendSchema,
   'journal.delete': journalDeleteSchema,
   'journal.set_locked': journalSetLockedSchema,
   'journal.set_title': journalSetTitleSchema,
