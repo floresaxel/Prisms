@@ -278,6 +278,13 @@ export function DayJournalPanel({
    * mounted with `key={date}`.
    */
   const [lockWorked, setLockWorked] = useState(false);
+  /**
+   * Has the note been TYPED in, this mounting of this day? Gates the tag row's
+   * unfold the same way `lockWorked` gates the padlock: a day that arrives with a
+   * note draws its tag row already open, while the first words written on an
+   * empty day unfold it downward under the date.
+   */
+  const [typed, setTyped] = useState(false);
   /** Mid-transition: the lock is deaf until the fold it started has finished. */
   const [lockBusy, setLockBusy] = useState(false);
   const lockTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -398,6 +405,7 @@ export function DayJournalPanel({
   }
   function change(next: string) {
     dirty.current = true;
+    setTyped(true);
     setDraft(next);
     scheduleSave(next);
   }
@@ -564,14 +572,24 @@ export function DayJournalPanel({
         </div>
         <span className="px-jn-date" data-testid="journal-date">{formatNoteDate(date, dateFormat)}</span>
         {/* Tags belong to a note that exists (an empty day has no row to tag), and
-            go read-only with the lock like everything else about the note. */}
-        {hasNote && (
-          <NoteTags
-            tags={entry?.tags ?? []}
-            readOnly={preview}
-            onChange={(next) => (existingId ? commands.setJournalTags(existingId, next) : undefined)}
-          />
-        )}
+            go read-only with the lock like everything else about the note.
+            The row appears as you START writing, i.e. above the line you are
+            typing on — so it UNFOLDS (0fr → 1fr) and pushes the note down, rather
+            than popping in. It stays mounted while folded so it can animate both
+            ways, and is `inert` then so its field is not a hidden tab stop. */}
+        <div
+          className={`px-jn-tags-clip${hasNote ? ' px-jn-tags-clip--open' : ''}${typed ? ' px-jn-tags-clip--anim' : ''}`}
+          data-testid="journal-tags-clip"
+          inert={!hasNote || undefined}
+        >
+          <div>
+            <NoteTags
+              tags={entry?.tags ?? []}
+              readOnly={preview}
+              onChange={(next) => (existingId ? commands.setJournalTags(existingId, next) : undefined)}
+            />
+          </div>
+        </div>
       </div>
 
       {/* One body in both states, rather than swapping the editor out for the

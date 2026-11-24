@@ -208,9 +208,13 @@ describe('DayJournalPanel — editor', () => {
   });
 
   it('tags: offered only for a note that exists, written through setJournalTags, read-only when locked', () => {
-    // a day with nothing written has no row to tag
+    // a day with nothing written has no row to tag: the tag row stays mounted
+    // (so it can unfold as the first words arrive) but folded shut and inert —
+    // not reachable by Tab or click
     render(createElement(DayJournalPanel, { date: '2026-06-11', ctx: CTX }));
-    expect(screen.queryByTestId('journal-tags')).toBeNull();
+    const folded = screen.getByTestId('journal-tags-clip');
+    expect(folded.classList.contains('px-jn-tags-clip--open')).toBe(false);
+    expect(folded.hasAttribute('inert')).toBe(true);
     cleanup();
 
     state.entry = { id: 'j1', content: 'x', deleted_at: null, tags: ['work'] } as never;
