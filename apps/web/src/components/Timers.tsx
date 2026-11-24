@@ -42,7 +42,7 @@ import {
   type BreakTask,
 } from '../break';
 import { formatElapsed } from '../format';
-import { FOCUS_MAX, FOCUS_MIN } from '../focus-factor';
+import { FOCUS_MAX, FOCUS_POPUP_MIN } from '../focus-factor';
 import { StepSlider } from './StepSlider';
 import { useSecondClock } from './useSecondClock';
 
@@ -347,7 +347,7 @@ export function TimersProvider({ ctx, children }: { ctx: CommandContext; childre
             Focus factor: ×{focus.toFixed(1)}
           </span>
           <StepSlider
-            min={FOCUS_MIN}
+            min={FOCUS_POPUP_MIN}
             max={FOCUS_MAX}
             step={0.1}
             value={focus}

@@ -170,27 +170,25 @@ export type ScheduleBlock = z.infer<typeof scheduleBlockSchema>;
 // --- TIME TRACKING (append-only facts) -------------------------------------------
 
 /**
- * The focus factor (§1.2): the share of a session's logged time that counted.
- * 0 = "don't count this session" at all; otherwise 0.3–1.0 (migration 0019 widened
- * it from 0.5). Nothing in between 0 and the minimum: a session either counts for
- * something or for nothing.
+ * The focus factor (§1.2): the share of a session's logged time that counted,
+ * anywhere from 0 ("this session doesn't count") to 1.0 (all of it). Migration 0020
+ * made the whole range legal; the clock-out review's slider still only offers 0.3 and
+ * up (a UI choice, see `focus-factor.ts`), so 0 and 0.1–0.2 come from the Review tab.
  */
 export const FOCUS_FACTOR_NONE = 0;
-export const FOCUS_FACTOR_MIN = 0.3;
 export const FOCUS_FACTOR_MAX = 1.0;
-/** 0, or within [FOCUS_FACTOR_MIN, FOCUS_FACTOR_MAX]. */
+/** Within [FOCUS_FACTOR_NONE, FOCUS_FACTOR_MAX]. */
 export function isFocusFactor(v: number): boolean {
-  return Number.isFinite(v) && (v === FOCUS_FACTOR_NONE || (v >= FOCUS_FACTOR_MIN && v <= FOCUS_FACTOR_MAX));
+  return Number.isFinite(v) && v >= FOCUS_FACTOR_NONE && v <= FOCUS_FACTOR_MAX;
 }
-export const focusFactorSchema = z.number().refine(isFocusFactor, { message: `focus_factor must be 0 or between ${FOCUS_FACTOR_MIN} and ${FOCUS_FACTOR_MAX}` });
-
+export const focusFactorSchema = z.number().refine(isFocusFactor, { message: `focus_factor must be between ${FOCUS_FACTOR_NONE} and ${FOCUS_FACTOR_MAX}` });
 export const timeEntrySchema = z.strictObject({
   ...baseRow,
   task_id: uuidSchema,
   started_at: isoDateTimeSchema,
   /** NULL = clock currently running (one open entry per user, invariant I5). */
   ended_at: isoDateTimeSchema.nullable(),
-  /** CHECK (focus_factor = 0 OR BETWEEN 0.3 AND 1.0); set at clock-out review. null = not reviewed yet. */
+  /** CHECK (focus_factor BETWEEN 0 AND 1.0); set at clock-out review. null = not reviewed yet. */
   focus_factor: focusFactorSchema.nullable(),
   completed_session: z.boolean().nullable(),
   /** false = unplanned ad-hoc work. */
