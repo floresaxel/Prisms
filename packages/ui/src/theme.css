@@ -541,6 +541,13 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
 .px-seg-btn:hover { background: var(--px-surface-2); color: var(--px-text); }
 .px-seg-btn--on { background: var(--px-blue-bg); color: var(--px-blue-deep); font-weight: 640; }
 .px-agenda-journal, .px-agenda-todo { background: var(--px-surface); border: 1px solid var(--px-border); border-radius: 10px; padding: 12px 14px; box-shadow: var(--px-shadow); min-width: 0; }
+/* A note GROWS DOWN. Left to itself the browser's scroll anchoring picks a node
+   inside the note (the line being typed on) and, when something above it grows —
+   the tag row unfolding on the first words of a day — scrolls the page by the
+   same amount to hold that node still, so the card appeared to grow UPWARD with
+   everything above it shoved off the top. Neither the note nor anything beside
+   it may serve as the anchor. */
+.px-agenda, .px-jn-editor { overflow-anchor: none; }
 .px-agenda-journal h2, .px-agenda-todo h2 { margin-top: 0; font-size: 14px; }
 /* The day's note fades in as it arrives, on BOTH surfaces that mount one: the
    Agenda's side panel and the Journal screen's editor. Each reloads whenever
@@ -1030,6 +1037,13 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
 /* line-height is `.px-md`'s job (same element, later rule would win otherwise) */
 .px-journal-rich { flex: 1 1 auto; cursor: text; }
 .px-journal-rich:focus, .px-journal-rich:focus-visible { outline: none; border-color: var(--px-focus); }
+/* While the box slides to a new height (`growDown` in RichJournalEditor) its text
+   is already laid out at the new size: `clip` hides the line the edge has not
+   reached yet, and `min-height: 0` lifts the flex item's content-sized minimum,
+   which would otherwise pin the box at the new height and skip the slide. `clip`
+   rather than `hidden`, which would make the editor a scroll container that
+   could scroll its own text. */
+.px-journal-rich--growing { overflow: clip; min-height: 0; }
 .px-md-toolbar { display: flex; flex-wrap: wrap; gap: 4px; }
 .px-md-toolbar .px-btn { padding: 4px 8px; font-size: 12px; min-width: 30px; }
 .px-md { background: var(--px-surface); border: 1px solid var(--px-border); border-radius: var(--px-radius); padding: 2px 14px; margin-top: 8px; }
@@ -2392,6 +2406,18 @@ textarea.px-vd-input { min-height: 92px; resize: vertical; line-height: 1.55; }
 
 /* --- journal: tags, filter bar, clocked time ---------------------------------- */
 .px-jn-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin-top: 6px; }
+/* The tag row arrives when a note does — i.e. on the first words typed into an
+   empty day, ABOVE the line being typed. It unfolds (the same 0fr → 1fr collapse
+   the toolbar uses) so it pushes the note down instead of popping in. Folded it
+   is a zero-height row; the −1px cancels the 1px gap `.px-jn-head` puts between
+   its rows, so an empty day lays out exactly as it did with no row at all.
+   Animated only once the note has been typed in (`--anim`, see DayJournal): a day
+   that arrives with a note draws its tags already there. */
+.px-jn-tags-clip { display: grid; grid-template-rows: 0fr; margin-top: -1px; opacity: 0; }
+.px-jn-tags-clip > * { overflow: hidden; min-height: 0; }
+.px-jn-tags-clip--open { grid-template-rows: 1fr; margin-top: 0; opacity: 1; }
+.px-jn-tags-clip--anim { transition: grid-template-rows 194ms cubic-bezier(0.4, 0, 0.2, 1), margin-top 194ms cubic-bezier(0.4, 0, 0.2, 1), opacity 160ms ease-out; }
+@media (prefers-reduced-motion: reduce) { .px-jn-tags-clip--anim { transition: none; } }
 .px-jn-tag { display: inline-flex; align-items: center; gap: 2px; font-size: 11.5px; font-weight: 560; color: var(--px-blue-deep); background: var(--px-blue-bg); border-radius: 999px; padding: 2px 4px 2px 8px; }
 .px-jn-tag-x { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; padding: 0; border: none; border-radius: 50%; background: none; color: inherit; cursor: pointer; opacity: 0.6; }
 .px-jn-tag-x:hover { opacity: 1; background: rgba(0, 0, 0, 0.08); }
