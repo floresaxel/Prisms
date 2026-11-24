@@ -71,3 +71,37 @@ test('the pulsing dot marks the clocked-in task in the Tasks and Agenda lists', 
   expect(stop.ok()).toBeTruthy();
   await expect(page.getByTestId(`alltask-${ids.a}`).locator(dot)).toHaveCount(0, { timeout: 30_000 });
 });
+
+test('the dot sits to the left of a title that wraps onto several rows, level with its first row', async ({ page }) => {
+  await register(page);
+  const ids = { v: randomUUID(), r: randomUUID(), p: randomUUID(), t: randomUUID(), entry: randomUUID() };
+  const long =
+    'Make the auto generated note title from the journal a grey color so that the user is more enticed to change it, and keep going for long enough that it takes several rows';
+  const seed = await page.request.post('/sync/upload', {
+    data: {
+      device_id: 'e2e-seed',
+      commands: [
+        cmd('node.create', { id: ids.v, node_type: 'vision', title: 'Work', sort_order: 'a0' }),
+        cmd('node.create', { id: ids.r, node_type: 'roadmap', title: 'Plan', sort_order: 'a0', parent_id: ids.v }),
+        cmd('node.create', { id: ids.p, node_type: 'project', title: 'Launch', sort_order: 'a0', parent_id: ids.r }),
+        cmd('node.create', { id: ids.t, node_type: 'task', title: long, sort_order: 'a0', parent_id: ids.p, estimate_minutes: 30 }),
+        cmd('timer.clock_in', { entry_id: ids.entry, task_id: ids.t, started_at: new Date(Date.now() - 5 * 60_000).toISOString() }),
+      ],
+    },
+  });
+  expect(seed.ok()).toBeTruthy();
+
+  await goto(page, 'tasks');
+  const row = page.getByTestId(`task-row-${ids.t}`);
+  await expect(row).toBeVisible({ timeout: 30_000 });
+  const dot = row.getByTestId('running-dot');
+  await expect(dot).toHaveCount(1);
+  const title = row.getByTestId(`title-${ids.t}`);
+  const [d, t] = await Promise.all([dot.boundingBox(), title.boundingBox()]);
+  expect(d).not.toBeNull();
+  expect(t).not.toBeNull();
+  expect(t!.height).toBeGreaterThan(30); // the title really takes several rows
+  expect(d!.x + d!.width).toBeLessThanOrEqual(t!.x + 1); // to the LEFT of the title, not above it
+  expect(d!.y).toBeGreaterThanOrEqual(t!.y - 2); // level with the first row…
+  expect(d!.y + d!.height).toBeLessThanOrEqual(t!.y + 22); // …not centred down the whole title
+});
