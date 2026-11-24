@@ -11,7 +11,7 @@
  * Load-bearing testids preserved from the old Worklist: worklist, clock-in-*,
  * check-*, progress-* + progress-pct-*, force-clock-in-*, checkoff-* (D8).
  */
-import { Fragment, useEffect, useState, type FormEvent } from 'react';
+import { Fragment, useEffect, useRef, useState, type FormEvent } from 'react';
 
 import {
   ancestorsOf,
@@ -58,6 +58,7 @@ import { DueDate } from '../components/DueDate';
 import { InboxDelete } from '../components/InboxDelete';
 import { ProjectDot } from '../components/ProjectDot';
 import { ProjectPicker } from '../components/ProjectPicker';
+import { useFocusAfterRender } from '../components/useFocusAfterRender';
 import { RunMark } from '../components/RunMark';
 import { useSecondClock } from '../components/useSecondClock';
 import { StepsToggle, SubstepPanel } from '../components/Substeps';
@@ -574,16 +575,29 @@ export function MyDay({ ctx, onNavigate }:{ ctx: CommandContext; onNavigate?: (h
  * its due date and moves up into Available now.
  */
 function CapturedRow({ activity, targets, newProject, commands, detail }: { activity: Node; targets: PromoteTarget[]; newProject: NewProjectApi | undefined; commands: PrismsCommands; detail: TaskDetailApi }) {
-  // Same as the Tasks Inbox row: nothing preselected, so Assign waits for a choice.
+  // Same as the Tasks Inbox row: nothing preselected, so Assign waits for a choice —
+  // and picking a project moves focus on to Assign, so pick + Enter assigns.
   const [parentId, setParentId] = useState('');
   const selected = targets.some((t) => t.id === parentId) ? parentId : '';
+  const assign = useRef<HTMLButtonElement>(null);
+  const focusAfter = useFocusAfterRender();
   return (
     <li className="px-trow px-trow--inbox" data-testid={`myday-captured-${activity.id}`} {...detail.rowProps(activity.id)}>
       <div className="px-t-main"><div className="px-t-title"><EditableTitle node={activity} commands={commands} /></div></div>
       <span className="px-due px-due--today"><Ic name="cal" />Today</span>
       <span className="px-promote">
-        <ProjectPicker targets={targets} value={selected} onChange={setParentId} testId={`myday-promote-target-${activity.id}`} newProject={newProject} />
+        <ProjectPicker
+          targets={targets}
+          value={selected}
+          onChange={(id) => {
+            setParentId(id);
+            if (id !== '') focusAfter(assign);
+          }}
+          testId={`myday-promote-target-${activity.id}`}
+          newProject={newProject}
+        />
         <button
+          ref={assign}
           className="px-btn px-btn--sm px-btn--primary"
           data-testid={`myday-promote-${activity.id}`}
           disabled={selected === ''}

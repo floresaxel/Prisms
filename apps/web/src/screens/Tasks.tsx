@@ -20,7 +20,7 @@
  * Load-bearing testids preserved from the old Inbox: activity-title, activity-add,
  * inbox (with <li> rows), promote-target-*, promote-* (D8).
  */
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useMemo, useRef, useState, type FormEvent } from 'react';
 
 import { usePowerSync, useStatus } from '@powersync/react';
 
@@ -59,6 +59,7 @@ import { useTabSwap } from '../components/tabSwap';
 import { UnfocusedTag } from '../components/UnfocusedTag';
 import { historyNotice, useHistoryStream } from '../components/useHistoryStream';
 import { useCollapsedSet } from '../components/useCollapsedSet';
+import { useFocusAfterRender } from '../components/useFocusAfterRender';
 import { useNewProject, type NewProjectApi } from '../components/useNewProject';
 import { formatMinutes, projectTone } from '../format';
 import { usePersistedText } from '../drafts';
@@ -102,6 +103,15 @@ export function Tasks({ ctx }: { ctx: CommandContext }) {
   // when you leave Tasks. A project that has since gone away falls back to Inbox.
   const [captureTo, setCaptureTo] = useState('');
   const captureTarget = targets.find((t) => t.id === captureTo) ?? null;
+  // Choosing where captures go moves focus on, so Enter captures: to Capture when a
+  // title is typed, else back to the title field to type one first.
+  const captureInput = useRef<HTMLInputElement>(null);
+  const captureButton = useRef<HTMLButtonElement>(null);
+  const focusAfter = useFocusAfterRender();
+  const pickCaptureTo = (id: string) => {
+    setCaptureTo(id);
+    focusAfter(title.trim() === '' ? captureInput : captureButton);
+  };
   // Which project groups are folded on By project — remembered on this device.
   const projectFolds = useCollapsedSet('prisms.tasks.collapsed-projects');
   // tasks with a live timer wear the pulsing dot in front of their title
@@ -134,6 +144,7 @@ export function Tasks({ ctx }: { ctx: CommandContext }) {
 
       <form className="px-capture" onSubmit={capture}>
         <input
+          ref={captureInput}
           data-testid="activity-title"
           placeholder="Capture task"
           value={title}
@@ -144,7 +155,7 @@ export function Tasks({ ctx }: { ctx: CommandContext }) {
             variant="field"
             targets={targets}
             value={captureTarget?.id ?? ''}
-            onChange={setCaptureTo}
+            onChange={pickCaptureTo}
             testId="capture-project"
             ariaLabel="Capture into"
             title="Where new captures go — stays selected until you leave Tasks"
@@ -153,7 +164,7 @@ export function Tasks({ ctx }: { ctx: CommandContext }) {
             newProject={newProject}
           />
         </span>
-        <button className="px-btn px-btn--primary" type="submit" data-testid="activity-add">Capture</button>
+        <button ref={captureButton} className="px-btn px-btn--primary" type="submit" data-testid="activity-add">Capture</button>
       </form>
 
       <div className="px-tabs" role="tablist">
@@ -487,16 +498,10 @@ function InboxRow({ activity, targets, newProject, commands, detail, onComplete 
   // and Assign stays off. A choice whose project has since gone counts as none.
   const [parentId, setParentId] = useState('');
   const selected = targets.some((t) => t.id === parentId) ? parentId : '';
-  // Picking a project moves focus on to Assign, so pick + Enter assigns. Assign is
-  // disabled until the choice has re-rendered, so focus follows that render (the
-  // picker itself hands focus back to its own button first, in the click).
+  // Picking a project moves focus on to Assign, so pick + Enter assigns (Assign is
+  // enabled by the choice, so focus waits for that render — useFocusAfterRender).
   const assign = useRef<HTMLButtonElement>(null);
-  const [focusAssign, setFocusAssign] = useState(false);
-  useEffect(() => {
-    if (!focusAssign) return;
-    setFocusAssign(false);
-    assign.current?.focus();
-  }, [focusAssign]);
+  const focusAfter = useFocusAfterRender();
   return (
     <li className="px-trow px-trow--inbox" {...detail.rowProps(activity.id)}>
       <InboxCheck activity={activity} onComplete={onComplete} />
@@ -507,7 +512,7 @@ function InboxRow({ activity, targets, newProject, commands, detail, onComplete 
           value={selected}
           onChange={(id) => {
             setParentId(id);
-            if (id !== '') setFocusAssign(true);
+            if (id !== '') focusAfter(assign);
           }}
           testId={`promote-target-${activity.id}`}
           newProject={newProject}
