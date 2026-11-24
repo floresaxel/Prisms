@@ -518,11 +518,40 @@ export function locationOf(node: Node): string {
   return typeof v === 'string' ? v : '';
 }
 
+/**
+ * The card opens centred, then STAYS where it opened: as Details grows the card
+ * grows DOWN, not out from its middle (a centred box that gets taller moves its
+ * top up by half of every line). Measured once per task — the body is keyed by
+ * task, so moving to another task re-centres the card for it.
+ *
+ * The top is handed to the scrim as a spacer (`--px-td-top`, a `::before` that may
+ * shrink — theme.css), not as a margin: once the card reaches the bottom of the
+ * window the spacer gives way and the card rises into the room above it, and only
+ * when the card fills the window does Details start scrolling. A data attribute,
+ * not a class: Modal owns the scrim's `className` and rewrites it on close, which
+ * would snap the card back to the centre while it fades out.
+ */
+function usePinnedTop() {
+  const body = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const card = body.current?.closest<HTMLElement>('.px-modal');
+    const scrim = card?.parentElement;
+    if (!card || !scrim) return;
+    delete scrim.dataset.tdPinned;
+    // offsetTop is layout, unaffected by the opening rise's transform
+    const top = card.offsetTop - (parseFloat(getComputedStyle(scrim).paddingTop) || 0);
+    scrim.style.setProperty('--px-td-top', `${Math.max(0, top)}px`);
+    scrim.dataset.tdPinned = '';
+  }, []);
+  return body;
+}
+
 function TaskDetailBody({ node, facts, ctx, onOpenTask, onClose }: { node: Node; facts: FactContext; ctx: CommandContext; onOpenTask: (id: string) => void; onClose: () => void }) {
   const commands = useCommands(ctx);
   const targets = usePromoteTargets();
   const [error, setError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const pinned = usePinnedTop();
 
   /** Run a write; a refusal shows in the card instead of vanishing. */
   const run = useCallback(async (write: () => Promise<void>) => {
@@ -648,7 +677,7 @@ function TaskDetailBody({ node, facts, ctx, onOpenTask, onClose }: { node: Node;
   }
 
   return (
-    <div data-testid="td-dialog" data-task={node.id}>
+    <div ref={pinned} className="px-td-body" data-testid="td-dialog" data-task={node.id}>
       <div className="px-td-kicker">
         <span className="px-td-kind">{kind}</span>
         {trail.length > 0 && (
@@ -1116,7 +1145,9 @@ function DetailsField({ node, commands, run }: FieldProps) {
   const placeholder = 'Notes, links, acceptance criteria — anything someone doing this needs to know.';
   const live = Field !== null && !plainFocused;
   return (
-    <div className="px-td-sec">
+    // `--details`: the one part of the card that gives way when the card is as
+    // tall as the window — the box scrolls inside, the card never does (theme.css)
+    <div className="px-td-sec px-td-sec--details">
       <label
         className="px-td-sec-h"
         htmlFor="td-details"

@@ -1037,13 +1037,6 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
 /* line-height is `.px-md`'s job (same element, later rule would win otherwise) */
 .px-journal-rich { flex: 1 1 auto; cursor: text; }
 .px-journal-rich:focus, .px-journal-rich:focus-visible { outline: none; border-color: var(--px-focus); }
-/* While the box slides to a new height (`growDown` in RichJournalEditor) its text
-   is already laid out at the new size: `clip` hides the line the edge has not
-   reached yet, and `min-height: 0` lifts the flex item's content-sized minimum,
-   which would otherwise pin the box at the new height and skip the slide. `clip`
-   rather than `hidden`, which would make the editor a scroll container that
-   could scroll its own text. */
-.px-journal-rich--growing { overflow: clip; min-height: 0; }
 .px-md-toolbar { display: flex; flex-wrap: wrap; gap: 4px; }
 .px-md-toolbar .px-btn { padding: 4px 8px; font-size: 12px; min-width: 30px; }
 .px-md { background: var(--px-surface); border: 1px solid var(--px-border); border-radius: var(--px-radius); padding: 2px 14px; margin-top: 8px; }
@@ -1486,6 +1479,43 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
 .px-td-mdbox .px-td-md > :first-child { margin-top: 0; }
 .px-td-mdbox .px-td-md > :last-child { margin-bottom: 0; }
 .px-td-mdbox-ph { position: absolute; left: 10px; top: 7px; right: 10px; font-size: 13px; line-height: 1.55; color: var(--px-faint); pointer-events: none; }
+
+/* ── Details gives way; the card never scrolls because of it ──
+   The card is as tall as its content up to the window (`.px-modal--card`'s
+   max-height). Past that, a long Details text used to make the whole CARD
+   scroll, title and all. Now the card is a flex column down through Modal's two
+   wrappers to the body, every part of it keeps its own height, and the Details
+   box is the one item allowed to shrink: held at what is left, it scrolls
+   INSIDE, down to its three-line minimum. Only if the rest of the card cannot fit
+   even then does the card's own `overflow-y: auto` take over.
+   The Details section is `display: contents` so its heading and box are items of
+   the body in their own right — the box can shrink without the section having
+   to; the section's top margin moves to the heading. (Flex margins do not
+   collapse: the one pair that did, an error above the footer, is zeroed.) */
+.px-modal--card.px-td { display: flex; flex-direction: column; }
+/* …and the card grows DOWN from where it opened (`usePinnedTop` in TaskDetail):
+   the scrim stacks a spacer of the measured top above the card. The card keeps
+   its height (capped at the window by its max-height); the spacer is what gives,
+   so a card reaching the bottom rises into the room above before Details has to
+   scroll. */
+.px-scrim[data-td-pinned] { flex-direction: column; justify-content: flex-start; }
+.px-scrim[data-td-pinned]::before { content: ''; flex: 0 1 var(--px-td-top, 0px); min-height: 0; }
+.px-scrim[data-td-pinned] > .px-modal--card { flex-shrink: 0; }
+.px-modal--card.px-td > div, .px-td .px-modal-body, .px-td-body { display: flex; flex-direction: column; flex: 0 1 auto; min-height: 0; }
+.px-td-body > * { flex-shrink: 0; }
+.px-td-body > .px-error { margin-bottom: 0; }
+.px-td-sec--details { display: contents; }
+.px-td-sec--details > .px-td-sec-h { margin-top: 18px; flex-shrink: 0; }
+.px-td-sec--details > .px-td-desc { flex: 0 1 auto; min-height: calc(3 * 1.55em + 14px); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+
+/* While a box slides to a new height (`growDown` in editor-grow.ts) its text is
+   already laid out at the new size: `clip` hides the line the edge has not
+   reached yet, and `min-height: 0` lifts the flex item's content-sized minimum,
+   which would otherwise pin the box at the new height and skip the slide. `clip`
+   rather than `hidden`, which would make the editor a scroll container that
+   could scroll its own text. After the rules above so it wins over the Details
+   box's `overflow-y: auto` for the length of a slide. */
+.px-ed-growing, .px-td-sec--details > .px-td-desc.px-ed-growing { overflow: clip; min-height: 0; }
 .px-td-hint { margin: 10px 0 0; font-size: 12.5px; color: var(--px-faint); }
 .px-td-steps { display: flex; flex-direction: column; gap: 1px; }
 .px-td-step { margin: 0 -8px; }
