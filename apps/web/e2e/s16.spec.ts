@@ -98,7 +98,7 @@ test('inbox → promote → clock in/out → review, offline then synced; double
   // clock out → focus review modal
   await page.getByTestId('timer-clock-out').click();
   await expect(page.getByTestId('review-save')).toBeVisible();
-  // the slider moves over its stops (0, 0.3 … 1.0): two to the left of 1.0 is ×0.8
+  // the slider runs 0.3 … 1.0 by tenths: two to the left of 1.0 is ×0.8
   await page.getByTestId('review-focus').focus();
   await page.keyboard.press('ArrowLeft');
   await page.keyboard.press('ArrowLeft');

@@ -42,20 +42,16 @@ import {
   type BreakTask,
 } from '../break';
 import { formatElapsed } from '../format';
-import { FOCUS_MAX, FOCUS_MIN, FOCUS_NONE } from '../focus-factor';
+import { FOCUS_MAX, FOCUS_MIN } from '../focus-factor';
 import { StepSlider } from './StepSlider';
 import { useSecondClock } from './useSecondClock';
 
 /**
- * The focus slider's stops: ×0 (the session doesn't count) first, then 0.3 … 1.0
- * by tenths — evenly spaced, so 0.3 is one step in from the left and 0.1 / 0.2 are
- * never offered. The slider moves over their positions (0 … 8), not their values.
+ * Captions under the clock-out review's focus slider: 0.3 … 1.0 in tenths, labelled
+ * at its ends and middle. ×0 ("this session doesn't count") is deliberately NOT
+ * offered here — only on the Review tab's session items, after the fact.
  */
-const FOCUS_STOPS = [FOCUS_NONE, ...Array.from({ length: Math.round((FOCUS_MAX - FOCUS_MIN) * 10) + 1 }, (_, i) => Math.round((FOCUS_MIN + i / 10) * 10) / 10)];
-/** Captions under the stops: 0, the floor, the middle and the top. */
-const FOCUS_SCALE = FOCUS_STOPS.map((v) => (v === FOCUS_NONE || v === FOCUS_MIN || v === 0.7 || v === FOCUS_MAX ? (v === FOCUS_NONE ? '0' : v.toFixed(1)) : ''));
-/** The stop nearest a value (the value itself, for anything this popup set). */
-const stopOf = (v: number) => FOCUS_STOPS.reduce((best, s, i) => (Math.abs(s - v) < Math.abs(FOCUS_STOPS[best]! - v) ? i : best), 0);
+const FOCUS_SCALE = ['0.3', '', '', '', '0.7', '', '', '1.0'];
 
 /** The numbers printed under the break slider, one per step (5, 10 … 30). */
 const BREAK_SCALE = Array.from({ length: (BREAK_MAX_MINUTES - BREAK_MIN_MINUTES) / BREAK_STEP_MINUTES + 1 }, (_, i) => String(BREAK_MIN_MINUTES + i * BREAK_STEP_MINUTES));
@@ -348,16 +344,15 @@ export function TimersProvider({ ctx, children }: { ctx: CommandContext; childre
         </p>
         <label className="px-field">
           <span data-testid="review-focus-label">
-            Focus factor: ×{focus === FOCUS_NONE ? '0' : focus.toFixed(1)}
-            {focus === FOCUS_NONE && <span className="px-muted"> — this session won&rsquo;t count</span>}
+            Focus factor: ×{focus.toFixed(1)}
           </span>
           <StepSlider
-            min={0}
-            max={FOCUS_STOPS.length - 1}
-            step={1}
-            value={stopOf(focus)}
-            onChange={(i) => setFocus(FOCUS_STOPS[i] ?? FOCUS_MAX)}
-            valueText={focus === FOCUS_NONE ? '×0, does not count' : `×${focus.toFixed(1)}`}
+            min={FOCUS_MIN}
+            max={FOCUS_MAX}
+            step={0.1}
+            value={focus}
+            onChange={setFocus}
+            valueText={`×${focus.toFixed(1)}`}
             testId="review-focus"
             ariaLabel="Focus factor"
             labels={FOCUS_SCALE}
