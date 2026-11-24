@@ -1165,7 +1165,12 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
 .px-trow--done .px-t-title { color: var(--px-faint); text-decoration: line-through; }
 /* the running dot in front of a clocked-in task's title (Tasks, Agenda lists) */
 .px-rdot { display: inline-flex; align-items: center; flex: none; margin-right: 6px; }
-.px-t-title > .px-rdot { margin-right: 0; } /* the title row already has its own gap */
+/* On Tasks the dot is its own item of the row, between the completion circle and the
+   title block. The row centres its items vertically, so the dot sits level with the
+   circle — the row's middle — however many rows the title takes (it used to ride on the
+   title's first row, and before that wrapped above a long title). The row's gap is
+   already 12px, so pull the title a little closer. */
+.px-trow > .px-rdot { margin-right: -4px; }
 /* Tasks › Recently deleted: a dimmed row with a Restore button, no tick */
 .px-trow--deleted .px-t-title { color: var(--px-text-dim); }
 .px-deleted-ic { width: 17px; height: 17px; flex: none; display: flex; align-items: center; justify-content: center; color: var(--px-faint); }

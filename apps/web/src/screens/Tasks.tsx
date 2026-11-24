@@ -240,7 +240,8 @@ export function Tasks({ ctx }: { ctx: CommandContext }) {
                   {blocked.map((b) => (
                     <li className="px-trow" key={b.task.id} {...detail.rowProps(b.task.id)}>
                       <span className="px-ckb" style={{ opacity: 0.4 }}><Ic name="check" /></span>
-                      <div className="px-t-main"><div className="px-t-title" style={{ color: 'var(--px-text-dim)' }}><RunningDot running={running.has(b.task.id)} /><EditableTitle node={b.task} commands={commands} /></div></div>
+                      <RunningDot running={running.has(b.task.id)} />
+                      <div className="px-t-main"><div className="px-t-title" style={{ color: 'var(--px-text-dim)' }}><EditableTitle node={b.task} commands={commands} /></div></div>
                       <span className="px-tag px-tag--red"><Ic name="alert" />{b.blockedBy[0] ?? 'blocked'}</span>
                     </li>
                   ))}
@@ -536,8 +537,9 @@ function AvailableStatusRow({ item, running, commands, detail, onCheck }: { item
   return (
     <li className="px-trow" {...detail.rowProps(item.task.id)}>
       <button className="px-ckb" data-testid={`task-check-${item.task.id}`} aria-label="check off" onClick={onCheck}><Ic name="check" /></button>
+      <RunningDot running={running} />
       <div className="px-t-main">
-        <div className="px-t-title"><RunningDot running={running} /><EditableTitle node={item.task} commands={commands} /></div>
+        <div className="px-t-title"><EditableTitle node={item.task} commands={commands} /></div>
         <div className="px-t-meta">
           {item.projectTitle && <span className="px-proj"><span className={`px-pdot px-pdot--${projectTone(item.projectId)}`} />{item.projectTitle}</span>}
           {item.priority !== null && <span className="px-prio">prio {item.priority.toFixed(1)}</span>}
@@ -555,8 +557,9 @@ function TaskRow({ task, status, blockedBy, steps, running, commands, detail }: 
     <>
       <li className="px-trow" data-testid={`task-row-${task.id}`} {...detail.rowProps(task.id)}>
         <button className="px-ckb" data-testid={`task-check-${task.id}`} aria-label="check off" disabled={isBlocked} onClick={() => void commands.checkOff(task.id)}><Ic name="check" /></button>
+        <RunningDot running={running} />
         <div className="px-t-main">
-          <div className="px-t-title" style={isBlocked ? { color: 'var(--px-text-dim)' } : undefined}><RunningDot running={running} /><EditableTitle node={task} commands={commands} /></div>
+          <div className="px-t-title" style={isBlocked ? { color: 'var(--px-text-dim)' } : undefined}><EditableTitle node={task} commands={commands} /></div>
           <div className="px-t-meta">
             {task.estimate_minutes != null && <span>est {formatMinutes(task.estimate_minutes)}</span>}
             {task.due_date && <DueDate date={task.due_date} />}

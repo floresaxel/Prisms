@@ -32,6 +32,19 @@ async function register(page: Page, tag: string): Promise<void> {
   await expect(page.getByTestId('sync-state')).toBeVisible();
 }
 
+/**
+ * In an open task card, get the Details box on screen: it is either already there or
+ * offered as a "+ Details" chip. Waits for whichever shows up — reading the box's count
+ * the instant the card appears raced its first render in CI (count 0, then a 60 s wait
+ * for a chip that never came because the box was there by then).
+ */
+async function showDetailsField(page: Page): Promise<void> {
+  const details = page.getByTestId('td-details');
+  const add = page.getByTestId('td-add-details');
+  await expect(details.or(add).first()).toBeVisible();
+  if (!(await details.isVisible())) await add.click();
+}
+
 test('an Inbox capture completes from the Inbox — as an unfocused task, or added to a project first', async ({ page }) => {
   await register(page, 'complete');
   const ids = { v: randomUUID(), r: randomUUID(), p: randomUUID() };
@@ -219,7 +232,7 @@ test('a task with details shows a notebook icon right after its title, in every 
   const line = await row.locator('.px-t-title').boundingBox();
   await row.locator('.px-t-title').click({ position: { x: line!.width - 8, y: line!.height / 2 } });
   await expect(page.getByTestId('td-dialog')).toBeVisible();
-  if ((await page.getByTestId('td-details').count()) === 0) await page.getByTestId('td-add-details').click();
+  await showDetailsField(page);
   await page.getByTestId('td-details').fill('Venue shortlist and budget.');
   await page.getByTestId('td-details').blur();
   await page.keyboard.press('Escape');
@@ -252,7 +265,7 @@ test('the notebook icon stays to the right of a title that wraps onto several li
   await row.focus();
   await row.press('Enter');
   await expect(page.getByTestId('td-dialog')).toBeVisible();
-  if ((await page.getByTestId('td-details').count()) === 0) await page.getByTestId('td-add-details').click();
+  await showDetailsField(page);
   await page.getByTestId('td-details').fill('Everything the offsite needs.');
   await page.getByTestId('td-details').blur();
   await page.keyboard.press('Escape');
