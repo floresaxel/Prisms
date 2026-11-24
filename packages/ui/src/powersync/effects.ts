@@ -195,6 +195,8 @@ export function buildOptimisticEffects(name: CommandName, payload: unknown, ctx:
     case 'timer.clock_out':
     case 'timer.adjust':
       return [upd('time_entries', p['entry_id'], { ended_at: p['ended_at'] })];
+    case 'break.log':
+      return [ins('breaks', p['id'], { started_at: p['started_at'], ended_at: p['ended_at'], planned_minutes: p['planned_minutes'] })];
     case 'timer.review':
       // the time-entry facts; a completing review also sets node.completed_at, but
       // that needs the entry's task_id (not in the payload) so the live writer adds it.
@@ -277,7 +279,8 @@ export function buildOptimisticEffects(name: CommandName, payload: unknown, ctx:
     }
     case 'journal.append':
       // The appended content depends on the note as this device holds it, which is
-      // not in the payload — the live writer (commands.appendJournal) supplies it.
+      // not in the payload. No client sends it any more (breaks are logged with
+      // `break.log` and shown in the day log); kept so an already-queued one lands.
       return [];
     case 'journal.set_locked':
       // patches an existing row (a lock never mints one — see the payload doc).

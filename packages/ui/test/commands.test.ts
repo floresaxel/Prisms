@@ -125,24 +125,15 @@ describe('createCommands — creates mint a row id and seed an insert', () => {
     expect(commands[0]).toMatchObject({ payload: { ended_at: '2026-06-28T00:00:00.000Z' } });
   });
 
-  it('appendJournal → journal.append; the overlay shows the line after the note this device holds', async () => {
+  it('logBreak → break.log; the overlay inserts the break row (the day log reads it, the note is untouched)', async () => {
     const { store, commands, effects } = captureStore();
-    store.replicaRows = async (table) =>
-      table === 'journal_entries' ? [{ id: NODE, entry_date: '2026-06-28', content: 'Morning notes', deleted_at: null }] : [];
-    await createCommands(store, ctx, deps()).appendJournal({ entryDate: '2026-06-28', text: '☕ Break — 15 min' });
-    expect(commands[0]).toMatchObject({ name: 'journal.append', payload: { id: NODE, entry_date: '2026-06-28', text: '☕ Break — 15 min' } });
+    const id = await createCommands(store, ctx, deps()).logBreak({ startedAt: '2026-06-28T10:26:00.000Z', endedAt: '2026-06-28T10:40:00.000Z', plannedMinutes: 10 });
+    expect(commands[0]).toMatchObject({ name: 'break.log', payload: { id, started_at: '2026-06-28T10:26:00.000Z', ended_at: '2026-06-28T10:40:00.000Z', planned_minutes: 10 } });
     expect(effects).toEqual([
-      expect.objectContaining({ table: 'journal_entries', row_id: NODE, op: 'update', fields: { content: 'Morning notes\n\n☕ Break — 15 min' } }),
+      expect.objectContaining({ table: 'breaks', row_id: id, op: 'insert', fields: expect.objectContaining({ started_at: '2026-06-28T10:26:00.000Z', planned_minutes: 10 }) }),
     ]);
+    expect(effects.some((e) => e.table === 'journal_entries')).toBe(false);
   });
-
-  it('appendJournal on a day with no note here → mints the row with just the line', async () => {
-    const { store, commands, effects } = captureStore();
-    await createCommands(store, ctx, deps()).appendJournal({ entryDate: '2026-06-28', text: '☕ Break — 5 min' });
-    const id = (commands[0]!.payload as { id: string }).id;
-    expect(effects[0]).toMatchObject({ table: 'journal_entries', row_id: id, op: 'insert', fields: { entry_date: '2026-06-28', month_key: '2026-06', content: '☕ Break — 5 min' } });
-  });
-
   it('createRule → JSON columns land as TEXT in the effect; enabled as 0/1', async () => {
     const { store, effects } = captureStore();
     await createCommands(store, ctx, deps()).createRule({

@@ -160,6 +160,30 @@ describe('DayLogFooter — the full marker matrix', () => {
     expect(screen.getByTestId('daylog-done-more').textContent).toBe('+7 more');
   });
 
+  it('renders a day’s breaks as events — time, length, how far over — with a drawn icon, no emoji', () => {
+    const entries: DayLogEntries = {
+      v: 2,
+      scheduled: [],
+      clocked: [],
+      clocked_minutes: 0,
+      completed: [],
+      breaks: [
+        { break_id: '00000000-0000-4000-8000-0000000000b1', started_at: '2026-05-08T14:26:00.000Z', ended_at: '2026-05-08T14:40:00.000Z', minutes: 14, planned_minutes: 10 },
+        { break_id: '00000000-0000-4000-8000-0000000000b2', started_at: '2026-05-08T17:00:00.000Z', ended_at: '2026-05-08T17:05:00.000Z', minutes: 5, planned_minutes: 5 },
+      ],
+    };
+    render(createElement(DayLogFooter, { entries, timezone: NY }));
+    expect(screen.getByTestId('daylog-breaks-total').textContent).toBe('19m');
+    const first = screen.getByTestId('daylog-break-00000000-0000-4000-8000-0000000000b1');
+    expect(first.textContent).toContain('10:26–10:40');
+    expect(first.textContent).toContain('Break');
+    expect(first.textContent).toContain('4m over the 10m planned');
+    expect(first.querySelector('svg')).not.toBeNull(); // the drawn cup
+    // on time: no "over" mark
+    expect(screen.getByTestId('daylog-break-00000000-0000-4000-8000-0000000000b2').textContent).not.toContain('over');
+    expect(screen.getByTestId('daylog').textContent).not.toMatch(/\p{Extended_Pictographic}/u);
+  });
+
   it('renders nothing for a null or empty log', () => {
     const { container, rerender } = render(createElement(DayLogFooter, { entries: null, timezone: NY }));
     expect(container.innerHTML).toBe('');

@@ -27,7 +27,9 @@ const MATERIALIZED = /day_logs\b/;
 describe('Annex L adds no write-path surface (D1)', () => {
   it('adds NO table: not in the Drizzle registry, not in the schema file', () => {
     expect(Object.keys(tables).filter((t) => MATERIALIZED.test(t))).toEqual([]);
-    expect(Object.keys(tables)).toHaveLength(26); // unchanged by this feature
+    // unchanged by this feature (Annex L stores nothing); the 27th is reaks (0018),
+    // a FACT the day log reads like time entries — not a stored log
+    expect(Object.keys(tables)).toHaveLength(27);
     const schema = read('packages/db/src/schema.ts');
     expect(/pgTable\(\s*'journal_day_logs?'/.test(schema)).toBe(false);
     // the flag is a COLUMN on user_settings, and only that

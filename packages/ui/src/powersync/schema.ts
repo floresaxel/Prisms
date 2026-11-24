@@ -199,6 +199,20 @@ const task_steps = new Table({
   deleted_at: column.text,
 });
 
+/** A finished break (migration 0018). Always-on synced (the `active` tier);
+ *  the journal's day log reads them (`useDayLog`). Written once by `break.log`. */
+const breaks = new Table({
+  user_id: column.text,
+  started_at: column.text,
+  ended_at: column.text,
+  planned_minutes: column.integer,
+  // stamped by the server; lets the overlay see its own write arrive (`reconcileConfirmed`)
+  last_modified_by_command_id: column.text,
+  created_at: column.text,
+  updated_at: column.text,
+  deleted_at: column.text,
+});
+
 const decision_boards = new Table({
   user_id: column.text,
   title: column.text,
@@ -361,6 +375,7 @@ const syncedTables = {
   tag_answers,
   journal_entries,
   task_steps,
+  breaks,
   decision_boards,
   decision_criteria,
   decision_scores,

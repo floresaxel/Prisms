@@ -128,7 +128,9 @@ describe('schema: overlay tables are local-only and out of appSchema (R15)', () 
     // J3: journal_entries is synced; W3/D4: task_steps is the 24th synced table.
     expect(names(appSchema)).toContain('journal_entries');
     expect(names(appSchema)).toContain('task_steps');
-    expect(appSchema.tables).toHaveLength(24);
+    // 0018: finished breaks, read by the journal's day log — the 25th
+    expect(names(appSchema)).toContain('breaks');
+    expect(appSchema.tables).toHaveLength(25);
   });
 
   it('clientSchema includes the overlay tables and marks ONLY those local-only', () => {

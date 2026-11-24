@@ -46,6 +46,7 @@ import {
   type BurndownValue,
   type CommittedBlock,
   type CompletionValue,
+  type DayLogBreak,
   type DayLogEntries,
   type DecisionBoard,
   type DecisionCriterion,
@@ -1646,6 +1647,7 @@ export function useDayLog(date: IsoDate): DayLogEntries | null {
   const { journalDayLog } = useUserSettings();
   const blockRows = rows.schedule_blocks;
   const entryRows = rows.time_entries;
+  const breaks = useBreaks();
   return useMemo(() => {
     if (!journalDayLog) return null;
     return computeDayLog({
@@ -1653,10 +1655,31 @@ export function useDayLog(date: IsoDate): DayLogEntries | null {
       nodes: ctx.tree.byId.values(), // live nodes only (tombstones excluded)
       blocks: blockRows.map(toScheduleBlock),
       timeEntries: entryRows.map(toTimeEntry),
+      breaks,
       dayResetHour: ctx.dayResetHour,
       timezone: ctx.timezone,
     });
-  }, [ctx, blockRows, entryRows, date, journalDayLog]);
+  }, [ctx, blockRows, entryRows, breaks, date, journalDayLog]);
+}
+
+/**
+ * Every finished break on this device's replica (`breaks`, migration 0018), as the
+ * day log reads them. Overlay-merged, so a break shows in the log the moment it is
+ * logged, before the server has it.
+ */
+export function useBreaks(): DayLogBreak[] {
+  const rows = useRows('SELECT * FROM breaks WHERE deleted_at IS NULL');
+  return useMemo(
+    () =>
+      rows.map((r) => ({
+        id: String(r['id']),
+        started_at: String(r['started_at'] ?? ''),
+        ended_at: String(r['ended_at'] ?? ''),
+        planned_minutes: Number(r['planned_minutes'] ?? 0),
+        deleted_at: r['deleted_at'] == null ? null : String(r['deleted_at']),
+      })),
+    [rows],
+  );
 }
 
 /**
@@ -1671,6 +1694,7 @@ export function useDayLogsByDate(): ReadonlyMap<IsoDate, DayLogEntries> {
   const { journalDayLog } = useUserSettings();
   const blockRows = rows.schedule_blocks;
   const entryRows = rows.time_entries;
+  const breaks = useBreaks();
   return useMemo(() => {
     if (!journalDayLog) return new Map<IsoDate, DayLogEntries>();
     return computeDayLogsByDate(
@@ -1678,10 +1702,11 @@ export function useDayLogsByDate(): ReadonlyMap<IsoDate, DayLogEntries> {
         nodes: ctx.tree.byId.values(),
         blocks: blockRows.map(toScheduleBlock),
         timeEntries: entryRows.map(toTimeEntry),
+        breaks,
       },
       { dayResetHour: ctx.dayResetHour, timezone: ctx.timezone },
     );
-  }, [ctx, blockRows, entryRows, journalDayLog]);
+  }, [ctx, blockRows, entryRows, breaks, journalDayLog]);
 }
 
 /** Server-computed aggregates (burndown, streaks, …) with their freshness. */

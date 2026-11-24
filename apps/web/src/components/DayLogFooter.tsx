@@ -17,10 +17,12 @@
 import {
   bucketDate,
   DEFAULT_DAY_RESET_HOUR,
+  formatDayLogDuration,
   formatDayLogTime,
   isDayLogEmpty,
   type DayLogEntries,
 } from '@prisms/core';
+import { Ic } from '@prisms/ui';
 
 import { usableZone } from '../clocked-day';
 import { ClockedSection } from './ClockedTimeline';
@@ -39,6 +41,7 @@ export function DayLogFooter({
   dayResetHour?: number;
 }) {  if (!entries || isDayLogEmpty(entries)) return null;
   const { scheduled, clocked, completed, truncated } = entries;
+  const breaks = entries.breaks ?? [];
   const at = (ts: string) => formatDayLogTime(ts, timezone);
   const resetHour = Number.isInteger(dayResetHour) && dayResetHour >= 0 && dayResetHour <= 23 ? dayResetHour : DEFAULT_DAY_RESET_HOUR;
   const day = date ?? (clocked[0] ? bucketDate(clocked[0].started_at, resetHour, usableZone(timezone)) : '');
@@ -81,6 +84,34 @@ export function DayLogFooter({
           dayResetHour={resetHour}
           timezone={timezone}
         />
+      )}
+      {breaks.length > 0 && (
+        <div className="px-daylog-sec" data-testid="daylog-breaks">
+          <div className="px-daylog-lbl">
+            Breaks{' '}
+            <span className="px-daylog-total px-num" data-testid="daylog-breaks-total">
+              {formatDayLogDuration(breaks.reduce((sum, b) => sum + b.minutes, 0))}
+            </span>
+          </div>
+          <ul className="px-daylog-list">
+            {breaks.map((b) => {
+              const over = b.minutes - b.planned_minutes;
+              return (
+                <li key={b.break_id} className="px-daylog-row" data-testid={`daylog-break-${b.break_id}`}>
+                  <Ic name="coffee" className="px-ic px-daylog-break-ic" />
+                  <span className="px-daylog-time px-num">{at(b.started_at)}–{at(b.ended_at)}</span>
+                  <span className="px-daylog-title">Break</span>
+                  <span className="px-daylog-dur px-num">{formatDayLogDuration(b.minutes)}</span>
+                  {over >= 1 && (
+                    <span className="px-daylog-mark px-daylog-mark--over" data-testid="daylog-break-over">
+                      {formatDayLogDuration(over)} over the {formatDayLogDuration(b.planned_minutes)} planned
+                    </span>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
       )}
       {completed.length > 0 && (
         <div className="px-daylog-sec" data-testid="daylog-completed">

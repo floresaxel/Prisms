@@ -156,6 +156,7 @@ export {
   useBlockTags,
   useJournalMonths,
   useJournalDay,
+  useBreaks,
   useDayLog,
   useDayLogsByDate,
   useTimeBlocksForDay,

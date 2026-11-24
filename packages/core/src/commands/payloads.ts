@@ -173,6 +173,17 @@ export const timerReviewSchema = z.strictObject({
   focus_factor: z.number().min(0.5).max(1.0),
   completed_session: z.boolean(),
 });
+/**
+ * A finished break, written once when it ends (clock back in, end it, or the
+ * auto-close 10 min past its end). The client mints `id`; a replay converges on
+ * the same row. The journal's day log shows it — never as note text.
+ */
+export const breakLogSchema = z.strictObject({
+  id: uuidSchema,
+  started_at: isoDateTimeSchema,
+  ended_at: isoDateTimeSchema,
+  planned_minutes: z.number().int().min(1).max(240),
+});
 
 // --- habits & skills --------------------------------------------------------
 
@@ -461,6 +472,7 @@ export const COMMAND_SCHEMAS = {
   'timer.clock_out': timerClockOutSchema,
   'timer.review': timerReviewSchema,
   'timer.adjust': timerAdjustSchema,
+  'break.log': breakLogSchema,
   'habit.create': habitCreateSchema,
   'habit.update': habitUpdateSchema,
   'habit.delete': habitDeleteSchema,

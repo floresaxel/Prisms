@@ -136,6 +136,11 @@ TABLE task_steps`. Same rule: after this upgrade lands on a live deployment, **r
 PowerSync** (the `restart powersync` above) so it reprocesses the new table. Omitting the
 restart leaves checklist steps silently un-synced.
 
+**Breaks (migration 0018).** Breaks taken from the clock-out review are recorded in a new`n`breaks` table (synced always-on through the `active` tier, tombstones in `history`) and shown in
+the journal's day log. Its migration (`packages/db/migrations/0018_breaks.sql`) **also changes the
+publication** — `ALTER PUBLICATION powersync ADD TABLE breaks` — so after this upgrade lands,
+**restart PowerSync**, or breaks logged on one device never reach the others.
+
 **Journal day log (migration 0012).** The generated "Day log" footer adds **no
 table**, so — unlike 0010 and 0011 — its migration
 (`packages/db/migrations/0012_journal_day_log.sql`) makes **no publication

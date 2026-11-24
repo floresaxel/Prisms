@@ -487,6 +487,33 @@ describe('DayJournalPanel — editor', () => {
     expect(screen.getByTestId('journal-export')).toBeTruthy();
   });
 
+  it('quick keystrokes into a NEW note all go to ONE row — the id it minted — not one each', () => {
+    // 2026-11-24: "c" minted the day's row and "cd", 150 ms later, minted another
+    // before the first came back — the server then reported the user's own
+    // keystroke as an edit conflict. The panel now reuses the id it minted.
+    state.entry = null;
+    render(createElement(DayJournalPanel, { date: '2026-11-24', ctx: CTX }));
+    const editor = screen.getByTestId('journal-rich');
+    fireEvent.change(editor, { target: { value: 'c' } });
+    fireEvent.blur(editor, { target: { value: 'c' } });
+    fireEvent.change(editor, { target: { value: 'cd' } });
+    fireEvent.blur(editor, { target: { value: 'cd' } });
+    const calls = command('writeJournal').mock.calls.map((c) => c[0] as { existingId?: string; content: string });
+    expect(calls.map((c) => c.content)).toEqual(['c', 'cd']);
+    expect(calls[0]!.existingId).toBeTruthy();
+    expect(calls[1]!.existingId).toBe(calls[0]!.existingId);
+
+    // clearing it deletes THAT row; typing again then starts a fresh one
+    fireEvent.change(editor, { target: { value: '' } });
+    fireEvent.blur(editor, { target: { value: '' } });
+    expect(command('deleteJournal')).toHaveBeenCalledWith(calls[0]!.existingId);
+    fireEvent.change(editor, { target: { value: 'again' } });
+    fireEvent.blur(editor, { target: { value: 'again' } });
+    const last = command('writeJournal').mock.calls.at(-1)![0] as { existingId?: string };
+    expect(last.existingId).toBeTruthy();
+    expect(last.existingId).not.toBe(calls[0]!.existingId);
+  });
+
   // --- an empty note is not a note -----------------------------------------
 
   it('typing nothing on a blank day stores NOTHING', () => {

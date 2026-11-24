@@ -23,15 +23,15 @@
  */
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
-import { asEpochMillis, bucketDate, MAX_OPEN_TIMERS } from '@prisms/core';
-import { Ic, Modal, useCommands, useNodeTree, useRunningTimers, useUserSettings, type CommandContext, type RunningTimer } from '@prisms/ui';
+import { asEpochMillis, MAX_OPEN_TIMERS } from '@prisms/core';
+import { Ic, Modal, useCommands, useNodeTree, useRunningTimers, type CommandContext, type RunningTimer } from '@prisms/ui';
 
 import {
   BREAK_DEFAULT_MINUTES,
   BREAK_MAX_MINUTES,
   BREAK_MIN_MINUTES,
   BREAK_STEP_MINUTES,
-  breakJournalLine,
+  breakLogEnd,
   breakPhase,
   breakRemainingMs,
   formatCountdown,
@@ -107,28 +107,29 @@ export function TimersProvider({ ctx, children }: { ctx: CommandContext; childre
 
   // ── breaks ──
   const activeBreak = useActiveBreak(ctx.userId);
-  const { timezone, dayResetHour } = useUserSettings();
   /** The review's break picker is showing (after "Take a break"). */
   const [breakPicker, setBreakPicker] = useState(false);
   const [breakMinutes, setBreakMinutes] = useState(BREAK_DEFAULT_MINUTES);
 
   /**
-   * Close the break `b` (once — a second tab or click finds it gone), log it in
-   * the journal note of the day it STARTED, and clock back in when asked to.
+   * Close the break `b` (once — a second tab or click finds it gone), record it
+   * (`break.log` — the journal's day log shows it on the day it started; nothing
+   * is written into the note), and clock back in when asked to.
    */
   const closeBreak = useCallback(
     async (b: ActiveBreak, resume: boolean) => {
       const endAt = Date.now();
       const closed = takeBreak(ctx.userId, b.id);
       if (!closed) return;
-      const entryDate = bucketDate(asEpochMillis(closed.startedAt), dayResetHour, timezone);
-      await commands.appendJournal({ entryDate, text: breakJournalLine(closed, endAt, timezone) }).catch(() => undefined);
+      await commands
+        .logBreak({ startedAt: new Date(closed.startedAt).toISOString(), endedAt: new Date(breakLogEnd(closed, endAt)).toISOString(), plannedMinutes: closed.minutes })
+        .catch(() => undefined);
       if (!resume) return;
       // They were running before the break: a task that has since become blocked
       // is taken back up as it was (force); one that is done or gone is skipped.
       for (const t of closed.tasks) await commands.clockIn(t.taskId, { force: true }).catch(() => undefined);
     },
-    [commands, ctx.userId, dayResetHour, timezone],
+    [commands, ctx.userId],
   );
   const resumeFromBreak = useCallback(async () => {
     if (activeBreak) await closeBreak(activeBreak, true);

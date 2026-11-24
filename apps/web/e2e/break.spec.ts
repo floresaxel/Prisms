@@ -4,7 +4,8 @@
  * the topbar and My Day count it down and Clock in is off; with a minute left a
  * prompt (listing the tasks) offers to clock back in, and its countdown goes
  * negative past the end; 10 min past the end the break closes by itself with
- * nothing clocked in. Each break is appended to the day's journal note.
+ * nothing clocked in. Each break is recorded (`breaks`) and shown as an event in
+ * the journal's day log — never written into the note's text.
  *
  * Time is moved by ageing the saved break (its start, in localStorage) — the app
  * reads it like any other tab's change.
@@ -13,6 +14,8 @@ import { randomUUID } from 'node:crypto';
 
 import { expect, test, type Page } from '@playwright/test';
 import postgres from 'postgres';
+
+import { goto } from './util/nav';
 
 test.setTimeout(240_000);
 
@@ -133,10 +136,11 @@ test('take a break from the clock-out review, get asked back, and it is logged',
     await expect
       .poll(async () => (await sql`SELECT task_id FROM time_entries WHERE user_id = ${userId} AND ended_at IS NULL ORDER BY task_id`).map((r) => r['task_id']), { timeout: 20_000 })
       .toEqual([ids.a, ids.b].sort());
-    // logged in the day's journal note: ~6 min (5 planned + ~1 over)
-    await expect
-      .poll(async () => (await sql`SELECT content FROM journal_entries WHERE user_id = ${userId} AND deleted_at IS NULL`).map((r) => r['content']).join('|'), { timeout: 20_000 })
-      .toMatch(/^☕ Break — 6 min \(.+ – .+\) · 1 min over the 5 planned$/);
+    // recorded as a break: ~6 min (5 planned + ~1 over) — and NOT as note text
+    const breakMinutes = async () =>
+      (await sql`SELECT round(extract(epoch FROM ended_at - started_at) / 60)::int AS m, planned_minutes AS p FROM breaks WHERE user_id = ${userId} AND deleted_at IS NULL ORDER BY started_at`).map((r) => `m${r['m']}/p${r['p']}`);
+    await expect.poll(breakMinutes, { timeout: 20_000 }).toEqual(['m6/p5']);
+    expect((await sql`SELECT count(*)::int AS n FROM journal_entries WHERE user_id = ${userId}`)[0]!['n']).toBe(0);
 
     // ── a second break that runs 10+ min over closes by itself, nothing clocked back in ──
     await page.getByTestId('timer-clock-out').click();
@@ -153,9 +157,19 @@ test('take a break from the clock-out review, get asked back, and it is logged',
     await expect(page.getByTestId('break-pill')).toHaveCount(0);
     await expect(page.getByTestId('myday-break')).toHaveCount(0);
     await expect(page.getByTestId('run-banner')).toHaveCount(0);
-    await expect
-      .poll(async () => (await sql`SELECT content FROM journal_entries WHERE user_id = ${userId} AND deleted_at IS NULL`)[0]?.['content'], { timeout: 20_000 })
-      .toMatch(/\n\n☕ Break — 15 min \(.+\) · 10 min over the 5 planned$/);
+    // the second break started earlier (it was aged further), so it lists first; capped at 5 + 10 min
+    await expect.poll(breakMinutes, { timeout: 20_000 }).toEqual(['m15/p5', 'm6/p5']);
+    expect((await sql`SELECT count(*)::int AS n FROM journal_entries WHERE user_id = ${userId}`)[0]!['n']).toBe(0);
+
+    // ── the journal's day log shows both as events; the note itself stays empty ──
+    await goto(page, 'journal');
+    const breaks = page.getByTestId('daylog-breaks');
+    await expect(breaks).toBeVisible({ timeout: 30_000 });
+    await expect(breaks.locator('[data-testid^="daylog-break-"]').filter({ hasText: 'Break' })).toHaveCount(2);
+    await expect(page.getByTestId('daylog-breaks-total')).toHaveText('21m');
+    await expect(breaks).toContainText('10m over the 5m planned');
+    await expect(breaks).toContainText('1m over the 5m planned');
+    await expect(page.getByTestId('daylog')).not.toContainText('☕');
     const open2 = await sql`SELECT count(*)::int AS n FROM time_entries WHERE user_id = ${userId} AND ended_at IS NULL`;
     expect(open2[0]!['n']).toBe(0);
   } finally {

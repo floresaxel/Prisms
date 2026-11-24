@@ -127,6 +127,13 @@
       "when": 1786059000000,
       "tag": "0017_long_session_review",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1795517307151,
+      "tag": "0018_breaks",
+      "breakpoints": true
     }
   ]
 }

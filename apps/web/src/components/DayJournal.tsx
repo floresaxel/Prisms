@@ -24,6 +24,7 @@ import {
   Ic,
   isJournalContentEmpty,
   journalDayFilename,
+  newId,
   useCommands,
   useDayLog,
   useJournalDay,
@@ -117,6 +118,27 @@ export function DayJournalPanel({
   const dirty = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const existingId = entry?.id;
+  /**
+   * The id this panel minted for a day that had no note yet, reused by every
+   * write until that row is back in `entry`.
+   *
+   * Without it, each keystroke into a NEW note minted its own id: the first one
+   * ("c") created the row, and the next one ("cd", ~150 ms later, before the row
+   * had come back to the panel) asked for the same day under a second id. The
+   * server merged them onto one row — and reported the user's own first keystroke
+   * as an edit conflict that "your older value was not applied". Cleared when the
+   * note is deleted, so typing again starts a fresh row rather than writing into
+   * a deleted one.
+   */
+  const mintedId = useRef<string | null>(null);
+  /** The row this day's writes go to: the live one, or the one this panel minted. */
+  const rowIdForWrite = (): string => {
+    if (entry?.id) return entry.id;
+    mintedId.current ??= newId();
+    return mintedId.current;
+  };
+  /** The row to delete / title: the live one, or a just-minted one not back yet. */
+  const knownRowId = (): string | undefined => entry?.id ?? mintedId.current ?? undefined;
   const menuRef = useRef<HTMLDivElement | null>(null);
 
   /** Title and lock belong to a note that EXISTS; a blank day has neither. */
@@ -251,15 +273,16 @@ export function DayJournalPanel({
     const next = isDefaultNoteHeading(typed, date) ? '' : typed;
     setTitleDraft(null);
     if (next === (entry?.title ?? '')) return;
-    if (existingId) {
-      void commands.setJournalTitle(existingId, next);
+    const known = knownRowId();
+    if (known) {
+      void commands.setJournalTitle(known, next);
       return;
     }
     if (next === '') return;
     // A day with no row yet (today before anything is written, or a day that only
     // has activity): a title needs a row to belong to, so mint it — with whatever
     // text is already drafted, usually none — and title it. Queued in order.
-    const id = crypto.randomUUID();
+    const id = rowIdForWrite();
     void (async () => {
       await commands.writeJournal({ existingId: id, entryDate: date, content: draft });
       await commands.setJournalTitle(id, next);
@@ -369,17 +392,19 @@ export function DayJournalPanel({
   const write = (content: string) => {
     if (lockedRef.current) return;
     if (isJournalContentEmpty(content)) {
-      if (!existingId) return;
+      const rowId = knownRowId();
+      if (!rowId) return;
       // A day with activity, or a title of its own, is still a note: keep its row
       // (text cleared) instead of deleting it. Nothing to write if it is already blank.
       if (dayActive || storedTitle !== '') {
-        if (!isJournalContentEmpty(entry?.content ?? '')) void commands.writeJournal({ existingId, entryDate: date, content: '' });
+        if (!isJournalContentEmpty(entry?.content ?? '') || entry === null) void commands.writeJournal({ existingId: rowId, entryDate: date, content: '' });
       } else {
-        void commands.deleteJournal(existingId);
+        void commands.deleteJournal(rowId);
+        mintedId.current = null; // typing again makes a new note, not a write into this deleted one
       }
       return;
     }
-    void commands.writeJournal({ existingId, entryDate: date, content });
+    void commands.writeJournal({ existingId: rowIdForWrite(), entryDate: date, content });
   };
 
   // Flush a pending debounced save if the panel unmounts (day switch) before the
@@ -425,9 +450,11 @@ export function DayJournalPanel({
   }
 
   function remove() {
-    if (!existingId) return;
+    const rowId = knownRowId();
+    if (!rowId) return;
     if (timer.current) { clearTimeout(timer.current); timer.current = null; }
-    void commands.deleteJournal(existingId);
+    void commands.deleteJournal(rowId);
+    mintedId.current = null;
     dirty.current = false;
     setDraft('');
   }

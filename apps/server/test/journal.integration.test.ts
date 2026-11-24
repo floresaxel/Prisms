@@ -102,6 +102,62 @@ describe.skipIf(!adminUrl)('J2 journal dispatcher + export', () => {
     await admin.end();
   });
 
+  it('two quick keystrokes into a NEW note under two ids from ONE device: one row, the later text, no conflict item', async () => {
+    // 2026-11-24: "c" minted the day's row; "cd", 150 ms later, minted another id
+    // before the first had come back to the editor. The merge was right, but the
+    // user's own first keystroke was reported as an edit conflict.
+    const user = randomUUID();
+    ok(await write(user, randomUUID(), '2026-11-24', 'c', hlcOf(1, 'web-1')));
+    ok(await write(user, randomUUID(), '2026-11-24', 'cd', hlcOf(2, 'web-1')));
+    const rows = await liveRows(user, '2026-11-24');
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!['content']).toBe('cd');
+    expect(await conflicts(user)).toHaveLength(0);
+  });
+
+  describe('break.log (a finished break, shown in the day log — never note text)', () => {
+    const logBreak = (userId: string, id: string, started_at: string, ended_at: string, planned_minutes: number) =>
+      dispatcher.handleUpload(userId, {
+        device_id: 'deva',
+        commands: [{ id: randomUUID(), name: 'break.log', hlc: hlcOf(1), payload: { id, started_at, ended_at, planned_minutes }, schema_version: 1 }],
+      });
+
+    it('stores the break, touches no note, and a replay converges on the same row', async () => {
+      const user = randomUUID();
+      const id = randomUUID();
+      const [r] = ok(await logBreak(user, id, '2026-11-24T10:26:00.000Z', '2026-11-24T10:40:00.000Z', 10));
+      expect(r!.result).toBe('applied');
+      const again = ok(await logBreak(user, id, '2026-11-24T10:26:00.000Z', '2026-11-24T10:40:00.000Z', 10));
+      expect(again[0]!.result).toBe('applied');
+      const rows = await sql`SELECT planned_minutes, started_at, ended_at FROM breaks WHERE user_id = ${user}`;
+      expect(rows).toHaveLength(1);
+      expect(rows[0]!['planned_minutes']).toBe(10);
+      expect(await sql`SELECT 1 FROM journal_entries WHERE user_id = ${user}`).toHaveLength(0);
+    });
+
+    it('rejects a break that ends before it starts, and another user’s break id', async () => {
+      const user = randomUUID();
+      const [bad] = ok(await logBreak(user, randomUUID(), '2026-11-24T10:40:00.000Z', '2026-11-24T10:26:00.000Z', 10));
+      expect(bad).toMatchObject({ result: 'rejected', reject_code: 'E_INVALID_INTERVAL' });
+      const id = randomUUID();
+      ok(await logBreak(user, id, '2026-11-24T10:26:00.000Z', '2026-11-24T10:40:00.000Z', 10));
+      const [theirs] = ok(await logBreak(randomUUID(), id, '2026-11-24T10:26:00.000Z', '2026-11-24T10:40:00.000Z', 10));
+      expect(theirs).toMatchObject({ result: 'rejected', reject_code: 'E_OWNERSHIP' });
+    });
+
+    it('the journal export puts it in the day log section, not the note', async () => {
+      const user = randomUUID();
+      ok(await write(user, randomUUID(), '2026-11-24', 'Morning notes', hlcOf(1)));
+      ok(await logBreak(user, randomUUID(), '2026-11-24T19:26:00.000Z', '2026-11-24T19:40:00.000Z', 10));
+      const files = await runJournalExport(db, user);
+      const day = files.find((f) => f.entry_date === '2026-11-24')!;
+      expect(day.content).toBe('Morning notes'); // the note is untouched
+      expect(day.day_log?.breaks).toEqual([
+        expect.objectContaining({ started_at: '2026-11-24T19:26:00.000Z', ended_at: '2026-11-24T19:40:00.000Z', minutes: 14, planned_minutes: 10 }),
+      ]);
+    });
+  });
+
   describe('journal.append (a break logged at the end of the day note)', () => {
     const append = (userId: string, id: string, entry_date: string, text: string, hlc: string, device = 'deva') =>
       dispatcher.handleUpload(userId, {
