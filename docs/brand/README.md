@@ -137,3 +137,26 @@ launcher opens it points the desktop shortcut at the current one, so the
 shortcut follows the artwork with nothing to do by hand (`-InstallShortcut` is
 still how the shortcut is first made). It only touches a shortcut that starts
 this same script.
+
+## Wallpapers
+
+`docs/brand/wallpapers/`, drawn by `apps/web/scripts/render-wallpapers.mjs`
+(the same door geometry) and committed as SVG masters plus PNGs: desktop at
+3840×2160, phone at 1170×2532 (3× a 390×844 screen).
+
+```powershell
+pnpm --filter @prisms/web brand:wallpapers
+```
+
+Ink, paper and blue only, and each has exactly **one** filled door, the "now".
+The corridor wallpapers carry the wordmark alone: the corridor is already the
+mark, and a second blue door would break the one-door rule.
+
+| File | What |
+|---|---|
+| `wallpaper-desktop-doorways` | Pattern, ink: outlined full marks in a half-drop grid, one door lit |
+| `wallpaper-desktop-floors` | Pattern, paper: floor lines carrying doors, some nested, one inner door filled |
+| `wallpaper-desktop-corridor` | Logo, ink: six doors (the plan layers) brightening toward the blue door, wordmark beneath |
+| `wallpaper-phone-doorways` | Pattern, ink: the compact mark in a half-drop grid, the lit one mid-screen |
+| `wallpaper-phone-doorway` | Logo, ink: the full mark inside three far larger, faint doors, wordmark below |
+| `wallpaper-phone-corridor-paper` | Logo, paper: the corridor darkening toward ink and the blue door |
