@@ -93,7 +93,7 @@ export function GlobalTimer() {
             className="px-timer-lead px-timer-lead--btn"
             data-testid="timer-open-task"
             aria-haspopup="dialog"
-            title="Open task details"
+            title={lead.task?.title || 'Open task details'} // the whole title: the pill cuts it short
             onClick={() => openTask(lead.entry.task_id)}
           >
             {leadBody}
@@ -111,7 +111,7 @@ export function GlobalTimer() {
                 className="px-timer-menu-open"
                 role="menuitem"
                 data-testid={`timer-menu-open-${t.entry.task_id}`}
-                title="Open task details"
+                title={t.task?.title || 'Open task details'} // the whole title: the row cuts it short
                 onClick={() => openTask(t.entry.task_id)}
               >
                 <span className="px-timer-menu-title">{t.task?.title ?? 'Unknown task'}</span>

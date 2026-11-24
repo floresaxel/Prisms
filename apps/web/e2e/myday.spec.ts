@@ -175,6 +175,9 @@ test('My Day: split focus — run two timers together, clock out of one, then sw
   await expect(page.getByTestId('timer-menu').getByRole('menuitem')).toHaveCount(2);
   await expect(page.getByTestId(`timer-menu-row-${ids.a}`)).toContainText('Alpha Task');
   await expect(page.getByTestId(`timer-menu-row-${ids.b}`)).toContainText('Beta Task');
+  // hovering a row shows the task's whole title (its tooltip), not a generic hint
+  await expect(page.getByTestId(`timer-menu-open-${ids.a}`)).toHaveAttribute('title', 'Alpha Task');
+  await expect(page.getByTestId(`timer-menu-open-${ids.b}`)).toHaveAttribute('title', 'Beta Task');
   await page.keyboard.press('Escape');
   await expect(page.getByTestId('timer-menu')).toHaveCount(0);
 
@@ -283,7 +286,8 @@ test('My Day: the running task has its own Clock out, which opens the session re
     .toBe(true);
   await expect(page.getByTestId('running-timer').locator('svg')).toHaveCount(1); // only the stop icon
 
-  // with one timer, the pill's task opens that task's details card
+  // with one timer, the pill's task opens that task's details card; its tooltip is the whole title
+  await expect(page.getByTestId('timer-open-task')).toHaveAttribute('title', 'Own Clock Out Task');
   await page.getByTestId('timer-open-task').click();
   await expect(page.getByTestId('td-dialog')).toBeVisible();
   await expect(page.getByTestId('td-title')).toHaveValue('Own Clock Out Task');
