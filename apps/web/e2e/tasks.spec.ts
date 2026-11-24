@@ -594,3 +594,44 @@ test('a half-typed capture is still there after switching to another page and ba
   await goto(page, 'myday');
   await expect(page.getByTestId('myday-capture-title')).toHaveValue('');
 });
+
+test('the capture bar: picking where a capture goes moves focus on, so Enter captures', async ({ page }) => {
+  await register(page, 'capturefocus');
+  const ids = { v: randomUUID(), r: randomUUID(), p: randomUUID() };
+  const seed = await page.request.post('/sync/upload', {
+    data: {
+      device_id: 'e2e-seed',
+      commands: [
+        cmd('node.create', { id: ids.v, node_type: 'vision', title: 'Work', sort_order: 'a0' }),
+        cmd('node.create', { id: ids.r, node_type: 'roadmap', title: 'Plan', sort_order: 'a0', parent_id: ids.v }),
+        cmd('node.create', { id: ids.p, node_type: 'project', title: 'Launch', sort_order: 'a0', parent_id: ids.r }),
+      ],
+    },
+  });
+  expect(seed.ok()).toBeTruthy();
+
+  await goto(page, 'tasks');
+  const titleField = page.getByTestId('activity-title');
+  const pick = page.getByTestId('capture-project');
+  const group = page.getByTestId(`project-group-${ids.p}`);
+  await pick.click();
+  await expect(page.getByTestId(`capture-project-opt-${ids.p}`)).toBeVisible({ timeout: 30_000 });
+
+  // ── title typed first: the pick hands focus to Capture, Enter captures into the project ──
+  await page.keyboard.press('Escape');
+  await titleField.fill('Write the note');
+  await pick.click();
+  await page.getByTestId(`capture-project-opt-${ids.p}`).click();
+  await expect(page.getByTestId('activity-add')).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(titleField).toHaveValue('');
+  await expect(group).toContainText('Write the note');
+
+  // ── nothing typed yet: the pick hands focus back to the title, type + Enter captures ──
+  await pick.click();
+  await page.getByTestId(`capture-project-opt-${ids.p}`).click();
+  await expect(titleField).toBeFocused();
+  await page.keyboard.type('Book the venue');
+  await page.keyboard.press('Enter');
+  await expect(group).toContainText('Book the venue');
+});

@@ -127,7 +127,9 @@ test('My Day: a capture is due today, waits under the bar, and keeps its date wh
   await expect(page.getByTestId(`myday-promote-${activityId}`)).toBeDisabled();
   await pick.click();
   await page.getByTestId(`myday-promote-target-${activityId}-opt-${ids.p}`).click();
-  await page.getByTestId(`myday-promote-${activityId}`).click();
+  // picking a project hands focus to Assign, so Enter assigns
+  await expect(page.getByTestId(`myday-promote-${activityId}`)).toBeFocused();
+  await page.keyboard.press('Enter');
   const promoted = page.getByTestId(`myday-row-${activityId}`);
   await expect(promoted).toBeVisible({ timeout: 30_000 });
   await expect(promoted.locator('.px-due--today')).toHaveText('Today');
