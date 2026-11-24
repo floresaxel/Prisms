@@ -1273,7 +1273,7 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
    native thumb cannot be animated; the real one stays in place, invisible, to take the pointer and keys. */
 @property --px-steps-pct { syntax: '<number>'; inherits: true; initial-value: 0; }
 .px-steps { --px-steps-c: var(--px-accent); --px-steps-thumb: 14px; --px-steps-stub: 10px; --px-steps-lead: calc(var(--px-steps-thumb) + var(--px-steps-stub)); position: relative; display: block; width: 100%; }
-@media (prefers-reduced-motion: no-preference) { .px-steps { transition: --px-steps-pct 150ms cubic-bezier(0.4, 0, 0.2, 1); } }
+@media (prefers-reduced-motion: no-preference) { .px-steps { transition: --px-steps-pct 88ms cubic-bezier(0.4, 0, 0.2, 1); } }
 .px-steps-body { position: relative; height: var(--px-steps-thumb); }
 .px-steps-rail {
   position: absolute; left: 0; right: 0; top: 50%; height: 6px; transform: translateY(-50%); border-radius: 3px;
