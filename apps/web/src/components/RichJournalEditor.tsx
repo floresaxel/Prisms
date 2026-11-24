@@ -21,7 +21,7 @@ import { useEffect, type ReactNode } from 'react';
 
 
 import { TaskItem, TaskList } from '@tiptap/extension-list';
-import { EditorContent, useEditor, type Editor } from '@tiptap/react';
+import { EditorContent, Extension, InputRule, useEditor, type Editor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Markdown, type MarkdownStorage } from 'tiptap-markdown';
 
@@ -66,6 +66,83 @@ const TOOLBAR: ToolItem[] = [
 ];
 
 /**
+ * `- [ ] ` as it is typed. The `- ` makes a bullet before the brackets arrive,
+ * and TaskItem's own rule only fires at the start of a plain line, so the item
+ * stayed a bullet with a literal "[ ]". Typing `[ ] ` or `[x] ` at the start of a
+ * top-level bullet item takes THAT item out of its list and makes it a task item:
+ * the bullets around it stay bullets (a new "- " joins the list above it, so
+ * converting the whole list would tick-box items that were never meant as tasks).
+ */
+const BulletToTask = Extension.create({
+  name: 'bulletToTask',
+  addInputRules() {
+    return [
+      new InputRule({
+        find: /^\s*\[([ xX])?\]\s$/,
+        handler: ({ state, range, match, chain }) => {
+          const $from = state.doc.resolve(range.from);
+          // doc › bulletList › listItem › paragraph: a top-level bullet, nothing nested
+          if ($from.depth !== 3) return null;
+          if ($from.node(-1).type.name !== 'listItem' || $from.node(-2).type.name !== 'bulletList') return null;
+          const checked = (match[1] ?? ' ').toLowerCase() === 'x';
+          chain().deleteRange(range).liftListItem('listItem').toggleTaskList().updateAttributes('taskItem', { checked }).run();
+        },
+      }),
+    ];
+  },
+});
+
+/**
+ * Task lists are written with `*` bullets (`* [ ] item`), bullet lists with `-`.
+ * In CommonMark a run of `-` items is ONE list even across a blank line, so a
+ * checklist written right after a bullet list with the same `-` came back from a
+ * reload merged into it (with a stray empty checkbox). A change of bullet
+ * character starts a new list, so each list survives the round trip. Still GFM;
+ * `- [ ]` already stored parses as before.
+ */
+interface ListSerializer {
+  renderList: (node: unknown, delim: string, firstDelim: (index: number) => string) => void;
+}
+const StarTaskList = TaskList.extend({
+  addStorage() {
+    return {
+      ...this.parent?.(),
+      markdown: {
+        serialize(state: ListSerializer, node: unknown) {
+          state.renderList(node, '  ', () => '* ');
+        },
+      },
+    };
+  },
+});
+
+/**
+ * The editor's schema and markdown bridge, shared with the task card's Details
+ * (`MarkdownField`): StarterKit (whose input rules render `**bold**`, `_italic_`,
+ * `# heading`, `- list`, `> quote`, `` `code` `` as they are typed), task lists,
+ * and tiptap-markdown with raw HTML off and a link-scheme allowlist (D2).
+ */
+export function richMarkdownExtensions() {
+  return [
+    StarterKit.configure({
+      link: {
+        openOnClick: false, // clicking a link while editing shouldn't navigate
+        autolink: true,
+        protocols: SAFE_PROTOCOLS,
+        HTMLAttributes: { rel: 'noopener noreferrer nofollow', target: '_blank' },
+      },
+    }),
+    StarTaskList,
+    TaskItem.configure({ nested: true }),
+    BulletToTask,
+    Markdown.configure({ html: false, linkify: false, breaks: false, transformPastedText: true, transformCopiedText: true }),
+  ];
+}
+
+/** The editor's content as markdown (tiptap-markdown's serializer). */
+export const editorMarkdown = (editor: Editor): string => getMd(editor);
+
+/**
  * Controlled by markdown: `value` seeds the editor and `onChange` emits the
  * serialized markdown on every edit. External (synced) changes are adopted only
  * while the editor is UNFOCUSED, so a same-day update from another device can't
@@ -103,19 +180,7 @@ export function RichJournalEditor({
 }) {
   const editor = useEditor({
     immediatelyRender: false, // client-only SPA; avoids any SSR-detection warning
-    extensions: [
-      StarterKit.configure({
-        link: {
-          openOnClick: false, // clicking a link while editing shouldn't navigate
-          autolink: true,
-          protocols: SAFE_PROTOCOLS,
-          HTMLAttributes: { rel: 'noopener noreferrer nofollow', target: '_blank' },
-        },
-      }),
-      TaskList,
-      TaskItem.configure({ nested: true }),
-      Markdown.configure({ html: false, linkify: false, breaks: false, transformPastedText: true, transformCopiedText: true }),
-    ],
+    extensions: richMarkdownExtensions(),
     content: value, // tiptap-markdown parses a string as markdown
     editorProps: {
       attributes: {

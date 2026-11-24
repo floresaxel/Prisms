@@ -90,6 +90,32 @@ const timersApi: { requestClockIn: ReturnType<typeof vi.fn>; clockOut: ReturnTyp
 };
 vi.mock('../src/components/Timers', () => ({ useTimers: () => timersApi }));
 
+// The live markdown field is TipTap, which needs a real browser (the journal's tests
+// mock it too; Playwright drives the real one). Here it never loads, so Details is the
+// plain stand-in box — except where a test hands in `richField`, a textarea standing
+// in for it that reports through the same props.
+type RichProps = { value: string; onChange: (s: string) => void; onFocus?: () => void; onBlur?: () => void; onKeyDown?: (e: unknown) => void; revision?: number; testId: string };
+const fieldLoad = vi.hoisted(() => ({ field: null as unknown, resolve: null as ((f: unknown) => void) | null }));
+vi.mock('../src/components/markdown-field-loader', () => ({
+  peekMarkdownField: () => fieldLoad.field,
+  loadMarkdownField: () =>
+    new Promise((resolve) => {
+      fieldLoad.resolve = resolve;
+    }),
+}));
+function RichStub({ value, onChange, onFocus, onBlur, onKeyDown, revision = 0, testId }: RichProps) {
+  return createElement('textarea', {
+    'data-testid': testId,
+    'data-live': 'true',
+    'data-revision': String(revision),
+    value,
+    onChange: (e: { target: { value: string } }) => onChange(e.target.value),
+    onFocus,
+    onBlur,
+    onKeyDown,
+  });
+}
+
 const { EditableTitle, TaskDetailProvider, useTaskDetail, hoursText, parseHours, stepMinutes } = await import('../src/components/TaskDetail');
 
 // ── a small world: one vision › roadmap › two projects ──
@@ -141,6 +167,8 @@ const openCard = (n: Node = task) => fireEvent.click(screen.getByTestId(`meta-${
 const input = (testId: string) => screen.getByTestId(testId) as HTMLInputElement;
 
 beforeEach(() => {
+  fieldLoad.field = null;
+  fieldLoad.resolve = null;
   clearDrafts(); // kept field text outlives a card; each test starts from a clean page load
   commandFns.clear();
   state.timers = [];
@@ -366,6 +394,59 @@ describe('completing from the card', () => {
   });
 });
 
+describe('Details: live markdown', () => {
+  it('is a plain box until the live field has loaded, then the live field with the same text', async () => {
+    world({ description: '**Quote** the mayor' });
+    mount();
+    openCard();
+    expect(input('td-details').dataset['live']).toBeUndefined(); // the stand-in
+    expect(input('td-details').value).toBe('**Quote** the mayor');
+    await act(async () => fieldLoad.resolve?.(RichStub));
+    expect(input('td-details').dataset['live']).toBe('true');
+    expect(input('td-details').value).toBe('**Quote** the mayor');
+  });
+
+  it('what is typed in the live field saves as markdown when it is left', () => {
+    fieldLoad.field = RichStub; // loaded already (an earlier card fetched it)
+    mount();
+    openCard();
+    const box = input('td-details');
+    expect(box.dataset['live']).toBe('true');
+    act(() => box.focus());
+    fireEvent.change(box, { target: { value: '# Brief\n\n- _one_\n' } });
+    fireEvent.blur(box);
+    expect(command('setDescription')).toHaveBeenCalledWith(task.id, '# Brief\n\n- _one_');
+  });
+
+  it('never swaps under the caret: a focused plain box stays until it is left', async () => {
+    mount();
+    openCard();
+    act(() => input('td-details').focus());
+    fireEvent.change(input('td-details'), { target: { value: 'half a thou' } });
+    await act(async () => fieldLoad.resolve?.(RichStub));
+    expect(input('td-details').dataset['live']).toBeUndefined(); // still the box being typed in
+    expect(document.activeElement).toBe(input('td-details'));
+    fireEvent.blur(input('td-details'));
+    expect(command('setDescription')).toHaveBeenCalledWith(task.id, 'half a thou');
+    expect(input('td-details').dataset['live']).toBe('true');
+  });
+
+  it('Escape in the live field puts the stored text back and keeps the card open', () => {
+    fieldLoad.field = RichStub;
+    world({ description: 'Stored' });
+    mount();
+    openCard();
+    const box = input('td-details');
+    act(() => box.focus());
+    fireEvent.change(box, { target: { value: 'Stored, then not' } });
+    fireEvent.keyDown(box, { key: 'Escape' });
+    expect(card()).not.toBeNull();
+    expect(input('td-details').value).toBe('Stored');
+    expect(input('td-details').dataset['revision']).toBe('1'); // tells the live field to show it
+    fireEvent.blur(input('td-details'));
+    expect(command('setDescription')).not.toHaveBeenCalled();
+  });
+});
 describe('the card’s fields', () => {
   it('shows where the task lives, its budget and the time logged against it', () => {
     mount();

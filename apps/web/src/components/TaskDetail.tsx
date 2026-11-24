@@ -28,7 +28,7 @@
  * shell) owns it, and a row opts in with `useTaskDetail().rowProps(taskId)`.
  *
  * Testids: td-dialog, td-title, td-project, td-start, td-due, td-hours,
- * td-logged, td-location, td-details, td-step-add, td-step-<id>, td-dep-add-before,
+ * td-logged, td-location, td-details (the live markdown editor, or its plain stand-in), td-step-add, td-step-<id>, td-dep-add-before,
  * td-dep-add-after, td-dep-<edgeId>, td-delete, td-done, td-complete, td-clock-in, td-clock-out,
  * td-running; rows' titles are
  * title-<taskId> (button) / title-input-<taskId> (inline rename).
@@ -89,6 +89,8 @@ import { ProjectPicker } from './ProjectPicker';
 import { RunMark } from './RunMark';
 import { ON_BREAK_TITLE } from '../break';
 import { useTimers } from './Timers';
+
+import { loadMarkdownField, peekMarkdownField, type MarkdownFieldComponent } from './markdown-field-loader';
 import { newProjectFor } from './useNewProject';
 
 // --- the shared controller ------------------------------------------------------
@@ -1070,8 +1072,39 @@ function LocationField({ node, commands, run, onRemove }: FieldProps & { onRemov
   );
 }
 
+/** The live markdown field once it has loaded (it is fetched on demand), else null. */
+function useMarkdownField(): MarkdownFieldComponent | null {
+  const [Field, setField] = useState<MarkdownFieldComponent | null>(() => peekMarkdownField());
+  useEffect(() => {
+    if (Field) return;
+    let live = true;
+    loadMarkdownField().then(
+      (F) => live && setField(() => F),
+      () => {}, // offline before it was cached: the plain box keeps working
+    );
+    return () => {
+      live = false;
+    };
+  }, [Field]);
+  return Field;
+}
+
+/**
+ * Details: notes in markdown, rendered AS THEY ARE TYPED — closing `**bold**` or
+ * `_italic_` formats it at once, and `# `, `- `, `1. `, `- [ ] `, `> ` start a
+ * heading, list, task list or quote (the journal's editor, no toolbar). The stored
+ * value is the markdown text, unchanged.
+ *
+ * The editor loads on demand; until it has, this is a plain text box bound to the
+ * same draft. The swap never happens under the caret: while the plain box is
+ * focused it stays, and the live field takes over once it is left.
+ */
 function DetailsField({ node, commands, run }: FieldProps) {
   const d = useDraft(node.description, `task.${node.id}.details`);
+  const Field = useMarkdownField();
+  const [plainFocused, setPlainFocused] = useState(false);
+  /** Bumped when Escape reverts an edit, so the live field shows the stored text again. */
+  const [revision, setRevision] = useState(0);
   function save() {
     const text = d.release().trimEnd();
     if (text === node.description) {
@@ -1080,23 +1113,58 @@ function DetailsField({ node, commands, run }: FieldProps) {
     }
     void run(() => commands.setDescription(node.id, text));
   }
-  const lines = d.draft.split('\n').length;
+  const placeholder = 'Notes, links, acceptance criteria — anything someone doing this needs to know.';
+  const live = Field !== null && !plainFocused;
   return (
     <div className="px-td-sec">
-      <label className="px-td-sec-h" htmlFor="td-details"><Ic name="note" />Details</label>
-      <textarea
-        id="td-details"
-        className="px-td-in px-td-desc"
-        data-testid="td-details"
-        placeholder="Notes, links, acceptance criteria — anything someone doing this needs to know."
-        maxLength={MAX_DESCRIPTION_LENGTH}
-        rows={Math.min(14, Math.max(3, lines + 1))}
-        value={d.draft}
-        onFocus={d.onFocus}
-        onChange={(e) => d.setDraft(e.target.value)}
-        onBlur={save}
-        onKeyDown={(e) => escapeReverts(e, d)}
-      />
+      <label
+        className="px-td-sec-h"
+        htmlFor="td-details"
+        // the live field is a contenteditable, which a label does not focus by itself
+        onClick={() => document.getElementById('td-details')?.focus()}
+      >
+        <Ic name="note" />
+        Details
+      </label>
+      {live ? (
+        <Field
+          id="td-details"
+          testId="td-details"
+          label="Details"
+          placeholder={placeholder}
+          value={d.draft}
+          revision={revision}
+          onChange={d.setDraft}
+          onFocus={d.onFocus}
+          onBlur={save}
+          onKeyDown={(e) => {
+            if (e.key !== 'Escape' || !d.dirty) return;
+            e.stopPropagation();
+            d.reset();
+            setRevision((r) => r + 1);
+          }}
+        />
+      ) : (
+        <textarea
+          id="td-details"
+          className="px-td-in px-td-desc"
+          data-testid="td-details"
+          placeholder={placeholder}
+          maxLength={MAX_DESCRIPTION_LENGTH}
+          rows={Math.min(14, Math.max(3, d.draft.split('\n').length + 1))}
+          value={d.draft}
+          onFocus={() => {
+            d.onFocus();
+            setPlainFocused(true);
+          }}
+          onChange={(e) => d.setDraft(e.target.value)}
+          onBlur={() => {
+            save();
+            setPlainFocused(false);
+          }}
+          onKeyDown={(e) => escapeReverts(e, d)}
+        />
+      )}
     </div>
   );
 }

@@ -1464,6 +1464,14 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
 .px-td-count { font-weight: 560; letter-spacing: 0; text-transform: none; color: var(--px-faint); }
 /* no resize grip: the box already grows with its text (rows follow the line count) */
 .px-td-desc { display: block; width: 100%; resize: none; line-height: 1.55; }
+/* Details, live: the journal's editor in the same framed box as the other fields. Markdown
+   renders as it is typed; the box grows with its content from a three-line minimum. */
+.px-td-mdbox { position: relative; box-sizing: border-box; padding: 0; cursor: text; }
+.px-td-mdbox:focus-within { border-color: var(--px-focus); }
+.px-td-mdbox .px-td-md { min-height: calc(3 * 1.55em + 12px); padding: 6px 9px; outline: none; background: none; border: none; border-radius: 0; margin: 0; font-size: 13px; line-height: 1.55; overflow-wrap: anywhere; }
+.px-td-mdbox .px-td-md > :first-child { margin-top: 0; }
+.px-td-mdbox .px-td-md > :last-child { margin-bottom: 0; }
+.px-td-mdbox-ph { position: absolute; left: 10px; top: 7px; right: 10px; font-size: 13px; line-height: 1.55; color: var(--px-faint); pointer-events: none; }
 .px-td-hint { margin: 10px 0 0; font-size: 12.5px; color: var(--px-faint); }
 .px-td-steps { display: flex; flex-direction: column; gap: 1px; }
 .px-td-step { margin: 0 -8px; }
