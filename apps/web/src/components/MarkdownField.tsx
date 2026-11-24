@@ -13,6 +13,7 @@ import { useEffect, useRef, type KeyboardEvent } from 'react';
 
 import { EditorContent, useEditor } from '@tiptap/react';
 
+import { followCaret, growDown, track, useGrow } from './editor-grow';
 import { editorMarkdown, richMarkdownExtensions } from './RichJournalEditor';
 
 export interface MarkdownFieldProps {
@@ -35,6 +36,16 @@ export function MarkdownField({ value, onChange, onFocus, onBlur, onKeyDown, rev
   const handlers = useRef({ onChange, onFocus, onBlur });
   handlers.current = { onChange, onFocus, onBlur };
 
+  /**
+   * The box grows down as lines are added, like the day's note (editor-grow.ts).
+   * What slides is the bordered BOX, not the editable inside it: the border is
+   * the box's. Once the task card is as tall as the window the box is held at
+   * that size and scrolls inside instead (theme.css), so its height stops
+   * changing and nothing animates.
+   */
+  const grow = useGrow();
+  const box = useRef<HTMLDivElement>(null);
+
   const editor = useEditor({
     immediatelyRender: false,
     extensions: richMarkdownExtensions(),
@@ -49,9 +60,17 @@ export function MarkdownField({ value, onChange, onFocus, onBlur, onKeyDown, rev
         'aria-label': label,
         writingsuggestions: 'false',
       },
+      // glide the capped box (or the card) to the caret rather than snapping
+      handleScrollToSelection: followCaret,
     },
-    onUpdate: ({ editor: e }) => handlers.current.onChange(editorMarkdown(e)),
-    onFocus: () => handlers.current.onFocus?.(),
+    onUpdate: ({ editor: e }) => {
+      growDown(grow);
+      handlers.current.onChange(editorMarkdown(e));
+    },
+    onFocus: () => {
+      track(grow, box.current);
+      handlers.current.onFocus?.();
+    },
     onBlur: () => handlers.current.onBlur?.(),
   });
 
@@ -70,7 +89,7 @@ export function MarkdownField({ value, onChange, onFocus, onBlur, onKeyDown, rev
   }, [editor, revision, value]);
 
   return (
-    <div className="px-td-in px-td-desc px-td-mdbox" data-testid={`${testId}-box`} onKeyDown={onKeyDown}>
+    <div ref={box} className="px-td-in px-td-desc px-td-mdbox" data-testid={`${testId}-box`} onKeyDown={onKeyDown}>
       <EditorContent editor={editor} />
       {value.trim() === '' && placeholder && (
         <span className="px-td-mdbox-ph" aria-hidden="true">

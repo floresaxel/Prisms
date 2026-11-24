@@ -17,7 +17,7 @@
  * Rendered in a browser only; the jsdom component tests mock this module (TipTap
  * needs a real DOM), and Playwright e2e exercises the live editor.
  */
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, type ReactNode } from 'react';
 
 import { TaskItem, TaskList } from '@tiptap/extension-list';
 import { EditorContent, Extension, InputRule, useEditor, type Editor } from '@tiptap/react';
@@ -26,114 +26,14 @@ import { Markdown, type MarkdownStorage } from 'tiptap-markdown';
 
 import { Ic } from '@prisms/ui';
 
+import { followCaret, growDown, track, useGrow } from './editor-grow';
+
 /** Link schemes allowed in a note; everything else is refused (matches MarkdownView, D2). */
 const SAFE_PROTOCOLS = ['http', 'https', 'mailto'];
 
 // tiptap-markdown augments the editor's storage at runtime but doesn't type it.
 const getMd = (editor: Editor): string =>
   (editor.storage as unknown as { markdown: MarkdownStorage }).markdown.getMarkdown();
-
-/* ── growing down ──
-   A new line lands at the bottom of the note, and the note's box follows it
-   DOWN: its height eases from where it was to where the text now needs it,
-   clipping the new line until the edge has slid past it. Nothing above moves. */
-
-/** How long the box takes to reach a new line. Short: it runs on every Enter. */
-const GROW_MS = 160;
-const GROW_EASE = 'cubic-bezier(0.2, 0, 0, 1)';
-
-const reducedMotion = (): boolean =>
-  typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-/** The box's settled height, and the animation easing it there if one is running. */
-interface Grow {
-  el: HTMLElement | null;
-  last: number;
-  anim: Animation | null;
-  ro: ResizeObserver | null;
-}
-
-/**
- * Start following `el`. A ResizeObserver keeps `last` current through every
- * change that is NOT typing — a synced edit landing, the window resizing — so the
- * next keystroke animates from the height actually on screen. It stands down
- * while an animation runs: those are the animation's own frames.
- */
-function track(s: Grow, el: HTMLElement): void {
-  if (s.el === el || typeof ResizeObserver !== 'function') return;
-  s.ro?.disconnect();
-  s.el = el;
-  s.last = el.getBoundingClientRect().height;
-  s.ro = new ResizeObserver(() => {
-    if (!s.anim && s.el) s.last = s.el.getBoundingClientRect().height;
-  });
-  s.ro.observe(el);
-}
-
-/**
- * Called right after an edit reached the DOM — the box is already at its NEW
- * height, and `last` still holds the old one. Animate between the two. An edit
- * landing mid-animation starts from wherever the edge has got to, so fast typing
- * is one continuous slide rather than a stutter.
- */
-function growDown(s: Grow): void {
-  const el = s.el;
-  if (!el || typeof el.animate !== 'function') return;
-  const from = s.anim ? el.getBoundingClientRect().height : s.last;
-  s.anim?.cancel();
-  s.anim = null;
-  const to = el.getBoundingClientRect().height;
-  s.last = to;
-  if (Math.abs(to - from) < 0.5 || reducedMotion()) {
-    el.classList.remove('px-journal-rich--growing');
-    return;
-  }
-  // overflow: clip + min-height: 0 for the length of the slide — see theme.css
-  el.classList.add('px-journal-rich--growing');
-  const a = el.animate({ height: [`${from}px`, `${to}px`] }, { duration: GROW_MS, easing: GROW_EASE });
-  s.anim = a;
-  a.onfinish = () => {
-    if (s.anim !== a) return;
-    s.anim = null;
-    el.classList.remove('px-journal-rich--growing');
-  };
-}
-
-/** The element that scrolls the page around this editor (`.px-content`). */
-function scrollParent(el: HTMLElement): HTMLElement | null {
-  for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
-    const oy = getComputedStyle(p).overflowY;
-    if (oy === 'auto' || oy === 'scroll') return p;
-  }
-  return null;
-}
-
-/** Room kept between the caret and the scroller's edge. */
-const CARET_MARGIN = 24;
-
-/**
- * Keep the caret in view by GLIDING the page, not snapping it. ProseMirror's own
- * scroll jumps the page a line at a time, and it runs before the box has grown —
- * so at the bottom of the window every Enter yanked the whole page up a line
- * while the note's edge was still sliding down. Returns false (ProseMirror's
- * default) when there is no scroller to drive.
- */
-function followCaret(view: Editor['view']): boolean {
-  const scroller = scrollParent(view.dom);
-  if (!scroller) return false;
-  let caret: { top: number; bottom: number };
-  try {
-    caret = view.coordsAtPos(view.state.selection.head);
-  } catch {
-    return false;
-  }
-  const box = scroller.getBoundingClientRect();
-  let delta = 0;
-  if (caret.bottom > box.bottom - CARET_MARGIN) delta = caret.bottom - (box.bottom - CARET_MARGIN);
-  else if (caret.top < box.top + CARET_MARGIN) delta = caret.top - (box.top + CARET_MARGIN);
-  if (delta !== 0) scroller.scrollBy({ top: delta, behavior: reducedMotion() ? 'auto' : 'smooth' });
-  return true;
-}
 
 interface ToolItem {
   key: string;
@@ -279,14 +179,8 @@ export function RichJournalEditor({
    */
   renderLocked?: (markdown: string) => ReactNode;
 }) {
-  const grow = useRef<Grow>({ el: null, last: 0, anim: null, ro: null });
-  useEffect(() => {
-    const s = grow.current;
-    return () => {
-      s.ro?.disconnect();
-      s.anim?.cancel();
-    };
-  }, []);
+  // the note's box grows down as lines are added (editor-grow.ts)
+  const grow = useGrow();
 
   const editor = useEditor({
     immediatelyRender: false, // client-only SPA; avoids any SSR-detection warning
@@ -304,10 +198,10 @@ export function RichJournalEditor({
     },
     // Tracking starts as soon as the view exists, and again on focus in case the
     // view was rebuilt; `track` is a no-op for the element it already follows.
-    onCreate: ({ editor }) => track(grow.current, editor.view.dom),
-    onFocus: ({ editor }) => track(grow.current, editor.view.dom),
+    onCreate: ({ editor }) => track(grow, editor.view.dom),
+    onFocus: ({ editor }) => track(grow, editor.view.dom),
     onUpdate: ({ editor }) => {
-      growDown(grow.current);
+      growDown(grow);
       onChange(getMd(editor));
     },
     onBlur: onBlur ? ({ editor }) => onBlur(getMd(editor)) : undefined,
