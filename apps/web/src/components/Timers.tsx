@@ -35,6 +35,7 @@ import {
   breakPhase,
   breakRemainingMs,
   formatCountdown,
+  loadBreak,
   saveBreak,
   takeBreak,
   useActiveBreak,
@@ -53,6 +54,9 @@ import { useSecondClock } from './useSecondClock';
  * offered here — only on the Review tab's session items, after the fact.
  */
 const FOCUS_SCALE = ['0.3', '', '', '', '0.7', '', '', '1.0'];
+
+/** Breaks being closed right now, by id — a second click while the first is mid-way does nothing. */
+const closingBreaks = new Set<string>();
 
 /** The numbers printed under the break slider, one per step (5, 10 … 30). */
 const BREAK_SCALE = Array.from({ length: (BREAK_MAX_MINUTES - BREAK_MIN_MINUTES) / BREAK_STEP_MINUTES + 1 }, (_, i) => String(BREAK_MIN_MINUTES + i * BREAK_STEP_MINUTES));
@@ -124,23 +128,37 @@ export function TimersProvider({ ctx, children }: { ctx: CommandContext; childre
    * Close the break `b` (once — a second tab or click finds it gone), record it
    * (`break.log` — the journal's day log shows it on the day it started; nothing
    * is written into the note), and clock back in when asked to.
+   *
+   * Resuming restarts the timers WHILE the break is still the break, and only then
+   * closes and logs it: the topbar pill goes straight from the break to the running
+   * timers instead of passing through a moment with nothing to show (it would shrink
+   * away and grow back). `closingBreaks` stops a second click from starting the
+   * timers twice meanwhile; the record's times were captured up front.
    */
   const closeBreak = useCallback(
     async (b: ActiveBreak, resume: boolean) => {
       const endAt = Date.now();
-      const closed = takeBreak(ctx.userId, b.id);
-      if (!closed) return;
-      await commands
-        .logBreak({ startedAt: new Date(closed.startedAt).toISOString(), endedAt: new Date(breakLogEnd(closed, endAt)).toISOString(), plannedMinutes: closed.minutes })
-        .catch(() => undefined);
-      if (!resume) return;
-      // They were running before the break: a task that has since become blocked
-      // is taken back up as it was (force); one that is done or gone is skipped.
-      for (const t of closed.tasks) await commands.clockIn(t.taskId, { force: true }).catch(() => undefined);
+      if (closingBreaks.has(b.id)) return;
+      closingBreaks.add(b.id);
+      try {
+        if (resume) {
+          const running = loadBreak(ctx.userId);
+          if (!running || running.id !== b.id) return;
+          // They were running before the break: a task that has since become blocked
+          // is taken back up as it was (force); one that is done or gone is skipped.
+          for (const t of running.tasks) await commands.clockIn(t.taskId, { force: true }).catch(() => undefined);
+        }
+        const closed = takeBreak(ctx.userId, b.id);
+        if (!closed) return;
+        await commands
+          .logBreak({ startedAt: new Date(closed.startedAt).toISOString(), endedAt: new Date(breakLogEnd(closed, endAt)).toISOString(), plannedMinutes: closed.minutes })
+          .catch(() => undefined);
+      } finally {
+        closingBreaks.delete(b.id);
+      }
     },
     [commands, ctx.userId],
-  );
-  const resumeFromBreak = useCallback(async () => {
+  );  const resumeFromBreak = useCallback(async () => {
     if (activeBreak) await closeBreak(activeBreak, true);
   }, [activeBreak, closeBreak]);
   const endBreak = useCallback(async () => {

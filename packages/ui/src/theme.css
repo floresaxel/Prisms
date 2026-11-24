@@ -386,19 +386,34 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
    "now", so the pill is solid blue with the filled-door glyph — the one place
    in the bar that is coloured. (Amber stays for caution: a sync queue that is
    not draining.) */
-.px-timer-pill { display: flex; align-items: center; gap: 8px; padding: 4px 5px 4px 11px; border: 1.5px solid var(--px-accent); background: var(--px-accent); border-radius: 999px; font-size: 12.5px; color: #fff; }
+/* The pill is animated as one thing (GlobalTimer.tsx): it grows in and shrinks out (`data-shown`), its WIDTH follows
+   its content (set inline from a measurement — `auto` cannot be transitioned), its colour eases between blue, amber
+   (a break) and red (over), and a running ⇄ break switch crossfades the old content out under the new. The padding
+   lives on the inner row so the measured width includes it; `overflow: hidden` clips the content while the width moves. */
+.px-timer-pill { position: relative; overflow: hidden; box-sizing: border-box; border: 1.5px solid var(--px-accent); background: var(--px-accent); border-radius: 999px; font-size: 12.5px; color: #fff; }
+.px-pill-inner { display: flex; align-items: center; gap: 8px; width: max-content; padding: 4px 5px 4px 11px; }
+.px-timer-pill[data-shown='false'] { opacity: 0; transform: scale(0.86); }
+@media (prefers-reduced-motion: no-preference) {
+  .px-timer-pill { transition: width 260ms cubic-bezier(0.4, 0, 0.2, 1), opacity 200ms ease-out, transform 260ms cubic-bezier(0.4, 0, 0.2, 1), background-color 260ms ease, border-color 260ms ease; }
+  .px-pill-inner--swap { animation: px-pill-in 200ms ease-out both; }
+  .px-pill-ghost { position: absolute; left: 0; top: 0; pointer-events: none; animation: px-pill-out 160ms ease-in forwards; }
+  .px-timer-pill-more { animation: px-pill-pop 220ms cubic-bezier(0.3, 1.4, 0.5, 1) both; }
+}
+@keyframes px-pill-in { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+@keyframes px-pill-out { to { opacity: 0; transform: translateY(-3px); } }
+@keyframes px-pill-pop { from { opacity: 0; transform: scale(0.5); } to { opacity: 1; transform: none; } }
 .px-timer-pill svg { flex: none; }
 @keyframes px-pulse { 50% { opacity: 0.35; } }
 .px-timer-pill-task { font-weight: 600; max-width: 180px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .px-timer-pill-elapsed { font-family: var(--px-font-mono); font-weight: 500; font-variant-numeric: tabular-nums; }
 .px-timer-stop { display: inline-flex; align-items: center; gap: 4px; border: 1px solid rgba(255,255,255,.38); background: rgba(255,255,255,.14); border-radius: 999px; padding: 3px 10px; font-size: 11.5px; font-weight: 560; color: #fff; cursor: pointer; }
 .px-timer-stop:hover { background: rgba(255,255,255,.26); }
-.px-timer-stop:focus-visible { outline-color: #fff; }
+.px-timer-stop:focus-visible { outline-color: #fff; outline-offset: 1px; }
 /* the pill's lead part (mark · task · +N · counter); a button once several timers run */
 .px-timer-wrap { position: relative; display: flex; }
 .px-timer-lead { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .px-timer-lead--btn { border: none; background: none; font: inherit; color: inherit; padding: 0; margin: 0; cursor: pointer; border-radius: 999px; }
-.px-timer-lead--btn:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+.px-timer-lead--btn:focus-visible { outline: 2px solid #fff; outline-offset: 1px; } /* the pill clips (overflow: hidden), so the ring stays inside it */
 .px-timer-caret { width: 12px; height: 12px; opacity: 0.85; }
 .px-timer-lead--btn[aria-expanded='true'] .px-timer-caret { transform: rotate(180deg); }
 /* the small drop-down under the pill: every running timer, with its own stop */
