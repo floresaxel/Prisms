@@ -23,6 +23,7 @@ export function StepSlider({
   testId,
   ariaLabel,
   labels,
+  disabled = false,
 }: {
   min: number;
   max: number;
@@ -33,12 +34,14 @@ export function StepSlider({
   ariaLabel?: string;
   /** One caption per step, in order (length = steps + 1); empty strings leave a step bare. */
   labels?: readonly string[];
+  /** Greyed out and not operable — the value is kept for when it comes back on. */
+  disabled?: boolean;
 }) {
   const steps = Math.max(1, Math.round((max - min) / step));
   const at = (i: number) => `${(i / steps) * 100}%`;
   const pct = Math.min(1, Math.max(0, (value - min) / (max - min)));
   return (
-    <div className="px-steps" style={{ '--px-steps-pct': pct } as CSSProperties}>
+    <div className={`px-steps${disabled ? ' px-steps--off' : ''}`} style={{ '--px-steps-pct': pct } as CSSProperties}>
       <div className="px-steps-body">
         <span className="px-steps-rail" aria-hidden="true" />
         <span className="px-steps-ticks" aria-hidden="true">
@@ -54,6 +57,7 @@ export function StepSlider({
           value={value}
           data-testid={testId}
           aria-label={ariaLabel}
+          disabled={disabled}
           onChange={(e) => onChange(Number(e.target.value))}
         />
       </div>

@@ -15,6 +15,7 @@ import {
   anchorTypeSchema,
   completionDispositionSchema,
   edgeTypeSchema,
+  focusFactorSchema,
   MAX_TITLE_LENGTH,
   nodeTypeSchema,
   streakModeSchema,
@@ -170,7 +171,8 @@ export const timerClockOutSchema = z.strictObject({ entry_id: uuidSchema, ended_
 export const timerAdjustSchema = z.strictObject({ entry_id: uuidSchema, ended_at: isoDateTimeSchema });
 export const timerReviewSchema = z.strictObject({
   entry_id: uuidSchema,
-  focus_factor: z.number().min(0.5).max(1.0),
+  /** 0 = the session does not count; else 0.3–1.0. */
+  focus_factor: focusFactorSchema,
   completed_session: z.boolean(),
 });
 /**

@@ -42,8 +42,12 @@ import {
   type BreakTask,
 } from '../break';
 import { formatElapsed } from '../format';
+import { FOCUS_MAX, FOCUS_MIN, FOCUS_NONE } from '../focus-factor';
 import { StepSlider } from './StepSlider';
 import { useSecondClock } from './useSecondClock';
+
+/** Captions under the focus slider: its ends and its middle (0.3 … 1.0 in tenths). */
+const FOCUS_SCALE = ['0.3', '', '', '', '0.7', '', '', '1.0'];
 
 /** The numbers printed under the break slider, one per step (5, 10 … 30). */
 const BREAK_SCALE = Array.from({ length: (BREAK_MAX_MINUTES - BREAK_MIN_MINUTES) / BREAK_STEP_MINUTES + 1 }, (_, i) => String(BREAK_MIN_MINUTES + i * BREAK_STEP_MINUTES));
@@ -103,6 +107,8 @@ export function TimersProvider({ ctx, children }: { ctx: CommandContext; childre
   const [toStop, setToStop] = useState<Set<string>>(new Set());
   const [reviews, setReviews] = useState<ReviewTarget[]>([]);
   const [focus, setFocus] = useState(1.0);
+  /** "Don't count": the session is saved at ×0 — logged, but none of its time counts. */
+  const [noCount, setNoCount] = useState(false);
   const [completed, setCompleted] = useState(false);
 
   // ── breaks ──
@@ -153,6 +159,7 @@ export function TimersProvider({ ctx, children }: { ctx: CommandContext; childre
       setReviews((q) => {
         if (q.length === 0) {
           setFocus(1.0);
+          setNoCount(false);
           setCompleted(false);
         }
         return [...q, ...targets];
@@ -199,8 +206,9 @@ export function TimersProvider({ ctx, children }: { ctx: CommandContext; childre
     const head = reviews[0];
     if (!head) return;
     if (action !== 'cancel') await stopHeld(head);
-    if (action === 'save') await commands.review({ entryId: head.entryId, focusFactor: focus, completedSession: completed, taskId: head.taskId });
+    if (action === 'save') await commands.review({ entryId: head.entryId, focusFactor: noCount ? FOCUS_NONE : focus, completedSession: completed, taskId: head.taskId });
     setFocus(1.0);
+          setNoCount(false);
     setCompleted(false);
     setBreakPicker(false);
     setReviews((q) => q.slice(1));
@@ -335,8 +343,21 @@ export function TimersProvider({ ctx, children }: { ctx: CommandContext; childre
           {review?.endedAt != null && ' · still clocked in until you save or pick Review later'}
         </p>
         <label className="px-field">
-          Focus factor: ×{focus.toFixed(1)}
-          <StepSlider min={0.5} max={1.0} step={0.1} value={focus} onChange={setFocus} testId="review-focus" ariaLabel="Focus factor" />
+          <span data-testid="review-focus-label">
+            Focus factor: ×{noCount ? '0' : focus.toFixed(1)}
+            {noCount && <span className="px-muted"> — this session won&rsquo;t count</span>}
+          </span>
+          <StepSlider
+            min={FOCUS_MIN}
+            max={FOCUS_MAX}
+            step={0.1}
+            value={focus}
+            onChange={setFocus}
+            disabled={noCount}
+            testId="review-focus"
+            ariaLabel="Focus factor"
+            labels={FOCUS_SCALE}
+          />
         </label>
         <div className="px-review-pills">
           <button
@@ -348,6 +369,16 @@ export function TimersProvider({ ctx, children }: { ctx: CommandContext; childre
             onClick={() => setCompleted((c) => !c)}
           >
             <Ic name="check" /> Completed this task
+          </button>
+          <button
+            type="button"
+            className="px-review-pill px-review-pill--skip"
+            data-testid="review-no-count"
+            aria-pressed={noCount}
+            title="Keep the session in the log, but count none of its time (×0)"
+            onClick={() => setNoCount((n) => !n)}
+          >
+            <Ic name="x" /> Don&rsquo;t count
           </button>
           <button
             type="button"

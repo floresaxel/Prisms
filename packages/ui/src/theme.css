@@ -1236,6 +1236,7 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
 .px-review-pill { --px-pill: var(--px-text-dim); --px-pill-bg: var(--px-sb-bg); --px-pill-brd: var(--px-border); display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px; border: 1px solid var(--px-pill-brd); background: var(--px-pill-bg); color: var(--px-pill); border-radius: 999px; font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; }
 .px-review-pill:hover { border-color: var(--px-pill); }
 .px-review-pill--done { --px-pill: var(--px-green); --px-pill-bg: var(--px-green-bg); --px-pill-brd: var(--px-green-brd); }
+.px-review-pill--skip { --px-pill: var(--px-red); --px-pill-bg: var(--px-red-bg); --px-pill-brd: var(--px-red-brd); }
 .px-review-pill--break { --px-pill: var(--px-amber); --px-pill-bg: var(--px-amber-bg); --px-pill-brd: var(--px-amber-brd); }
 .px-review-pill[aria-pressed='true'], .px-review-pill[aria-expanded='true'] { background: var(--px-pill); border-color: var(--px-pill); color: #fff; }
 .px-review-later { margin-right: auto; padding: 6px 2px; border: 0; background: none; font: inherit; font-size: 13px; color: var(--px-text-dim); cursor: pointer; }
@@ -1276,6 +1277,8 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
 }
 .px-steps input[type='range']:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px color-mix(in srgb, var(--px-steps-c) 30%, transparent); }
 .px-steps input[type='range']:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 4px color-mix(in srgb, var(--px-steps-c) 30%, transparent); }
+.px-steps--off { opacity: 0.38; filter: grayscale(1); }
+.px-steps--off input[type='range'] { cursor: not-allowed; }
 .px-steps-labels { position: relative; display: block; height: 14px; margin: 3px calc(var(--px-steps-thumb) / 2) 0; font-size: 10.5px; color: var(--px-text-dim); font-variant-numeric: tabular-nums; }
 .px-steps-labels > span { position: absolute; top: 0; transform: translateX(-50%); }
 .px-break-count { font-family: var(--px-font-mono); font-size: 40px; font-weight: 500; text-align: center; color: var(--px-amber); font-variant-numeric: tabular-nums; margin: 4px 0 6px; }
