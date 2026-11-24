@@ -10,7 +10,7 @@
 import { createElement } from 'react';
 
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { buildFactContext, sortOrderBetween, SYNC_ROW_DEFAULTS, type Edge, type FactContext, type Node, type NodeType, type TaskStep } from '@prisms/core';
 import type { PromoteTarget } from '@prisms/ui';
@@ -90,6 +90,32 @@ const timersApi: { requestClockIn: ReturnType<typeof vi.fn>; clockOut: ReturnTyp
 };
 vi.mock('../src/components/Timers', () => ({ useTimers: () => timersApi }));
 
+// The live markdown field is TipTap, which needs a real browser (the journal's tests
+// mock it too; Playwright drives the real one). Here it never loads, so Details is the
+// plain stand-in box — except where a test hands in `richField`, a textarea standing
+// in for it that reports through the same props.
+type RichProps = { value: string; onChange: (s: string) => void; onFocus?: () => void; onBlur?: () => void; onKeyDown?: (e: unknown) => void; revision?: number; testId: string };
+const fieldLoad = vi.hoisted(() => ({ field: null as unknown, resolve: null as ((f: unknown) => void) | null }));
+vi.mock('../src/components/markdown-field-loader', () => ({
+  peekMarkdownField: () => fieldLoad.field,
+  loadMarkdownField: () =>
+    new Promise((resolve) => {
+      fieldLoad.resolve = resolve;
+    }),
+}));
+function RichStub({ value, onChange, onFocus, onBlur, onKeyDown, revision = 0, testId }: RichProps) {
+  return createElement('textarea', {
+    'data-testid': testId,
+    'data-live': 'true',
+    'data-revision': String(revision),
+    value,
+    onChange: (e: { target: { value: string } }) => onChange(e.target.value),
+    onFocus,
+    onBlur,
+    onKeyDown,
+  });
+}
+
 const { EditableTitle, TaskDetailProvider, useTaskDetail, hoursText, parseHours, stepMinutes } = await import('../src/components/TaskDetail');
 
 // ── a small world: one vision › roadmap › two projects ──
@@ -141,6 +167,8 @@ const openCard = (n: Node = task) => fireEvent.click(screen.getByTestId(`meta-${
 const input = (testId: string) => screen.getByTestId(testId) as HTMLInputElement;
 
 beforeEach(() => {
+  fieldLoad.field = null;
+  fieldLoad.resolve = null;
   clearDrafts(); // kept field text outlives a card; each test starts from a clean page load
   commandFns.clear();
   state.timers = [];
@@ -366,84 +394,59 @@ describe('completing from the card', () => {
   });
 });
 
-describe('Details render markdown', () => {
-  const MD = '# Plan\n\nShip **fast**.\n\n- one\n- two\n\n[docs](https://example.test/x) and [bad](javascript:alert(1))\n\n<script>alert(1)</script>';
-  const view = () => screen.getByTestId('td-details-view');
-  // The renderer loads on demand (a dynamic import). Load it once up front, with a generous
-  // hook timeout: the first import in a cold run (CI) can take longer than a test is allowed.
-  beforeAll(async () => {
-    await import('../src/components/MarkdownView');
-  }, 30_000);
-  /** Wait for the loaded renderer to replace the plain-text stand-in. */
-  const rendered = () => screen.findByTestId('td-details-md', undefined, { timeout: 4000 });
-
-  it('shows saved details rendered — headings, bold, lists, links — and never raw HTML', async () => {
-    world({ description: MD });
+describe('Details: live markdown', () => {
+  it('is a plain box until the live field has loaded, then the live field with the same text', async () => {
+    world({ description: '**Quote** the mayor' });
     mount();
     openCard();
-    await rendered();
-    expect(view().querySelector('h1')?.textContent).toBe('Plan');
-    expect(view().querySelector('strong')?.textContent).toBe('fast');
-    expect(view().querySelectorAll('li')).toHaveLength(2);
-    expect(view().querySelector('script')).toBeNull();
-    const links = [...view().querySelectorAll('a')];
-    const ok = links.find((a) => a.textContent === 'docs')!;
-    expect(ok.getAttribute('href')).toBe('https://example.test/x');
-    expect(ok.getAttribute('target')).toBe('_blank'); // following a link never leaves the card
-    expect(links.find((a) => a.textContent === 'bad')?.getAttribute('href') ?? '').toBe(''); // javascript: dropped
-    expect(screen.queryByTestId('td-details')).toBeNull();
+    expect(input('td-details').dataset['live']).toBeUndefined(); // the stand-in
+    expect(input('td-details').value).toBe('**Quote** the mayor');
+    await act(async () => fieldLoad.resolve?.(RichStub));
+    expect(input('td-details').dataset['live']).toBe('true');
+    expect(input('td-details').value).toBe('**Quote** the mayor');
   });
 
-  it('a click edits the raw markdown; leaving the box saves it and renders it again', async () => {
-    world({ description: '**bold** note' });
+  it('what is typed in the live field saves as markdown when it is left', () => {
+    fieldLoad.field = RichStub; // loaded already (an earlier card fetched it)
     mount();
     openCard();
-    await rendered();
-    fireEvent.mouseDown(view());
-    fireEvent.click(view());
     const box = input('td-details');
-    expect(box.value).toBe('**bold** note'); // the source, not the rendering
-    expect(document.activeElement).toBe(box);
-    fireEvent.change(box, { target: { value: '## New\n\n*made* _it_' } });
-    await act(async () => fireEvent.blur(box));
-    expect(command('setDescription')).toHaveBeenCalledWith(task.id, '## New\n\n*made* _it_');
-    expect(screen.queryByTestId('td-details')).toBeNull();
-    await rendered();
-    expect(view().querySelector('h2')?.textContent).toBe('New'); // rendered at once
+    expect(box.dataset['live']).toBe('true');
+    act(() => box.focus());
+    fireEvent.change(box, { target: { value: '# Brief\n\n- _one_\n' } });
+    fireEvent.blur(box);
+    expect(command('setDescription')).toHaveBeenCalledWith(task.id, '# Brief\n\n- _one_');
   });
 
-  it('Enter on the focused text edits it; a click on a link or after selecting text does not', async () => {
-    world({ description: 'See [docs](https://example.test/x) for **more**' });
+  it('never swaps under the caret: a focused plain box stays until it is left', async () => {
     mount();
     openCard();
-    await rendered();
-    // a link follows itself
-    fireEvent.mouseDown(view().querySelector('a')!);
-    fireEvent.click(view().querySelector('a')!);
-    expect(screen.queryByTestId('td-details')).toBeNull();
-    // a selection made by dragging is not a click to edit
-    const range = document.createRange();
-    range.selectNodeContents(view().querySelector('strong')!);
-    window.getSelection()?.removeAllRanges();
-    window.getSelection()?.addRange(range);
-    fireEvent.mouseDown(view());
-    fireEvent.click(view());
-    expect(screen.queryByTestId('td-details')).toBeNull();
-    window.getSelection()?.removeAllRanges();
-    // the keyboard gets in
-    fireEvent.keyDown(view(), { key: 'Enter' });
-    expect(input('td-details').value).toContain('[docs]');
+    act(() => input('td-details').focus());
+    fireEvent.change(input('td-details'), { target: { value: 'half a thou' } });
+    await act(async () => fieldLoad.resolve?.(RichStub));
+    expect(input('td-details').dataset['live']).toBeUndefined(); // still the box being typed in
+    expect(document.activeElement).toBe(input('td-details'));
+    fireEvent.blur(input('td-details'));
+    expect(command('setDescription')).toHaveBeenCalledWith(task.id, 'half a thou');
+    expect(input('td-details').dataset['live']).toBe('true');
   });
 
-  it('an empty Details is the editor, with a markdown hint once you are in it', () => {
+  it('Escape in the live field puts the stored text back and keeps the card open', () => {
+    fieldLoad.field = RichStub;
+    world({ description: 'Stored' });
     mount();
     openCard();
-    expect(screen.queryByTestId('td-details-view')).toBeNull();
-    expect(input('td-details').value).toBe('');
-    expect(screen.queryByText(/Markdown supported/)).toBeNull();
+    const box = input('td-details');
+    act(() => box.focus());
+    fireEvent.change(box, { target: { value: 'Stored, then not' } });
+    fireEvent.keyDown(box, { key: 'Escape' });
+    expect(card()).not.toBeNull();
+    expect(input('td-details').value).toBe('Stored');
+    expect(input('td-details').dataset['revision']).toBe('1'); // tells the live field to show it
+    fireEvent.blur(input('td-details'));
+    expect(command('setDescription')).not.toHaveBeenCalled();
   });
 });
-
 describe('the card’s fields', () => {
   it('shows where the task lives, its budget and the time logged against it', () => {
     mount();
@@ -479,8 +482,7 @@ describe('the card’s fields', () => {
     mount();
     openCard();
     expect(input('td-start').value).toBe('2026-11-20');
-    expect(screen.getByTestId('td-details-view').textContent).toBe('Quote the mayor.'); // rendered, not the editor
-    expect(screen.queryByTestId('td-details')).toBeNull();
+    expect(input('td-details').value).toBe('Quote the mayor.');
     expect(input('td-location').value).toBe('Studio B');
     expect(screen.getByTestId('td-deps')).toBeTruthy(); // it waits on "Pick a date"
     const chips = within(screen.getByTestId('td-adds')).getAllByRole('button').map((b) => b.textContent);
@@ -857,13 +859,13 @@ describe('closing', () => {
     world({ description: 'Same as stored later' });
     mount();
     openCard();
-    expect(screen.getByTestId('td-details-view').textContent).toBe('Same as stored later');
+    expect(input('td-details').value).toBe('Same as stored later');
     cleanup();
     // …so it is no longer a draft: a later change from elsewhere shows, not the old text
     world({ description: 'Edited on another device' });
     mount();
     openCard();
-    expect(screen.getByTestId('td-details-view').textContent).toBe('Edited on another device');
+    expect(input('td-details').value).toBe('Edited on another device');
   });
 
   it('Delete asks once, then soft-deletes and closes', async () => {

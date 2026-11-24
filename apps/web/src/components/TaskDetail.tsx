@@ -28,15 +28,13 @@
  * shell) owns it, and a row opts in with `useTaskDetail().rowProps(taskId)`.
  *
  * Testids: td-dialog, td-title, td-project, td-start, td-due, td-hours,
- * td-logged, td-location, td-details (the editor), td-details-view (the rendered markdown), td-step-add, td-step-<id>, td-dep-add-before,
+ * td-logged, td-location, td-details (the live markdown editor, or its plain stand-in), td-step-add, td-step-<id>, td-dep-add-before,
  * td-dep-add-after, td-dep-<edgeId>, td-delete, td-done, td-complete, td-clock-in, td-clock-out,
  * td-running; rows' titles are
  * title-<taskId> (button) / title-input-<taskId> (inline rename).
  */
 import {
   createContext,
-  lazy,
-  Suspense,
   useCallback,
   useContext,
   useEffect,
@@ -92,9 +90,7 @@ import { RunMark } from './RunMark';
 import { ON_BREAK_TITLE } from '../break';
 import { useTimers } from './Timers';
 
-// The markdown renderer is only needed once a task has details to show: loaded on demand,
-// so react-markdown and remark-gfm stay out of the main bundle.
-const MarkdownView = lazy(() => import('./MarkdownView').then((m) => ({ default: m.MarkdownView })));
+import { loadMarkdownField, peekMarkdownField, type MarkdownFieldComponent } from './markdown-field-loader';
 import { newProjectFor } from './useNewProject';
 
 // --- the shared controller ------------------------------------------------------
@@ -1076,135 +1072,98 @@ function LocationField({ node, commands, run, onRemove }: FieldProps & { onRemov
   );
 }
 
+/** The live markdown field once it has loaded (it is fetched on demand), else null. */
+function useMarkdownField(): MarkdownFieldComponent | null {
+  const [Field, setField] = useState<MarkdownFieldComponent | null>(() => peekMarkdownField());
+  useEffect(() => {
+    if (Field) return;
+    let live = true;
+    loadMarkdownField().then(
+      (F) => live && setField(() => F),
+      () => {}, // offline before it was cached: the plain box keeps working
+    );
+    return () => {
+      live = false;
+    };
+  }, [Field]);
+  return Field;
+}
+
 /**
- * Details: notes in markdown. With text, the box shows it RENDERED (headings,
- * lists, links, checkboxes, code…); a click — or Enter on the focused block —
- * turns it into the plain-text editor with the raw markdown, and leaving it saves
- * and renders again. Selecting text (a drag, or a hold) just selects it; a link
- * follows itself. Empty, it is the editor, so there is always a box to type in.
- * The stored value is the markdown source, unchanged.
+ * Details: notes in markdown, rendered AS THEY ARE TYPED — closing `**bold**` or
+ * `_italic_` formats it at once, and `# `, `- `, `1. `, `- [ ] `, `> ` start a
+ * heading, list, task list or quote (the journal's editor, no toolbar). The stored
+ * value is the markdown text, unchanged.
+ *
+ * The editor loads on demand; until it has, this is a plain text box bound to the
+ * same draft. The swap never happens under the caret: while the plain box is
+ * focused it stays, and the live field takes over once it is left.
  */
 function DetailsField({ node, commands, run }: FieldProps) {
   const d = useDraft(node.description, `task.${node.id}.details`);
-  const [editing, setEditing] = useState(false);
-  /** The text this card last saved: it renders at once, before the stored value catches up. */
-  const [saved, setSaved] = useState<string | null>(null);
-  /** The press on the rendered text, to tell a click from a drag or a hold. */
-  const press = useRef<Press | null>(null);
-  /** The editor was opened from the rendered text (so it starts with the caret at the end). */
-  const fromView = useRef(false);
-  function startEditing() {
-    fromView.current = true;
-    setEditing(true);
-  }
-  // Whether a pointer is down right now. The rendered text is a different height from the
-  // editor and the card is centred, so swapping them under a click that BLURRED the editor
-  // (on another field, a chip, Done) would move that control out from under the pointer.
-  // The swap waits for the release instead.
-  const pointerDown = useRef(false);
-  useEffect(() => {
-    const down = () => {
-      pointerDown.current = true;
-    };
-    const up = () => {
-      pointerDown.current = false;
-    };
-    window.addEventListener('pointerdown', down, true);
-    window.addEventListener('pointerup', up, true);
-    window.addEventListener('pointercancel', up, true);
-    return () => {
-      window.removeEventListener('pointerdown', down, true);
-      window.removeEventListener('pointerup', up, true);
-      window.removeEventListener('pointercancel', up, true);
-    };
-  }, []);
-  function leaveEditor() {
-    if (!pointerDown.current) {
-      setEditing(false);
-      return;
-    }
-    const release = () => {
-      window.removeEventListener('pointerup', release, true);
-      window.removeEventListener('pointercancel', release, true);
-      // after the click that the release produces has been handled
-      window.setTimeout(() => setEditing(false), 0);
-    };
-    window.addEventListener('pointerup', release, true);
-    window.addEventListener('pointercancel', release, true);
-  }
+  const Field = useMarkdownField();
+  const [plainFocused, setPlainFocused] = useState(false);
+  /** Bumped when Escape reverts an edit, so the live field shows the stored text again. */
+  const [revision, setRevision] = useState(0);
   function save() {
     const text = d.release().trimEnd();
     if (text === node.description) {
       d.reset();
       return;
     }
-    setSaved(text);
     void run(() => commands.setDescription(node.id, text));
   }
-  const lines = d.draft.split('\n').length;
-  // Rendered when there is text and it is not mid-edit. Text that was NOT saved (a draft
-  // kept from a closed card) stays in the editor, where it can be seen to be unsaved.
-  const rendered = !editing && d.draft.trim() !== '' && (!d.dirty || d.draft.trimEnd() === saved);
+  const placeholder = 'Notes, links, acceptance criteria — anything someone doing this needs to know.';
+  const live = Field !== null && !plainFocused;
   return (
     <div className="px-td-sec">
-      <label className="px-td-sec-h" htmlFor="td-details" onClick={startEditing}><Ic name="note" />Details</label>
-      {rendered ? (
-        <div
-          className="px-td-in px-td-desc px-td-desc--view"
-          data-testid="td-details-view"
-          role="button"
-          tabIndex={0}
-          aria-label="Details — edit"
-          title="Click to edit"
-          onMouseDown={(e) => {
-            press.current = pressAt(e);
-          }}
-          onClick={(e) => {
-            // a link follows itself; a drag, a hold or a selection is not a click to edit
-            if (e.target instanceof Element && e.target.closest('a')) return;
-            if (dragOrHold(press.current, e) || selectsTextIn(e.currentTarget)) return;
-            startEditing();
-          }}
+      <label
+        className="px-td-sec-h"
+        htmlFor="td-details"
+        // the live field is a contenteditable, which a label does not focus by itself
+        onClick={() => document.getElementById('td-details')?.focus()}
+      >
+        <Ic name="note" />
+        Details
+      </label>
+      {live ? (
+        <Field
+          id="td-details"
+          testId="td-details"
+          label="Details"
+          placeholder={placeholder}
+          value={d.draft}
+          revision={revision}
+          onChange={d.setDraft}
+          onFocus={d.onFocus}
+          onBlur={save}
           onKeyDown={(e) => {
-            if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
-              e.preventDefault();
-              startEditing();
-            }
+            if (e.key !== 'Escape' || !d.dirty) return;
+            e.stopPropagation();
+            d.reset();
+            setRevision((r) => r + 1);
           }}
-        >
-          <Suspense fallback={<span className="px-td-desc-plain">{d.draft}</span>}>
-            <MarkdownView markdown={d.draft} testId="td-details-md" linksInNewTab />
-          </Suspense>
-        </div>
+        />
       ) : (
-        <>
-          <textarea
-            id="td-details"
-            className="px-td-in px-td-desc"
-            data-testid="td-details"
-            placeholder="Notes, links, acceptance criteria — anything someone doing this needs to know."
-            maxLength={MAX_DESCRIPTION_LENGTH}
-            rows={Math.min(14, Math.max(3, lines + 1))}
-            value={d.draft}
-            // opened from the rendered text: straight into typing, caret at the end
-            autoFocus={editing}
-            onFocus={(e) => {
-              d.onFocus();
-              setEditing(true); // typing here counts as editing, however the box was focused
-              if (fromView.current) {
-                fromView.current = false;
-                e.currentTarget.setSelectionRange(e.currentTarget.value.length, e.currentTarget.value.length);
-              }
-            }}
-            onChange={(e) => d.setDraft(e.target.value)}
-            onBlur={() => {
-              save();
-              leaveEditor();
-            }}
-            onKeyDown={(e) => escapeReverts(e, d)}
-          />
-          {editing && <p className="px-td-md-hint">Markdown supported: **bold**, _italic_, # heading, - list, - [ ] task, [text](url), `code`</p>}
-        </>
+        <textarea
+          id="td-details"
+          className="px-td-in px-td-desc"
+          data-testid="td-details"
+          placeholder={placeholder}
+          maxLength={MAX_DESCRIPTION_LENGTH}
+          rows={Math.min(14, Math.max(3, d.draft.split('\n').length + 1))}
+          value={d.draft}
+          onFocus={() => {
+            d.onFocus();
+            setPlainFocused(true);
+          }}
+          onChange={(e) => d.setDraft(e.target.value)}
+          onBlur={() => {
+            save();
+            setPlainFocused(false);
+          }}
+          onKeyDown={(e) => escapeReverts(e, d)}
+        />
       )}
     </div>
   );

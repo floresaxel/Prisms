@@ -123,11 +123,13 @@ test('rename a task in place, then edit every detail in its card — all of it s
   // compact: the empty fields wait behind "+" chips (the budget is set, so it shows)
   // — except Details, which is always there, empty or not
   await expect(page.getByTestId('td-add-details')).toHaveCount(0);
-  await expect(page.getByTestId('td-details')).toBeVisible();
+  // Details is the live markdown editor (fetched when the card opens)
+  const details = page.locator('[data-testid="td-details"][contenteditable="true"]');
+  await expect(details).toBeVisible();
   // a focused text field gets a light grey outline, not the accent blue
-  await page.getByTestId('td-details').focus();
-  expect(await page.getByTestId('td-details').evaluate((el) => getComputedStyle(el).borderTopColor)).toBe('rgb(197, 203, 214)');
-  await page.getByTestId('td-details').fill('Quote the mayor. Embargo until 9am.');
+  await details.click();
+  expect(await page.getByTestId('td-details-box').evaluate((el) => getComputedStyle(el).borderTopColor)).toBe('rgb(197, 203, 214)');
+  await page.keyboard.type('Quote the mayor. Embargo until 9am.');
   await page.getByTestId('td-add-due').click();
   await page.getByTestId('td-due').fill('2026-12-01');
   await page.getByTestId('td-hours').fill('2.5');
@@ -164,22 +166,40 @@ test('rename a task in place, then edit every detail in its card — all of it s
   await expect(back).toContainText('Write the launch note', { timeout: 30_000 });
   await back.locator('.px-t-meta').click();
   await expect(page.getByTestId('td-dialog')).toBeVisible();
-  // the saved details show rendered; a click opens the raw text
-  await expect(page.getByTestId('td-details-view')).toContainText('Quote the mayor. Embargo until 9am.');
-  await page.getByTestId('td-details-view').click();
-  await expect(page.getByTestId('td-details')).toBeFocused();
-  await expect(page.getByTestId('td-details')).toHaveValue('Quote the mayor. Embargo until 9am.');
-  // markdown typed there is recognized and displayed when the box is left
-  await page.getByTestId('td-details').fill('# Brief\n\n- **Quote** the mayor\n- Embargo until 9am');
-  await page.getByTestId('td-title').click();
-  const rendered = page.getByTestId('td-details-view');
-  await expect(rendered.locator('h1')).toHaveText('Brief');
-  await expect(rendered.locator('li')).toHaveCount(2);
-  await expect(rendered.locator('strong')).toHaveText('Quote');
-  // …and it saved as the markdown source
-  await page.getByTestId('td-details-view').click();
-  await expect(page.getByTestId('td-details')).toHaveValue('# Brief\n\n- **Quote** the mayor\n- Embargo until 9am');
-  await page.getByTestId('td-title').click();
+  await expect(details).toHaveText('Quote the mayor. Embargo until 9am.');
+  // ── markdown renders AS IT IS TYPED: a heading on "# ", a list on "- ", bold the
+  //    moment "**" closes, italic the moment "_" closes ──
+  await details.click();
+  await page.keyboard.press('Control+A');
+  await page.keyboard.press('Delete');
+  await page.keyboard.type('# Brief');
+  await expect(details.locator('h1')).toHaveText('Brief');
+  await page.keyboard.press('Enter');
+  await page.keyboard.type('- **Quote**');
+  await expect(details.locator('li strong')).toHaveText('Quote'); // already bold, still typing
+  await page.keyboard.type(' the mayor');
+  await page.keyboard.press('Enter');
+  await page.keyboard.type('_Embargo_');
+  await expect(details.locator('li em')).toHaveText('Embargo');
+  await expect(details.locator('li')).toHaveCount(2);
+  await expect(details).not.toContainText('**');
+  // "- [ ] " starts a checklist, not a bullet with "[ ]" in it
+  await page.keyboard.press('Enter');
+  await page.keyboard.press('Enter');
+  await page.keyboard.type('- [ ] Proof it');
+  await expect(details.locator('ul[data-type="taskList"] li')).toHaveText('Proof it');
+  await expect(details).not.toContainText('[ ]');
+  await page.getByTestId('td-title').click(); // leave the box: it saves
+  // ── stored as markdown: after a reload it renders the same ──
+  await expect(page.getByTestId('sync-state')).toHaveAttribute('data-sync', 'synced', { timeout: 30_000 });
+  await page.reload();
+  await goto(page, 'tasks');
+  await expect(back).toContainText('Write the launch note', { timeout: 30_000 });
+  await back.locator('.px-t-meta').click();
+  await expect(details.locator('h1')).toHaveText('Brief', { timeout: 30_000 });
+  await expect(details.locator('li strong')).toHaveText('Quote');
+  await expect(details.locator('li em')).toHaveText('Embargo');
+  await expect(details.locator('ul[data-type="taskList"] li')).toHaveText('Proof it');
   await expect(page.getByTestId('td-due')).toHaveValue('2026-12-01');
   await expect(page.getByTestId('td-hours')).toHaveValue('2.5');
   await expect(page.getByTestId('td-location')).toHaveValue('Studio B');

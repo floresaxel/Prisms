@@ -44,10 +44,13 @@ vi.mock('@tiptap/react', async () => {
       return fakeEditor;
     },
     EditorContent: () => h('div', { 'data-testid': 'journal-rich' }),
+    // the shared schema builds its own extensions (BulletToTask) at import
+    Extension: { create: () => ({}) },
+    InputRule: class {},
   };
 });
 vi.mock('@tiptap/starter-kit', () => ({ default: { configure: () => ({}) } }));
-vi.mock('@tiptap/extension-list', () => ({ TaskList: {}, TaskItem: { configure: () => ({}) } }));
+vi.mock('@tiptap/extension-list', () => ({ TaskList: { extend: () => ({}) }, TaskItem: { configure: () => ({}) } }));
 vi.mock('tiptap-markdown', () => ({ Markdown: { configure: () => ({}) } }));
 
 // Imported AFTER the mocks (vitest hoists vi.mock).
