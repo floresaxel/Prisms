@@ -10,7 +10,7 @@
 import { createElement } from 'react';
 
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { buildFactContext, sortOrderBetween, SYNC_ROW_DEFAULTS, type Edge, type FactContext, type Node, type NodeType, type TaskStep } from '@prisms/core';
 import type { PromoteTarget } from '@prisms/ui';
@@ -369,8 +369,13 @@ describe('completing from the card', () => {
 describe('Details render markdown', () => {
   const MD = '# Plan\n\nShip **fast**.\n\n- one\n- two\n\n[docs](https://example.test/x) and [bad](javascript:alert(1))\n\n<script>alert(1)</script>';
   const view = () => screen.getByTestId('td-details-view');
-  /** The renderer loads on demand: wait for it to replace the plain-text stand-in. */
-  const rendered = () => screen.findByTestId('td-details-md');
+  // The renderer loads on demand (a dynamic import). Load it once up front, with a generous
+  // hook timeout: the first import in a cold run (CI) can take longer than a test is allowed.
+  beforeAll(async () => {
+    await import('../src/components/MarkdownView');
+  }, 30_000);
+  /** Wait for the loaded renderer to replace the plain-text stand-in. */
+  const rendered = () => screen.findByTestId('td-details-md', undefined, { timeout: 4000 });
 
   it('shows saved details rendered — headings, bold, lists, links — and never raw HTML', async () => {
     world({ description: MD });
