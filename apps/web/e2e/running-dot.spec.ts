@@ -72,7 +72,7 @@ test('the pulsing dot marks the clocked-in task in the Tasks and Agenda lists', 
   await expect(page.getByTestId(`alltask-${ids.a}`).locator(dot)).toHaveCount(0, { timeout: 30_000 });
 });
 
-test('the dot sits to the left of a title that wraps onto several rows, level with its first row', async ({ page }) => {
+test('the dot sits left of a title that wraps onto several rows, level with the completion circle', async ({ page }) => {
   await register(page);
   const ids = { v: randomUUID(), r: randomUUID(), p: randomUUID(), t: randomUUID(), entry: randomUUID() };
   const long =
@@ -97,11 +97,15 @@ test('the dot sits to the left of a title that wraps onto several rows, level wi
   const dot = row.getByTestId('running-dot');
   await expect(dot).toHaveCount(1);
   const title = row.getByTestId(`title-${ids.t}`);
-  const [d, t] = await Promise.all([dot.boundingBox(), title.boundingBox()]);
+  const check = row.getByTestId(`task-check-${ids.t}`);
+  const [d, t, c] = await Promise.all([dot.boundingBox(), title.boundingBox(), check.boundingBox()]);
   expect(d).not.toBeNull();
   expect(t).not.toBeNull();
+  expect(c).not.toBeNull();
   expect(t!.height).toBeGreaterThan(30); // the title really takes several rows
-  expect(d!.x + d!.width).toBeLessThanOrEqual(t!.x + 1); // to the LEFT of the title, not above it
-  expect(d!.y).toBeGreaterThanOrEqual(t!.y - 2); // level with the first row…
-  expect(d!.y + d!.height).toBeLessThanOrEqual(t!.y + 22); // …not centred down the whole title
+  expect(d!.x).toBeGreaterThanOrEqual(c!.x + c!.width - 1); // right of the completion circle…
+  expect(d!.x + d!.width).toBeLessThanOrEqual(t!.x + 1); // …and to the LEFT of the title, not above it
+  // level with the completion circle (the row's middle), not riding on the title's first row
+  const mid = (b: { y: number; height: number }) => b.y + b.height / 2;
+  expect(Math.abs(mid(d!) - mid(c!))).toBeLessThanOrEqual(1);
 });
