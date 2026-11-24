@@ -20,6 +20,7 @@ import { z } from 'zod';
 
 import {
   completionDispositionSchema,
+  type BreakEntry,
   type CompletionDisposition,
   type Node,
   type ScheduleBlock,
@@ -89,6 +90,22 @@ export const dayLogClockedEntrySchema = z.strictObject({
 });
 export type DayLogClockedEntry = z.infer<typeof dayLogClockedEntrySchema>;
 
+/**
+ * A break taken that day (a `breaks` row), bucketed to the day it STARTED on.
+ * An event of the day, not work: it belongs to no project or vision, adds nothing
+ * to `clocked_minutes`, and is hidden when the log is narrowed to one.
+ */
+export const dayLogBreakEntrySchema = z.strictObject({
+  break_id: uuidSchema,
+  started_at: isoDateTimeSchema,
+  ended_at: isoDateTimeSchema,
+  /** Whole minutes taken (rounded). */
+  minutes: z.number().int().nonnegative(),
+  /** The length picked when it started — so the log can say how far over it ran. */
+  planned_minutes: z.number().int().positive(),
+});
+export type DayLogBreakEntry = z.infer<typeof dayLogBreakEntrySchema>;
+
 export const dayLogEntriesSchema = z.strictObject({
   v: z.literal(DAY_LOG_VERSION),
   scheduled: z.array(dayLogScheduledEntrySchema),
@@ -99,6 +116,8 @@ export const dayLogEntriesSchema = z.strictObject({
    */
   clocked_minutes: z.number().int().nonnegative(),
   completed: z.array(dayLogCompletedEntrySchema),
+  /** Breaks taken that day, oldest first. Present only when the day has one. */
+  breaks: z.array(dayLogBreakEntrySchema).optional(),
   /** Present only when a list overflowed the cap; counts the DROPPED rows. */
   truncated: z
     .strictObject({
@@ -141,6 +160,8 @@ export type DayLogTimeEntry = Pick<
   'id' | 'task_id' | 'started_at' | 'ended_at' | 'deleted_at'
 >;
 
+export type DayLogBreak = Pick<BreakEntry, 'id' | 'started_at' | 'ended_at' | 'planned_minutes' | 'deleted_at'>;
+
 /**
  * Fact rows. Callers may pass supersets — this module filters and buckets.
  * 
@@ -152,6 +173,8 @@ export interface DayLogFacts {
   blocks: Iterable<DayLogBlock>;
   /** Optional so a caller with no time facts still compiles; absent = nothing clocked. */
   timeEntries?: Iterable<DayLogTimeEntry>;
+  /** Finished breaks; absent = none taken. */
+  breaks?: Iterable<DayLogBreak>;
 }
 
 export interface DayLogInput extends DayLogFacts, DayLogSettings {
@@ -217,12 +240,13 @@ interface Draft {
   scheduled: { ms: number; entry: DayLogScheduledEntry }[];
   clocked: { ms: number; entry: DayLogClockedEntry }[];
   completed: { ms: number; entry: DayLogCompletedEntry }[];
+  breaks: { ms: number; entry: DayLogBreakEntry }[];
   /** Task ids holding a live committed block on this day — the `planned` marker. */
   plannedTaskIds: Set<Uuid>;
 }
 
 function draft(): Draft {
-  return { scheduled: [], clocked: [], completed: [], plannedTaskIds: new Set() };
+  return { scheduled: [], clocked: [], completed: [], breaks: [], plannedTaskIds: new Set() };
 }
 
 /**
@@ -345,6 +369,24 @@ function collect(
     });
   }
 
+  // Pass 1c — breaks, bucketed to the day they STARTED on (like clocked time). A
+  // row with an unusable or backwards span is skipped: a break always has an end.
+  for (const b of facts.breaks ?? []) {
+    if (!b || b.deleted_at !== null) continue;
+    const breakId = idOf(b.id);
+    if (breakId === null) continue;
+    const startMs = epochOf(b.started_at);
+    const endMs = epochOf(b.ended_at);
+    if (startMs === null || endMs === null || endMs < startMs) continue;
+    const date = bucketOf(startMs);
+    if (onlyDate !== null && date !== onlyDate) continue;
+    const planned = typeof b.planned_minutes === 'number' && Number.isInteger(b.planned_minutes) && b.planned_minutes > 0 ? b.planned_minutes : 1;
+    draftFor(date).breaks.push({
+      ms: startMs,
+      entry: { break_id: breakId, started_at: b.started_at, ended_at: b.ended_at, minutes: Math.round((endMs - startMs) / 60_000), planned_minutes: planned },
+    });
+  }
+
   // Pass 2 — completions. Runs after every block is bucketed so `planned` reads a
   // fully-populated set.
   for (const [taskId, node] of liveNodes) {
@@ -412,7 +454,7 @@ function compareIds(a: string, b: string): number {
 
 /** Deterministic order + cap. Returns null for an empty day (D1: null = no footer). */
 function finalize(source: Draft): DayLogEntries | null {
-  if (source.scheduled.length === 0 && source.clocked.length === 0 && source.completed.length === 0) {
+  if (source.scheduled.length === 0 && source.clocked.length === 0 && source.completed.length === 0 && source.breaks.length === 0) {
     return null;
   }
   const scheduled = [...source.scheduled]
@@ -435,6 +477,12 @@ function finalize(source: Draft): DayLogEntries | null {
     clocked_minutes: unionMinutes(clocked),
     completed: completed.slice(0, DAY_LOG_MAX_ENTRIES),
   };
+  if (source.breaks.length > 0) {
+    entries.breaks = [...source.breaks]
+      .sort((a, b) => a.ms - b.ms || compareIds(a.entry.break_id, b.entry.break_id))
+      .map((b) => b.entry)
+      .slice(0, DAY_LOG_MAX_ENTRIES);
+  }
   if (droppedScheduled > 0 || droppedClocked > 0 || droppedCompleted > 0) {
     entries.truncated = {
       scheduled: droppedScheduled,
@@ -474,7 +522,10 @@ export function computeDayLogsByDate(
 export function isDayLogEmpty(entries: DayLogEntries | null | undefined): boolean {
   return (
     !entries ||
-    (entries.scheduled.length === 0 && entries.clocked.length === 0 && entries.completed.length === 0)
+    (entries.scheduled.length === 0 &&
+      entries.clocked.length === 0 &&
+      entries.completed.length === 0 &&
+      (entries.breaks?.length ?? 0) === 0)
   );
 }
 
@@ -508,6 +559,7 @@ function matchesFilter(entry: Attributed, filter: DayLogFilter): boolean {
  * or null when nothing on the day belongs to it. A view over the computed log —
  * the stored/exported log is never filtered. 	runcated is dropped: it counted
  * rows hidden by the cap of the UNFILTERED list, which says nothing about this one.
+ * Breaks are dropped too: they belong to no project or vision.
  */
 export function filterDayLog(
   entries: DayLogEntries | null | undefined,
@@ -620,6 +672,16 @@ export function renderDayLogMarkdown(
       lines.push(`- ${span} ${inlineTitle(k.title)}`);
     }
     if (dropped && dropped.clocked > 0) lines.push(`- +${dropped.clocked} more`);
+  }
+  const breaks = entries.breaks ?? [];
+  if (breaks.length > 0) {
+    const total = breaks.reduce((sum, b) => sum + b.minutes, 0);
+    lines.push('', `**Breaks** — ${formatDayLogDuration(total)}`, '');
+    for (const b of breaks) {
+      const over = b.minutes - b.planned_minutes;
+      const overText = over >= 1 ? ` · ${formatDayLogDuration(over)} over the ${formatDayLogDuration(b.planned_minutes)} planned` : '';
+      lines.push(`- ${formatDayLogTime(b.started_at, tz)}–${formatDayLogTime(b.ended_at, tz)} (${formatDayLogDuration(b.minutes)}) Break${overText}`);
+    }
   }
   if (entries.completed.length > 0) {
     lines.push('', '**Completed**', '');

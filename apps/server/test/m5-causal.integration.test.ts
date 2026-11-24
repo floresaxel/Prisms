@@ -207,7 +207,8 @@ describe.skipIf(!adminUrl)('M5 — causal ordering + schema floor + review inbox
     const user = randomUUID();
     const p = await project(user);
     // winner: a high-HLC rename applies first and records the field version.
-    const high = { id: randomUUID(), name: 'node.rename', hlc: 'ffffffffffff-0000-web-9', payload: { id: p.task, title: 'New' }, schema_version: 1 };
+    // two DIFFERENT devices: a device is never in conflict with itself (see below)
+    const high = { id: randomUUID(), name: 'node.rename', hlc: 'ffffffffffff-0000-web-8', payload: { id: p.task, title: 'New' }, schema_version: 1 };
     const r1 = await upload(user, [high]);
     expect(r1.kind === 'ok' && r1.results[0]!.result).toBe('applied');
 
@@ -225,6 +226,19 @@ describe.skipIf(!adminUrl)('M5 — causal ordering + schema floor + review inbox
     expect(items).toHaveLength(1);
     expect(items[0]!['severity']).toBe('warning');
     expect(items[0]!['detail']).toMatchObject({ field: 'title', winning_value: 'New', losing_value: 'Old' });
+  });
+
+  it('a device’s own older write losing to its own newer one is NOT a conflict (no review item)', async () => {
+    const user = randomUUID();
+    const p = await project(user);
+    const high = { id: randomUUID(), name: 'node.rename', hlc: 'ffffffffffff-0000-web-7', payload: { id: p.task, title: 'Newer' }, schema_version: 1 };
+    await upload(user, [high]);
+    const low = { id: randomUUID(), name: 'node.rename', hlc: '000000000001-0000-web-7', payload: { id: p.task, title: 'Older' }, schema_version: 1 };
+    await upload(user, [low]);
+    const [row] = await sql`SELECT title FROM nodes WHERE id = ${p.task}`;
+    expect(row!['title']).toBe('Newer');
+    const items = await sql`SELECT 1 FROM sync_review_items WHERE user_id = ${user} AND item_type = 'hlc_conflict'`;
+    expect(items).toHaveLength(0);
   });
 
   it('a losing write with the SAME value creates no hlc_conflict item (not material, §7.13)', async () => {

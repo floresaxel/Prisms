@@ -9,6 +9,7 @@
 import type {
   AutomationRule,
   BlockerRule,
+  BreakEntry,
   CommandLogEntry,
   ComputedAggregate,
   DecisionBoard,
@@ -69,6 +70,7 @@ export type AssertCommandLog = Assert<Equal<Row<'command_log'>, CommandLogEntry>
 export type AssertUserSettings = Assert<Equal<Row<'user_settings'>, UserSettings>>;
 export type AssertJournalEntries = Assert<Equal<Row<'journal_entries'>, JournalEntry>>;
 export type AssertTaskSteps = Assert<Equal<Row<'task_steps'>, TaskStep>>;
+export type AssertBreaks = Assert<Equal<Row<'breaks'>, BreakEntry>>;
 
 // New 1.3 synced tables (not yet in the `tables` registry — M4 wires sync).
 export type AssertSuggestionBatches = Assert<Equal<typeof schedule_suggestion_batches.$inferSelect, ScheduleSuggestionBatch>>;

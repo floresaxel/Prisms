@@ -36,6 +36,7 @@ import {
   checkNodeRetype,
   checkRule,
   checkStepParent,
+  hlcParse,
   incomingEdges,
   isBlockedForAcceptance,
   isClientTooOld,
@@ -67,6 +68,7 @@ import {
 import {
   automation_rules,
   blocker_rules,
+  breaks,
   command_field_versions,
   command_log,
   decision_boards,
@@ -181,6 +183,8 @@ const CONTEXT_WRITES: Partial<Record<CommandName, readonly ContextTable[]>> = {
   'timer.clock_out': ['time_entries'],
   'timer.review': ['time_entries'],
   'timer.adjust': ['time_entries'],
+  // a break is not a context table (it is shown only in the journal's day log)
+  'break.log': [],
   'settings.update': ['user_settings'],
   // task_steps is NOT a context table (steps have no status/schedule/estimate,
   // D4) — a step command invalidates NO context, so an explicit empty set beats
@@ -471,6 +475,13 @@ export function createDispatcher(
     winningHlc: string,
     losingHlc: string,
   ): Promise<void> {
+    // A device is never in conflict with itself: its own earlier write losing to
+    // its own later one is just typing (two keystrokes into a new note, each
+    // minting the day's row before the first one's id came back). Only a write
+    // from ANOTHER device can be prose the user would want to recover.
+    const winner = hlcParse(winningHlc);
+    const loser = hlcParse(losingHlc);
+    if (winner.ok && loser.ok && winner.value.deviceId === loser.value.deviceId) return;
     const res = (await tx.execute(
       sql`SELECT ${sql.identifier(field)} AS v FROM ${sql.identifier(table)} WHERE id = ${rowId} LIMIT 1`,
     )) as unknown as { v: unknown }[];
@@ -1467,6 +1478,16 @@ export function createDispatcher(
       }
 
       // --- task steps (checklist on a task, W3/D4) --------------------------
+      case 'break.log': {
+        // A finished break, written once. Idempotent by id (a replay converges).
+        const p = payload as Payload<'break.log'>;
+        const conv = convergeOrOwn(await one(tx.select({ user_id: breaks.user_id }).from(breaks).where(eq(breaks.id, p.id)).limit(1)), 'break', p.id);
+        if (conv) return conv;
+        if (Date.parse(p.ended_at) < Date.parse(p.started_at)) return reject('E_INVALID_INTERVAL', 'a break cannot end before it starts');
+        await tx.insert(breaks).values({ id: p.id, user_id: userId, started_at: p.started_at, ended_at: p.ended_at, planned_minutes: p.planned_minutes, ...born });
+        rec('breaks', p.id, 'insert');
+        return applied();
+      }
       case 'step.add': {
         const p = payload as Payload<'step.add'>;
         const conv = convergeOrOwn(await loadStepRow(tx, p.id), 'step', p.id);

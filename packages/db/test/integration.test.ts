@@ -46,10 +46,10 @@ describe.skipIf(!adminUrl)('migrations + seed against fresh postgres', () => {
     // the §6.0 tables + 4 better-auth + 2 server-internal (command_field_versions
     // s12, push_subscriptions s14) + 3 tag tables + the 2 M3 1.3 tables
     // (schedule_suggestion_batches §7.5, sync_review_items §7.13) + journal_entries
-    // (J1 §6.0) + task_steps (checklist steps, W3 migration 0011); drizzle
+    // (J1 §6.0) + task_steps (checklist steps, W3 migration 0011) + breaks (0018); drizzle
     // bookkeeping lives in its own schema
     const expected = [
-      'account', 'automation_rules', 'blocker_rules', 'command_field_versions',
+      'account', 'automation_rules', 'blocker_rules', 'breaks', 'command_field_versions',
       'command_log', 'computed_aggregates', 'decision_boards',
       'decision_criteria', 'decision_scores', 'diagram_groups',
       'diagram_layouts', 'edges', 'external_facts', 'habit_completions',
@@ -63,7 +63,7 @@ describe.skipIf(!adminUrl)('migrations + seed against fresh postgres', () => {
     // this list must not grow. Asserted in the same commit as the migration
     // because this test only runs against a fresh DB in CI — a drift here is
     // invisible locally and fails the branch's first CI run.
-    expect(expected).toHaveLength(32);
+    expect(expected).toHaveLength(33);
     expect(expected).not.toContain('journal_day_logs');
   });
 

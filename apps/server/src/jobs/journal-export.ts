@@ -22,7 +22,7 @@ import {
   DEFAULT_TIMEZONE,
   type DayLogEntries,
 } from '@prisms/core';
-import { journal_entries, nodes, schedule_blocks, time_entries, user_settings } from '@prisms/db';
+import { breaks, journal_entries, nodes, schedule_blocks, time_entries, user_settings } from '@prisms/db';
 import { and, asc, eq, isNull } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 
@@ -105,8 +105,19 @@ export async function runJournalExport(db: PostgresJsDatabase, userId: string): 
     })
     .from(time_entries)
     .where(and(eq(time_entries.user_id, userId), isNull(time_entries.deleted_at)));
+  // finished breaks — a day-log event of the day each one started on
+  const breakRows = await db
+    .select({ id: breaks.id, started_at: breaks.started_at, ended_at: breaks.ended_at, planned_minutes: breaks.planned_minutes, deleted_at: breaks.deleted_at })
+    .from(breaks)
+    .where(and(eq(breaks.user_id, userId), isNull(breaks.deleted_at)));
   const logs = computeDayLogsByDate(
-    { nodes: factNodes, blocks, timeEntries: timeEntryRows },
+    {
+      nodes: factNodes,
+      blocks,
+      timeEntries: timeEntryRows,
+      // ISO instants, as the day-log entry schema declares (the driver hands back Postgres' text form)
+      breaks: breakRows.map((b) => ({ ...b, started_at: new Date(b.started_at).toISOString(), ended_at: new Date(b.ended_at).toISOString() })),
+    },
     {
       dayResetHour: settings?.day_reset_hour ?? DEFAULT_DAY_RESET_HOUR,
       timezone: settings?.timezone ?? DEFAULT_TIMEZONE,

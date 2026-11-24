@@ -9,11 +9,12 @@
  *                 and the prompt stays up.
  *   - `expired` — OVERTIME_MS past the end: the break closes by itself and the
  *                 tasks stay clocked out.
- * However it closes, the time taken (capped at the end + OVERTIME_MS) is logged
- * in that day's journal note.
+ * However it closes, it is recorded (`break.log`, capped at the end + OVERTIME_MS)
+ * and the journal's day log shows it on the day it started — as an event of the
+ * day, never as text in the note.
  *
  * The running break lives on THIS device (localStorage, per account), shared by
- * its open tabs; the journal line is what syncs.
+ * its open tabs; the recorded break is what syncs.
  */
 import { useSyncExternalStore } from 'react';
 
@@ -82,18 +83,13 @@ export function formatCountdown(ms: number): string {
   return `${negative ? '-' : ''}${m}:${String(s).padStart(2, '0')}`;
 }
 
-function clockOf(ms: number, timeZone?: string): string {
-  return new Date(ms).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', ...(timeZone ? { timeZone } : {}) });
-}
-
-/** The journal line for a break that closed at `endAt`, e.g. "☕ Break — 15 min (2:05 PM – 2:20 PM)". */
-export function breakJournalLine(b: ActiveBreak, endAt: number, timeZone?: string): string {
-  const taken = breakTakenMs(b, endAt);
-  const mins = Math.round(taken / 60_000);
-  const length = mins < 1 ? 'under a minute' : `${mins} min`;
-  const over = taken - b.minutes * 60_000;
-  const overText = over >= 60_000 ? ` · ${Math.round(over / 60_000)} min over the ${b.minutes} planned` : '';
-  return `☕ Break — ${length} (${clockOf(b.startedAt, timeZone)} – ${clockOf(b.startedAt + taken, timeZone)})${overText}`;
+/**
+ * When the break is recorded as ending if it closes at `endAt`: the real end, but
+ * never more than its planned end + the overtime (a break left running while the
+ * app was closed for hours is logged as 10 min over, not hours).
+ */
+export function breakLogEnd(b: ActiveBreak, endAt: number): number {
+  return b.startedAt + breakTakenMs(b, endAt);
 }
 
 // --- persistence (this device, per account) ---------------------------------

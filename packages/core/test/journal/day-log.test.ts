@@ -667,3 +667,53 @@ describe('filterDayLog / dayLogRefs — narrowing by project and vision', () => 
     expect(dayLogRefs(null)).toEqual({ projects: [], visions: [] });
   });
 });
+describe('breaks — an event of the day, not work', () => {
+  const day = '2026-05-08';
+  // 14:26–14:40 EDT on the 8th: 14 minutes against 10 planned
+  const brk = { id: idOf(7001), started_at: '2026-05-08T18:26:00.000Z', ended_at: '2026-05-08T18:40:00.000Z', planned_minutes: 10, deleted_at: null };
+  const p = makeNode({ id: idOf(7100), node_type: 'project', title: 'Proj' });
+  const t = makeNode({ id: idOf(7101), node_type: 'task', parent_id: p.id, title: 'Work' });
+  const worked = makeEntry({ id: idOf(7200), task_id: t.id, started_at: '2026-05-08T17:00:00.000Z', ended_at: '2026-05-08T18:00:00.000Z' });
+
+  it('a day with only a break has a log, and the break carries its length and plan', () => {
+    const log = computeDayLog({ date: day, nodes: [], blocks: [], breaks: [brk], ...settings });
+    expect(log).not.toBeNull();
+    expect(isDayLogEmpty(log)).toBe(false);
+    expect(log!.breaks).toEqual([{ break_id: brk.id, started_at: brk.started_at, ended_at: brk.ended_at, minutes: 14, planned_minutes: 10 }]);
+    expect(dayLogEntriesSchema.safeParse(log).success).toBe(true);
+  });
+
+  it('is bucketed to the day it started on, adds nothing to the clocked total, and is absent on a day without one', () => {
+    const late = { ...brk, id: idOf(7002), started_at: '2026-05-09T07:50:00.000Z', ended_at: '2026-05-09T08:10:00.000Z' }; // 03:50 EDT → the 8th
+    const log = computeDayLog({ date: day, nodes: [p, t], blocks: [], timeEntries: [worked], breaks: [late, brk], ...settings })!;
+    expect(log.breaks?.map((b) => b.break_id)).toEqual([brk.id, late.id]); // oldest first
+    expect(log.clocked_minutes).toBe(60);
+    const plain = computeDayLog({ date: day, nodes: [p, t], blocks: [], timeEntries: [worked], ...settings })!;
+    expect('breaks' in plain).toBe(false);
+    expect(computeDayLog({ date: '2026-05-09', nodes: [], blocks: [], breaks: [late, brk], ...settings })).toBeNull();
+  });
+
+  it('skips deleted and backwards rows, and the by-date path agrees', () => {
+    const gone = { ...brk, id: idOf(7003), deleted_at: '2026-05-08T19:00:00.000Z' };
+    const backwards = { ...brk, id: idOf(7004), ended_at: '2026-05-08T18:00:00.000Z' };
+    const log = computeDayLog({ date: day, nodes: [], blocks: [], breaks: [gone, backwards, brk], ...settings })!;
+    expect(log.breaks?.map((b) => b.break_id)).toEqual([brk.id]);
+    expect(computeDayLogsByDate({ nodes: [], blocks: [], breaks: [gone, backwards, brk] }, settings).get(day)).toEqual(log);
+  });
+
+  it('is hidden when the log is narrowed to a project (it belongs to none)', () => {
+    const log = computeDayLog({ date: day, nodes: [p, t], blocks: [], timeEntries: [worked], breaks: [brk], ...settings })!;
+    const narrowed = filterDayLog(log, { project_id: p.id, vision_id: null })!;
+    expect(narrowed.breaks).toBeUndefined();
+    expect(narrowed.clocked).toHaveLength(1);
+    const onlyBreak = computeDayLog({ date: day, nodes: [p], blocks: [], breaks: [brk], ...settings });
+    expect(filterDayLog(onlyBreak, { project_id: p.id, vision_id: null })).toBeNull();
+  });
+
+  it('renders a Breaks section — times, length, how far over — with no emoji', () => {
+    const md = renderDayLogMarkdown(computeDayLog({ date: day, nodes: [], blocks: [], breaks: [brk], ...settings })!, { timezone: NY });
+    expect(md).toContain('**Breaks** — 14m');
+    expect(md).toContain('- 14:26–14:40 (14m) Break · 4m over the 10m planned');
+    expect(md).not.toMatch(/\p{Extended_Pictographic}/u);
+  });
+});

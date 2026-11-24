@@ -669,6 +669,27 @@ export const task_steps = pgTable(
   (t) => [index('task_steps_task_idx').on(t.user_id, t.task_id).where(sql`${t.deleted_at} IS NULL`)],
 );
 
+/**
+ * A finished break (migration 0018): time off the clock, taken from the clock-out
+ * review. Written once, when the break ends, by `break.log`; the journal's day log
+ * shows it as an event of the day it STARTED on. `planned_minutes` is the length
+ * chosen on the slider, so the log can say how far over it ran.
+ */
+export const breaks = pgTable(
+  'breaks',
+  {
+    ...baseColumns,
+    started_at: timestamptz('started_at').notNull(),
+    ended_at: timestamptz('ended_at').notNull(),
+    planned_minutes: smallint('planned_minutes').notNull(),
+  },
+  (t) => [
+    check('breaks_interval_check', sql`${t.ended_at} >= ${t.started_at}`),
+    check('breaks_planned_minutes_check', sql`${t.planned_minutes} BETWEEN 1 AND 240`),
+    index('breaks_user_started_idx').on(t.user_id, t.started_at).where(sql`${t.deleted_at} IS NULL`),
+  ],
+);
+
 // --- COMMAND LOG (audit; written server-side on every applied mutation) -----------------
 
 export const command_log = pgTable(
@@ -790,6 +811,7 @@ export const tables = {
   sync_review_items,
   journal_entries,
   task_steps,
+  breaks,
   command_log,
   user_settings,
 } as const;

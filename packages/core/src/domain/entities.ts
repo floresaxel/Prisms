@@ -563,6 +563,20 @@ export const taskStepSchema = z.strictObject({
 });
 export type TaskStep = z.infer<typeof taskStepSchema>;
 
+/**
+ * A finished break (migration 0018): time off the clock, taken from the clock-out
+ * review and written once, when it ends (`break.log`). The journal's day log shows
+ * it as an event of the day it STARTED on. `planned_minutes` is the length picked
+ * on the slider, so the log can say how far over it ran.
+ */
+export const breakEntrySchema = z.strictObject({
+  ...baseRow,
+  started_at: isoDateTimeSchema,
+  ended_at: isoDateTimeSchema,
+  planned_minutes: z.number().int().min(1).max(240),
+});
+export type BreakEntry = z.infer<typeof breakEntrySchema>;
+
 // --- REGISTRY -------------------------------------------------------------------------------------
 
 /** Every §6.0 table, keyed by SQL table name (s03 asserts Drizzle parity against this). */

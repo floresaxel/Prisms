@@ -12,7 +12,7 @@
  * are untouched — only the storage path moved from replica `db.execute` to the
  * overlay.
  */
-import { appendJournalText, normalizeJournalTags } from '@prisms/core';
+import { normalizeJournalTags } from '@prisms/core';
 
 import type { VisionColor, VisionHorizon } from '../format';
 import { newId } from './client-runtime';
@@ -198,6 +198,15 @@ export function createCommands(store: OverlayStore, ctx: CommandContext, deps: E
       if (Number.isFinite(started) && !(Date.parse(end) > started)) end = new Date(started + 1000).toISOString();
       await run('timer.clock_out', { entry_id: entryId, ended_at: end });
     },
+    /**
+     * Record a finished break (`break.log`): the journal's day log shows it on the
+     * day it started — it is never written into the note's text.
+     */
+    async logBreak(input: { startedAt: string; endedAt: string; plannedMinutes: number }): Promise<string> {
+      const id = newId();
+      await run('break.log', { id, started_at: input.startedAt, ended_at: input.endedAt, planned_minutes: input.plannedMinutes });
+      return id;
+    },
     /** Correct when a CLOSED session ended (long-session review). */
     async adjustEntryEnd(entryId: string, endedAt: string): Promise<void> {
       await run('timer.adjust', { entry_id: entryId, ended_at: endedAt });
@@ -373,26 +382,6 @@ export function createCommands(store: OverlayStore, ctx: CommandContext, deps: E
     },
     async deleteJournal(id: string): Promise<void> {
       await run('journal.delete', { id });
-    },
-    /**
-     * Add a line to the end of a day's note (journal.append) — a log entry such as
-     * a finished break. The server appends to the note as IT holds it; the overlay
-     * shows the same result over the note as this device holds it (or a new note
-     * with just the line when this device has none for that day).
-     */
-    async appendJournal(input: { entryDate: string; text: string }): Promise<void> {
-      const live = (await readMergedRows(store, 'journal_entries')).find((r) => r['entry_date'] === input.entryDate && r['deleted_at'] == null);
-      const id = live ? String(live['id']) : newId();
-      const now = iso(ctx);
-      const effect: EffectSpec = live
-        ? { table: 'journal_entries', row_id: id, op: 'update', fields: { content: appendJournalText(String(live['content'] ?? ''), input.text) } }
-        : {
-            table: 'journal_entries',
-            row_id: id,
-            op: 'insert',
-            fields: { id, user_id: ctx.userId, source_kind: 'user', entry_date: input.entryDate, month_key: input.entryDate.slice(0, 7), content: input.text, created_at: now, updated_at: now },
-          };
-      await run('journal.append', { id, entry_date: input.entryDate, text: input.text }, { extraEffects: [effect] });
     },
     /**
      * Lock/unlock a day's note. SYNCED, so the lock follows the user to every

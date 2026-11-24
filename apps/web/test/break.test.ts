@@ -1,5 +1,5 @@
 /**
- * Break timeline + journal line (break.ts): the phases that drive the prompt and
+ * Break timeline + recorded end (break.ts): the phases that drive the prompt and
  * the auto-close, the countdown text (negative past the end), the time-taken cap
  * of end + 10 min, and that a break closes exactly once.
  */
@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   BREAK_OVERTIME_MS,
-  breakJournalLine,
+  breakLogEnd,
   breakPhase,
   breakRemainingMs,
   breakTakenMs,
@@ -63,7 +63,7 @@ describe('formatCountdown', () => {
   });
 });
 
-describe('time taken + the journal line', () => {
+describe('time taken + the recorded end', () => {
   it('is the real length, capped at the end + 10 min', () => {
     const b = brk(15);
     expect(breakTakenMs(b, START + 8 * MIN)).toBe(8 * MIN); // came back early
@@ -71,11 +71,11 @@ describe('time taken + the journal line', () => {
     expect(breakTakenMs(b, START + 3 * 60 * MIN)).toBe(25 * MIN); // app closed for hours: capped
   });
 
-  it('logs length and times, and how far over when it ran over', () => {
+  it('records the real end, but never later than the end + 10 min', () => {
     const b = brk(15);
-    expect(breakJournalLine(b, START + 15 * MIN, 'America/New_York')).toBe('☕ Break — 15 min (2:05 PM – 2:20 PM)');
-    expect(breakJournalLine(b, START + 4 * 60 * MIN, 'America/New_York')).toBe('☕ Break — 25 min (2:05 PM – 2:30 PM) · 10 min over the 15 planned');
-    expect(breakJournalLine(b, START + 20_000, 'America/New_York')).toBe('☕ Break — under a minute (2:05 PM – 2:05 PM)');
+    expect(breakLogEnd(b, START + 15 * MIN)).toBe(START + 15 * MIN);
+    expect(breakLogEnd(b, START + 20_000)).toBe(START + 20_000);
+    expect(breakLogEnd(b, START + 4 * 60 * MIN)).toBe(START + 25 * MIN); // closed hours later: capped
   });
 });
 
