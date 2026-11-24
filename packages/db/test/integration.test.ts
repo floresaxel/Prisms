@@ -160,13 +160,23 @@ describe.skipIf(!adminUrl)('migrations + seed against fresh postgres', () => {
     ).rejects.toThrow(/blocks_interval_check/);
   });
 
-  it('focus_factor check rejects out-of-range values', async () => {
+  it('focus_factor check: 0 (doesn’t count) and 0.3 are allowed; the gap and above 1 are refused', async () => {
     const [task] = await sql`
       SELECT id FROM nodes WHERE user_id = ${DEMO_USER_ID} AND node_type = 'task' LIMIT 1`;
     await expect(
       sql`INSERT INTO time_entries (id, user_id, task_id, started_at, ended_at, focus_factor, device_id, updated_at)
           VALUES (gen_random_uuid(), ${DEMO_USER_ID}, ${task!['id']},
-                  '2026-06-12T08:00:00Z', '2026-06-12T09:00:00Z', 0.3, 'test-device', now())`,
+                  '2026-06-12T08:00:00Z', '2026-06-12T09:00:00Z', 0.2, 'test-device', now())`,
     ).rejects.toThrow(/entries_focus_factor_check/);
+    await expect(
+      sql`INSERT INTO time_entries (id, user_id, task_id, started_at, ended_at, focus_factor, device_id, updated_at)
+          VALUES (gen_random_uuid(), ${DEMO_USER_ID}, ${task!['id']},
+                  '2026-06-12T08:00:00Z', '2026-06-12T09:00:00Z', 1.1, 'test-device', now())`,
+    ).rejects.toThrow(/entries_focus_factor_check/);
+    for (const ok of [0, 0.3]) {
+      await sql`INSERT INTO time_entries (id, user_id, task_id, started_at, ended_at, focus_factor, device_id, updated_at)
+          VALUES (gen_random_uuid(), ${DEMO_USER_ID}, ${task!['id']},
+                  '2026-06-13T08:00:00Z', '2026-06-13T09:00:00Z', ${ok}, 'test-device', now())`;
+    }
   });
 });

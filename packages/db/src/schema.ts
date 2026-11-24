@@ -229,7 +229,8 @@ export const time_entries = pgTable(
   (t) => [
     check(
       'entries_focus_factor_check',
-      sql`${t.focus_factor} BETWEEN 0.5 AND 1.0`,
+      // 0 = the session does not count; otherwise 0.3–1.0 (migration 0019)
+      sql`${t.focus_factor} = 0 OR ${t.focus_factor} BETWEEN 0.3 AND 1.0`,
     ),
     // §6.7 I6
     check(

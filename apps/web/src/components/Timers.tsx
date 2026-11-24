@@ -42,8 +42,16 @@ import {
   type BreakTask,
 } from '../break';
 import { formatElapsed } from '../format';
+import { FOCUS_MAX, FOCUS_MIN } from '../focus-factor';
 import { StepSlider } from './StepSlider';
 import { useSecondClock } from './useSecondClock';
+
+/**
+ * Captions under the clock-out review's focus slider: 0.3 … 1.0 in tenths, labelled
+ * at its ends and middle. ×0 ("this session doesn't count") is deliberately NOT
+ * offered here — only on the Review tab's session items, after the fact.
+ */
+const FOCUS_SCALE = ['0.3', '', '', '', '0.7', '', '', '1.0'];
 
 /** The numbers printed under the break slider, one per step (5, 10 … 30). */
 const BREAK_SCALE = Array.from({ length: (BREAK_MAX_MINUTES - BREAK_MIN_MINUTES) / BREAK_STEP_MINUTES + 1 }, (_, i) => String(BREAK_MIN_MINUTES + i * BREAK_STEP_MINUTES));
@@ -335,8 +343,20 @@ export function TimersProvider({ ctx, children }: { ctx: CommandContext; childre
           {review?.endedAt != null && ' · still clocked in until you save or pick Review later'}
         </p>
         <label className="px-field">
-          Focus factor: ×{focus.toFixed(1)}
-          <StepSlider min={0.5} max={1.0} step={0.1} value={focus} onChange={setFocus} testId="review-focus" ariaLabel="Focus factor" />
+          <span data-testid="review-focus-label">
+            Focus factor: ×{focus.toFixed(1)}
+          </span>
+          <StepSlider
+            min={FOCUS_MIN}
+            max={FOCUS_MAX}
+            step={0.1}
+            value={focus}
+            onChange={setFocus}
+            valueText={`×${focus.toFixed(1)}`}
+            testId="review-focus"
+            ariaLabel="Focus factor"
+            labels={FOCUS_SCALE}
+          />
         </label>
         <div className="px-review-pills">
           <button

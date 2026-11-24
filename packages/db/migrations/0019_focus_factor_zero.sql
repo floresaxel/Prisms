@@ -1,0 +1,2 @@
+ALTER TABLE "time_entries" DROP CONSTRAINT "entries_focus_factor_check";--> statement-breakpoint
+ALTER TABLE "time_entries" ADD CONSTRAINT "entries_focus_factor_check" CHECK ("time_entries"."focus_factor" = 0 OR "time_entries"."focus_factor" BETWEEN 0.3 AND 1.0);

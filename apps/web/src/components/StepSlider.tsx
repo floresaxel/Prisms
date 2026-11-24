@@ -23,6 +23,7 @@ export function StepSlider({
   testId,
   ariaLabel,
   labels,
+  valueText,
 }: {
   min: number;
   max: number;
@@ -33,6 +34,8 @@ export function StepSlider({
   ariaLabel?: string;
   /** One caption per step, in order (length = steps + 1); empty strings leave a step bare. */
   labels?: readonly string[];
+  /** What a screen reader says for the current value, when the raw number is not it (`aria-valuetext`). */
+  valueText?: string;
 }) {
   const steps = Math.max(1, Math.round((max - min) / step));
   const at = (i: number) => `${(i / steps) * 100}%`;
@@ -54,6 +57,7 @@ export function StepSlider({
           value={value}
           data-testid={testId}
           aria-label={ariaLabel}
+          aria-valuetext={valueText}
           onChange={(e) => onChange(Number(e.target.value))}
         />
       </div>

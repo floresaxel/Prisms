@@ -102,14 +102,20 @@ test('a session put off with "Review later" is a review item; Clear takes it awa
   await expect(sf).toHaveValue('0.8');
   await sf.fill('0.1');
   await sf.press('Enter');
-  await expect(sf).toHaveValue('0.5'); // clamped
+  await expect(sf).toHaveValue('0.3'); // held to the floor
+  // one step below the floor is ×0: the session doesn't count
+  await page.getByTestId(`sr-down-${entries.a}`).click();
+  await expect(sf).toHaveValue('0');
+  await expect(page.getByTestId(`sr-counted-${entries.a}`)).toHaveText('0m counted');
   await expect(page.getByTestId(`sr-down-${entries.a}`)).toBeDisabled();
+  await page.getByTestId(`sr-up-${entries.a}`).click();
+  await expect(sf).toHaveValue('0.3');
   await sf.fill('lots'); // junk puts the last good value back
   await sf.press('Enter');
-  await expect(sf).toHaveValue('0.5');
+  await expect(sf).toHaveValue('0.3');
   await sf.fill('0.9'); // Escape abandons a half-typed edit
   await sf.press('Escape');
-  await expect(sf).toHaveValue('0.5');
+  await expect(sf).toHaveValue('0.3');
   await sf.fill('0.9');
   await sf.press('Enter');
   await expect(sf).toHaveValue('0.9');

@@ -9,9 +9,12 @@ describe('stepFocus', () => {
     expect(stepFocus(0.8, -1)).toBe(0.7);
   });
 
-  it('never leaves 0.5–1.0', () => {
+  it('never leaves the range: 1.0 is the top, and one step below 0.3 is 0 (doesn’t count)', () => {
     expect(stepFocus(1.0, 1)).toBe(1.0);
-    expect(stepFocus(0.5, -1)).toBe(0.5);
+    expect(stepFocus(0.4, -1)).toBe(0.3);
+    expect(stepFocus(0.3, -1)).toBe(0);
+    expect(stepFocus(0, -1)).toBe(0);
+    expect(stepFocus(0, 1)).toBe(0.3);
   });
 
   it('snaps an in-between value to the next tenth in the direction pressed', () => {
@@ -21,9 +24,10 @@ describe('stepFocus', () => {
 
   it('has no floating-point drift across repeated presses', () => {
     let f = 1.0;
-    for (let i = 0; i < 5; i++) f = stepFocus(f, -1);
-    expect(f).toBe(0.5);
-    for (let i = 0; i < 5; i++) f = stepFocus(f, 1);
+    for (let i = 0; i < 7; i++) f = stepFocus(f, -1);
+    expect(f).toBe(0.3);
+    expect(stepFocus(f, -1)).toBe(0);
+    for (let i = 0; i < 7; i++) f = stepFocus(f, 1);
     expect(f).toBe(1.0);
   });
 });
@@ -38,7 +42,10 @@ describe('parseFocus', () => {
 
   it('clamps into range and keeps hundredths', () => {
     expect(parseFocus('2')).toBe(1.0);
-    expect(parseFocus('0.1')).toBe(0.5);
+    expect(parseFocus('0.1')).toBe(0.3); // above 0 but below the floor
+    expect(parseFocus('0.45')).toBe(0.45); // now in range
+    expect(parseFocus('0')).toBe(0); // doesn't count
+    expect(parseFocus('-1')).toBe(0);
     expect(parseFocus('0.755')).toBe(0.76);
   });
 
@@ -53,5 +60,7 @@ describe('focusText', () => {
     expect(focusText(1)).toBe('1.0');
     expect(focusText(0.8)).toBe('0.8');
     expect(focusText(0.85)).toBe('0.85');
+    expect(focusText(0.3)).toBe('0.3');
+    expect(focusText(0)).toBe('0');
   });
 });

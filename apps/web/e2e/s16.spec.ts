@@ -98,7 +98,11 @@ test('inbox → promote → clock in/out → review, offline then synced; double
   // clock out → focus review modal
   await page.getByTestId('timer-clock-out').click();
   await expect(page.getByTestId('review-save')).toBeVisible();
-  await page.getByTestId('review-focus').fill('0.8');
+  // the slider runs 0.3 … 1.0 by tenths: two to the left of 1.0 is ×0.8
+  await page.getByTestId('review-focus').focus();
+  await page.keyboard.press('ArrowLeft');
+  await page.keyboard.press('ArrowLeft');
+  await expect(page.getByTestId('review-focus-label')).toContainText('×0.8');
   await page.getByTestId('review-completed').click();
   await expect(page.getByTestId('review-completed')).toHaveAttribute('aria-pressed', 'true');
   await page.getByTestId('review-save').click();

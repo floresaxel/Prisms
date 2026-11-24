@@ -9,7 +9,7 @@
  */
 import { Ic } from '@prisms/ui';
 
-import { FOCUS_MAX, FOCUS_MIN, focusText } from '../focus-factor';
+import { FOCUS_MAX, FOCUS_NONE, focusText } from '../focus-factor';
 
 export function FocusStepper({
   prefix,
@@ -65,7 +65,7 @@ export function FocusStepper({
         <button type="button" tabIndex={-1} aria-label="Raise the focus multiple by 0.1" data-testid={`${prefix}-up-${id}`} disabled={shown >= FOCUS_MAX} onClick={() => onStep(1)}>
           <Ic name="chevd" />
         </button>
-        <button type="button" tabIndex={-1} aria-label="Lower the focus multiple by 0.1" data-testid={`${prefix}-down-${id}`} disabled={shown <= FOCUS_MIN} onClick={() => onStep(-1)}>
+        <button type="button" tabIndex={-1} aria-label="Lower the focus multiple by 0.1" data-testid={`${prefix}-down-${id}`} disabled={shown <= FOCUS_NONE} onClick={() => onStep(-1)}>
           <Ic name="chevd" />
         </button>
       </span>
