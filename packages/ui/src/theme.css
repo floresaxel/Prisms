@@ -386,19 +386,34 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
    "now", so the pill is solid blue with the filled-door glyph — the one place
    in the bar that is coloured. (Amber stays for caution: a sync queue that is
    not draining.) */
-.px-timer-pill { display: flex; align-items: center; gap: 8px; padding: 4px 5px 4px 11px; border: 1.5px solid var(--px-accent); background: var(--px-accent); border-radius: 999px; font-size: 12.5px; color: #fff; }
+/* The pill is animated as one thing (GlobalTimer.tsx): it grows in and shrinks out (`data-shown`), its WIDTH follows
+   its content (set inline from a measurement — `auto` cannot be transitioned), its colour eases between blue, amber
+   (a break) and red (over), and a running ⇄ break switch crossfades the old content out under the new. The padding
+   lives on the inner row so the measured width includes it; `overflow: hidden` clips the content while the width moves. */
+.px-timer-pill { position: relative; overflow: hidden; box-sizing: border-box; border: 1.5px solid var(--px-accent); background: var(--px-accent); border-radius: 999px; font-size: 12.5px; color: #fff; }
+.px-pill-inner { display: flex; align-items: center; gap: 8px; width: max-content; padding: 4px 5px 4px 11px; }
+.px-timer-pill[data-shown='false'] { opacity: 0; transform: scale(0.86); }
+@media (prefers-reduced-motion: no-preference) {
+  .px-timer-pill { transition: width 260ms cubic-bezier(0.4, 0, 0.2, 1), opacity 200ms ease-out, transform 260ms cubic-bezier(0.4, 0, 0.2, 1), background-color 260ms ease, border-color 260ms ease; }
+  .px-pill-inner--swap { animation: px-pill-in 200ms ease-out both; }
+  .px-pill-ghost { position: absolute; left: 0; top: 0; pointer-events: none; animation: px-pill-out 160ms ease-in forwards; }
+  .px-timer-pill-more { animation: px-pill-pop 220ms cubic-bezier(0.3, 1.4, 0.5, 1) both; }
+}
+@keyframes px-pill-in { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+@keyframes px-pill-out { to { opacity: 0; transform: translateY(-3px); } }
+@keyframes px-pill-pop { from { opacity: 0; transform: scale(0.5); } to { opacity: 1; transform: none; } }
 .px-timer-pill svg { flex: none; }
 @keyframes px-pulse { 50% { opacity: 0.35; } }
 .px-timer-pill-task { font-weight: 600; max-width: 180px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .px-timer-pill-elapsed { font-family: var(--px-font-mono); font-weight: 500; font-variant-numeric: tabular-nums; }
 .px-timer-stop { display: inline-flex; align-items: center; gap: 4px; border: 1px solid rgba(255,255,255,.38); background: rgba(255,255,255,.14); border-radius: 999px; padding: 3px 10px; font-size: 11.5px; font-weight: 560; color: #fff; cursor: pointer; }
 .px-timer-stop:hover { background: rgba(255,255,255,.26); }
-.px-timer-stop:focus-visible { outline-color: #fff; }
+.px-timer-stop:focus-visible { outline-color: #fff; outline-offset: 1px; }
 /* the pill's lead part (mark · task · +N · counter); a button once several timers run */
 .px-timer-wrap { position: relative; display: flex; }
 .px-timer-lead { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .px-timer-lead--btn { border: none; background: none; font: inherit; color: inherit; padding: 0; margin: 0; cursor: pointer; border-radius: 999px; }
-.px-timer-lead--btn:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+.px-timer-lead--btn:focus-visible { outline: 2px solid #fff; outline-offset: 1px; } /* the pill clips (overflow: hidden), so the ring stays inside it */
 .px-timer-caret { width: 12px; height: 12px; opacity: 0.85; }
 .px-timer-lead--btn[aria-expanded='true'] .px-timer-caret { transform: rotate(180deg); }
 /* the small drop-down under the pill: every running timer, with its own stop */
@@ -1246,12 +1261,34 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
 .px-break-pick .px-muted { margin: 0; font-size: 12px; }
 .px-break-pick > .px-btn { justify-self: end; }
 
+/* ── content that grows open and folds shut (Unfold.tsx) ──
+   The same 0fr → 1fr grid collapse the journal's tag row and toolbar use: the row's
+   height is its content's height, which is the one thing a plain `height` cannot
+   transition to, and whatever sits around it (the dialog's card) grows with it. The
+   child needs `overflow: hidden` + `min-height: 0` or it refuses to shrink. Folded,
+   it fades out, and `visibility` flips only once the fold has finished — so the
+   closing animation is seen — leaving it out of the tab order and hit-testing. */
+.px-unfold { display: grid; grid-template-rows: 0fr; opacity: 0; visibility: hidden; }
+.px-unfold > * { overflow: hidden; min-height: 0; }
+.px-unfold--open { grid-template-rows: 1fr; opacity: 1; visibility: visible; }
+@media (prefers-reduced-motion: no-preference) {
+  .px-unfold { transition: grid-template-rows 194ms cubic-bezier(0.4, 0, 0.2, 1), opacity 160ms ease-out, visibility 0s linear 194ms; }
+  .px-unfold--open { transition: grid-template-rows 194ms cubic-bezier(0.4, 0, 0.2, 1), opacity 160ms ease-out, visibility 0s; }
+}
+
 /* ── step slider (StepSlider.tsx): a tick at every step; the dot starts a little way IN, and ends flush right ──
    The rail is drawn edge to edge, and the fill runs from its left end to the dot's centre. The dot's centre
    travels from --px-steps-lead (a thumb plus a stub in, so at the minimum there is a short bar to its left)
    to half a thumb from the right end (where it lies flush at the maximum). The ticks and captions sit in a box
-   spanning that same travel, so each lines up under the dot at its step. */
+   spanning that same travel, so each lines up under the dot at its step.
+
+   The position (--px-steps-pct, 0 … 1, set inline from the value) is a REGISTERED number, so a change to
+   it can be transitioned: the fill and the dot both read it, and glide together when the value changes —
+   a key press, a click on the rail, or a drag. The dot is drawn here (.px-steps-dot) because a browser's
+   native thumb cannot be animated; the real one stays in place, invisible, to take the pointer and keys. */
+@property --px-steps-pct { syntax: '<number>'; inherits: true; initial-value: 0; }
 .px-steps { --px-steps-c: var(--px-accent); --px-steps-thumb: 14px; --px-steps-stub: 10px; --px-steps-lead: calc(var(--px-steps-thumb) + var(--px-steps-stub)); position: relative; display: block; width: 100%; }
+@media (prefers-reduced-motion: no-preference) { .px-steps { transition: --px-steps-pct 88ms cubic-bezier(0.4, 0, 0.2, 1); } }
 .px-steps-body { position: relative; height: var(--px-steps-thumb); }
 .px-steps-rail {
   position: absolute; left: 0; right: 0; top: 50%; height: 6px; transform: translateY(-50%); border-radius: 3px;
@@ -1267,17 +1304,21 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
 }
 .px-steps input[type='range']::-webkit-slider-runnable-track { height: var(--px-steps-thumb); background: transparent; border: 0; }
 .px-steps input[type='range']::-moz-range-track { height: var(--px-steps-thumb); background: transparent; border: 0; }
-/* the handle is a plain dot in the slider's own colour — no outline, no shadow (the focus ring below is for keyboard users) */
+/* the browser's own handle stays (it takes the pointer and the keys) but is invisible; the dot you see is .px-steps-dot */
 .px-steps input[type='range']::-webkit-slider-thumb {
   -webkit-appearance: none; appearance: none; box-sizing: border-box; width: var(--px-steps-thumb); height: var(--px-steps-thumb); border-radius: 50%;
-  background: var(--px-steps-c); border: 0; box-shadow: none;
+  background: transparent; border: 0; box-shadow: none;
 }
 .px-steps input[type='range']::-moz-range-thumb {
   box-sizing: border-box; width: var(--px-steps-thumb); height: var(--px-steps-thumb); border-radius: 50%;
-  background: var(--px-steps-c); border: 0; box-shadow: none;
+  background: transparent; border: 0; box-shadow: none;
 }
-.px-steps input[type='range']:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px color-mix(in srgb, var(--px-steps-c) 30%, transparent); }
-.px-steps input[type='range']:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 4px color-mix(in srgb, var(--px-steps-c) 30%, transparent); }
+/* a plain dot in the slider's own colour — no outline, no shadow — centred on the animated position; the focus ring is for keyboard users */
+.px-steps-dot {
+  position: absolute; top: 0; width: var(--px-steps-thumb); height: var(--px-steps-thumb); border-radius: 50%; background: var(--px-steps-c); pointer-events: none;
+  left: calc(var(--px-steps-lead) + var(--px-steps-pct) * (100% - var(--px-steps-lead) - var(--px-steps-thumb) / 2) - var(--px-steps-thumb) / 2);
+}
+.px-steps input[type='range']:focus-visible ~ .px-steps-dot { box-shadow: 0 0 0 4px color-mix(in srgb, var(--px-steps-c) 30%, transparent); }
 .px-steps-labels { position: relative; display: block; height: 14px; margin: 3px calc(var(--px-steps-thumb) / 2) 0 var(--px-steps-lead); font-size: 10.5px; color: var(--px-text-dim); font-variant-numeric: tabular-nums; }
 .px-steps-labels > span { position: absolute; top: 0; transform: translateX(-50%); }
 .px-break-count { font-family: var(--px-font-mono); font-size: 40px; font-weight: 500; text-align: center; color: var(--px-amber); font-variant-numeric: tabular-nums; margin: 4px 0 6px; }

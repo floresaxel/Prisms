@@ -278,6 +278,8 @@ test('My Day: the running task has its own Clock out, which opens the session re
   // the topbar pill wears the very same pulsing circle (white): same size, same ring
   await expect(page.getByTestId('timer-mark')).toBeVisible();
   await expect(page.getByTestId('timer-mark').locator('.px-run-wave')).toHaveCount(1);
+  // the topbar pill grows in as it appears (scale 0.86 → 1); measure once it has settled
+  await expect(page.getByTestId('running-timer')).toHaveCSS('transform', 'none');
   const sizeOf = (id: string) => page.getByTestId(id).evaluate((el) => `${el.getBoundingClientRect().width}x${el.getBoundingClientRect().height}`);
   expect(await sizeOf('timer-mark')).toBe(await sizeOf('run-mark'));
   // …and both counters read the same time
