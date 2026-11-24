@@ -9,14 +9,21 @@ describe('stepFocus', () => {
     expect(stepFocus(0.8, -1)).toBe(0.7);
   });
 
-  it('never leaves the range: 1.0 is the top, and one step below 0.3 is 0 (doesn’t count)', () => {
+  it('never leaves 0–1.0', () => {
     expect(stepFocus(1.0, 1)).toBe(1.0);
-    expect(stepFocus(0.4, -1)).toBe(0.3);
-    expect(stepFocus(0.3, -1)).toBe(0);
     expect(stepFocus(0, -1)).toBe(0);
-    expect(stepFocus(0, 1)).toBe(0.3);
+    expect(stepFocus(0, 1)).toBe(0.1);
+    expect(stepFocus(0.1, -1)).toBe(0);
   });
 
+  it('walks the whole range one tenth at a time — no jumps, either way', () => {
+    const down: number[] = [1.0];
+    for (let i = 0; i < 10; i++) down.push(stepFocus(down.at(-1)!, -1));
+    expect(down).toEqual([1.0, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1, 0]);
+    const up: number[] = [0];
+    for (let i = 0; i < 10; i++) up.push(stepFocus(up.at(-1)!, 1));
+    expect(up).toEqual([0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]);
+  });
   it('snaps an in-between value to the next tenth in the direction pressed', () => {
     expect(stepFocus(0.85, 1)).toBe(0.9);
     expect(stepFocus(0.85, -1)).toBe(0.8);
@@ -24,10 +31,9 @@ describe('stepFocus', () => {
 
   it('has no floating-point drift across repeated presses', () => {
     let f = 1.0;
-    for (let i = 0; i < 7; i++) f = stepFocus(f, -1);
-    expect(f).toBe(0.3);
-    expect(stepFocus(f, -1)).toBe(0);
-    for (let i = 0; i < 7; i++) f = stepFocus(f, 1);
+    for (let i = 0; i < 10; i++) f = stepFocus(f, -1);
+    expect(f).toBe(0);
+    for (let i = 0; i < 10; i++) f = stepFocus(f, 1);
     expect(f).toBe(1.0);
   });
 });
@@ -42,7 +48,7 @@ describe('parseFocus', () => {
 
   it('clamps into range and keeps hundredths', () => {
     expect(parseFocus('2')).toBe(1.0);
-    expect(parseFocus('0.1')).toBe(0.3); // above 0 but below the floor
+    expect(parseFocus('0.1')).toBe(0.1); // in range now
     expect(parseFocus('0.45')).toBe(0.45); // now in range
     expect(parseFocus('0')).toBe(0); // doesn't count
     expect(parseFocus('-1')).toBe(0);
@@ -61,6 +67,7 @@ describe('focusText', () => {
     expect(focusText(0.8)).toBe('0.8');
     expect(focusText(0.85)).toBe('0.85');
     expect(focusText(0.3)).toBe('0.3');
+    expect(focusText(0.1)).toBe('0.1');
     expect(focusText(0)).toBe('0');
   });
 });

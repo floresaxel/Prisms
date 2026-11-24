@@ -100,17 +100,25 @@ test('a session put off with "Review later" is a review item; Clear takes it awa
   await sf.focus();
   await sf.press('ArrowDown');
   await expect(sf).toHaveValue('0.8');
+  // a typed value below the old 0.3 floor is accepted as it is
   await sf.fill('0.1');
   await sf.press('Enter');
-  await expect(sf).toHaveValue('0.3'); // held to the floor
-  // one step below the floor is ×0: the session doesn't count
+  await expect(sf).toHaveValue('0.1');
+  // the arrows then walk down to ×0 and back up one tenth at a time — no jump
   await page.getByTestId(`sr-down-${entries.a}`).click();
   await expect(sf).toHaveValue('0');
   await expect(page.getByTestId(`sr-counted-${entries.a}`)).toHaveText('0m counted');
   await expect(page.getByTestId(`sr-down-${entries.a}`)).toBeDisabled();
-  await page.getByTestId(`sr-up-${entries.a}`).click();
-  await expect(sf).toHaveValue('0.3');
-  await sf.fill('lots'); // junk puts the last good value back
+  const walk: string[] = [];
+  for (let i = 0; i < 4; i += 1) {
+    await page.getByTestId(`sr-up-${entries.a}`).click();
+    walk.push(await sf.inputValue());
+  }
+  expect(walk).toEqual(['0.1', '0.2', '0.3', '0.4']);
+  for (let i = 0; i < 4; i += 1) await page.getByTestId(`sr-down-${entries.a}`).click();
+  await expect(sf).toHaveValue('0');
+  for (let i = 0; i < 3; i += 1) await page.getByTestId(`sr-up-${entries.a}`).click();
+  await expect(sf).toHaveValue('0.3');  await sf.fill('lots'); // junk puts the last good value back
   await sf.press('Enter');
   await expect(sf).toHaveValue('0.3');
   await sf.fill('0.9'); // Escape abandons a half-typed edit

@@ -177,24 +177,25 @@ describe.skipIf(!adminUrl)('S11 command dispatcher (§8 pipeline, full catalog)'
     expect(rows[0]!['last_modified_by_command_id']).toBe(againId);
   });
 
-  it('focus factor: ×0 (doesn’t count) and ×0.3 are stored; ×0.2 is refused', async () => {
+  it('focus factor: every value from ×0 to ×1 is stored (0.1 steps included); out of range is refused', async () => {
     const ids = await seedTree();
     const e1 = randomUUID();
     await results([cmd('timer.clock_in', { entry_id: e1, task_id: ids.task, started_at: '2026-06-13T10:00:00.000Z' })], ids.user);
     await results([cmd('timer.clock_out', { entry_id: e1, ended_at: '2026-06-13T11:00:00.000Z' })], ids.user);
-    const [zero] = await results([cmd('timer.review', { entry_id: e1, focus_factor: 0, completed_session: false })], ids.user);
-    expect(zero!.result).toBe('applied');
-    expect((await sql`SELECT focus_factor FROM time_entries WHERE id = ${e1}`)[0]!['focus_factor']).toBe(0);
-    const [low] = await results([cmd('timer.review', { entry_id: e1, focus_factor: 0.3, completed_session: false })], ids.user);
-    expect(low!.result).toBe('applied');
-    expect((await sql`SELECT focus_factor FROM time_entries WHERE id = ${e1}`)[0]!['focus_factor']).toBeCloseTo(0.3);
-    const [gap] = await results([cmd('timer.review', { entry_id: e1, focus_factor: 0.2, completed_session: false })], ids.user);
-    expect(gap!.result).toBe('rejected'); // refused by the payload schema, before the database
-    expect((await sql`SELECT focus_factor FROM time_entries WHERE id = ${e1}`)[0]!['focus_factor']).toBeCloseTo(0.3);
-    // and the database itself refuses the gap, whatever writes it
-    await expect(sql`UPDATE time_entries SET focus_factor = 0.2 WHERE id = ${e1}`).rejects.toThrow(/entries_focus_factor_check/);
+    const stored = async () => (await sql`SELECT focus_factor FROM time_entries WHERE id = ${e1}`)[0]!['focus_factor'] as number;
+    for (const f of [0, 0.1, 0.2, 0.3, 1]) {
+      const [r] = await results([cmd('timer.review', { entry_id: e1, focus_factor: f, completed_session: false })], ids.user);
+      expect(r!.result).toBe('applied');
+      expect(await stored()).toBeCloseTo(f);
+    }
+    for (const bad of [-0.1, 1.1]) {
+      const [r] = await results([cmd('timer.review', { entry_id: e1, focus_factor: bad, completed_session: false })], ids.user);
+      expect(r!.result).toBe('rejected'); // refused by the payload schema, before the database
+    }
+    expect(await stored()).toBeCloseTo(1);
+    // and the database itself refuses what is out of range, whatever writes it
+    await expect(sql`UPDATE time_entries SET focus_factor = 1.1 WHERE id = ${e1}`).rejects.toThrow(/entries_focus_factor_check/);
   });
-
   it('I5 split focus: other tasks run alongside, up to MAX_OPEN_TIMERS; one more is E_TIMER_LIMIT', async () => {
     const ids = await seedTree();
     const tasks = [ids.task];

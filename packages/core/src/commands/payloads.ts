@@ -171,7 +171,7 @@ export const timerClockOutSchema = z.strictObject({ entry_id: uuidSchema, ended_
 export const timerAdjustSchema = z.strictObject({ entry_id: uuidSchema, ended_at: isoDateTimeSchema });
 export const timerReviewSchema = z.strictObject({
   entry_id: uuidSchema,
-  /** 0 = the session does not count; else 0.3–1.0. */
+  /** 0 = the session does not count … 1.0 = all of it. */
   focus_factor: focusFactorSchema,
   completed_session: z.boolean(),
 });
