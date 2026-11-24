@@ -42,6 +42,16 @@ describe('StepSlider', () => {
     expect(at(30)).toBe(1);
   });
 
+  it('draws its own dot, after the input, at the animated position (a native thumb cannot glide)', () => {
+    const { container } = render(createElement(StepSlider, { min: 5, max: 30, step: 5, value: 15, onChange: () => undefined, testId: 's' }));
+    const input = screen.getByTestId('s');
+    const dot = container.querySelector('.px-steps-dot')!;
+    expect(dot).not.toBeNull();
+    expect(dot.getAttribute('aria-hidden')).toBe('true');
+    // after the input, so `input:focus-visible ~ .px-steps-dot` can draw the focus ring on it
+    expect(input.compareDocumentPosition(dot) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it('reports the new value as a number', () => {
     const onChange = vi.fn();
     render(createElement(StepSlider, { min: 5, max: 30, step: 5, value: 15, onChange, testId: 's' }));

@@ -71,8 +71,28 @@ test('take a break from the clock-out review, get asked back, and it is logged',
   // Clock out all → the review → Take a break → the slider
   await page.getByTestId('timer-clock-out').click();
   await expect(page.getByTestId('review-save')).toBeVisible();
-  await expect(page.getByTestId('break-picker')).toHaveCount(0);
+  await expect(page.getByTestId('break-picker')).toBeHidden(); // folded shut until Take a break
+  // Take a break GROWS open (the card grows with it) rather than popping in: sampled on
+  // every animation frame, the picker's height passes through values between 0 and its
+  // full height. (Reduced-motion users skip the animation, so this pins the default.)
+  const heights = page.evaluate(
+    () =>
+      new Promise<number[]>((resolve) => {
+        const out: number[] = [];
+        const t0 = performance.now();
+        const tick = () => {
+          out.push(document.querySelector('[data-testid=break-unfold]')!.getBoundingClientRect().height);
+          if (performance.now() - t0 < 600) requestAnimationFrame(tick);
+          else resolve(out);
+        };
+        requestAnimationFrame(tick);
+      }),
+  );
   await page.getByTestId('review-break').click();
+  const sampled = await heights;
+  const full = Math.max(...sampled);
+  expect(full).toBeGreaterThan(100);
+  expect(sampled.filter((h) => h > 2 && h < full - 2).length).toBeGreaterThanOrEqual(2);
   const slider = page.getByTestId('break-minutes');
   await expect(slider).toHaveAttribute('min', '5');
   await expect(slider).toHaveAttribute('max', '30');

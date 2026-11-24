@@ -60,6 +60,9 @@ export function StepSlider({
           aria-valuetext={valueText}
           onChange={(e) => onChange(Number(e.target.value))}
         />
+        {/* the dot is drawn here, not by the browser: a native thumb cannot be animated,
+            and this one glides with the fill when the value changes (theme.css) */}
+        <span className="px-steps-dot" aria-hidden="true" />
       </div>
       {labels && (
         <span className="px-steps-labels" aria-hidden="true">

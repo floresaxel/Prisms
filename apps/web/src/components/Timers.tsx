@@ -44,6 +44,7 @@ import {
 import { formatElapsed } from '../format';
 import { FOCUS_MAX, FOCUS_POPUP_MIN } from '../focus-factor';
 import { StepSlider } from './StepSlider';
+import { Unfold } from './Unfold';
 import { useSecondClock } from './useSecondClock';
 
 /**
@@ -380,31 +381,31 @@ export function TimersProvider({ ctx, children }: { ctx: CommandContext; childre
             <Ic name="coffee" /> Take a break
           </button>
         </div>
-        {breakPicker && (
-          <div className="px-break-pick" data-testid="break-picker">
-            <label className="px-field">
-              <span>
-                Break for <b data-testid="break-minutes-label">{breakMinutes} min</b>
-              </span>
-              <StepSlider
-                min={BREAK_MIN_MINUTES}
-                max={BREAK_MAX_MINUTES}
-                step={BREAK_STEP_MINUTES}
-                value={breakMinutes}
-                onChange={setBreakMinutes}
-                testId="break-minutes"
-                ariaLabel="Break length in minutes"
-                labels={BREAK_SCALE}
-              />
-            </label>
-            <p className="px-muted">
-              Clocks out of {breakTasks.map((t) => `“${t.title}”`).join(', ')}. With a minute left you'll be asked to clock back in.
-            </p>
-            <button className="px-btn px-btn--primary" data-testid="break-start" onClick={() => void startBreak()}>
-              Start {breakMinutes}-min break
-            </button>
-          </div>
-        )}
+        <Unfold open={breakPicker} testId="break-unfold">
+            <div className="px-break-pick" data-testid="break-picker">
+              <label className="px-field">
+                <span>
+                  Break for <b data-testid="break-minutes-label">{breakMinutes} min</b>
+                </span>
+                <StepSlider
+                  min={BREAK_MIN_MINUTES}
+                  max={BREAK_MAX_MINUTES}
+                  step={BREAK_STEP_MINUTES}
+                  value={breakMinutes}
+                  onChange={setBreakMinutes}
+                  testId="break-minutes"
+                  ariaLabel="Break length in minutes"
+                  labels={BREAK_SCALE}
+                />
+              </label>
+              <p className="px-muted">
+                Clocks out of {breakTasks.map((t) => `“${t.title}”`).join(', ')}. With a minute left you'll be asked to clock back in.
+              </p>
+              <button className="px-btn px-btn--primary" data-testid="break-start" onClick={() => void startBreak()}>
+                Start {breakMinutes}-min break
+              </button>
+            </div>
+        </Unfold>
       </Modal>
 
       {activeBreak && (
