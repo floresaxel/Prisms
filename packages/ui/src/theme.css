@@ -1589,6 +1589,15 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
 .px-td-dep-row--done .px-td-dep-link { color: var(--px-faint); text-decoration: line-through; }
 .px-td-dep-link { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0; border: 0; background: none; font: inherit; color: var(--px-text); text-align: left; cursor: pointer; }
 .px-td-dep-link:hover { color: var(--px-blue-deep); text-decoration: underline; text-underline-offset: 2px; }
+/* A task's name that opens its details card, where a task is only mentioned
+   (a Review item, the journal's day log): plain text until hovered. */
+.px-task-open { padding: 0; border: 0; background: none; font: inherit; text-align: left; cursor: pointer; border-radius: 3px; }
+/* zero specificity: a class that greys the name (a done block, say) still wins */
+:where(.px-task-open) { color: inherit; }
+.px-task-open:hover { color: var(--px-blue-deep); text-decoration: underline; text-underline-offset: 2px; }
+.px-task-open:focus-visible { outline: 2px solid var(--px-blue); outline-offset: 1px; }
+/* a Clocked task row on the day log opens the task: its name says so on hover */
+.px-clk-task[aria-haspopup='dialog']:hover .px-daylog-title { text-decoration: underline; text-underline-offset: 2px; }
 .px-td-dep-add { width: 100%; font-size: 12.5px; color: var(--px-text-dim); border-style: dashed; }
 .px-td-foot { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 22px; padding-top: 14px; border-top: 1px solid var(--px-border); }
 .px-td-foot .px-grow { flex: 1; }

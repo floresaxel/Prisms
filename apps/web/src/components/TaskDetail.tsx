@@ -123,6 +123,36 @@ export function useTaskDetail(): TaskDetailApi {
   return api;
 }
 
+/** The card's controller, or null outside a `TaskDetailProvider` (a bare render in a test). */
+export function useOptionalTaskDetail(): TaskDetailApi | null {
+  return useContext(TaskDetailContext);
+}
+
+/**
+ * A task's name that opens its details card when clicked — for places that only
+ * MENTION a task (a review item, the journal's day log). Outside a provider it is
+ * plain text.
+ */
+export function TaskOpenLink({ taskId, className, testId, children }: { taskId: string; className?: string; testId?: string; children: ReactNode }) {
+  const detail = useOptionalTaskDetail();
+  if (!detail) return <span className={className}>{children}</span>;
+  return (
+    <button
+      type="button"
+      className={`px-task-open${className ? ` ${className}` : ''}`}
+      data-testid={testId}
+      aria-haspopup="dialog"
+      title="Open task details"
+      onClick={(e) => {
+        e.stopPropagation();
+        detail.open(taskId);
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
 /** Elements inside a row that keep their own click (they never open the card). */
 const ROW_CONTROLS = 'button, a, input, select, textarea, label, [role="button"]';
 
