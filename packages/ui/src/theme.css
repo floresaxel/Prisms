@@ -1180,12 +1180,20 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
 .px-proj { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--px-text-dim); }
 /* The project colour chip is a REGULAR pentagon (five equal sides), point up. The
    box is 1.902 : 1.809 (width : height) — the exact bounding box of a regular
-   pentagon — and the clip points are its vertices. */
-.px-pdot { width: 10.5px; height: 10px; flex: none; clip-path: polygon(50% 0, 100% 38.2%, 80.9% 100%, 19.1% 100%, 0 38.2%); }
+   pentagon — and the polygon points are its vertices. The chip is an inline SVG
+   (`Pentagon` in ProjectDot.tsx), not a clip-path: a clip-path mask layer scrolls
+   out of step with the page, an SVG is painted with its row. The tone classes also
+   paint the plain-span marks (`RunMark`), so the svg flavour only sets `fill`. */
+.px-pdot { width: 10.5px; height: 10px; flex: none; display: inline-block; }
+svg.px-pdot { fill: currentColor; }
 .px-pdot--teal { background: var(--px-teal); }
 .px-pdot--blue { background: var(--px-blue); }
 .px-pdot--amber { background: var(--px-amber); }
 .px-pdot--green { background: var(--px-green); }
+svg.px-pdot--teal { background: none; fill: var(--px-teal); }
+svg.px-pdot--blue { background: none; fill: var(--px-blue); }
+svg.px-pdot--amber { background: none; fill: var(--px-amber); }
+svg.px-pdot--green { background: none; fill: var(--px-green); }
 .px-prio { font-weight: 640; }
 .px-due { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--px-text-dim); background: var(--px-surface-2); border-radius: 6px; padding: 2px 7px; white-space: nowrap; }
 .px-due .px-ic, .px-t-due .px-ic { width: 12px; height: 12px; flex: none; }

@@ -378,7 +378,9 @@ test('My Day: project pentagons wear the colour of their vision; the run mark st
 
   const RED = 'rgb(220, 38, 38)';
   const TEAL = 'rgb(13, 148, 136)';
-  const bg = (loc: ReturnType<Page['locator']>) => loc.evaluate((el) => getComputedStyle(el).backgroundColor);
+  // a project pentagon is an SVG (its colour is `fill`); the run mark is a plain span (`background`)
+  const bg = (loc: ReturnType<Page['locator']>) =>
+    loc.evaluate((el) => (el instanceof SVGElement ? getComputedStyle(el).fill : getComputedStyle(el).backgroundColor));
   const row = (id: string) => page.getByTestId(`myday-row-${id}`);
   await expect(row(ids.b)).toBeVisible({ timeout: 30_000 });
 
