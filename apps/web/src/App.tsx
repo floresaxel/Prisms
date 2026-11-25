@@ -43,6 +43,7 @@ import { rejectionMessage } from './format';
 import { ScreenBoundary } from './components/ScreenBoundary';
 import { holdPage, revealPage, swapPage } from './components/pageSwap';
 import { clearLocalAccount, connectDb, dbFor, forgetDb } from './powersync';
+import { watchRowExits } from './row-exit';
 import {
   Agenda,
   Automations,
@@ -230,6 +231,8 @@ function Shell({
   // the inbox plus the sessions put off with "Review later"
   const reviewCount = useReviewInbox().length + usePendingSessionReviews().length;
   const pageRef = useBootReveal(route);
+  // a row taken out of any list on the page collapses away instead of vanishing
+  useEffect(() => watchRowExits(document.getElementById(PAGE_SWAP_ID)), []);
 
   const groups: NavGroupSpec[] = [
     {
