@@ -274,7 +274,8 @@ test('My Day: the running task has its own Clock out, which opens the session re
   // the banner's mark is a pulsing circle in the project's colour, not the Prisms logo
   await expect(page.getByTestId('run-mark-core')).toHaveClass(/px-pdot--blue/);
   await expect(page.getByTestId('run-mark').locator('.px-run-wave')).toHaveCount(1); // the one trailing ring
-  await expect(page.getByTestId('run-banner').locator('svg')).toHaveCount(1); // only the Clock out button's stop icon
+  // no logo in the banner: just the Clock out button's stop icon, plus the project's pentagon (also an svg)
+  await expect(page.getByTestId('run-banner').locator('svg:not(.px-pdot)')).toHaveCount(1);
   // the topbar pill wears the very same pulsing circle (white): same size, same ring
   await expect(page.getByTestId('timer-mark')).toBeVisible();
   await expect(page.getByTestId('timer-mark').locator('.px-run-wave')).toHaveCount(1);
