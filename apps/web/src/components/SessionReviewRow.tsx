@@ -7,7 +7,8 @@
  * taken a step at a time.
  *
  * Testids: session-review-<entryId>, sr-focus-<entryId>, sr-up-<entryId>,
- * sr-down-<entryId>, sr-counted-<entryId>, sr-clear-<entryId>, sr-error-<entryId>.
+ * sr-down-<entryId>, sr-counted-<entryId>, sr-clear-<entryId>, sr-error-<entryId>,
+ * sr-open-<entryId> (the task's name: opens its details card).
  */
 import { useState } from 'react';
 
@@ -17,6 +18,7 @@ import { Ic, useCommands, type CommandContext, type LoggedSession } from '@prism
 import { focusText, parseFocus, stepFocus } from '../focus-factor';
 import { formatMinutes } from '../format';
 import { FocusStepper } from './FocusStepper';
+import { TaskOpenLink } from './TaskDetail';
 
 /** "Mon, Nov 23, 2:05 PM" — when a session started, in the user's timezone. */
 function sessionStamp(iso: string, tz: string): string {
@@ -69,7 +71,9 @@ export function SessionReviewRow({ s, timezone, ctx }: { s: LoggedSession; timez
       </span>
       <div className="px-t-main">
         <div className="px-t-title">
-          {s.taskTitle}
+          <TaskOpenLink taskId={s.entry.task_id} testId={`sr-open-${s.entry.id}`}>
+            {s.taskTitle}
+          </TaskOpenLink>
           <span className="px-muted" style={{ fontWeight: 400 }}>Session review</span>
         </div>
         <div className="px-t-meta">

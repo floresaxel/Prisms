@@ -9,10 +9,12 @@
  *  - hover a row (or a bar region) → every session of that TASK stays in colour,
  *    everything else — rows and bar regions alike — greys out;
  *  - click a single log (or a bar region) → only THAT session and its region stay
- *    in colour. Click it again to let go. On the card, clicking a task row pins
- *    the task the same way.
+ *    in colour. Click it again to let go.
  * A click pin outranks hover: the pointer is still over the log just clicked, and
  * letting its hover take over would widen the pin straight back to the whole task.
+ *
+ * Clicking a task row on the card opens that task's details card (outside a
+ * `TaskDetailProvider` it pins the task instead).
  *
  * Nothing here edits anything. The controls only change what is in view.
  */
@@ -34,6 +36,7 @@ import {
   type DayTick,
 } from '../clocked-day';
 import { DayLogContext } from './DayLogContext';
+import { useOptionalTaskDetail } from './TaskDetail';
 
 const sameFocus = (a: ClockFocus, b: ClockFocus) =>
   a === b ||
@@ -163,6 +166,8 @@ export function ClockedSection({
   const card = useClockFocus();
   const pop = useClockFocus();
   const [open, setOpen] = useState(false);
+  // a task row on the card opens that task's details card (pins it when there is no card to open)
+  const detail = useOptionalTaskDetail();
 
   const at = (ts: string) => formatDayLogTime(ts, timezone);
   const byId = useMemo(() => new Map(entries.map((e) => [e.entry_id, e])), [entries]);
@@ -216,12 +221,14 @@ export function ClockedSection({
                   className="px-clk-task"
                   data-testid={`daylog-clock-task-${t.taskId}`}
                   data-state={focusState(card.focus, { taskId: t.taskId })}
-                  aria-pressed={sameFocus(card.pinned, f)}
+                  aria-pressed={detail ? undefined : sameFocus(card.pinned, f)}
+                  aria-haspopup={detail ? 'dialog' : undefined}
+                  title={detail ? 'Open task details' : undefined}
                   onMouseEnter={() => card.hover(f)}
                   onMouseLeave={() => card.hover(null)}
                   onFocus={() => card.hover(f)}
                   onBlur={() => card.hover(null)}
-                  onClick={() => card.toggle(f)}
+                  onClick={() => (detail ? detail.open(t.taskId) : card.toggle(f))}
                 >
                   <span className={`px-clk-sw px-ctone-${t.tone}`} aria-hidden="true" />
                   <span className="px-clk-main">
