@@ -146,7 +146,9 @@ or the user picked a zone — is recorded in a new `timezone_changes` table (syn
 the `active` tier, tombstones in `history`) and listed in the journal day log's *All logs*. Its
 migration (`packages/db/migrations/0021_timezone_changes.sql`) **also changes the publication** —
 `ALTER PUBLICATION powersync ADD TABLE timezone_changes` — so after this upgrade lands, **restart
-PowerSync**, or a change made on one device never reaches the others' day logs.
+PowerSync**, or a change made on one device never reaches the others' day logs. Migration 0022
+adds `user_settings.timezone_follow_device` ("Use this device's timezone", default on) — a column on an
+already-published table, so no publication change.
 
 **Journal day log (migration 0012).** The generated "Day log" footer adds **no
 table**, so — unlike 0010 and 0011 — its migration

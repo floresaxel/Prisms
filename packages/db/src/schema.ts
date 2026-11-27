@@ -760,6 +760,8 @@ export const user_settings = pgTable(
     >(),
     // Annex L built-in automation, opt-OUT: existing rows get it ON at migration.
     journal_day_log: boolean('journal_day_log').notNull().default(true),
+    /** "Use this device's timezone" (migration 0022): the account's zone follows the device's. */
+    timezone_follow_device: boolean('timezone_follow_device').notNull().default(true),
     updated_at: timestamptz('updated_at').notNull(),
   },
   (t) => [

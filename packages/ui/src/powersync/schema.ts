@@ -352,6 +352,8 @@ const user_settings = new Table({
   // Annex L. SQLite has no boolean: 0/1, and ABSENT means ON (the DDL default),
   // so a client that has not synced settings yet still shows the day log.
   journal_day_log: column.integer,
+  // "Use this device's timezone" (0022): 0/1, ABSENT means ON (the DDL default).
+  timezone_follow_device: column.integer,
   updated_at: column.text,
 });
 

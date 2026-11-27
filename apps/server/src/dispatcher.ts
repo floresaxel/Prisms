@@ -1757,6 +1757,7 @@ export function createDispatcher(
         // EXPLICIT field list: a settings field missing here applies as a silent
         // no-op — the command succeeds and nothing changes (Annex L).
         if (p.journal_day_log !== undefined) candidate['journal_day_log'] = p.journal_day_log;
+        if (p.timezone_follow_device !== undefined) candidate['timezone_follow_device'] = p.timezone_follow_device;
         const win = await lwwFields(tx, hlc, userId, 'user_settings', userId, candidate);
         if (Object.keys(win).length === 0) return applied(); // every field lost LWW
         await tx

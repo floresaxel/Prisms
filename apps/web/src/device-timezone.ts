@@ -1,12 +1,16 @@
 /**
- * The account's timezone follows the DEVICE: when the device's own zone changes
- * (you flew somewhere, or changed it in the OS), the account moves to it through
- * `timezone.change` — which also records the change for the journal day log.
+ * "Use this device's timezone" — ON by default (`user_settings.timezone_follow_device`):
+ * the account's zone follows the DEVICE through `timezone.change`, which also
+ * records each change for the journal day log. Turn it off (pick a zone by hand,
+ * in the topbar clock or Settings) and the account keeps that zone wherever the
+ * device goes.
  *
- * Only a CHANGE seen by this device moves anything. The first zone a device
- * reports is just remembered (per account, in localStorage), so signing in on a
- * machine set to another zone never rewrites the account's zone by itself, and a
- * zone the user picked by hand stays until the device actually moves again.
+ * While it is on, a device pushes its zone when it is a zone THIS device has not
+ * pushed before: the first time it is seen (a new device, or the option just
+ * turned back on) and whenever the device moves. It does not push the same zone
+ * again, so two signed-in devices in different zones don't fight over the account
+ * — the latest to open or move wins, once. This device's last zone is kept per
+ * account in localStorage.
  *
  * Checked when the app opens (once local data has loaded, so "from" is the real
  * account zone), whenever the window regains focus or becomes visible, and every
@@ -28,20 +32,19 @@ const keyFor = (userId: string) => `prisms.device-tz.${userId}`;
 
 /** What one check decided. */
 export type DeviceTimezoneStep =
-  | { kind: 'none' } // nothing usable to read, or nothing changed
-  | { kind: 'baseline'; device: string } // first zone this device reported: remember it
-  | { kind: 'moved'; device: string } // the device moved, the account is already there
-  | { kind: 'follow'; device: string; from: string }; // the device moved: move the account
+  | { kind: 'none' } // nothing usable to read, or nothing to do
+  | { kind: 'remember'; device: string } // note this device's zone; the account stays as it is
+  | { kind: 'follow'; device: string; from: string }; // move the account to the device's zone
 
 /**
- * Pure decision: the device's zone now, the zone last seen on this device, and
- * the account's zone → what to do.
+ * Pure decision: the device's zone now, the zone this device last saw, the
+ * account's zone, and whether the account follows the device → what to do.
  */
-export function decideDeviceTimezone(device: string | null, lastSeen: string | null, account: string): DeviceTimezoneStep {
+export function decideDeviceTimezone(device: string | null, lastSeen: string | null, account: string, follow: boolean): DeviceTimezoneStep {
   if (!device || !isValidTimezone(device)) return { kind: 'none' };
-  if (lastSeen === null) return { kind: 'baseline', device };
+  // a zone this device has already had (and pushed, if following): leave the account be
   if (device === lastSeen) return { kind: 'none' };
-  if (device === account) return { kind: 'moved', device };
+  if (!follow || device === account) return { kind: 'remember', device };
   return { kind: 'follow', device, from: account };
 }
 
@@ -53,29 +56,37 @@ function readLastSeen(userId: string): string | null {
   }
 }
 
-function writeLastSeen(userId: string, zone: string): void {
+function writeLastSeen(userId: string, zone: string | null): void {
   try {
-    localStorage.setItem(keyFor(userId), zone);
+    if (zone === null) localStorage.removeItem(keyFor(userId));
+    else localStorage.setItem(keyFor(userId), zone);
   } catch {
-    // private mode / quota: the next check simply sees a change again
+    // private mode / quota: the next check simply sees a new zone again
   }
 }
 
-/** Keep the account's timezone on the device's. Mount once, in the signed-in app. */
+/** Keep the account's timezone on the device's while "Use this device's timezone" is on. Mount once. */
 export function useFollowDeviceTimezone(ctx: CommandContext): void {
   const commands = useCommands(ctx);
   const hydrated = useIsHydrated();
-  const { timezone } = useUserSettings();
-  // read through a ref, so the listeners below see the CURRENT account zone
+  const { timezone, timezoneFollowDevice } = useUserSettings();
+  // read through refs, so the listeners below see the CURRENT settings
   const account = useRef(timezone);
   account.current = timezone;
+  const follow = useRef(timezoneFollowDevice);
+  follow.current = timezoneFollowDevice;
   const send = useRef(commands.changeTimezone);
   send.current = commands.changeTimezone;
+  // the option as last seen by this hook: turning it back ON makes the device's
+  // zone "new" again, so the account snaps to it straight away
+  const wasFollowing = useRef<boolean | null>(null);
 
   useEffect(() => {
     if (!hydrated) return;
+    if (wasFollowing.current === false && timezoneFollowDevice) writeLastSeen(ctx.userId, null);
+    wasFollowing.current = timezoneFollowDevice;
     const check = () => {
-      const step = decideDeviceTimezone(deviceTimezone(), readLastSeen(ctx.userId), account.current);
+      const step = decideDeviceTimezone(deviceTimezone(), readLastSeen(ctx.userId), account.current, follow.current);
       if (step.kind === 'none') return;
       writeLastSeen(ctx.userId, step.device); // first, so another tab or check never sends it twice
       if (step.kind === 'follow') void send.current({ from: step.from, to: step.device, cause: 'device' });
@@ -92,5 +103,5 @@ export function useFollowDeviceTimezone(ctx: CommandContext): void {
       document.removeEventListener('visibilitychange', onVisible);
       window.clearInterval(poll);
     };
-  }, [hydrated, ctx.userId]);
+  }, [hydrated, ctx.userId, timezoneFollowDevice]);
 }

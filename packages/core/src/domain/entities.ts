@@ -460,6 +460,11 @@ export const userSettingsSchema = z.strictObject({
   weather_location: weatherLocationSchema.nullable(),
   /** Built-in automation toggle (Annex L): render the generated journal day log. DDL default true. */
   journal_day_log: z.boolean(),
+  /**
+   * "Use this device's timezone" (migration 0022): the account's zone follows the
+   * device's (web device-timezone.ts). Off = keep the zone picked by hand. DDL default true.
+   */
+  timezone_follow_device: z.boolean(),
   updated_at: isoDateTimeSchema,
 });
 export type UserSettings = z.infer<typeof userSettingsSchema>;

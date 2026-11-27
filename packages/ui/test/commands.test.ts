@@ -11,6 +11,7 @@ import { defaultCommandMeta, type OverlayEffect } from '@prisms/core';
 
 import { createCommands, type CommandContext } from '../src/powersync/commands';
 import type { OverlayStore, PendingCommand } from '../src/powersync/overlay-store';
+import { toUserSettings } from '../src/powersync/rows';
 
 // real UUIDs — the catalog validates `uuidSchema`, so payload ids must be valid.
 const NODE = '11111111-1111-7111-8111-111111111111';
@@ -134,7 +135,16 @@ describe('createCommands — creates mint a row id and seed an insert', () => {
     ]);
     expect(effects.some((e) => e.table === 'journal_entries')).toBe(false);
   });
-  it('changeTimezone → timezone.change; the overlay records the change AND moves the account zone', async () => {
+  it('updateSettings carries "Use this device’s timezone" to the server and the overlay (0/1)', async () => {
+    const { store, commands, effects } = captureStore();
+    await createCommands(store, ctx, deps()).updateSettings({ timezone_follow_device: false });
+    expect(commands[0]).toMatchObject({ name: 'settings.update', payload: { timezone_follow_device: false } });
+    expect(effects).toEqual([expect.objectContaining({ table: 'user_settings', row_id: ctx.userId, fields: { timezone_follow_device: 0 } })]);
+    // read back: only an explicit 0 is off — a row synced before the column existed is ON
+    expect(toUserSettings({ timezone_follow_device: 0 }).timezone_follow_device).toBe(false);
+    expect(toUserSettings({ timezone_follow_device: 1 }).timezone_follow_device).toBe(true);
+    expect(toUserSettings({}).timezone_follow_device).toBe(true);
+  });  it('changeTimezone → timezone.change; the overlay records the change AND moves the account zone', async () => {
     const { store, commands, effects } = captureStore();
     const id = await createCommands(store, ctx, deps()).changeTimezone({ from: 'America/New_York', to: 'Asia/Tokyo', cause: 'device', at: '2026-06-28T10:00:00.000Z' });
     expect(commands[0]).toMatchObject({

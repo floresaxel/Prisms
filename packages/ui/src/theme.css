@@ -352,6 +352,14 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
 .px-tz-opt { display: flex; justify-content: space-between; gap: 10px; width: 100%; text-align: left; background: none; border: none; font: inherit; font-size: 12.5px; color: var(--px-text); padding: 6px 8px; border-radius: 6px; cursor: pointer; }
 .px-tz-opt:hover, .px-tz-opt--on { background: var(--px-surface-2); }
 .px-tz-opt small { color: var(--px-faint); font-size: 11.5px; white-space: nowrap; }
+/* "Use this device's timezone": the switch atop the picker; the device's zone under its label */
+.px-tz-follow { width: 100%; padding: 6px 8px; border-radius: 6px; text-align: left; }
+.px-tz-follow:hover { background: var(--px-surface-2); }
+.px-tz-follow .px-switch-knob { flex: none; }
+.px-tz-follow .px-switch-lbl, .px-set-follow .px-switch-lbl { text-align: left; }
+/* the Settings zone field while following the device: locked, and looks it */
+.px-set-ctl .px-input:disabled { background: var(--px-surface-2); color: var(--px-text-dim); cursor: not-allowed; }
+.px-tz-follow .px-switch-lbl small, .px-set-follow .px-switch-lbl small { display: block; color: var(--px-faint); font-size: 11.5px; font-weight: 400; }
 .px-tz-err { font-size: 12px; color: var(--px-danger); }
 .px-sync-chip { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--px-text-dim); border: 1px solid var(--px-border); border-radius: 8px; padding: 5px 10px; background: var(--px-surface); flex: none; }
 .px-sync-chip .px-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--px-green); flex: none; }

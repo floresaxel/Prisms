@@ -1,32 +1,50 @@
 // @vitest-environment jsdom
 /**
- * The account's timezone follows the device's (device-timezone.ts): the pure
- * decision. Only a CHANGE this device sees moves the account; the first zone a
- * device reports is just remembered, so signing in somewhere never rewrites it.
+ * "Use this device's timezone" (device-timezone.ts): the pure decision. While it
+ * is on, a zone this device has not pushed before (first seen, or the device
+ * moved) moves the account; the same zone is never pushed twice, so two devices
+ * in different zones don't fight. While it is off, the device is only noted.
  */
 import { describe, expect, it } from 'vitest';
 
 import { decideDeviceTimezone } from '../src/device-timezone';
 
-describe('decideDeviceTimezone', () => {
-  it('remembers the first zone a device reports, and moves nothing', () => {
-    expect(decideDeviceTimezone('Asia/Tokyo', null, 'America/New_York')).toEqual({ kind: 'baseline', device: 'Asia/Tokyo' });
+const NY = 'America/New_York';
+const LA = 'America/Los_Angeles';
+const TOKYO = 'Asia/Tokyo';
+
+describe('decideDeviceTimezone — following the device (the default)', () => {
+  it('a device seen for the first time moves the account to its zone', () => {
+    expect(decideDeviceTimezone(TOKYO, null, NY, true)).toEqual({ kind: 'follow', device: TOKYO, from: NY });
   });
 
-  it('does nothing while the device stays where it was — even if the account was set elsewhere by hand', () => {
-    expect(decideDeviceTimezone('America/New_York', 'America/New_York', 'Europe/London')).toEqual({ kind: 'none' });
+  it('a device already in the account’s zone is only noted', () => {
+    expect(decideDeviceTimezone(NY, null, NY, true)).toEqual({ kind: 'remember', device: NY });
   });
 
   it('follows the device when it moves', () => {
-    expect(decideDeviceTimezone('Asia/Tokyo', 'America/New_York', 'America/New_York')).toEqual({ kind: 'follow', device: 'Asia/Tokyo', from: 'America/New_York' });
+    expect(decideDeviceTimezone(LA, NY, NY, true)).toEqual({ kind: 'follow', device: LA, from: NY });
   });
 
-  it('a move to where the account already is only updates what this device last saw', () => {
-    expect(decideDeviceTimezone('Asia/Tokyo', 'America/New_York', 'Asia/Tokyo')).toEqual({ kind: 'moved', device: 'Asia/Tokyo' });
+  it('does not push the same zone again — another device that moved the account since wins', () => {
+    expect(decideDeviceTimezone(NY, NY, TOKYO, true)).toEqual({ kind: 'none' });
+  });
+});
+
+describe('decideDeviceTimezone — a zone kept by hand (following off)', () => {
+  it('a moved device is noted, and the account keeps its zone', () => {
+    expect(decideDeviceTimezone(LA, NY, TOKYO, false)).toEqual({ kind: 'remember', device: LA });
+    expect(decideDeviceTimezone(TOKYO, null, NY, false)).toEqual({ kind: 'remember', device: TOKYO });
   });
 
-  it('ignores a device that reports nothing usable', () => {
-    expect(decideDeviceTimezone(null, 'America/New_York', 'America/New_York')).toEqual({ kind: 'none' });
-    expect(decideDeviceTimezone('Not/AZone', 'America/New_York', 'America/New_York')).toEqual({ kind: 'none' });
+  it('nothing to do while the device stays put', () => {
+    expect(decideDeviceTimezone(LA, LA, TOKYO, false)).toEqual({ kind: 'none' });
+  });
+});
+
+describe('decideDeviceTimezone — nothing usable', () => {
+  it('ignores a device that reports no zone, or one the runtime does not know', () => {
+    expect(decideDeviceTimezone(null, NY, NY, true)).toEqual({ kind: 'none' });
+    expect(decideDeviceTimezone('Not/AZone', NY, NY, true)).toEqual({ kind: 'none' });
   });
 });

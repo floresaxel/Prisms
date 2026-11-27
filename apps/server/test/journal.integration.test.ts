@@ -187,6 +187,15 @@ describe.skipIf(!adminUrl)('J2 journal dispatcher + export', () => {
       expect(await zoneOf(user)).toBe('Asia/Tokyo');
     });
 
+    it('"Use this device’s timezone" is on by default and saves through settings.update', async () => {
+      const user = randomUUID();
+      ok(await change(user, randomUUID(), 'America/New_York', 'Asia/Tokyo', hlcOf(1))); // creates the settings row
+      const follow = async () => (await sql`SELECT timezone_follow_device FROM user_settings WHERE user_id = ${user}`)[0]?.['timezone_follow_device'];
+      expect(await follow()).toBe(true); // the DDL default
+      ok(await dispatcher.handleUpload(user, { device_id: 'deva', commands: [{ id: randomUUID(), name: 'settings.update', hlc: hlcOf(2), payload: { timezone_follow_device: false }, schema_version: 1 }] }));
+      expect(await follow()).toBe(false);
+      expect(await zoneOf(user)).toBe('Asia/Tokyo'); // the zone itself is untouched
+    });
     it('rejects a zone the server does not know, and another user’s change id', async () => {
       const user = randomUUID();
       const [bad] = ok(await change(user, randomUUID(), 'America/New_York', 'Mars/Olympus_Mons', hlcOf(1)));

@@ -28,6 +28,8 @@ export const DEFAULT_DAY_RESET_HOUR = 4;
 export const DEFAULT_TIMEZONE = 'America/New_York';
 /** Annex L: the journal day log is opt-OUT — absent settings mean ON. */
 export const DEFAULT_JOURNAL_DAY_LOG = true;
+/** "Use this device's timezone" is ON unless turned off (user_settings DDL default). */
+export const DEFAULT_TIMEZONE_FOLLOW_DEVICE = true;
 
 export interface FactRows {
   nodes: readonly Node[];

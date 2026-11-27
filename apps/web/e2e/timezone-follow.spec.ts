@@ -32,11 +32,16 @@ const cmd = (name: string, payload: unknown) => ({
 const seconds = (text: string): number => text.trim().split(':').map(Number).reduce((acc, n) => acc * 60 + n, 0);
 const elapsed = async (page: Page) => seconds((await page.getByTestId('timer-elapsed').textContent()) ?? '');
 
-test('the account follows the device’s timezone mid-session; logged time stays exact; All logs notes it', async ({ page }) => {
+test('the account follows the device’s timezone mid-session; logged time stays exact; All logs notes it', async ({ browser }, testInfo) => {
   test.setTimeout(150_000);
-  // the device's zone, driven through ONE DevTools session (Chrome refuses a second
-  // override while another is active, so Playwright's own `timezoneId` is not used)
-  const cdp = await page.context().newCDPSession(page);
+  // The device's zone is driven through ONE DevTools session, in a context of this
+  // spec's own: Chrome refuses a second override while another is active, and the
+  // config's `timezoneId` is one.
+  const { baseURL, serviceWorkers } = testInfo.project.use;
+  // (inside a test, newContext takes the config's options too — so opt out of its zone)
+  const context = await browser.newContext({ baseURL, serviceWorkers, timezoneId: undefined });
+  const page = await context.newPage();
+  const cdp = await context.newCDPSession(page);
   await cdp.send('Emulation.setTimezoneOverride', { timezoneId: 'America/New_York' });
   await page.goto('/');
   await page.getByRole('link', { name: 'Register' }).click();
@@ -104,4 +109,5 @@ test('the account follows the device’s timezone mid-session; logged time stays
   );
   expect(order.indexOf(`daylog-clock-${entry}`)).toBeLessThan(order.findIndex((id) => id.startsWith('daylog-tz-')));
   await expect(page.getByRole('dialog')).toContainText('1 timezone change');
+  await context.close();
 });

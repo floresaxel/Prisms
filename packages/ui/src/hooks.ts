@@ -22,6 +22,7 @@ import {
   computeDayLogsByDate,
   criticalPath,
   DEFAULT_JOURNAL_DAY_LOG,
+  DEFAULT_TIMEZONE_FOLLOW_DEVICE,
   DEFAULT_WINDOWS,
   descendantsOf,
   evaluateBlockerRules,
@@ -1611,6 +1612,8 @@ export interface UserSettingsView {
   weatherLocation: unknown;
   /** Annex L built-in automation. Opt-OUT: no row (or no column) still means ON. */
   journalDayLog: boolean;
+  /** "Use this device's timezone": the account's zone follows the device's. Opt-OUT. */
+  timezoneFollowDevice: boolean;
 }
 
 /** User settings row, with architecture defaults when a fresh account has not synced one yet. */
@@ -1624,6 +1627,7 @@ export function useUserSettings(): UserSettingsView {
       timezone: row?.timezone ?? 'America/New_York',
       weatherLocation: row?.weather_location ?? null,
       journalDayLog: row?.journal_day_log ?? DEFAULT_JOURNAL_DAY_LOG,
+      timezoneFollowDevice: row?.timezone_follow_device ?? DEFAULT_TIMEZONE_FOLLOW_DEVICE,
     };
   }, [rows.user_settings]);
 }
