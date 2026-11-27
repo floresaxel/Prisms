@@ -22,6 +22,7 @@ import {
   computeDayLogsByDate,
   criticalPath,
   DEFAULT_JOURNAL_DAY_LOG,
+  DEFAULT_TIMEZONE_FOLLOW_DEVICE,
   DEFAULT_WINDOWS,
   descendantsOf,
   evaluateBlockerRules,
@@ -47,6 +48,7 @@ import {
   type CommittedBlock,
   type CompletionValue,
   type DayLogBreak,
+  type DayLogTimezoneChange,
   type DayLogEntries,
   type DecisionBoard,
   type DecisionCriterion,
@@ -1610,6 +1612,8 @@ export interface UserSettingsView {
   weatherLocation: unknown;
   /** Annex L built-in automation. Opt-OUT: no row (or no column) still means ON. */
   journalDayLog: boolean;
+  /** "Use this device's timezone": the account's zone follows the device's. Opt-OUT. */
+  timezoneFollowDevice: boolean;
 }
 
 /** User settings row, with architecture defaults when a fresh account has not synced one yet. */
@@ -1623,6 +1627,7 @@ export function useUserSettings(): UserSettingsView {
       timezone: row?.timezone ?? 'America/New_York',
       weatherLocation: row?.weather_location ?? null,
       journalDayLog: row?.journal_day_log ?? DEFAULT_JOURNAL_DAY_LOG,
+      timezoneFollowDevice: row?.timezone_follow_device ?? DEFAULT_TIMEZONE_FOLLOW_DEVICE,
     };
   }, [rows.user_settings]);
 }
@@ -1648,6 +1653,7 @@ export function useDayLog(date: IsoDate): DayLogEntries | null {
   const blockRows = rows.schedule_blocks;
   const entryRows = rows.time_entries;
   const breaks = useBreaks();
+  const timezoneChanges = useTimezoneChanges();
   return useMemo(() => {
     if (!journalDayLog) return null;
     return computeDayLog({
@@ -1656,10 +1662,11 @@ export function useDayLog(date: IsoDate): DayLogEntries | null {
       blocks: blockRows.map(toScheduleBlock),
       timeEntries: entryRows.map(toTimeEntry),
       breaks,
+      timezoneChanges,
       dayResetHour: ctx.dayResetHour,
       timezone: ctx.timezone,
     });
-  }, [ctx, blockRows, entryRows, breaks, date, journalDayLog]);
+  }, [ctx, blockRows, entryRows, breaks, timezoneChanges, date, journalDayLog]);
 }
 
 /**
@@ -1683,6 +1690,27 @@ export function useBreaks(): DayLogBreak[] {
 }
 
 /**
+ * Every change of the account's timezone on this device's replica
+ * (`timezone_changes`, migration 0021), as the day log reads them (it sorts them).
+ * Overlay-merged, so a change shows the moment it is made, before the server has it.
+ */
+export function useTimezoneChanges(): DayLogTimezoneChange[] {
+  const rows = useRows('SELECT * FROM timezone_changes WHERE deleted_at IS NULL');
+  return useMemo(
+    () =>
+      rows.map((r) => ({
+        id: String(r['id']),
+        changed_at: String(r['changed_at'] ?? ''),
+        from_timezone: String(r['from_timezone'] ?? ''),
+        to_timezone: String(r['to_timezone'] ?? ''),
+        cause: r['cause'] === 'manual' ? ('manual' as const) : ('device' as const),
+        deleted_at: r['deleted_at'] == null ? null : String(r['deleted_at']),
+      })),
+    [rows],
+  );
+}
+
+/**
  * Every day's generated log in one pass, keyed by day — what the Journal screen's
  * project / vision filter reads to decide which days a project or vision touches.
  * Same inputs and the same core function as `useDayLog`, so the two cannot
@@ -1695,6 +1723,7 @@ export function useDayLogsByDate(): ReadonlyMap<IsoDate, DayLogEntries> {
   const blockRows = rows.schedule_blocks;
   const entryRows = rows.time_entries;
   const breaks = useBreaks();
+  const timezoneChanges = useTimezoneChanges();
   return useMemo(() => {
     if (!journalDayLog) return new Map<IsoDate, DayLogEntries>();
     return computeDayLogsByDate(
@@ -1703,10 +1732,11 @@ export function useDayLogsByDate(): ReadonlyMap<IsoDate, DayLogEntries> {
         blocks: blockRows.map(toScheduleBlock),
         timeEntries: entryRows.map(toTimeEntry),
         breaks,
+        timezoneChanges,
       },
       { dayResetHour: ctx.dayResetHour, timezone: ctx.timezone },
     );
-  }, [ctx, blockRows, entryRows, breaks, journalDayLog]);
+  }, [ctx, blockRows, entryRows, breaks, timezoneChanges, journalDayLog]);
 }
 
 /** Server-computed aggregates (burndown, streaks, …) with their freshness. */

@@ -61,6 +61,7 @@ export function Settings({ ctx }: { ctx: CommandContext }) {
   const [tz, setTz] = useState(settings.timezone);
   const [tzError, setTzError] = useState('');
   const device = useMemo(() => deviceTimezone(), []);
+  const follow = settings.timezoneFollowDevice;
   const [saved, setSaved] = useState(false);
   const [tab, setTab] = useState<'general' | 'data' | 'account'>('general');
   const [panelRef, swap] = useTabSwap();
@@ -81,7 +82,10 @@ export function Settings({ ctx }: { ctx: CommandContext }) {
       return;
     }
     setTzError('');
-    if (hasRow) await commands.updateSettings({ day_reset_hour, timezone });
+    // a new zone goes through timezone.change, so the journal day log records it (while
+    // following the device the field is locked, and the zone is the device's business)
+    if (!follow && timezone !== settings.timezone) await commands.changeTimezone({ from: settings.timezone, to: timezone, cause: 'manual' });
+    if (hasRow) await commands.updateSettings({ day_reset_hour });
     else await commands.insertSettings({ day_reset_hour, timezone });
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
@@ -119,11 +123,34 @@ export function Settings({ ctx }: { ctx: CommandContext }) {
               <div className="px-set-lbl">
                 <b>Timezone</b>
                 <span>
-                  IANA timezone name (e.g. America/New_York). The clock in the top bar shows this zone, and you can also change it by clicking the clock.
+                  The clock in the top bar shows this zone, and you can also change it by clicking the clock. By default it follows this device; turn that off to keep one zone (IANA name, e.g. America/New_York) wherever you are.
                 </span>
               </div>
               <div className="px-set-ctl">
-                <input className="px-input" data-testid="settings-tz" list="px-tz-options" value={tz} onChange={(e) => { setTz(e.target.value); setTzError(''); }} />
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={follow}
+                  className={`px-switch px-set-follow${follow ? ' px-switch--on' : ''}`}
+                  data-testid="settings-tz-follow"
+                  style={{ marginBottom: 10 }}
+                  onClick={() => void commands.updateSettings({ timezone_follow_device: !follow })}
+                >
+                  <span className="px-switch-knob" />
+                  <span className="px-switch-lbl">
+                    Use this device’s timezone
+                    {device && <small>{device}</small>}
+                  </span>
+                </button>
+                <input
+                  className="px-input"
+                  data-testid="settings-tz"
+                  list="px-tz-options"
+                  value={tz}
+                  disabled={follow}
+                  title={follow ? 'Following this device — turn that off to pick a zone' : undefined}
+                  onChange={(e) => { setTz(e.target.value); setTzError(''); }}
+                />
                 <datalist id="px-tz-options">
                   {allTimezones().map((z) => <option key={z} value={z} />)}
                 </datalist>
@@ -131,11 +158,6 @@ export function Settings({ ctx }: { ctx: CommandContext }) {
                   <div className="px-muted" data-testid="settings-tz-place" style={{ marginTop: 6 }}>{timezoneTitle(tz.trim())}</div>
                 )}
                 {tzError && <div className="px-tz-err" data-testid="settings-tz-error" style={{ marginTop: 6 }}>{tzError}</div>}
-                {device && device !== tz.trim() && (
-                  <button className="px-btn px-btn--sm" data-testid="settings-tz-device" style={{ marginTop: 8 }} onClick={() => { setTz(device); setTzError(''); }}>
-                    Use this device’s timezone ({device})
-                  </button>
-                )}
               </div>
             </div>
             <div className="px-set-row">

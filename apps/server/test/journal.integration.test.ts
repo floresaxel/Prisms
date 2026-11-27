@@ -158,6 +158,69 @@ describe.skipIf(!adminUrl)('J2 journal dispatcher + export', () => {
     });
   });
 
+  describe('timezone.change (the account follows the device; the day log records it)', () => {
+    const change = (userId: string, id: string, from_timezone: string, to_timezone: string, hlc: string, cause: 'device' | 'manual' = 'device', changed_at = '2026-11-24T19:00:00.000Z') =>
+      dispatcher.handleUpload(userId, {
+        device_id: 'deva',
+        commands: [{ id: randomUUID(), name: 'timezone.change', hlc, payload: { id, changed_at, from_timezone, to_timezone, cause }, schema_version: 1 }],
+      });
+    const zoneOf = async (userId: string) => (await sql`SELECT timezone FROM user_settings WHERE user_id = ${userId}`)[0]?.['timezone'];
+
+    it('moves the account zone (creating the settings row if needed), records the change once, and a replay converges', async () => {
+      const user = randomUUID();
+      const id = randomUUID();
+      const [r] = ok(await change(user, id, 'America/New_York', 'Asia/Tokyo', hlcOf(1)));
+      expect(r!.result).toBe('applied');
+      expect(await zoneOf(user)).toBe('Asia/Tokyo');
+      ok(await change(user, id, 'America/New_York', 'Asia/Tokyo', hlcOf(2)));
+      const rows = await sql`SELECT from_timezone, to_timezone, cause FROM timezone_changes WHERE user_id = ${user}`;
+      expect(rows).toEqual([{ from_timezone: 'America/New_York', to_timezone: 'Asia/Tokyo', cause: 'device' }]);
+    });
+
+    it('the zone is last-write-wins with settings.update; the record is kept either way', async () => {
+      const user = randomUUID();
+      ok(await dispatcher.handleUpload(user, { device_id: 'deva', commands: [{ id: randomUUID(), name: 'settings.update', hlc: hlcOf(5), payload: { timezone: 'Europe/London' }, schema_version: 1 }] }));
+      ok(await change(user, randomUUID(), 'America/New_York', 'Asia/Tokyo', hlcOf(3))); // older: loses the field
+      expect(await zoneOf(user)).toBe('Europe/London');
+      expect(await sql`SELECT 1 FROM timezone_changes WHERE user_id = ${user}`).toHaveLength(1);
+      ok(await change(user, randomUUID(), 'Europe/London', 'Asia/Tokyo', hlcOf(9), 'manual')); // newer: wins
+      expect(await zoneOf(user)).toBe('Asia/Tokyo');
+    });
+
+    it('"Use this device’s timezone" is on by default and saves through settings.update', async () => {
+      const user = randomUUID();
+      ok(await change(user, randomUUID(), 'America/New_York', 'Asia/Tokyo', hlcOf(1))); // creates the settings row
+      const follow = async () => (await sql`SELECT timezone_follow_device FROM user_settings WHERE user_id = ${user}`)[0]?.['timezone_follow_device'];
+      expect(await follow()).toBe(true); // the DDL default
+      ok(await dispatcher.handleUpload(user, { device_id: 'deva', commands: [{ id: randomUUID(), name: 'settings.update', hlc: hlcOf(2), payload: { timezone_follow_device: false }, schema_version: 1 }] }));
+      expect(await follow()).toBe(false);
+      expect(await zoneOf(user)).toBe('Asia/Tokyo'); // the zone itself is untouched
+    });
+    it('rejects a zone the server does not know, and another user’s change id', async () => {
+      const user = randomUUID();
+      const [bad] = ok(await change(user, randomUUID(), 'America/New_York', 'Mars/Olympus_Mons', hlcOf(1)));
+      expect(bad).toMatchObject({ result: 'rejected', reject_code: 'E_INVALID_TIMEZONE' });
+      expect(await zoneOf(user)).toBeUndefined();
+      const id = randomUUID();
+      ok(await change(user, id, 'America/New_York', 'Asia/Tokyo', hlcOf(2)));
+      const [theirs] = ok(await change(randomUUID(), id, 'America/New_York', 'Asia/Tokyo', hlcOf(3)));
+      expect(theirs).toMatchObject({ result: 'rejected', reject_code: 'E_OWNERSHIP' });
+    });
+
+    it('the journal export lists it in the day log', async () => {
+      const user = randomUUID();
+      // a break makes the day non-empty (a zone change alone never does); 14:00 EST
+      const breakLog = { id: randomUUID(), started_at: '2026-11-24T19:26:00.000Z', ended_at: '2026-11-24T19:40:00.000Z', planned_minutes: 10 };
+      ok(await dispatcher.handleUpload(user, { device_id: 'deva', commands: [{ id: randomUUID(), name: 'break.log', hlc: hlcOf(1), payload: breakLog, schema_version: 1 }] }));
+      const id = randomUUID();
+      ok(await change(user, id, 'America/New_York', 'America/New_York', hlcOf(2), 'manual'));
+      const files = await runJournalExport(db, user);
+      const day = files.find((f) => f.entry_date === '2026-11-24')!;
+      expect(day.day_log?.timezone_changes).toEqual([
+        { change_id: id, changed_at: '2026-11-24T19:00:00.000Z', from_timezone: 'America/New_York', to_timezone: 'America/New_York', cause: 'manual' },
+      ]);
+    });
+  });
   describe('journal.append (a break logged at the end of the day note)', () => {
     const append = (userId: string, id: string, entry_date: string, text: string, hlc: string, device = 'deva') =>
       dispatcher.handleUpload(userId, {

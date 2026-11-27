@@ -460,6 +460,11 @@ export const userSettingsSchema = z.strictObject({
   weather_location: weatherLocationSchema.nullable(),
   /** Built-in automation toggle (Annex L): render the generated journal day log. DDL default true. */
   journal_day_log: z.boolean(),
+  /**
+   * "Use this device's timezone" (migration 0022): the account's zone follows the
+   * device's (web device-timezone.ts). Off = keep the zone picked by hand. DDL default true.
+   */
+  timezone_follow_device: z.boolean(),
   updated_at: isoDateTimeSchema,
 });
 export type UserSettings = z.infer<typeof userSettingsSchema>;
@@ -589,6 +594,25 @@ export const breakEntrySchema = z.strictObject({
   planned_minutes: z.number().int().min(1).max(240),
 });
 export type BreakEntry = z.infer<typeof breakEntrySchema>;
+
+/** What moved the account's timezone: the device's own zone changed, or the user picked one. */
+export const timezoneChangeCauseSchema = z.enum(['device', 'manual']);
+export type TimezoneChangeCause = z.infer<typeof timezoneChangeCauseSchema>;
+
+/**
+ * A change of the account's timezone (migration 0021), written once by
+ * `timezone.change`, which also sets `user_settings.timezone`. Clocked time is
+ * stored as instants, so a change never adds or removes logged time; this row is
+ * the record that it happened, shown in the journal day log's "All logs" list.
+ */
+export const timezoneChangeSchema = z.strictObject({
+  ...baseRow,
+  changed_at: isoDateTimeSchema,
+  from_timezone: z.string().min(1).max(100),
+  to_timezone: z.string().min(1).max(100),
+  cause: timezoneChangeCauseSchema,
+});
+export type TimezoneChange = z.infer<typeof timezoneChangeSchema>;
 
 // --- REGISTRY -------------------------------------------------------------------------------------
 

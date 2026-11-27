@@ -91,6 +91,7 @@ export function DayLogFooter({
           date={day}
           dayResetHour={resetHour}
           timezone={timezone}
+          timezoneChanges={entries.timezone_changes ?? []}
         />
       )}
       {breaks.length > 0 && (

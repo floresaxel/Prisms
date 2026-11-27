@@ -37,16 +37,23 @@ test('timezone clock: hover names the zone, click changes it, Settings agrees', 
   // hover text says where the clock is set to (a fresh account defaults to New York)
   await expect(clock).toHaveAttribute('title', /New York, America.*\(America\/New_York\)/);
 
-  // click → pick another zone
+  // click → "Use this device's timezone" is on by default (the browser is in New York too)
   await clock.click();
+  await expect(page.getByTestId('tz-follow')).toHaveAttribute('aria-checked', 'true');
+  // pick another zone: kept by hand, so following the device turns off
   await page.getByTestId('tz-search').fill('tokyo');
   await page.getByTestId('tz-opt-Asia/Tokyo').click();
   await expect(page.getByTestId('tz-popover')).toHaveCount(0);
   await expect(clock).toHaveAttribute('title', /Tokyo, Asia.*\(Asia\/Tokyo\)/);
+  await clock.click();
+  await expect(page.getByTestId('tz-follow')).toHaveAttribute('aria-checked', 'false');
+  await page.keyboard.press('Escape');
 
   // the same value is in Settings
   await page.getByTestId('nav-settings').click();
   await expect(page.getByTestId('settings-tz')).toHaveValue('Asia/Tokyo');
+  await expect(page.getByTestId('settings-tz-follow')).toHaveAttribute('aria-checked', 'false');
+  await expect(page.getByTestId('settings-tz')).toBeEnabled();
 
   // and Settings can change it back; junk is refused
   await page.getByTestId('settings-tz').fill('Mars/Olympus');
@@ -56,4 +63,12 @@ test('timezone clock: hover names the zone, click changes it, Settings agrees', 
   await page.getByTestId('settings-save').click();
   await expect(page.getByTestId('settings-saved')).toBeVisible();
   await expect(clock).toHaveAttribute('title', /Paris, Europe.*\(Europe\/Paris\)/);
+
+  // turning "Use this device's timezone" back on snaps the zone to the device's (New
+  // York here) at once, locks the field, and the day log records it as the device's
+  await page.getByTestId('settings-tz-follow').click();
+  await expect(page.getByTestId('settings-tz-follow')).toHaveAttribute('aria-checked', 'true');
+  await expect(clock).toHaveAttribute('title', /New York, America.*\(America\/New_York\)/);
+  await expect(page.getByTestId('settings-tz')).toHaveValue('America/New_York');
+  await expect(page.getByTestId('settings-tz')).toBeDisabled();
 });

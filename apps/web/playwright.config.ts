@@ -21,6 +21,10 @@ export default defineConfig({
   use: {
     baseURL: 'http://localhost:5173',
     trace: 'retain-on-failure',
+    // The account's timezone follows the device by default (device-timezone.ts), and a
+    // fresh account starts in New York — so the browser is in New York too, or every
+    // spec's account would move to the runner's zone (UTC on CI) the moment it opens.
+    timezoneId: 'America/New_York',
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
 });

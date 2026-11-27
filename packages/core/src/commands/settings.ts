@@ -18,6 +18,8 @@ export const settingsUpdateSchema = z
     weather_location: weatherLocationSchema.nullable().optional(),
     /** Built-in automation toggle (Annex L): show the generated journal day log. */
     journal_day_log: z.boolean().optional(),
+    /** "Use this device's timezone": the account's zone follows the device's. */
+    timezone_follow_device: z.boolean().optional(),
   })
   .refine((patch) => Object.keys(patch).length > 0, {
     message: 'settings.update requires at least one field',

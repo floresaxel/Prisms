@@ -148,6 +148,20 @@
       "when": 1795550240294,
       "tag": "0020_focus_factor_tenths",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1795764294576,
+      "tag": "0021_timezone_changes",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1795765524928,
+      "tag": "0022_timezone_follow_device",
+      "breakpoints": true
     }
   ]
 }

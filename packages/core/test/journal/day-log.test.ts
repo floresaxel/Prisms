@@ -717,3 +717,47 @@ describe('breaks — an event of the day, not work', () => {
     expect(md).not.toMatch(/\p{Extended_Pictographic}/u);
   });
 });
+describe('timezone changes — a note beside the day, never time', () => {
+  const day = '2026-05-08';
+  const p = makeNode({ id: idOf(8100), node_type: 'project', title: 'Proj' });
+  const t = makeNode({ id: idOf(8101), node_type: 'task', parent_id: p.id, title: 'Work' });
+  // a session 13:00–15:00 EDT, and the device moved to Tokyo at 14:00 EDT, mid-session
+  const worked = makeEntry({ id: idOf(8200), task_id: t.id, started_at: '2026-05-08T17:00:00.000Z', ended_at: '2026-05-08T19:00:00.000Z' });
+  const moved = { id: idOf(8001), changed_at: '2026-05-08T18:00:00.000Z', from_timezone: NY, to_timezone: 'Asia/Tokyo', cause: 'device' as const, deleted_at: null };
+  const picked = { ...moved, id: idOf(8002), changed_at: '2026-05-08T16:00:00.000Z', from_timezone: 'Europe/London', to_timezone: NY, cause: 'manual' as const };
+
+  it('lists the day’s changes oldest first and leaves the clocked time exactly as logged', () => {
+    const log = computeDayLog({ date: day, nodes: [p, t], blocks: [], timeEntries: [worked], timezoneChanges: [moved, picked], ...settings })!;
+    expect(log.timezone_changes).toEqual([
+      { change_id: picked.id, changed_at: picked.changed_at, from_timezone: 'Europe/London', to_timezone: NY, cause: 'manual' },
+      { change_id: moved.id, changed_at: moved.changed_at, from_timezone: NY, to_timezone: 'Asia/Tokyo', cause: 'device' },
+    ]);
+    expect(log.clocked[0]!.minutes).toBe(120); // instants: the zone change adds or removes nothing
+    expect(log.clocked_minutes).toBe(120);
+    expect(dayLogEntriesSchema.safeParse(log).success).toBe(true);
+    const plain = computeDayLog({ date: day, nodes: [p, t], blocks: [], timeEntries: [worked], ...settings })!;
+    expect('timezone_changes' in plain).toBe(false);
+    expect({ ...log, timezone_changes: undefined }).toEqual({ ...plain, timezone_changes: undefined });
+  });
+
+  it('alone does not make a day show a log, skips deleted rows, and the by-date path agrees', () => {
+    expect(computeDayLog({ date: day, nodes: [], blocks: [], timezoneChanges: [moved], ...settings })).toBeNull();
+    const gone = { ...moved, id: idOf(8003), deleted_at: '2026-05-08T20:00:00.000Z' };
+    const log = computeDayLog({ date: day, nodes: [p, t], blocks: [], timeEntries: [worked], timezoneChanges: [gone, moved], ...settings })!;
+    expect(log.timezone_changes?.map((c) => c.change_id)).toEqual([moved.id]);
+    expect(computeDayLogsByDate({ nodes: [p, t], blocks: [], timeEntries: [worked], timezoneChanges: [gone, moved] }, settings).get(day)).toEqual(log);
+  });
+
+  it('is hidden when the log is narrowed to a project (it belongs to none)', () => {
+    const log = computeDayLog({ date: day, nodes: [p, t], blocks: [], timeEntries: [worked], timezoneChanges: [moved], ...settings })!;
+    expect(filterDayLog(log, { project_id: p.id, vision_id: null })!.timezone_changes).toBeUndefined();
+  });
+
+  it('renders a Timezone changes section in the .md, with no emoji', () => {
+    const md = renderDayLogMarkdown(computeDayLog({ date: day, nodes: [p, t], blocks: [], timeEntries: [worked], timezoneChanges: [moved, picked], ...settings })!, { timezone: NY });
+    expect(md).toContain('**Timezone changes**');
+    expect(md).toContain('- 12:00 Europe/London → America/New_York (set by hand)');
+    expect(md).toContain('- 14:00 America/New_York → Asia/Tokyo (device moved)');
+    expect(md).not.toMatch(/\p{Extended_Pictographic}/u);
+  });
+});

@@ -1,0 +1,1 @@
+ALTER TABLE "user_settings" ADD COLUMN "timezone_follow_device" boolean DEFAULT true NOT NULL;

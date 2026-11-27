@@ -54,6 +54,7 @@ import type {
   SubjectKind,
   SuggestionBatchSource,
   TagAnswerValue,
+  TimezoneChangeCause,
   UserSettings,
 } from '@prisms/core';
 
@@ -691,6 +692,27 @@ export const breaks = pgTable(
   ],
 );
 
+/**
+ * A change of the account's timezone (migration 0021), written once by
+ * `timezone.change` — which also sets `user_settings.timezone`. Clocked time is
+ * stored as instants, so a change never adds or removes logged time; this row is
+ * the record that it happened, for the journal day log's "All logs" list.
+ * `cause`: the device's own zone changed, or the user picked one.
+ */
+export const timezone_changes = pgTable(
+  'timezone_changes',
+  {
+    ...baseColumns,
+    changed_at: timestamptz('changed_at').notNull(),
+    from_timezone: text('from_timezone').notNull(),
+    to_timezone: text('to_timezone').notNull(),
+    cause: text('cause').$type<TimezoneChangeCause>().notNull(),
+  },
+  (t) => [
+    check('timezone_changes_cause_check', sql`${t.cause} IN ('device', 'manual')`),
+    index('timezone_changes_user_changed_idx').on(t.user_id, t.changed_at).where(sql`${t.deleted_at} IS NULL`),
+  ],
+);
 // --- COMMAND LOG (audit; written server-side on every applied mutation) -----------------
 
 export const command_log = pgTable(
@@ -738,6 +760,8 @@ export const user_settings = pgTable(
     >(),
     // Annex L built-in automation, opt-OUT: existing rows get it ON at migration.
     journal_day_log: boolean('journal_day_log').notNull().default(true),
+    /** "Use this device's timezone" (migration 0022): the account's zone follows the device's. */
+    timezone_follow_device: boolean('timezone_follow_device').notNull().default(true),
     updated_at: timestamptz('updated_at').notNull(),
   },
   (t) => [
@@ -813,6 +837,7 @@ export const tables = {
   journal_entries,
   task_steps,
   breaks,
+  timezone_changes,
   command_log,
   user_settings,
 } as const;

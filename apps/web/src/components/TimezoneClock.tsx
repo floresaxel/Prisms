@@ -2,7 +2,9 @@
  * The topbar's HH:MM clock. It reads the time in the account's timezone (the
  * one every "today" is computed in), says which zone that is when hovered, and
  * opens a small picker when clicked so the zone can be changed from anywhere.
- * Settings holds the same value; both write `settings.update`.
+ * Settings holds the same value; both write `timezone.change` (which the journal
+ * day log lists). "Use this device's timezone" (on by default) makes the zone follow
+ * the device on its own (device-timezone.ts); picking a zone from the list turns it off.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 
@@ -16,6 +18,7 @@ export function TimezoneClock({ ctx }: { ctx: CommandContext }) {
   const settings = useUserSettings();
   const commands = useCommands(ctx);
   const tz = settings.timezone;
+  const follow = settings.timezoneFollowDevice;
 
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
@@ -46,7 +49,8 @@ export function TimezoneClock({ ctx }: { ctx: CommandContext }) {
     };
   }, [open]);
 
-  const device = useMemo(() => deviceTimezone(), []);
+  // read every render (the clock ticks each second), so a device that moves shows its new zone
+  const device = deviceTimezone();
   const matches = useMemo(() => {
     const q = query.trim().toLowerCase().replace(/\s+/g, '_');
     const all = allTimezones();
@@ -61,9 +65,11 @@ export function TimezoneClock({ ctx }: { ctx: CommandContext }) {
     setError('');
     setOpen(false);
     setQuery('');
+    // a zone picked by hand is kept: stop following the device first, so it can't snap back
+    if (follow) await commands.updateSettings({ timezone_follow_device: false });
     if (next === tz) return;
-    if (settings.hasRow) await commands.updateSettings({ timezone: next });
-    else await commands.insertSettings({ day_reset_hour: settings.dayResetHour, timezone: next });
+    // through timezone.change (not settings.update), so the journal day log records it
+    await commands.changeTimezone({ from: tz, to: next, cause: 'manual' });
   }
 
   const current = describeTimezone(tz, now);
@@ -99,6 +105,21 @@ export function TimezoneClock({ ctx }: { ctx: CommandContext }) {
             <br />
             {[current.name, current.offset].filter(Boolean).join(' · ')} — {tz}
           </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={follow}
+            className={`px-switch px-tz-follow${follow ? ' px-switch--on' : ''}`}
+            data-testid="tz-follow"
+            title={follow ? 'The timezone changes with this device. Pick a zone below to keep one instead.' : 'Follow this device’s timezone wherever it goes'}
+            onClick={() => void commands.updateSettings({ timezone_follow_device: !follow })}
+          >
+            <span className="px-switch-knob" />
+            <span className="px-switch-lbl">
+              Use this device’s timezone
+              {device && <small>{describeTimezone(device, now).place}</small>}
+            </span>
+          </button>
           <input
             ref={input}
             className="px-input"
@@ -115,12 +136,6 @@ export function TimezoneClock({ ctx }: { ctx: CommandContext }) {
           />
           {error && <div className="px-tz-err" data-testid="tz-error">{error}</div>}
           <div className="px-tz-list" role="listbox" aria-label="Timezones">
-            {device && device !== tz && (
-              <button type="button" className="px-tz-opt" data-testid="tz-device" onClick={() => void choose(device)}>
-                <span>Use this device’s timezone</span>
-                <small>{describeTimezone(device, now).place}</small>
-              </button>
-            )}
             {matches.map((z) => (
               <button
                 key={z}

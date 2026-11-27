@@ -29,7 +29,8 @@ describe('Annex L adds no write-path surface (D1)', () => {
     expect(Object.keys(tables).filter((t) => MATERIALIZED.test(t))).toEqual([]);
     // unchanged by this feature (Annex L stores nothing); the 27th is reaks (0018),
     // a FACT the day log reads like time entries — not a stored log
-    expect(Object.keys(tables)).toHaveLength(27);
+    // …and the 28th is timezone_changes (0021), likewise a fact it reads, not a stored log
+    expect(Object.keys(tables)).toHaveLength(28);
     const schema = read('packages/db/src/schema.ts');
     expect(/pgTable\(\s*'journal_day_logs?'/.test(schema)).toBe(false);
     // the flag is a COLUMN on user_settings, and only that

@@ -46,7 +46,7 @@ describe.skipIf(!adminUrl)('migrations + seed against fresh postgres', () => {
     // the §6.0 tables + 4 better-auth + 2 server-internal (command_field_versions
     // s12, push_subscriptions s14) + 3 tag tables + the 2 M3 1.3 tables
     // (schedule_suggestion_batches §7.5, sync_review_items §7.13) + journal_entries
-    // (J1 §6.0) + task_steps (checklist steps, W3 migration 0011) + breaks (0018); drizzle
+    // (J1 §6.0) + task_steps (checklist steps, W3 migration 0011) + breaks (0018) + timezone_changes (0021); drizzle
     // bookkeeping lives in its own schema
     const expected = [
       'account', 'automation_rules', 'blocker_rules', 'breaks', 'command_field_versions',
@@ -56,14 +56,14 @@ describe.skipIf(!adminUrl)('migrations + seed against fresh postgres', () => {
       'habits', 'journal_entries', 'nodes', 'push_subscriptions', 'schedule_blocks',
       'schedule_suggestion_batches', 'session', 'sprint_memberships', 'sprints',
       'sync_review_items', 'tag_answers', 'tag_placements', 'tags',
-      'task_steps', 'time_entries', 'user', 'user_settings', 'verification',
+      'task_steps', 'time_entries', 'timezone_changes', 'user', 'user_settings', 'verification',
     ];
     expect(rows.map((t) => t.table_name)).toEqual(expected);
     // Annex L is DERIVED: migration 0012 adds a settings COLUMN and no table, so
     // this list must not grow. Asserted in the same commit as the migration
     // because this test only runs against a fresh DB in CI — a drift here is
     // invisible locally and fails the branch's first CI run.
-    expect(expected).toHaveLength(33);
+    expect(expected).toHaveLength(34);
     expect(expected).not.toContain('journal_day_logs');
   });
 
