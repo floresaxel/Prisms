@@ -1370,13 +1370,21 @@ svg.px-pdot--green { background: none; fill: var(--px-green); }
 .px-run-core, .px-run-wave { position: absolute; inset: 0; border-radius: 50%; }
 /* on the topbar pill's blue the mark is white */
 .px-run-mark--white .px-run-core, .px-run-mark--white .px-run-wave { background: #fff; }
+/* The pulse animates two REGISTERED custom properties, and opacity / transform just
+   read them. Animating `opacity` + `transform` directly hands the dot to the
+   compositor as its own layer, and that layer scrolls out of step with the page
+   (it lags or runs ahead of its row). A custom-property animation runs on the main
+   thread, so the dot is painted with the row and moves with it. */
+@property --px-run-o { syntax: '<number>'; inherits: false; initial-value: 1; }
+@property --px-run-s { syntax: '<number>'; inherits: false; initial-value: 1; }
+.px-run-core, .px-run-wave { opacity: var(--px-run-o); transform: scale(var(--px-run-s)); }
 .px-run-core { animation: px-run-pulse 1.8s ease-in-out var(--px-run-phase, 0ms) infinite; }
-.px-run-wave { opacity: 0; animation: px-run-wave 1.8s ease-out var(--px-run-phase, 0ms) infinite; }
-@keyframes px-run-pulse { 50% { opacity: 0.55; transform: scale(0.8); } }
+.px-run-wave { --px-run-o: 0; --px-run-s: 0.8; animation: px-run-wave 1.8s ease-out var(--px-run-phase, 0ms) infinite; }
+@keyframes px-run-pulse { 50% { --px-run-o: 0.55; --px-run-s: 0.8; } }
 @keyframes px-run-wave {
-  0%, 45% { opacity: 0; transform: scale(0.8); }
-  50% { opacity: 0.5; }
-  100% { opacity: 0; transform: scale(1.6); }
+  0%, 45% { --px-run-o: 0; --px-run-s: 0.8; }
+  50% { --px-run-o: 0.5; }
+  100% { --px-run-o: 0; --px-run-s: 1.6; }
 }
 .px-card { background: var(--px-surface); border: 1px solid var(--px-border); border-radius: 10px; box-shadow: var(--px-shadow); }
 .px-card-h { display: flex; align-items: center; gap: 8px; padding: 11px 14px; border-bottom: 1px solid var(--px-border); font-weight: 600; font-size: 13px; }
