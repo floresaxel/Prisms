@@ -19,7 +19,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 
-import { formatDayLogDuration, formatDayLogTime, type DayLogClockedEntry } from '@prisms/core';
+import { formatDayLogDuration, formatDayLogTime, type DayLogClockedEntry, type DayLogTimezoneChangeEntry } from '@prisms/core';
 import { Ic, Modal } from '@prisms/ui';
 
 import {
@@ -33,6 +33,7 @@ import {
   type ClockFocus,
   type DayTick,
 } from '../clocked-day';
+import { describeTimezone } from '../timezones';
 import { DayLogContext } from './DayLogContext';
 
 const sameFocus = (a: ClockFocus, b: ClockFocus) =>
@@ -138,6 +139,38 @@ function DayBar({
   );
 }
 
+/**
+ * A timezone change in `All logs`: when it happened (in the zone the account is in
+ * now, like every time here), from where to where with each zone's offset at that
+ * moment, and whether the device moved or the zone was picked by hand. A note, not
+ * a log: nothing to hover or pin.
+ */
+/** "New York, America" → "New York" (the full zone is in the row's tooltip). */
+const city = (place: string) => place.split(',')[0] ?? place;
+
+function TimezoneChangeRow({ c, at }: { c: DayLogTimezoneChangeEntry; at: (ts: string) => string }) {
+  const when = new Date(c.changed_at);
+  const from = describeTimezone(c.from_timezone, when);
+  const to = describeTimezone(c.to_timezone, when);
+  const offsets = from.offset && to.offset ? `(${from.offset} → ${to.offset})` : '';
+  return (
+    <li className="px-clk-tz" data-testid={`daylog-tz-${c.change_id}`} title={`Timezone changed: ${c.from_timezone} → ${c.to_timezone}`}>
+      <Ic name="clock" className="px-ic px-clk-tz-ic" />
+      <span className="px-daylog-time px-num">{at(c.changed_at)}</span>
+      <span className="px-clk-main">
+        <span className="px-daylog-title">
+          Timezone changed · {city(from.place)} → {city(to.place)}
+        </span>
+        <span className="px-clk-tz-sub">
+          {offsets}
+          {offsets && ' · '}
+          {c.cause === 'manual' ? 'set by hand' : 'this device moved'} · clocked time unchanged
+        </span>
+      </span>
+    </li>
+  );
+}
+
 export function ClockedSection({
   entries,
   totalMinutes,
@@ -145,6 +178,7 @@ export function ClockedSection({
   date,
   dayResetHour,
   timezone,
+  timezoneChanges = [],
 }: {
   entries: DayLogClockedEntry[];
   totalMinutes: number;
@@ -153,6 +187,8 @@ export function ClockedSection({
   date: string;
   dayResetHour: number;
   timezone: string;
+  /** The day's timezone changes: listed in `All logs` among the sessions, by time. */
+  timezoneChanges?: DayLogTimezoneChangeEntry[];
 }) {
   const nowMs = useNow();
   const zone = useMemo(() => usableZone(timezone), [timezone]);
@@ -174,6 +210,12 @@ export function ClockedSection({
   };
   const toneOf = new Map(day.tasks.map((t) => [t.taskId, t.tone]));
   const logs = [...entries].sort((a, b) => Date.parse(a.started_at) - Date.parse(b.started_at));
+  // `All logs`: every session and every timezone change, in the order they happened
+  const timeline: ({ kind: 'log'; ms: number; e: DayLogClockedEntry } | { kind: 'tz'; ms: number; c: DayLogTimezoneChangeEntry })[] = [
+    ...logs.map((e) => ({ kind: 'log' as const, ms: Date.parse(e.started_at), e })),
+    ...timezoneChanges.map((c) => ({ kind: 'tz' as const, ms: Date.parse(c.changed_at), c })),
+  ].sort((a, b) => a.ms - b.ms);
+  const zones = timezoneChanges.length;
 
   function close() {
     setOpen(false);
@@ -252,7 +294,7 @@ export function ClockedSection({
             open={open}
             size="card"
             title={`Clocked · ${dayLabel(date)}`}
-            subtitle={`${formatDayLogDuration(totalMinutes)} total · ${entries.length + truncated} session${entries.length + truncated === 1 ? '' : 's'} · ${day.tasks.length} task${day.tasks.length === 1 ? '' : 's'}`}
+            subtitle={`${formatDayLogDuration(totalMinutes)} total · ${entries.length + truncated} session${entries.length + truncated === 1 ? '' : 's'} · ${day.tasks.length} task${day.tasks.length === 1 ? '' : 's'}${zones > 0 ? ` · ${zones} timezone change${zones === 1 ? '' : 's'}` : ''}`}
             onClose={close}
             actions={
               <button type="button" className="px-btn" data-testid="daylog-clock-close" onClick={close}>
@@ -276,7 +318,9 @@ export function ClockedSection({
                   onPick={pop.toggle}
                 />
                 <ul className="px-clk-logs">
-                  {logs.map((e) => {
+                  {timeline.map((item) => {
+                    if (item.kind === 'tz') return <TimezoneChangeRow key={`tz-${item.c.change_id}`} c={item.c} at={at} />;
+                    const e = item.e;
                     const f: ClockFocus = { kind: 'entry', entryId: e.entry_id, taskId: e.task_id };
                     return (
                       <li key={e.entry_id}>

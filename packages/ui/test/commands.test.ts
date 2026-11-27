@@ -134,7 +134,18 @@ describe('createCommands — creates mint a row id and seed an insert', () => {
     ]);
     expect(effects.some((e) => e.table === 'journal_entries')).toBe(false);
   });
-  it('createRule → JSON columns land as TEXT in the effect; enabled as 0/1', async () => {
+  it('changeTimezone → timezone.change; the overlay records the change AND moves the account zone', async () => {
+    const { store, commands, effects } = captureStore();
+    const id = await createCommands(store, ctx, deps()).changeTimezone({ from: 'America/New_York', to: 'Asia/Tokyo', cause: 'device', at: '2026-06-28T10:00:00.000Z' });
+    expect(commands[0]).toMatchObject({
+      name: 'timezone.change',
+      payload: { id, changed_at: '2026-06-28T10:00:00.000Z', from_timezone: 'America/New_York', to_timezone: 'Asia/Tokyo', cause: 'device' },
+    });
+    expect(effects).toEqual([
+      expect.objectContaining({ table: 'timezone_changes', row_id: id, op: 'insert', fields: expect.objectContaining({ to_timezone: 'Asia/Tokyo', cause: 'device' }) }),
+      expect.objectContaining({ table: 'user_settings', row_id: ctx.userId, fields: { timezone: 'Asia/Tokyo' } }),
+    ]);
+  });  it('createRule → JSON columns land as TEXT in the effect; enabled as 0/1', async () => {
     const { store, effects } = captureStore();
     await createCommands(store, ctx, deps()).createRule({
       trigger: 'task_completed',

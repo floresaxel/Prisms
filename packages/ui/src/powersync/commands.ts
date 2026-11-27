@@ -515,6 +515,16 @@ export function createCommands(store: OverlayStore, ctx: CommandContext, deps: E
       if (Object.keys(payload).length === 0) return;
       await run('settings.update', payload);
     },
+    /**
+     * Move the account to another timezone and record that it moved (the journal day
+     * log lists it). `cause`: the device's own zone changed, or the user picked one.
+     * Clocked time is stored as instants, so a running session keeps its exact length.
+     */
+    async changeTimezone(input: { from: string; to: string; cause: 'device' | 'manual'; at?: string }): Promise<string> {
+      const id = newId();
+      await run('timezone.change', { id, changed_at: input.at ?? new Date().toISOString(), from_timezone: input.from, to_timezone: input.to, cause: input.cause });
+      return id;
+    },
     /** First settings write for a fresh account (the server upserts on user_id). */
     async insertSettings(patch: { day_reset_hour: number; timezone: string }): Promise<void> {
       await run('settings.update', { day_reset_hour: patch.day_reset_hour, timezone: patch.timezone });

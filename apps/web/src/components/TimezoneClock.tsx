@@ -2,7 +2,8 @@
  * The topbar's HH:MM clock. It reads the time in the account's timezone (the
  * one every "today" is computed in), says which zone that is when hovered, and
  * opens a small picker when clicked so the zone can be changed from anywhere.
- * Settings holds the same value; both write `settings.update`.
+ * Settings holds the same value; both write `timezone.change` (which the journal
+ * day log lists). The zone also follows the device on its own (device-timezone.ts).
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 
@@ -62,8 +63,8 @@ export function TimezoneClock({ ctx }: { ctx: CommandContext }) {
     setOpen(false);
     setQuery('');
     if (next === tz) return;
-    if (settings.hasRow) await commands.updateSettings({ timezone: next });
-    else await commands.insertSettings({ day_reset_hour: settings.dayResetHour, timezone: next });
+    // through timezone.change (not settings.update), so the journal day log records it
+    await commands.changeTimezone({ from: tz, to: next, cause: 'manual' });
   }
 
   const current = describeTimezone(tz, now);

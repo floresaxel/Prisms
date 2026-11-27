@@ -22,7 +22,7 @@ import {
   DEFAULT_TIMEZONE,
   type DayLogEntries,
 } from '@prisms/core';
-import { breaks, journal_entries, nodes, schedule_blocks, time_entries, user_settings } from '@prisms/db';
+import { breaks, journal_entries, nodes, schedule_blocks, time_entries, timezone_changes, user_settings } from '@prisms/db';
 import { and, asc, eq, isNull } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 
@@ -110,6 +110,11 @@ export async function runJournalExport(db: PostgresJsDatabase, userId: string): 
     .select({ id: breaks.id, started_at: breaks.started_at, ended_at: breaks.ended_at, planned_minutes: breaks.planned_minutes, deleted_at: breaks.deleted_at })
     .from(breaks)
     .where(and(eq(breaks.user_id, userId), isNull(breaks.deleted_at)));
+  // timezone changes — a note beside the day's logs, on the day each happened
+  const zoneRows = await db
+    .select({ id: timezone_changes.id, changed_at: timezone_changes.changed_at, from_timezone: timezone_changes.from_timezone, to_timezone: timezone_changes.to_timezone, cause: timezone_changes.cause, deleted_at: timezone_changes.deleted_at })
+    .from(timezone_changes)
+    .where(and(eq(timezone_changes.user_id, userId), isNull(timezone_changes.deleted_at)));
   const logs = computeDayLogsByDate(
     {
       nodes: factNodes,
@@ -117,6 +122,7 @@ export async function runJournalExport(db: PostgresJsDatabase, userId: string): 
       timeEntries: timeEntryRows,
       // ISO instants, as the day-log entry schema declares (the driver hands back Postgres' text form)
       breaks: breakRows.map((b) => ({ ...b, started_at: new Date(b.started_at).toISOString(), ended_at: new Date(b.ended_at).toISOString() })),
+      timezoneChanges: zoneRows.map((c) => ({ ...c, changed_at: new Date(c.changed_at).toISOString() })),
     },
     {
       dayResetHour: settings?.day_reset_hour ?? DEFAULT_DAY_RESET_HOUR,

@@ -54,6 +54,7 @@ streams:
       - SELECT * FROM habit_completions WHERE user_id = auth.user_id() AND deleted_at IS NULL
       - SELECT * FROM task_steps WHERE user_id = auth.user_id() AND deleted_at IS NULL
       - SELECT * FROM breaks WHERE user_id = auth.user_id() AND deleted_at IS NULL
+      - SELECT * FROM timezone_changes WHERE user_id = auth.user_id() AND deleted_at IS NULL
       - SELECT * FROM tags WHERE user_id = auth.user_id()
       - SELECT * FROM tag_placements WHERE user_id = auth.user_id()
       - SELECT * FROM tag_answers WHERE user_id = auth.user_id()
@@ -83,6 +84,7 @@ streams:
       - SELECT * FROM habit_completions WHERE user_id = auth.user_id() AND deleted_at IS NOT NULL
       - SELECT * FROM task_steps WHERE user_id = auth.user_id() AND deleted_at IS NOT NULL
       - SELECT * FROM breaks WHERE user_id = auth.user_id() AND deleted_at IS NOT NULL
+      - SELECT * FROM timezone_changes WHERE user_id = auth.user_id() AND deleted_at IS NOT NULL
       - SELECT * FROM diagram_layouts WHERE user_id = auth.user_id() AND deleted_at IS NOT NULL
       - SELECT * FROM journal_entries WHERE user_id = auth.user_id() AND deleted_at IS NOT NULL
 

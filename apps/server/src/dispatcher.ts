@@ -91,6 +91,7 @@ import {
   tags,
   task_steps,
   time_entries,
+  timezone_changes,
   user_settings,
 } from '@prisms/db';
 import { randomUUID } from 'node:crypto';
@@ -185,6 +186,8 @@ const CONTEXT_WRITES: Partial<Record<CommandName, readonly ContextTable[]>> = {
   'timer.adjust': ['time_entries'],
   // a break is not a context table (it is shown only in the journal's day log)
   'break.log': [],
+  // the account's zone moves every "today" — the record itself is not a context table
+  'timezone.change': ['user_settings'],
   'settings.update': ['user_settings'],
   // task_steps is NOT a context table (steps have no status/schedule/estimate,
   // D4) — a step command invalidates NO context, so an explicit empty set beats
@@ -1488,6 +1491,33 @@ export function createDispatcher(
         rec('breaks', p.id, 'insert');
         return applied();
       }
+      case 'timezone.change': {
+        // The account's timezone changes: record it (once — a replay converges on the
+        // same row) and move user_settings.timezone, last write wins like
+        // settings.update. Clocked time is stored as instants, so nothing else moves.
+        const p = payload as Payload<'timezone.change'>;
+        const conv = convergeOrOwn(await one(tx.select({ user_id: timezone_changes.user_id }).from(timezone_changes).where(eq(timezone_changes.id, p.id)).limit(1)), 'timezone change', p.id);
+        if (conv) return conv;
+        if (!isKnownTimezone(p.to_timezone)) return reject('E_INVALID_TIMEZONE', `"${p.to_timezone}" is not a timezone this server knows`);
+        await tx.insert(timezone_changes).values({
+          id: p.id,
+          user_id: userId,
+          changed_at: p.changed_at,
+          from_timezone: p.from_timezone,
+          to_timezone: p.to_timezone,
+          cause: p.cause,
+          ...born,
+        });
+        rec('timezone_changes', p.id, 'insert');
+        const win = await lwwFields(tx, hlc, userId, 'user_settings', userId, { timezone: p.to_timezone });
+        if (Object.keys(win).length > 0) {
+          await tx
+            .insert(user_settings)
+            .values({ user_id: userId, updated_at: now, ...(win as Record<string, unknown>) } as typeof user_settings.$inferInsert)
+            .onConflictDoUpdate({ target: user_settings.user_id, set: { updated_at: now, ...win } });
+        }
+        return applied();
+      }
       case 'step.add': {
         const p = payload as Payload<'step.add'>;
         const conv = convergeOrOwn(await loadStepRow(tx, p.id), 'step', p.id);
@@ -1971,6 +2001,16 @@ export function createDispatcher(
       return { kind: 'ok', results: commands.map((c) => byId.get(c.id)!) };
     },
   };
+}
+
+/** An IANA zone this runtime knows — an unknown one would make every later Intl call throw. */
+function isKnownTimezone(tz: string): boolean {
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: tz });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function isUniqueViolation(error: unknown): boolean {

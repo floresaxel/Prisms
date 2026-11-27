@@ -20,6 +20,7 @@ import {
   nodeTypeSchema,
   streakModeSchema,
   tagAnswerValueSchema,
+  timezoneChangeCauseSchema,
 } from '../domain/entities';
 import { boundedJsonObjectSchema, boundedJsonSchema, isoDateSchema, isoDateTimeSchema, uuidSchema } from '../domain/primitives';
 import { settingsUpdateSchema } from './settings';
@@ -185,6 +186,21 @@ export const breakLogSchema = z.strictObject({
   started_at: isoDateTimeSchema,
   ended_at: isoDateTimeSchema,
   planned_minutes: z.number().int().min(1).max(240),
+});
+/**
+ * The account's timezone changes: sets `user_settings.timezone` (last write wins,
+ * like `settings.update`) AND records the change (`timezone_changes`) so the day
+ * log can say when it happened. Sent when the device's zone changes, and when the
+ * user picks a zone. The client mints `id`; a replay converges on the same row.
+ * Clocked time is unaffected — entries are instants, not wall-clock times.
+ */
+export const timezoneChangePayloadSchema = z.strictObject({
+  id: uuidSchema,
+  changed_at: isoDateTimeSchema,
+  // SEC-3/F6: an IANA zone name is short ('America/Argentina/Buenos_Aires' is 30).
+  from_timezone: z.string().min(1).max(100),
+  to_timezone: z.string().min(1).max(100),
+  cause: timezoneChangeCauseSchema,
 });
 
 // --- habits & skills --------------------------------------------------------
@@ -475,6 +491,7 @@ export const COMMAND_SCHEMAS = {
   'timer.review': timerReviewSchema,
   'timer.adjust': timerAdjustSchema,
   'break.log': breakLogSchema,
+  'timezone.change': timezoneChangePayloadSchema,
   'habit.create': habitCreateSchema,
   'habit.update': habitUpdateSchema,
   'habit.delete': habitDeleteSchema,

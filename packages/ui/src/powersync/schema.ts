@@ -213,6 +213,21 @@ const breaks = new Table({
   deleted_at: column.text,
 });
 
+/** A change of the account's timezone (migration 0021). Always-on synced (the
+ *  `active` tier); the journal day log reads them. Written once by `timezone.change`. */
+const timezone_changes = new Table({
+  user_id: column.text,
+  changed_at: column.text,
+  from_timezone: column.text,
+  to_timezone: column.text,
+  cause: column.text,
+  // stamped by the server; lets the overlay see its own write arrive (`reconcileConfirmed`)
+  last_modified_by_command_id: column.text,
+  created_at: column.text,
+  updated_at: column.text,
+  deleted_at: column.text,
+});
+
 const decision_boards = new Table({
   user_id: column.text,
   title: column.text,
@@ -376,6 +391,7 @@ const syncedTables = {
   journal_entries,
   task_steps,
   breaks,
+  timezone_changes,
   decision_boards,
   decision_criteria,
   decision_scores,

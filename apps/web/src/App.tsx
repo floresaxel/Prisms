@@ -42,6 +42,7 @@ import { clearDrafts } from './drafts';
 import { rejectionMessage } from './format';
 import { ScreenBoundary } from './components/ScreenBoundary';
 import { holdPage, revealPage, swapPage } from './components/pageSwap';
+import { useFollowDeviceTimezone } from './device-timezone';
 import { clearLocalAccount, connectDb, dbFor, forgetDb } from './powersync';
 import {
   Agenda,
@@ -230,6 +231,8 @@ function Shell({
   // the inbox plus the sessions put off with "Review later"
   const reviewCount = useReviewInbox().length + usePendingSessionReviews().length;
   const pageRef = useBootReveal(route);
+  // the account's timezone follows the device's when it changes (logged in the day log)
+  useFollowDeviceTimezone(ctx);
 
   const groups: NavGroupSpec[] = [
     {

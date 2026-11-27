@@ -25,6 +25,8 @@ import {
   type Node,
   type ScheduleBlock,
   type TimeEntry,
+  type TimezoneChange,
+  timezoneChangeCauseSchema,
 } from '../domain/entities';
 import {
   isoDateTimeSchema,
@@ -106,6 +108,21 @@ export const dayLogBreakEntrySchema = z.strictObject({
 });
 export type DayLogBreakEntry = z.infer<typeof dayLogBreakEntrySchema>;
 
+/**
+ * The account's timezone changed that day (a `timezone_changes` row), bucketed by
+ * when it happened. A note BESIDE the day's logs, not an event of its own: it never
+ * makes an otherwise empty day show a log, adds nothing to any total, and is hidden
+ * when the log is narrowed to a project or vision.
+ */
+export const dayLogTimezoneChangeEntrySchema = z.strictObject({
+  change_id: uuidSchema,
+  changed_at: isoDateTimeSchema,
+  from_timezone: z.string(),
+  to_timezone: z.string(),
+  cause: timezoneChangeCauseSchema,
+});
+export type DayLogTimezoneChangeEntry = z.infer<typeof dayLogTimezoneChangeEntrySchema>;
+
 export const dayLogEntriesSchema = z.strictObject({
   v: z.literal(DAY_LOG_VERSION),
   scheduled: z.array(dayLogScheduledEntrySchema),
@@ -118,6 +135,8 @@ export const dayLogEntriesSchema = z.strictObject({
   completed: z.array(dayLogCompletedEntrySchema),
   /** Breaks taken that day, oldest first. Present only when the day has one. */
   breaks: z.array(dayLogBreakEntrySchema).optional(),
+  /** Timezone changes that day, oldest first. Present only when the day has one (and a log). */
+  timezone_changes: z.array(dayLogTimezoneChangeEntrySchema).optional(),
   /** Present only when a list overflowed the cap; counts the DROPPED rows. */
   truncated: z
     .strictObject({
@@ -162,6 +181,8 @@ export type DayLogTimeEntry = Pick<
 
 export type DayLogBreak = Pick<BreakEntry, 'id' | 'started_at' | 'ended_at' | 'planned_minutes' | 'deleted_at'>;
 
+export type DayLogTimezoneChange = Pick<TimezoneChange, 'id' | 'changed_at' | 'from_timezone' | 'to_timezone' | 'cause' | 'deleted_at'>;
+
 /**
  * Fact rows. Callers may pass supersets — this module filters and buckets.
  * 
@@ -175,6 +196,8 @@ export interface DayLogFacts {
   timeEntries?: Iterable<DayLogTimeEntry>;
   /** Finished breaks; absent = none taken. */
   breaks?: Iterable<DayLogBreak>;
+  /** Changes of the account's timezone; absent = none. */
+  timezoneChanges?: Iterable<DayLogTimezoneChange>;
 }
 
 export interface DayLogInput extends DayLogFacts, DayLogSettings {
@@ -241,12 +264,13 @@ interface Draft {
   clocked: { ms: number; entry: DayLogClockedEntry }[];
   completed: { ms: number; entry: DayLogCompletedEntry }[];
   breaks: { ms: number; entry: DayLogBreakEntry }[];
+  timezoneChanges: { ms: number; entry: DayLogTimezoneChangeEntry }[];
   /** Task ids holding a live committed block on this day — the `planned` marker. */
   plannedTaskIds: Set<Uuid>;
 }
 
 function draft(): Draft {
-  return { scheduled: [], clocked: [], completed: [], breaks: [], plannedTaskIds: new Set() };
+  return { scheduled: [], clocked: [], completed: [], breaks: [], timezoneChanges: [], plannedTaskIds: new Set() };
 }
 
 /**
@@ -387,6 +411,22 @@ function collect(
     });
   }
 
+  // Pass 1d — timezone changes, bucketed by when they happened (in the zone the
+  // account is in NOW, like everything else here).
+  for (const c of facts.timezoneChanges ?? []) {
+    if (!c || c.deleted_at !== null) continue;
+    const changeId = idOf(c.id);
+    if (changeId === null) continue;
+    const ms = epochOf(c.changed_at);
+    if (ms === null) continue;
+    const date = bucketOf(ms);
+    if (onlyDate !== null && date !== onlyDate) continue;
+    draftFor(date).timezoneChanges.push({
+      ms,
+      entry: { change_id: changeId, changed_at: c.changed_at, from_timezone: textOf(c.from_timezone), to_timezone: textOf(c.to_timezone), cause: c.cause === 'manual' ? 'manual' : 'device' },
+    });
+  }
+
   // Pass 2 — completions. Runs after every block is bucketed so `planned` reads a
   // fully-populated set.
   for (const [taskId, node] of liveNodes) {
@@ -452,7 +492,10 @@ function compareIds(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
 }
 
-/** Deterministic order + cap. Returns null for an empty day (D1: null = no footer). */
+/**
+ * Deterministic order + cap. Returns null for an empty day (D1: null = no footer) —
+ * timezone changes alone do not make a day non-empty: they annotate its logs.
+ */
 function finalize(source: Draft): DayLogEntries | null {
   if (source.scheduled.length === 0 && source.clocked.length === 0 && source.completed.length === 0 && source.breaks.length === 0) {
     return null;
@@ -481,6 +524,12 @@ function finalize(source: Draft): DayLogEntries | null {
     entries.breaks = [...source.breaks]
       .sort((a, b) => a.ms - b.ms || compareIds(a.entry.break_id, b.entry.break_id))
       .map((b) => b.entry)
+      .slice(0, DAY_LOG_MAX_ENTRIES);
+  }
+  if (source.timezoneChanges.length > 0) {
+    entries.timezone_changes = [...source.timezoneChanges]
+      .sort((a, b) => a.ms - b.ms || compareIds(a.entry.change_id, b.entry.change_id))
+      .map((c) => c.entry)
       .slice(0, DAY_LOG_MAX_ENTRIES);
   }
   if (droppedScheduled > 0 || droppedClocked > 0 || droppedCompleted > 0) {
@@ -559,7 +608,7 @@ function matchesFilter(entry: Attributed, filter: DayLogFilter): boolean {
  * or null when nothing on the day belongs to it. A view over the computed log —
  * the stored/exported log is never filtered. 	runcated is dropped: it counted
  * rows hidden by the cap of the UNFILTERED list, which says nothing about this one.
- * Breaks are dropped too: they belong to no project or vision.
+ * Breaks and timezone changes are dropped too: they belong to no project or vision.
  */
 export function filterDayLog(
   entries: DayLogEntries | null | undefined,
@@ -681,6 +730,14 @@ export function renderDayLogMarkdown(
       const over = b.minutes - b.planned_minutes;
       const overText = over >= 1 ? ` · ${formatDayLogDuration(over)} over the ${formatDayLogDuration(b.planned_minutes)} planned` : '';
       lines.push(`- ${formatDayLogTime(b.started_at, tz)}–${formatDayLogTime(b.ended_at, tz)} (${formatDayLogDuration(b.minutes)}) Break${overText}`);
+    }
+  }
+  const zones = entries.timezone_changes ?? [];
+  if (zones.length > 0) {
+    lines.push('', '**Timezone changes**', '');
+    for (const c of zones) {
+      const by = c.cause === 'manual' ? 'set by hand' : 'device moved';
+      lines.push(`- ${formatDayLogTime(c.changed_at, tz)} ${inlineTitle(c.from_timezone)} → ${inlineTitle(c.to_timezone)} (${by})`);
     }
   }
   if (entries.completed.length > 0) {

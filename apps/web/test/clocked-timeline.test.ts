@@ -227,6 +227,31 @@ describe('ClockedSection — All logs popup', () => {
     expect(screen.getByRole('dialog').getAttribute('aria-label')).toBe('Clocked · Thu 18 Jun');
   });
 
+  it('lists a timezone change among the sessions, where it happened, as a note (not a log)', () => {
+    render(
+      createElement(ClockedSection, {
+        entries: day,
+        totalMinutes: 195,
+        truncated: 0,
+        date: DAY,
+        dayResetHour: 0,
+        timezone: 'UTC',
+        timezoneChanges: [{ change_id: 'tz1', changed_at: '2026-06-18T11:30:00.000Z', from_timezone: 'America/New_York', to_timezone: 'Asia/Tokyo', cause: 'device' }],
+      }),
+    );
+    expect(screen.getByTestId('daylog-clock-all').textContent).toContain('All logs (3)'); // still counts sessions
+    fireEvent.click(screen.getByTestId('daylog-clock-all'));
+    const pop = screen.getByTestId('daylog-clock-popup');
+    const order = [...pop.querySelectorAll('[data-testid^="daylog-clock-e"], [data-testid^="daylog-tz-"]')].map((r) => r.getAttribute('data-testid'));
+    expect(order).toEqual(['daylog-clock-e1', 'daylog-clock-e2', 'daylog-tz-tz1', 'daylog-clock-e3']); // 11:30, between 10:00 and 13:00
+    const row = within(pop).getByTestId('daylog-tz-tz1');
+    expect(row.textContent).toContain('11:30');
+    expect(row.textContent).toContain('Timezone changed · New York → Tokyo');
+    expect(row.textContent).toContain('this device moved');
+    expect(row.textContent).toContain('clocked time unchanged');
+    expect(row.querySelector('button')).toBeNull(); // nothing to click
+    expect(screen.getByRole('dialog').textContent).toContain('1 timezone change');
+  });
   it('hovering a log lights every log of the same task, in the list and on the bar', () => {
     open();
     fireEvent.mouseEnter(screen.getByTestId('daylog-clock-e1'));

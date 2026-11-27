@@ -130,7 +130,9 @@ describe('schema: overlay tables are local-only and out of appSchema (R15)', () 
     expect(names(appSchema)).toContain('task_steps');
     // 0018: finished breaks, read by the journal's day log — the 25th
     expect(names(appSchema)).toContain('breaks');
-    expect(appSchema.tables).toHaveLength(25);
+    // 0021: timezone changes, read by the journal day log's All logs — the 26th
+    expect(names(appSchema)).toContain('timezone_changes');
+    expect(appSchema.tables).toHaveLength(26);
   });
 
   it('clientSchema includes the overlay tables and marks ONLY those local-only', () => {

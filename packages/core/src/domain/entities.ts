@@ -590,6 +590,25 @@ export const breakEntrySchema = z.strictObject({
 });
 export type BreakEntry = z.infer<typeof breakEntrySchema>;
 
+/** What moved the account's timezone: the device's own zone changed, or the user picked one. */
+export const timezoneChangeCauseSchema = z.enum(['device', 'manual']);
+export type TimezoneChangeCause = z.infer<typeof timezoneChangeCauseSchema>;
+
+/**
+ * A change of the account's timezone (migration 0021), written once by
+ * `timezone.change`, which also sets `user_settings.timezone`. Clocked time is
+ * stored as instants, so a change never adds or removes logged time; this row is
+ * the record that it happened, shown in the journal day log's "All logs" list.
+ */
+export const timezoneChangeSchema = z.strictObject({
+  ...baseRow,
+  changed_at: isoDateTimeSchema,
+  from_timezone: z.string().min(1).max(100),
+  to_timezone: z.string().min(1).max(100),
+  cause: timezoneChangeCauseSchema,
+});
+export type TimezoneChange = z.infer<typeof timezoneChangeSchema>;
+
 // --- REGISTRY -------------------------------------------------------------------------------------
 
 /** Every §6.0 table, keyed by SQL table name (s03 asserts Drizzle parity against this). */

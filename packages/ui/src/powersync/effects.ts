@@ -197,6 +197,12 @@ export function buildOptimisticEffects(name: CommandName, payload: unknown, ctx:
       return [upd('time_entries', p['entry_id'], { ended_at: p['ended_at'] })];
     case 'break.log':
       return [ins('breaks', p['id'], { started_at: p['started_at'], ended_at: p['ended_at'], planned_minutes: p['planned_minutes'] })];
+    case 'timezone.change':
+      // the record of the change, and the account's zone itself (settings row id = user id)
+      return [
+        ins('timezone_changes', p['id'], { changed_at: p['changed_at'], from_timezone: p['from_timezone'], to_timezone: p['to_timezone'], cause: p['cause'] }),
+        upd('user_settings', ctx.userId, { timezone: p['to_timezone'] }),
+      ];
     case 'timer.review':
       // the time-entry facts; a completing review also sets node.completed_at, but
       // that needs the entry's task_id (not in the payload) so the live writer adds it.

@@ -81,7 +81,9 @@ export function Settings({ ctx }: { ctx: CommandContext }) {
       return;
     }
     setTzError('');
-    if (hasRow) await commands.updateSettings({ day_reset_hour, timezone });
+    // a new zone goes through timezone.change, so the journal day log records it
+    if (timezone !== settings.timezone) await commands.changeTimezone({ from: settings.timezone, to: timezone, cause: 'manual' });
+    if (hasRow) await commands.updateSettings({ day_reset_hour });
     else await commands.insertSettings({ day_reset_hour, timezone });
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
