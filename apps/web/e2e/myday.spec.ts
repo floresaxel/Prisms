@@ -274,7 +274,8 @@ test('My Day: the running task has its own Clock out, which opens the session re
   // the banner's mark is a pulsing circle in the project's colour, not the Prisms logo
   await expect(page.getByTestId('run-mark-core')).toHaveClass(/px-pdot--blue/);
   await expect(page.getByTestId('run-mark').locator('.px-run-wave')).toHaveCount(1); // the one trailing ring
-  await expect(page.getByTestId('run-banner').locator('svg')).toHaveCount(1); // only the Clock out button's stop icon
+  // no logo in the banner: just the Clock out button's stop icon, plus the project's pentagon (also an svg)
+  await expect(page.getByTestId('run-banner').locator('svg:not(.px-pdot)')).toHaveCount(1);
   // the topbar pill wears the very same pulsing circle (white): same size, same ring
   await expect(page.getByTestId('timer-mark')).toBeVisible();
   await expect(page.getByTestId('timer-mark').locator('.px-run-wave')).toHaveCount(1);
@@ -380,7 +381,9 @@ test('My Day: project pentagons wear the colour of their vision; the run mark st
 
   const RED = 'rgb(220, 38, 38)';
   const TEAL = 'rgb(13, 148, 136)';
-  const bg = (loc: ReturnType<Page['locator']>) => loc.evaluate((el) => getComputedStyle(el).backgroundColor);
+  // a project pentagon is an SVG (its colour is `fill`); the run mark is a plain span (`background`)
+  const bg = (loc: ReturnType<Page['locator']>) =>
+    loc.evaluate((el) => (el instanceof SVGElement ? getComputedStyle(el).fill : getComputedStyle(el).backgroundColor));
   const row = (id: string) => page.getByTestId(`myday-row-${id}`);
   await expect(row(ids.b)).toBeVisible({ timeout: 30_000 });
 

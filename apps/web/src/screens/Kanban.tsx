@@ -10,7 +10,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { ancestorsOf, asEpochMillis, type Instant } from '@prisms/core';
 import { Skeleton, useCommands, useIsHydrated, useKanban, useNodeTree, type CommandContext } from '@prisms/ui';
 
-import { projectTone } from '../format';
+import { PentagonTone } from '../components/ProjectDot';
 
 export function Kanban({ ctx, projectId }: { ctx: CommandContext; projectId?: string | null }) {
   const [now, setNow] = useState<Instant>(asEpochMillis(Date.now()));
@@ -78,7 +78,7 @@ export function Kanban({ ctx, projectId }: { ctx: CommandContext; projectId?: st
                   >
                     <b>{card.title}</b>
                     <div className="px-t-meta">
-                      {proj && <span className="px-proj"><span className={`px-pdot px-pdot--${projectTone(proj.id)}`} />{proj.title}</span>}
+                      {proj && <span className="px-proj"><PentagonTone projectId={proj.id} />{proj.title}</span>}
                       {card.estimate_minutes != null && <span>{card.estimate_minutes}m</span>}
                     </div>
                   </div>

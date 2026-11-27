@@ -47,7 +47,7 @@ test('the task card’s and the roadmap’s project pentagons wear their vision�
     },
   });
   expect(seed.ok()).toBeTruthy();
-  const style = (loc: ReturnType<Page['locator']>, prop: 'backgroundColor' | 'stroke') => loc.evaluate((el, p) => getComputedStyle(el)[p as 'stroke'], prop);
+  const style = (loc: ReturnType<Page['locator']>, prop: 'backgroundColor' | 'stroke' | 'fill') => loc.evaluate((el, p) => getComputedStyle(el)[p as 'stroke'], prop);
 
   // ── the task details card: the breadcrumb's project pentagon ──
   await goto(page, 'tasks');
@@ -56,7 +56,7 @@ test('the task card’s and the roadmap’s project pentagons wear their vision�
   await row.locator('.px-t-meta').click();
   const card = page.getByTestId('td-dialog');
   await expect(card).toBeVisible();
-  expect(await style(card.locator('.px-td-crumb .px-pdot'), 'backgroundColor')).toBe(RED);
+  expect(await style(card.locator('.px-td-crumb .px-pdot'), 'fill')).toBe(RED);
   await page.getByTestId('td-done').click();
 
   // ── the roadmap: a project that can start has an outlined pentagon, in the vision's colour ──
