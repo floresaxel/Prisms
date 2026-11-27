@@ -363,7 +363,7 @@ export function Journal({ ctx }: { ctx: CommandContext }) {
 
       <div className="px-jn-cols">
         <div className="px-jn-months" data-testid="journal-months" ref={listRef}>
-          {/* Pinned to the top of the list in both views, and independent of the
+          {/* First in the list in both views, and independent of the
               filters: it is a way BACK, not a note, so it stays even when today has
               nothing written and no note row exists. */}
           <TodayRow date={today} entry={todayNote} active={dayLogs.has(today)} selected={selectedDay === today} onSelect={goToday} />

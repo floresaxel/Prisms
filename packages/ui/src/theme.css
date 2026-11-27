@@ -1370,13 +1370,21 @@ svg.px-pdot--green { background: none; fill: var(--px-green); }
 .px-run-core, .px-run-wave { position: absolute; inset: 0; border-radius: 50%; }
 /* on the topbar pill's blue the mark is white */
 .px-run-mark--white .px-run-core, .px-run-mark--white .px-run-wave { background: #fff; }
+/* The pulse animates two REGISTERED custom properties, and opacity / transform just
+   read them. Animating `opacity` + `transform` directly hands the dot to the
+   compositor as its own layer, and that layer scrolls out of step with the page
+   (it lags or runs ahead of its row). A custom-property animation runs on the main
+   thread, so the dot is painted with the row and moves with it. */
+@property --px-run-o { syntax: '<number>'; inherits: false; initial-value: 1; }
+@property --px-run-s { syntax: '<number>'; inherits: false; initial-value: 1; }
+.px-run-core, .px-run-wave { opacity: var(--px-run-o); transform: scale(var(--px-run-s)); }
 .px-run-core { animation: px-run-pulse 1.8s ease-in-out var(--px-run-phase, 0ms) infinite; }
-.px-run-wave { opacity: 0; animation: px-run-wave 1.8s ease-out var(--px-run-phase, 0ms) infinite; }
-@keyframes px-run-pulse { 50% { opacity: 0.55; transform: scale(0.8); } }
+.px-run-wave { --px-run-o: 0; --px-run-s: 0.8; animation: px-run-wave 1.8s ease-out var(--px-run-phase, 0ms) infinite; }
+@keyframes px-run-pulse { 50% { --px-run-o: 0.55; --px-run-s: 0.8; } }
 @keyframes px-run-wave {
-  0%, 45% { opacity: 0; transform: scale(0.8); }
-  50% { opacity: 0.5; }
-  100% { opacity: 0; transform: scale(1.6); }
+  0%, 45% { --px-run-o: 0; --px-run-s: 0.8; }
+  50% { --px-run-o: 0.5; }
+  100% { --px-run-o: 0; --px-run-s: 1.6; }
 }
 .px-card { background: var(--px-surface); border: 1px solid var(--px-border); border-radius: 10px; box-shadow: var(--px-shadow); }
 .px-card-h { display: flex; align-items: center; gap: 8px; padding: 11px 14px; border-bottom: 1px solid var(--px-border); font-weight: 600; font-size: 13px; }
@@ -1809,7 +1817,11 @@ textarea:focus-visible, select:focus-visible, [contenteditable]:not([contentedit
 /* ── Journal hub (W6) — lazy month list + day editor ── */
 .px-btn--icon { padding: 7px 9px; line-height: 0; }
 .px-jn-cols { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 18px; align-items: start; }
-.px-jn-months { background: var(--px-surface); border: 1px solid var(--px-border); border-radius: 10px; padding: 6px; box-shadow: var(--px-shadow); max-height: 74vh; overflow-y: auto; }
+/* The month list and the note card scroll TOGETHER, on the page's one scrollbar: the
+   list is no longer a scroll box of its own (it used to be max-height 74vh +
+   overflow-y, so a wheel over it moved the list while the note stayed, and the two
+   ran out of step). It simply grows with its days. */
+.px-jn-months { background: var(--px-surface); border: 1px solid var(--px-border); border-radius: 10px; padding: 6px; box-shadow: var(--px-shadow); }
 .px-jn-m { border-bottom: 1px solid var(--px-border); }
 .px-jn-m:last-child { border-bottom: none; }
 .px-jn-mh { display: flex; align-items: center; gap: 8px; width: 100%; background: none; border: none; font: inherit; font-weight: 600; font-size: 13px; color: var(--px-text); padding: 9px 6px; cursor: pointer; text-align: left; }
@@ -2581,11 +2593,11 @@ textarea.px-vd-input { min-height: 92px; resize: vertical; line-height: 1.55; }
 @media (prefers-reduced-motion: reduce) {
   .px-cbar-seg, .px-clk-task, .px-clk-log { transition: none; }
 }
-/* --- journal list: the pinned Today row --------------------------------------
-   First row of the list in both views, sticky so it is one click away however far
-   the list has been scrolled. Its own wrapper paints the surface, so rows scrolling
-   under it do not show through. */
-.px-jn-today-wrap { position: sticky; top: 0; z-index: 2; background: var(--px-surface); padding-bottom: 6px; margin-bottom: 4px; border-bottom: 1px solid var(--px-border); }
+/* --- journal list: the Today row ---------------------------------------------
+   First row of the list in both views. NOT sticky: the list scrolls with the page
+   along with the note card, and a pinned row would be the one thing that did not
+   move with them. */
+.px-jn-today-wrap { background: var(--px-surface); padding-bottom: 6px; margin-bottom: 4px; border-bottom: 1px solid var(--px-border); }
 .px-jn-today { border: 1px solid var(--px-border); }
 .px-jn-today .px-jn-d-date { color: var(--px-accent); font-weight: 640; }
 /* not italic: an italic's last glyph overhangs its box and the title clips overflow */
