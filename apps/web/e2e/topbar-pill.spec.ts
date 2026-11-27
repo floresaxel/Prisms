@@ -102,7 +102,9 @@ test('the topbar pill grows, changes colour, crossfades and shrinks — it never
 
   // ── a second timer: its width follows ("+1", "Clock out all", a longer name) ──
   const one = (await page.locator('.px-timer-pill').boundingBox())!.width;
-  done = sample(page, 700);
+  // longer window: TWO clicks (clock in, then "split") come before the pill can grow,
+  // and a busy machine can spend most of 700 ms on them
+  done = sample(page, 1500);
   await page.getByTestId(`clock-in-${ids.b}`).click();
   await page.getByTestId('clockin-split').click();
   s = await done();
