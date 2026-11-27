@@ -1172,6 +1172,8 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
 /* task rows */
 .px-rows { list-style: none; margin: 0; padding: 0; background: var(--px-surface); border: 1px solid var(--px-border); border-radius: 10px; box-shadow: var(--px-shadow); overflow: hidden; }
 .px-rows--muted { background: var(--px-surface-2); }
+/* a row on its way out of a list (apps/web/src/row-exit.ts): a copy that collapses, then goes */
+.px-row-ghost { overflow: hidden; box-sizing: border-box; pointer-events: none; }
 .px-trow { display: flex; align-items: center; gap: 12px; padding: 9px 14px; border-bottom: 1px solid var(--px-border); }
 .px-trow:last-child { border-bottom: none; }
 .px-trow:hover { background: #fafbfc; }
@@ -1203,12 +1205,20 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
 .px-proj { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--px-text-dim); }
 /* The project colour chip is a REGULAR pentagon (five equal sides), point up. The
    box is 1.902 : 1.809 (width : height) — the exact bounding box of a regular
-   pentagon — and the clip points are its vertices. */
-.px-pdot { width: 10.5px; height: 10px; flex: none; clip-path: polygon(50% 0, 100% 38.2%, 80.9% 100%, 19.1% 100%, 0 38.2%); }
+   pentagon — and the polygon points are its vertices. The chip is an inline SVG
+   (`Pentagon` in ProjectDot.tsx), not a clip-path: a clip-path mask layer scrolls
+   out of step with the page, an SVG is painted with its row. The tone classes also
+   paint the plain-span marks (`RunMark`), so the svg flavour only sets `fill`. */
+.px-pdot { width: 10.5px; height: 10px; flex: none; display: inline-block; }
+svg.px-pdot { fill: currentColor; }
 .px-pdot--teal { background: var(--px-teal); }
 .px-pdot--blue { background: var(--px-blue); }
 .px-pdot--amber { background: var(--px-amber); }
 .px-pdot--green { background: var(--px-green); }
+svg.px-pdot--teal { background: none; fill: var(--px-teal); }
+svg.px-pdot--blue { background: none; fill: var(--px-blue); }
+svg.px-pdot--amber { background: none; fill: var(--px-amber); }
+svg.px-pdot--green { background: none; fill: var(--px-green); }
 .px-prio { font-weight: 640; }
 .px-due { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--px-text-dim); background: var(--px-surface-2); border-radius: 6px; padding: 2px 7px; white-space: nowrap; }
 .px-due .px-ic, .px-t-due .px-ic { width: 12px; height: 12px; flex: none; }
@@ -1370,13 +1380,21 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
 .px-run-core, .px-run-wave { position: absolute; inset: 0; border-radius: 50%; }
 /* on the topbar pill's blue the mark is white */
 .px-run-mark--white .px-run-core, .px-run-mark--white .px-run-wave { background: #fff; }
+/* The pulse animates two REGISTERED custom properties, and opacity / transform just
+   read them. Animating `opacity` + `transform` directly hands the dot to the
+   compositor as its own layer, and that layer scrolls out of step with the page
+   (it lags or runs ahead of its row). A custom-property animation runs on the main
+   thread, so the dot is painted with the row and moves with it. */
+@property --px-run-o { syntax: '<number>'; inherits: false; initial-value: 1; }
+@property --px-run-s { syntax: '<number>'; inherits: false; initial-value: 1; }
+.px-run-core, .px-run-wave { opacity: var(--px-run-o); transform: scale(var(--px-run-s)); }
 .px-run-core { animation: px-run-pulse 1.8s ease-in-out var(--px-run-phase, 0ms) infinite; }
-.px-run-wave { opacity: 0; animation: px-run-wave 1.8s ease-out var(--px-run-phase, 0ms) infinite; }
-@keyframes px-run-pulse { 50% { opacity: 0.55; transform: scale(0.8); } }
+.px-run-wave { --px-run-o: 0; --px-run-s: 0.8; animation: px-run-wave 1.8s ease-out var(--px-run-phase, 0ms) infinite; }
+@keyframes px-run-pulse { 50% { --px-run-o: 0.55; --px-run-s: 0.8; } }
 @keyframes px-run-wave {
-  0%, 45% { opacity: 0; transform: scale(0.8); }
-  50% { opacity: 0.5; }
-  100% { opacity: 0; transform: scale(1.6); }
+  0%, 45% { --px-run-o: 0; --px-run-s: 0.8; }
+  50% { --px-run-o: 0.5; }
+  100% { --px-run-o: 0; --px-run-s: 1.6; }
 }
 .px-card { background: var(--px-surface); border: 1px solid var(--px-border); border-radius: 10px; box-shadow: var(--px-shadow); }
 .px-card-h { display: flex; align-items: center; gap: 8px; padding: 11px 14px; border-bottom: 1px solid var(--px-border); font-weight: 600; font-size: 13px; }
@@ -1597,6 +1615,15 @@ button.px-now-clock:hover, button.px-now-clock[aria-expanded='true'] { backgroun
 .px-td-dep-row--done .px-td-dep-link { color: var(--px-faint); text-decoration: line-through; }
 .px-td-dep-link { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0; border: 0; background: none; font: inherit; color: var(--px-text); text-align: left; cursor: pointer; }
 .px-td-dep-link:hover { color: var(--px-blue-deep); text-decoration: underline; text-underline-offset: 2px; }
+/* A task's name that opens its details card, where a task is only mentioned
+   (a Review item, the journal's day log): plain text until hovered. */
+.px-task-open { padding: 0; border: 0; background: none; font: inherit; text-align: left; cursor: pointer; border-radius: 3px; }
+/* zero specificity: a class that greys the name (a done block, say) still wins */
+:where(.px-task-open) { color: inherit; }
+.px-task-open:hover { color: var(--px-blue-deep); text-decoration: underline; text-underline-offset: 2px; }
+.px-task-open:focus-visible { outline: 2px solid var(--px-blue); outline-offset: 1px; }
+/* a Clocked task row on the day log opens the task: its name says so on hover */
+.px-clk-task[aria-haspopup='dialog']:hover .px-daylog-title { text-decoration: underline; text-underline-offset: 2px; }
 .px-td-dep-add { width: 100%; font-size: 12.5px; color: var(--px-text-dim); border-style: dashed; }
 .px-td-foot { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 22px; padding-top: 14px; border-top: 1px solid var(--px-border); }
 .px-td-foot .px-grow { flex: 1; }
@@ -1809,7 +1836,11 @@ textarea:focus-visible, select:focus-visible, [contenteditable]:not([contentedit
 /* ── Journal hub (W6) — lazy month list + day editor ── */
 .px-btn--icon { padding: 7px 9px; line-height: 0; }
 .px-jn-cols { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 18px; align-items: start; }
-.px-jn-months { background: var(--px-surface); border: 1px solid var(--px-border); border-radius: 10px; padding: 6px; box-shadow: var(--px-shadow); max-height: 74vh; overflow-y: auto; }
+/* The month list and the note card scroll TOGETHER, on the page's one scrollbar: the
+   list is no longer a scroll box of its own (it used to be max-height 74vh +
+   overflow-y, so a wheel over it moved the list while the note stayed, and the two
+   ran out of step). It simply grows with its days. */
+.px-jn-months { background: var(--px-surface); border: 1px solid var(--px-border); border-radius: 10px; padding: 6px; box-shadow: var(--px-shadow); }
 .px-jn-m { border-bottom: 1px solid var(--px-border); }
 .px-jn-m:last-child { border-bottom: none; }
 .px-jn-mh { display: flex; align-items: center; gap: 8px; width: 100%; background: none; border: none; font: inherit; font-weight: 600; font-size: 13px; color: var(--px-text); padding: 9px 6px; cursor: pointer; text-align: left; }
@@ -2587,11 +2618,11 @@ textarea.px-vd-input { min-height: 92px; resize: vertical; line-height: 1.55; }
 @media (prefers-reduced-motion: reduce) {
   .px-cbar-seg, .px-clk-task, .px-clk-log { transition: none; }
 }
-/* --- journal list: the pinned Today row --------------------------------------
-   First row of the list in both views, sticky so it is one click away however far
-   the list has been scrolled. Its own wrapper paints the surface, so rows scrolling
-   under it do not show through. */
-.px-jn-today-wrap { position: sticky; top: 0; z-index: 2; background: var(--px-surface); padding-bottom: 6px; margin-bottom: 4px; border-bottom: 1px solid var(--px-border); }
+/* --- journal list: the Today row ---------------------------------------------
+   First row of the list in both views. NOT sticky: the list scrolls with the page
+   along with the note card, and a pinned row would be the one thing that did not
+   move with them. */
+.px-jn-today-wrap { background: var(--px-surface); padding-bottom: 6px; margin-bottom: 4px; border-bottom: 1px solid var(--px-border); }
 .px-jn-today { border: 1px solid var(--px-border); }
 .px-jn-today .px-jn-d-date { color: var(--px-accent); font-weight: 640; }
 /* not italic: an italic's last glyph overhangs its box and the title clips overflow */

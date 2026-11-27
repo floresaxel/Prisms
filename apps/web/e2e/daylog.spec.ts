@@ -125,10 +125,18 @@ test('a scheduled + completed task shows in both sections; unchecking removes it
   await expect(completed).toContainText('12:20');
   await expect(completed.getByTestId('daylog-unplanned')).toHaveCount(0);
 
-  // The footer is INERT: nothing in it can be typed into or clicked.
+  // The footer is NOT EDITABLE: nothing in it can be typed into, and the only thing
+  // to click is a task's name — which opens that task's details card.
+  expect(await footer(page).evaluate((el) => el.querySelectorAll('input,textarea,select,a,[contenteditable]').length)).toBe(0);
   expect(
-    await footer(page).evaluate((el) => el.querySelectorAll('input,textarea,button,select,a,[contenteditable],[tabindex]').length),
-  ).toBe(0);
+    await footer(page).evaluate((el) =>
+      [...el.querySelectorAll('button,[tabindex]')].map((b) => b.getAttribute('data-testid') ?? b.outerHTML.slice(0, 60)),
+    ),
+  ).toEqual([`daylog-sched-open-${block}`]);
+  await page.getByTestId(`daylog-sched-open-${block}`).click();
+  await expect(page.getByTestId('td-title')).toHaveValue('Write the release notes 🚀');
+  await page.getByTestId('td-done').click();
+  await expect(page.getByTestId('td-dialog')).toHaveCount(0);
 
   // Uncheck → the Completed line disappears and the box empties. That IS the
   // feature: the log is a snapshot of current facts, never history.

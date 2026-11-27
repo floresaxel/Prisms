@@ -50,7 +50,7 @@ import {
 
 import { DueDate } from '../components/DueDate';
 import { InboxDelete } from '../components/InboxDelete';
-import { ProjectDot } from '../components/ProjectDot';
+import { PentagonTone, ProjectDot } from '../components/ProjectDot';
 import { RunningDot, useRunningTaskIds } from '../components/RunningDot';
 import { ProjectPicker } from '../components/ProjectPicker';
 import { StepsToggle, SubstepPanel } from '../components/Substeps';
@@ -61,7 +61,7 @@ import { historyNotice, useHistoryStream } from '../components/useHistoryStream'
 import { useCollapsedSet } from '../components/useCollapsedSet';
 import { useFocusAfterRender } from '../components/useFocusAfterRender';
 import { useNewProject, type NewProjectApi } from '../components/useNewProject';
-import { formatMinutes, projectTone } from '../format';
+import { formatMinutes } from '../format';
 import { usePersistedText } from '../drafts';
 import { listLayoutClass } from '../list-layout';
 import { useMeasuredWidth } from '../use-measured-width';
@@ -335,7 +335,7 @@ function CompletedPanel({ commands, detail }: { commands: PrismsCommands; detail
                   <div className="px-t-title"><EditableTitle node={d.task} commands={commands} /></div>
                   {d.projectTitle && (
                     <div className="px-t-meta">
-                      <span className="px-proj"><span className={`px-pdot px-pdot--${projectTone(d.projectId)}`} />{d.projectTitle}</span>
+                      <span className="px-proj"><PentagonTone projectId={d.projectId} />{d.projectTitle}</span>
                     </div>
                   )}
                 </div>
@@ -397,7 +397,7 @@ function DeletedPanel({ commands, now }: { commands: PrismsCommands; now: Instan
                     <div className="px-t-title">{d.task.title}</div>
                     <div className="px-t-meta">
                       {d.projectTitle ? (
-                        <span className="px-proj"><span className={`px-pdot px-pdot--${projectTone(d.projectId)}`} />{d.projectTitle}</span>
+                        <span className="px-proj"><PentagonTone projectId={d.projectId} />{d.projectTitle}</span>
                       ) : (
                         <span>Inbox</span>
                       )}
@@ -541,7 +541,7 @@ function AvailableStatusRow({ item, running, commands, detail, onCheck }: { item
       <div className="px-t-main">
         <div className="px-t-title"><EditableTitle node={item.task} commands={commands} /></div>
         <div className="px-t-meta">
-          {item.projectTitle && <span className="px-proj"><span className={`px-pdot px-pdot--${projectTone(item.projectId)}`} />{item.projectTitle}</span>}
+          {item.projectTitle && <span className="px-proj"><PentagonTone projectId={item.projectId} />{item.projectTitle}</span>}
           {item.priority !== null && <span className="px-prio">prio {item.priority.toFixed(1)}</span>}
         </div>
       </div>

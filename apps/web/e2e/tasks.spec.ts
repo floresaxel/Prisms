@@ -488,7 +488,7 @@ test('a project group’s pentagon wears the colour of its vision', async ({ pag
 
   await goto(page, 'tasks');
   await expect(page.getByTestId(`task-row-${ids.t2}`)).toBeVisible({ timeout: 30_000 });
-  const bg = (testId: string) => page.getByTestId(testId).evaluate((el) => getComputedStyle(el).backgroundColor);
+  const bg = (testId: string) => page.getByTestId(testId).evaluate((el) => getComputedStyle(el).fill);
   // #dc2626 (red) and #0d9488 (teal), as the browser reports them
   expect(await bg(`project-dot-${ids.p1}`)).toBe('rgb(220, 38, 38)');
   expect(await bg(`project-dot-${ids.p2}`)).toBe('rgb(13, 148, 136)');

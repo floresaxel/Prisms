@@ -8,8 +8,9 @@
  * the same entries through the same core module, so the two textual forms cannot
  * drift.
  *
- * It does hold VIEW controls now — the Clocked section's task rows, its day bar
- * and "All logs" popup (`ClockedSection`) — which change only what is in view.
+ * It does hold VIEW controls now — the Clocked section's day bar and "All logs"
+ * popup (`ClockedSection`) — which change only what is in view; and a Scheduled
+ * task's name, or a Clocked task row, opens that task's details card.
  *
  * The project / vision filter is NOT in here: its controls live in `DayLogSection`,
  * next to this component, and hand it already-narrowed entries.
@@ -27,6 +28,7 @@ import { Ic } from '@prisms/ui';
 import { usableZone } from '../clocked-day';
 import { ClockedSection } from './ClockedTimeline';
 import { DayLogContext as Context } from './DayLogContext';
+import { TaskOpenLink } from './TaskDetail';
 
 export function DayLogFooter({
   entries,
@@ -64,7 +66,13 @@ export function DayLogFooter({
                   aria-label={s.done ? 'done' : 'not done'}
                 />
                 <span className="px-daylog-time px-num">{at(s.starts_at)}–{at(s.ends_at)}</span>
-                <span className={`px-daylog-title${s.done ? ' px-daylog-title--done' : ''}`}>{s.title}</span>
+                <TaskOpenLink
+                  taskId={s.task_id}
+                  className={`px-daylog-title${s.done ? ' px-daylog-title--done' : ''}`}
+                  testId={`daylog-sched-open-${s.block_id}`}
+                >
+                  {s.title}
+                </TaskOpenLink>
                 <Context project={s.project} vision={s.vision} />
               </li>
             ))}
